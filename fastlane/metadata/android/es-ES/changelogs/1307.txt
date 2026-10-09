@@ -1,0 +1,1 @@
+• Ajustes: el enlace al código fuente y «Informar de un problema» abren el repositorio público
