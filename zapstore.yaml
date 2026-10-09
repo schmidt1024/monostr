@@ -1,6 +1,8 @@
 # Zapstore listing (https://zapstore.dev), published with `zsp publish` from the project account.
 # APKs come from the GitHub releases of the public repository; texts and screenshots from fastlane/.
 repository: https://github.com/schmidt1024/monostr
+# the project account publishes (and the relay whitelists it by this file)
+pubkey: npub1zcqletxlyf7amggwx0n3j9unpdymusmtgw7aqv9hnx2g48e8fmfs89e6z2
 name: monostr
 summary: Nostr client with Monero tips
 license: AGPL-3.0-or-later
