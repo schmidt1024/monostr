@@ -1,0 +1,445 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- app -->
+    <string name="login_tagline">Monero bahşişli Nostr</string>
+
+    <!-- shared actions and states -->
+    <string name="action_back">Geri</string>
+    <string name="action_close">Kapat</string>
+    <string name="action_done">Tamam</string>
+    <string name="action_check">Kontrol et</string>
+    <string name="action_add">Ekle</string>
+    <string name="action_remove">Kaldır</string>
+    <string name="action_send">Gönder</string>
+    <string name="action_send_again">Tekrar gönder</string>
+    <string name="action_copy_address">Adresi kopyala</string>
+    <string name="action_copy_uri">URI\'yi kopyala</string>
+    <string name="state_sending">Gönderiliyor…</string>
+    <string name="state_loading">Yükleniyor…</string>
+    <string name="qr_content_description">QR kodu</string>
+
+    <!-- relay state -->
+    <string name="relay_connected">bağlı</string>
+    <string name="relay_connecting">bağlanıyor…</string>
+    <string name="relay_disconnected">bağlantı kesildi</string>
+    <string name="relay_not_connected">bağlı değil</string>
+    <string name="relay_status">Relay durumu: %1$s</string>
+
+    <!-- relative time -->
+    <string name="time_now">şimdi</string>
+    <string name="time_minutes">%1$d dk</string>
+    <string name="time_hours">%1$d sa</string>
+    <string name="time_days">%1$d g</string>
+
+    <!-- errors mapped from exceptions -->
+    <string name="error_signing_rejected">İmzalayıcıda reddedildi</string>
+    <string name="error_watcher_unreachable">Watcher\'a ulaşılamıyor</string>
+    <string name="error_watcher_rate_limited">Watcher: çok fazla istek, daha sonra tekrar dene</string>
+    <string name="error_watcher_rejected">Watcher isteği reddetti</string>
+    <string name="error_watcher_invalid">Watcher yanıtı geçersiz</string>
+    <string name="error_note_unavailable">Not kullanılamıyor</string>
+    <string name="error_send_failed">Gönderilemedi</string>
+    <string name="session_restore_failed">Oturum geri yüklenemedi</string>
+
+    <!-- notes and actions -->
+    <string name="note_reply">Yanıtla</string>
+    <string name="note_open_profile">Profili aç</string>
+    <string name="note_repost">Yeniden paylaş</string>
+    <string name="note_like">Beğen</string>
+    <string name="note_tip">Monero ile bahşiş ver</string>
+    <string name="note_bookmark">Yer imi</string>
+    <string name="note_bookmarked">Kaydedildi</string>
+    <string name="note_deleted">Silme istendi</string>
+    <string name="note_not_bookmarked">Kaydedilmedi</string>
+    <string name="bookmark_failed">Yer imi kaydedilemedi</string>
+    <string name="bookmark_nip44_unsupported">İmzalayıcın NIP-44 desteklemiyor</string>
+    <string name="mute_done">%1$s sessize alındı</string>
+    <string name="mute_read_only">Sessiz listesi burada değiştirilemiyor: özel bölümü bu uygulamanın okuyamadığı bir biçimde.</string>
+    <string name="mute_account">%1$s sessize al</string>
+    <string name="unmute_account">Sessizi kaldır</string>
+    <string name="mute_undo">Geri al</string>
+    <string name="mute_profile_hint">Sessize alındı</string>
+    <string name="mute_settings_title">Sessize alınan hesaplar</string>
+    <string name="mute_settings_empty">Kimse sessize alınmadı. Bir hesabı bir notun menüsünden veya profilinden sessize al.</string>
+    <string name="note_tips_open">Bahşiş verenleri göster</string>
+    <string name="note_reposted_by">%1$s yeniden paylaştı</string>
+    <string name="note_tip_pending">Bahşiş gönderildi, onay bekleniyor</string>
+    <string name="note_tips_chip">%1$s · %2$d</string>
+    <string name="media_sensitive">Hassas içerik</string>
+    <string name="media_tap_to_show">Göstermek için dokun</string>
+    <string name="media_tap_to_load">Görselleri yüklemek için dokun</string>
+    <string name="media_failed">Görsel yüklenemedi</string>
+    <string name="media_video">Videoyu oynat</string>
+    <string name="media_viewer_close">Kapat</string>
+    <string name="media_copy_link">Bağlantıyı kopyala</string>
+    <string name="media_open_browser">Tarayıcıda aç</string>
+    <string name="profile_extra_relays">Notlar ayrıca %1$s üzerinden</string>
+    <!-- profile header: "12 Following · 3,373 Followers"; the numbers are formatted apart -->
+    <string name="profile_following_label">Takip edilen</string>
+    <plurals name="profile_followers_label">
+        <item quantity="one">%1$s Takipçi</item>
+        <item quantity="other">%1$s Takipçi</item>
+    </plurals>
+    <string name="settings_amber_renew">Amber izinlerini yenile</string>
+    <string name="settings_msg_amber_updated">İzinler güncellendi</string>
+    <string name="settings_msg_amber_cancelled">İptal edildi</string>
+    <string name="settings_msg_amber_wrong_key">Farklı bir anahtar seçildi – hiçbir şey değişmedi</string>
+    <string name="action_like_sent">Beğeni gönderildi</string>
+    <string name="action_repost_sent">Yeniden paylaşım gönderildi</string>
+    <string name="action_no_relay_local">Ulaşılabilir relay yok, yerel olarak tutuluyor</string>
+
+    <!-- tabs -->
+    <string name="tab_feed">Akış</string>
+    <string name="tab_search">Ara</string>
+    <string name="tab_notifications">Bildirimler</string>
+    <string name="tab_messages">Mesajlar</string>
+
+    <!-- search -->
+    <string name="search_hint">Ad, npub, not veya #etiket</string>
+    <string name="search_clear">Temizle</string>
+    <string name="search_recent_title">Son aramalar</string>
+    <string name="search_recent_remove">Son aramalardan kaldır</string>
+    <string name="search_recent_clear">Tümünü temizle</string>
+    <string name="search_people">Kişiler</string>
+    <string name="search_notes">Notlar</string>
+    <string name="search_empty">Bir şey bulunamadı</string>
+    <string name="search_no_relays">Arama rölesi yok – yalnızca yerel sonuçlar.</string>
+    <string name="search_open_settings">Arama röleleri…</string>
+
+    <!-- feed -->
+    <string name="feed_settings">Ayarlar</string>
+    <string name="feed_new_note">Yeni not</string>
+    <string name="feed_empty">Henüz not yok. Birini takip et ya da ilkini yaz.</string>
+    <string name="feed_error_load">Akış yüklenemedi</string>
+    <string name="feed_error_more">Daha fazla not yüklenemedi</string>
+
+    <!-- thread / profile -->
+    <string name="thread_title">Konu</string>
+    <string name="thread_not_found">Not bulunamadı</string>
+    <string name="profile_title_self">Profilim</string>
+    <string name="profile_error_load">Profil yüklenemedi</string>
+    <string name="note_replying_one">Yanıtlanan: %1$s</string>
+    <string name="note_replying_two">Yanıtlanan: %1$s ve %2$s</string>
+    <plurals name="note_replying_more">
+        <item quantity="one">Yanıtlanan: %1$s, %2$s ve %3$d kişi daha</item>
+        <item quantity="other">Yanıtlanan: %1$s, %2$s ve %3$d kişi daha</item>
+    </plurals>
+    <string name="profile_tab_posts">Gönderiler</string>
+    <string name="profile_tab_replies">Yanıtlar</string>
+    <string name="profile_empty_posts">Henüz gönderi yok</string>
+    <string name="profile_empty_replies">Henüz yanıt yok</string>
+
+    <!-- compose -->
+    <string name="compose_title_reply">Yanıtla</string>
+    <string name="compose_title_new">Yeni not</string>
+    <string name="compose_placeholder">Neler oluyor?</string>
+    <string name="compose_error_empty">Boş not</string>
+    <string name="compose_error_reply_target">Yanıtlanan not yüklenemedi</string>
+    <string name="compose_notice_offline">Ulaşılabilir relay yok, not yerel olarak kaydedildi</string>
+
+    <!-- login -->
+    <string name="login_amber">Amber ile giriş yap (önerilen)</string>
+    <string name="login_or_key">Ya da bir anahtarla:</string>
+    <string name="login_no_signer">NIP-55 imzalayıcı (ör. Amber) yüklü değil. Anahtarla giriş yap:</string>
+    <string name="login_secret_label">nsec veya hex</string>
+    <string name="login_button">Giriş yap</string>
+    <string name="login_error_invalid_key">Geçerli bir nsec veya hex anahtarı değil</string>
+    <string name="login_error_rejected">İstek imzalayıcıda reddedildi</string>
+    <string name="login_error_signer">İmzalayıcı bir hata bildirdi</string>
+    <string name="login_error_failed">Giriş başarısız</string>
+
+    <!-- tip sheet -->
+    <string name="tip_title">Monero bahşişi gönder</string>
+    <string name="tip_amount">Tutar (XMR)</string>
+    <string name="tip_xmr_amount">%1$s XMR</string>
+    <string name="tip_custom_amount">XMR cinsinden özel tutar</string>
+    <string name="tip_pay">Cüzdanla öde</string>
+    <string name="tip_no_wallet_title">Cüzdan uygulaması bulunamadı</string>
+    <string name="tip_no_wallet_text">Monerujo veya Cake Wallet yükle ya da tutarı bu adrese elle öde:</string>
+    <string name="tip_open_wallet_again">Cüzdanı tekrar aç</string>
+    <string name="tip_sent">Cüzdan açıldı. Bahşiş, watcher onayını bekliyor.</string>
+    <string name="tip_error_amount">Geçersiz tutar (ör. 0.005)</string>
+    <string name="tip_no_monero">Alıcı Monero kurmamış</string>
+    <string name="tip_notice_offline">Ulaşılabilir relay yok, intent yerel olarak kaydedildi</string>
+    <string name="tip_anonymous_switch">Anonim bahşiş</string>
+    <string name="tip_anonymous_hint">Adın görünmez. Alıcı da bahşişi kimin gönderdiğini öğrenmez.</string>
+    <string name="tip_error_anon_unavailable">Anonim bahşiş şu anda mümkün değil: alıcının watcher\'ına ulaşılamıyor.</string>
+    <string name="tip_arrived">Bahşiş ulaştı</string>
+    <string name="tip_anonymous">Anonim</string>
+    <string name="tippers_title">Monero bahşişleri</string>
+    <string name="tippers_empty">Bahşiş yok</string>
+
+    <!-- monero setup -->
+    <string name="setup_title_intro">Monero bahşişi almak ister misin?</string>
+    <string name="setup_title">Monero bahşişleri</string>
+    <string name="setup_registering">Watcher\'a kaydolunuyor…</string>
+    <string name="setup_intro_text">Bir Monero adresiyle başkaları sana bahşiş gönderebilir. Bahşiş göndermek için gerekmez.</string>
+    <string name="setup_watcher_heading">Watcher</string>
+    <string name="setup_watcher_text">Watcher gelen ödemeleri algılar ve makbuzları Nostr\'da yayınlar.</string>
+    <string name="setup_watcher_url">Watcher URL\'si</string>
+    <string name="setup_load_watcher">Watcher\'ı kontrol et</string>
+    <string name="setup_skip">Daha sonra</string>
+    <string name="setup_watcher_info">Watcher %1$s · %2$s · yükseklik %3$d</string>
+    <string name="setup_privacy">Watcher bu cüzdana gelen her ödemeyi görür. Bu yüzden yalnızca bahşişler için ayrı bir cüzdan kullan.</string>
+    <string name="setup_watcher_privacy">Watcher yalnızca gerekeni saklar: Nostr açık anahtarını, görüntüleme anahtarıyla birlikte cüzdan adresini ve açık bahşiş intent\'leri ile makbuzları (bunlar Nostr\'da zaten herkese açık). IP adresleri ne kaydedilir ne de saklanır. Bahşişleri kapatmak watcher\'daki hesabını siler; tarayıcısı adresi ve görüntüleme anahtarını işletmeci silene kadar pasif olarak tutar.</string>
+    <string name="setup_path_new_hint">Bu telefonda 25 kelimelik yeni bir seed oluşturur. monostr yalnızca gelen bahşişleri izler; harcamak için seed\'i Cake Wallet, Monerujo veya Feather\'a aktar.</string>
+    <string name="setup_path_existing_hint">Cake Wallet, Monerujo veya Feather\'dan ana adresi ve özel görüntüleme anahtarını yapıştır.</string>
+    <string name="setup_new_wallet">Yeni bahşiş cüzdanı oluştur (önerilen)</string>
+    <string name="setup_existing_wallet">Mevcut bir cüzdanı kullan</string>
+    <string name="setup_reuse_wallet">Kayıtlı cüzdanı bu watcher\'a taşı</string>
+    <string name="setup_seed_title">Seed\'in (25 kelime)</string>
+    <string name="setup_seed_text">Kâğıda yaz. Bahşişleri daha sonra Monerujo, Cake veya Feather\'da yalnızca bununla harcayabilirsin. Uygulama yalnızca adresi ve görüntüleme anahtarını saklar.</string>
+    <string name="setup_restore_height">Geri yükleme yüksekliği: %1$d</string>
+    <string name="setup_seed_written">Yazdım</string>
+    <string name="seed_copy">Seed\'i kopyala</string>
+    <string name="seed_copy_warning_title">Seed panoya kopyalansın mı?</string>
+    <string name="seed_copy_warning_text">Diğer uygulamalar panoyu okuyabilir. Seed\'i hemen cüzdanına yapıştır; monostr 60 saniye sonra onu panodan siler.</string>
+    <string name="seed_copied">Kopyalandı. Pano 60 saniye sonra temizlenir.</string>
+    <string name="setup_verify_title">Kontrol için üç kelime</string>
+    <string name="setup_verify_word">%1$d. kelime</string>
+    <string name="setup_verify_wrong">En az bir kelime yanlış.</string>
+    <string name="setup_back_to_seed">Seed\'e geri dön</string>
+    <string name="setup_existing_title">Mevcut cüzdan</string>
+    <string name="setup_address_label">Ana adres (4… / 5…)</string>
+    <string name="setup_view_key_label">Özel görüntüleme anahtarı (64 hex)</string>
+    <string name="setup_confirm_title">Lütfen onayla</string>
+    <string name="setup_confirm_text">Watcher bu cüzdana gelen tüm ödemeleri görür, yalnızca bahşişleri değil. Hiçbir şey harcayamaz.</string>
+    <string name="setup_understood">Anladım</string>
+    <string name="setup_register">Watcher\'a kaydol</string>
+    <string name="setup_done_title">Tamam</string>
+    <string name="setup_done_text">Ödeme bilgin Nostr\'da yayınlandı. Bahşişler bu cüzdana gelir:</string>
+    <string name="setup_done_import">Harcamak için: seed\'i Monerujo, Cake veya Feather\'a aktar, geri yükleme yüksekliği %1$d.</string>
+    <string name="setup_err_url">Watcher URL\'si https:// ile başlamalı</string>
+    <string name="setup_err_watcher_network">Watcher bilinmeyen bir ağ bildiriyor</string>
+    <string name="setup_err_subaddress">Alt adresler desteklenmiyor. Lütfen ana adresi kullan (4 veya 5 ile başlar).</string>
+    <string name="setup_err_integrated">Entegre adresler desteklenmiyor. Lütfen ana adresi kullan.</string>
+    <string name="setup_err_address">Geçersiz adres</string>
+    <string name="setup_err_network">Adres, watcher\'dan farklı bir ağa ait</string>
+    <string name="setup_err_view_key_format">Görüntüleme anahtarı 64 hex karakter olmalı</string>
+    <string name="setup_err_view_key_mismatch">Görüntüleme anahtarı adresle eşleşmiyor</string>
+    <string name="setup_err_not_published">Ulaşılabilir relay yok – ödeme bilgisi yayınlanmadı, lütfen tekrar dene</string>
+
+    <!-- settings -->
+    <string name="settings_title">Ayarlar</string>
+    <string name="settings_logged_in_as">Giriş yapılan hesap</string>
+    <string name="settings_relays">Relay\'ler</string>
+    <string name="settings_relay_invalid">Geçersiz relay URL\'si (ws:// veya wss:// bekleniyor)</string>
+    <string name="settings_relay_keep_one">En az bir relay kalmalı</string>
+    <string name="settings_relay_save_failed">Relay\'ler kaydedilemedi</string>
+    <string name="settings_messages">Mesajlar</string>
+    <string name="settings_dm_relays">Mesaj röleleri (NIP-17)</string>
+    <string name="settings_dm_relays_hint">Diğerleri mesajlarını buraya iletir; kind 10050 olarak yayımlanır. relay.monostr.com oturum açma gerektirir (NIP-42) – Amber\'ın kind 22242 izni gerekir, bkz. “Amber izinlerini yenile”.</string>
+    <string name="settings_dm_preview_name">Bildirimlerde göndereni göster</string>
+    <string name="settings_dm_preview_text">Bildirimlerde mesaj metnini göster</string>
+    <string name="settings_search_relays">Arama röleleri</string>
+    <string name="settings_search_relays_hint">Yalnızca ad ve tam metin araması için (NIP-50), akış için asla.</string>
+    <string name="settings_search_relays_reset">Varsayılanlara sıfırla</string>
+    <string name="settings_suggested_relays">Önerilen röleler</string>
+    <string name="settings_suggested_relays_hint">Ücretli Monero röleleri: okuma ücretsiz, yazma rölenin sitesinde tek seferlik XMR ödemesinden sonra. Kaynak: pmnr.xmr.rocks</string>
+    <string name="settings_suggested_relay_fee">Ücretli Monero rölesi · yazmak için %1$s XMR</string>
+    <string name="settings_media">Medya</string>
+    <string name="settings_media_blur">Hassas medyayı gizle</string>
+    <string name="settings_media_blur_hint">Hassas işaretli notlar (content warning veya #nsfw) dokunana kadar bulanık görsel gösterir.</string>
+    <string name="settings_media_on_tap">Görselleri yalnızca dokununca yükle</string>
+    <string name="settings_media_on_tap_hint">Veri tasarrufu sağlar; videolar hiçbir zaman kendiliğinden yüklenmez.</string>
+    <string name="settings_author_relays">Yazarın rölelerini geçici olarak bağla</string>
+    <string name="settings_author_relays_hint">Bir profil açıldığında notlar o kişinin kendi rölelerinden de alınır. Röle IP adresinizi ve kimin profilini açtığınızı görür.</string>
+    <string name="settings_client_tag">“via monostr” göster</string>
+    <string name="settings_client_tag_hint">Notlar, beğeniler ve yeniden paylaşımlar, diğer uygulamaların “via monostr” olarak gösterdiği bir istemci etiketi taşır.</string>
+    <string name="settings_primal_stats">Primal üzerinden takipçi sayısı</string>
+    <string name="settings_primal_stats_hint">Profiller, diğer uygulamaların gösterdiği takipçi sayısını Primal dizininden alır. Kapalı: yalnızca relay’ler sayar, sayı çok daha düşük olur.</string>
+    <string name="note_via">%1$s ile</string>
+    <string name="settings_monero">Monero bahşişleri</string>
+    <string name="settings_monero_not_set_up">Kurulmadı. Bahşiş göndermek için gerekmez.</string>
+    <string name="settings_monero_set_up">Monero bahşişi almayı kur</string>
+    <string name="settings_monero_address">Adres %1$s…%2$s · %3$s</string>
+    <string name="settings_monero_watcher">Watcher %1$s</string>
+    <string name="settings_monero_switch_watcher">Watcher\'ı değiştir</string>
+    <string name="settings_monero_disable">Bahşişleri kapat</string>
+    <string name="settings_monero_delete_view_key">Görüntüleme anahtarını yerelden sil</string>
+    <string name="settings_presets">Hazır bahşiş tutarları (XMR)</string>
+    <string name="settings_preset_n">Hazır tutar %1$d</string>
+    <string name="settings_presets_save">Hazır tutarları kaydet</string>
+    <string name="settings_preset_add">Ön ayar ekle</string>
+    <string name="settings_preset_remove">Ön ayarı kaldır</string>
+    <string name="settings_adopt_relays">Bu relay\'leri yayınlanmış listemle değiştir (NIP-65)</string>
+    <string name="settings_logout">Çıkış yap</string>
+    <string name="settings_msg_presets_saved">Hazır tutarlar kaydedildi</string>
+    <string name="settings_msg_disabled">Monero bahşişleri kapatıldı</string>
+    <string name="settings_msg_view_key_deleted">Görüntüleme anahtarı yerelden silindi</string>
+    <string name="settings_msg_relays_adopted">Relay\'ler profilden alındı</string>
+    <string name="settings_msg_no_relay_list">Profilde relay listesi (NIP-65) bulunamadı</string>
+    <string name="settings_publish_relays">Bu relay\'leri relay listem olarak yayınla (NIP-65)</string>
+    <string name="settings_publish_relays_hint">Diğer uygulamalar ve bahşiş watcher\'ı seni bu listedeki relay\'lerde arar. Yayınlamak, başka bir uygulamadan kalan listenin yerini alır.</string>
+    <string name="settings_adopt_relays_hint">Bu uygulamanın relay\'leri, hesabın için yayınlanmış relay listesiyle değiştirilir. Başka bir uygulamadan kalan liste artık var olmayan relay\'ler içerebilir.</string>
+    <string name="settings_reset_relays">Varsayılan relay\'leri geri yükle</string>
+    <string name="settings_reset_relays_hint">Bu uygulamanın relay\'leri monostr\'un varsayılan relay\'leriyle değiştirilir.</string>
+    <string name="settings_msg_relay_list_published">Relay listesi yayınlandı</string>
+    <string name="settings_msg_relay_list_not_published">Hiçbir relay, relay listesini kabul etmedi</string>
+    <string name="settings_err_presets">Hazır tutarlar: geçerli XMR tutarları, ör. 0.001</string>
+
+    <!-- appearance (Task 5) -->
+    <string name="settings_appearance">Görünüm</string>
+    <string name="settings_theme_system">Sistem</string>
+    <string name="settings_theme_light">Açık</string>
+    <string name="settings_theme_dark">Koyu</string>
+    <string name="settings_accent">Vurgu rengi</string>
+    <string name="settings_accent_mono">Mono</string>
+    <string name="settings_accent_orange">Turuncu</string>
+    <string name="settings_accent_blue">Mavi</string>
+    <string name="settings_accent_purple">Mor</string>
+    <string name="settings_accent_custom">Özel</string>
+    <string name="settings_accent_hue">Renk tonu</string>
+    <string name="settings_accent_selected">%1$s, seçili</string>
+    <string name="settings_language">Dil</string>
+    <string name="settings_language_text">Uygulama dili sistem ayarına uyar.</string>
+    <string name="settings_language_button">Uygulama dilini değiştir</string>
+
+    <!-- notifications -->
+    <string name="notifications_title">Bildirimler</string>
+    <string name="notifications_empty">Henüz bildirim yok</string>
+    <string name="notifications_error_load">Bildirimler yüklenemedi</string>
+    <string name="messages_title">Mesajlar</string>
+    <string name="messages_empty">Henüz mesaj yok. Bir profil açıp “Mesaj”a dokun.</string>
+    <plurals name="messages_requests">
+        <item quantity="one">İstekler (%1$d)</item>
+        <item quantity="other">İstekler (%1$d)</item>
+    </plurals>
+    <string name="messages_auth_failed">%1$s oturum açma gerektiriyor (NIP-42) – Ayarlar\'da Amber izinlerini yenile</string>
+    <string name="messages_auth_rejected">%1$s oturum açmayı reddediyor (%2$s). Oradaki mesajlar yüklenemiyor; diğer rölelerin çalışmaya devam ediyor. Ayarlar\'da mesaj rölelerinden kaldır.</string>
+    <plurals name="messages_pending">
+        <item quantity="one">%1$d mesaj Amber\'ı bekliyor – şifreyi çözmek için dokun</item>
+        <item quantity="other">%1$d mesaj Amber\'ı bekliyor – şifreyi çözmek için dokun</item>
+    </plurals>
+    <string name="messages_error_load">Mesajlar yüklenemedi</string>
+    <string name="chat_input_hint">Mesaj</string>
+    <string name="chat_send">Gönder</string>
+    <string name="chat_retry">Yeniden dene</string>
+    <string name="chat_status_sending">Gönderiliyor…</string>
+    <string name="chat_status_failed">Gönderilmedi</string>
+    <string name="chat_error_send">Mesaj gönderilemedi</string>
+    <string name="profile_message">Mesaj</string>
+    <string name="notif_mentioned">senden bahsetti</string>
+    <string name="notif_liked_one">%1$s notunu beğendi</string>
+    <string name="notif_liked_two">%1$s ve %2$s notunu beğendi</string>
+    <plurals name="notif_liked_more">
+        <item quantity="one">%1$s, %2$s ve %3$d kişi daha notunu beğendi</item>
+        <item quantity="other">%1$s, %2$s ve %3$d kişi daha notunu beğendi</item>
+    </plurals>
+    <string name="notif_reposted_one">%1$s notunu yeniden paylaştı</string>
+    <string name="notif_reposted_two">%1$s ve %2$s notunu yeniden paylaştı</string>
+    <plurals name="notif_reposted_more">
+        <item quantity="one">%1$s, %2$s ve %3$d kişi daha notunu yeniden paylaştı</item>
+        <item quantity="other">%1$s, %2$s ve %3$d kişi daha notunu yeniden paylaştı</item>
+    </plurals>
+    <string name="notif_about_reply">Yanıt: “%1$s”</string>
+    <string name="notif_about_quote">Alıntı: “%1$s”</string>
+    <string name="notif_tip_profile">profiline</string>
+    <string name="avatar_of">%1$s profili</string>
+    <string name="notif_note_missing">not yüklenmedi</string>
+    <string name="notif_note_withdrawn">silinmiş not</string>
+    <string name="notif_tipped">%1$s XMR bahşiş verdi</string>
+    <string name="notif_channel_name">Monero bahşişleri</string>
+    <string name="notif_tip_title">Monero bahşişi alındı</string>
+    <string name="notif_tip_text">%1$s sana %2$s XMR bahşiş verdi</string>
+    <string name="notif_dm_channel">Mesajlar</string>
+    <string name="notif_dm_title">%1$s kişisinden mesaj</string>
+    <string name="notif_dm_title_anonymous">Yeni mesaj</string>
+    <string name="notif_dm_tap">Açmak için dokun</string>
+    <plurals name="dm_pending_summary">
+        <item quantity="one">%1$d mesaj Amber\'ı bekliyor</item>
+        <item quantity="other">%1$d mesaj Amber\'ı bekliyor</item>
+    </plurals>
+
+    <!-- bookmarks -->
+    <string name="bookmarks_title">Yer imleri</string>
+    <string name="bookmarks_empty">Henüz yer imi yok. Bir notun altındaki yer imi simgesine dokun.</string>
+    <string name="bookmarks_missing">Not bulunamadı (%1$s)</string>
+    <string name="bookmarks_error_load">Yer imleri yüklenemedi</string>
+    <string name="note_ref_label">not</string>
+    <string name="quote_missing">Not bulunamadı</string>
+    <string name="mute_quote_placeholder">Sessize alınmış bir hesabın notu</string>
+    <string name="action_quote">Alıntıla</string>
+    <string name="compose_quote_hint">Alıntı</string>
+    <string name="profile_edit">Profili düzenle</string>
+    <string name="feed_profile">Profilim</string>
+    <string name="profile_edit_title">Profili düzenle</string>
+    <string name="profile_edit_banner">Banner URL\'si</string>
+    <string name="profile_edit_picture">Resim URL\'si</string>
+    <string name="profile_edit_display_name">Görünen ad</string>
+    <string name="profile_edit_name">Ad</string>
+    <string name="profile_edit_about">Hakkında</string>
+    <string name="profile_edit_nip05">NIP-05 adresi</string>
+    <string name="profile_edit_save">Kaydet</string>
+    <string name="profile_edit_no_profile">Röle sunucularınızda mevcut bir profil bulunamadı. Kaydetmek yeni bir profil oluşturur.</string>
+    <string name="profile_save_failed">Profil kaydedilemedi</string>
+    <string name="profile_url_invalid">https:// ile başlamalı</string>
+    <string name="action_cancel">İptal</string>
+    <string name="action_replace">Değiştir</string>
+    <string name="profile_follow">Takip et</string>
+    <string name="profile_following">Takip ediliyor</string>
+    <string name="profile_unfollow_title">@%1$s takipten çıkarılsın mı?</string>
+    <string name="profile_unfollow_confirm">Takibi bırak</string>
+    <string name="follow_no_list">Takip listen yüklenemedi, hiçbir şey değiştirilmedi. Daha sonra tekrar dene.</string>
+    <string name="support_title">monostr\'u destekle</string>
+    <string name="support_text">monostr açık kaynaklıdır; reklam ve izleme yoktur. İşine yarıyorsa geliştirmesini Monero ile destekleyebilirsin.</string>
+    <string name="support_button">Monero ile destekle</string>
+    <string name="support_contributors">Katkıda bulunanlar</string>
+    <string name="support_repo">Kaynak kod</string>
+    <string name="support_hint_title">monostr\'u beğendin mi?</string>
+    <string name="support_hint_action">Destekle</string>
+    <string name="support_hint_dismiss">Gizle</string>
+    <string name="about_title">monostr hakkında</string>
+    <string name="about_version">Sürüm %1$s (derleme %2$d)</string>
+    <string name="about_beta">Beta</string>
+    <string name="about_feedback">Nostr\'da geri bildirim</string>
+    <string name="about_issues">Sorun bildir</string>
+    <string name="about_license">Lisans: %1$s</string>
+    <string name="dm_relay_hint_missing">relay.monostr.com gelen kutusu listende yok, bu yüzden monostr kullanıcıları sana ulaşamayabilir.</string>
+    <string name="dm_relay_hint_add">Ekle</string>
+    <string name="dm_relay_hint_second">İkinci bir gelen kutusu relay\'i mesajlarını daha güvenilir kılar.</string>
+    <string name="dm_relay_hint_dismiss">Gizle</string>
+    <string name="dm_relay_hint_replace">Gelen kutusu listen dolu. relay.monostr.com hangi relay\'in yerine geçsin?</string>
+    <string name="upload_error_nsfw">Bu sunucu yetişkin içeriği kabul etmiyor. Ayarlardan başka bir medya sunucusu seçebilirsin.</string>
+    <string name="upload_error_too_large">Resim bu sunucu için çok büyük</string>
+    <string name="upload_error_quota">Bu sunucudaki alanın dolu</string>
+    <string name="upload_error_rate">Yükleme sınırına ulaşıldı, yarın yeniden dene</string>
+    <string name="upload_error_type">Sunucu bu dosya türünü kabul etmiyor</string>
+    <string name="upload_error_banned">Sunucu bu yüklemeyi reddediyor</string>
+    <string name="upload_error_auth">Sunucu imzayı kabul etmedi</string>
+    <string name="upload_error_unavailable">Medya sunucusu kullanılamıyor, daha sonra yeniden dene</string>
+    <string name="upload_error_network">Medya sunucusuna ulaşılamıyor</string>
+    <string name="upload_error_unreadable">Bu resim okunamıyor</string>
+    <string name="upload_error_signing">İmza reddedildi. İmzalayıcıda izin ver veya ayarlardan Amber izinlerini yenile.</string>
+    <string name="upload_error_failed">Yükleme başarısız</string>
+    <string name="compose_error_uploads">Resimlerin yüklenmesini bekle veya yüklenemeyenleri kaldır</string>
+    <string name="compose_attach">Resim ekle</string>
+    <string name="compose_attachment_remove">Resmi kaldır</string>
+    <string name="upload_retry">Yeniden dene</string>
+    <string name="compose_sensitive">Hassas içerik</string>
+    <string name="compose_sensitive_hint">Okuyanlar resimleri dokunana kadar bulanık görür.</string>
+    <string name="profile_edit_pick">Resim seç</string>
+    <string name="profile_edit_uploading">Yükleniyor…</string>
+    <string name="settings_media_server">Medya sunucusu</string>
+    <string name="settings_media_server_hint">Eklediğin resimler bu Blossom sunucusuna yüklenir. Herkese açıktır.</string>
+    <string name="settings_media_server_invalid">Yol içermeyen bir https:// adresi olmalı</string>
+    <string name="settings_media_server_reset">Varsayılan</string>
+    <string name="about_media">Yüklediğin resimler %1$s üzerinde saklanır ve bağlantıya sahip herkese açıktır. Bir resmi bildirmek için bağlantısını Nostr\'daki monostr proje hesabına gönder.</string>
+    <string name="note_menu">Diğer</string>
+    <string name="note_menu_copy_link">Bağlantıyı kopyala</string>
+    <string name="note_menu_copy_text">Metni kopyala</string>
+    <string name="note_menu_delete">Silinmesini iste</string>
+    <string name="note_delete_title">Not silinsin mi?</string>
+    <string name="note_delete_text">Rölelerden ve diğer uygulamalardan bu notu kaldırmaları istenir. Bu zorunlu kılınamaz; notu daha önce görenlerde kalabilir.</string>
+    <string name="note_delete_pictures">Bu notun resimleri medya sunucusundan kaldırılır.</string>
+    <string name="note_delete_confirm">Sil</string>
+    <string name="note_copied">Kopyalandı</string>
+    <string name="note_show_more">Devamını göster</string>
+    <string name="feed_to_top">Başa dön ve yenile</string>
+    <string name="profile_edit_remove_picture">Resmi kaldır</string>
+    <string name="profile_edit_remove_banner">Banner’ı kaldır</string>
+    <plurals name="note_delete_pictures_failed">
+        <item quantity="one">%1$d resim sunucudan kaldırılamadı</item>
+        <item quantity="other">%1$d resim sunucudan kaldırılamadı</item>
+    </plurals>
+</resources>

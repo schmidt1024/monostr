@@ -1,0 +1,47 @@
+# Search relay search.monostr.com on its own VPS (see README). searchnos pulls events from
+# SRC_RELAYS itself and rejects client EVENT writes; Caddy terminates TLS.
+name: search
+
+services:
+  searchnos:
+    build:
+      context: ${SEARCHNOS_SRC:-/opt/monostr/searchnos-src}
+      dockerfile: docker/Dockerfile
+    image: monostr-searchnos:current # tag is fixed; deploy.sh pins the source commit
+    restart: unless-stopped
+    mem_limit: 2g
+    stop_grace_period: 30s
+    logging: { driver: json-file, options: { max-size: "50m", max-file: "5" } }
+    environment:
+      PORT: "3000"
+      RUST_LOG: info # searchnos defaults to debug and logs every received event
+      SEARCHNOS_DB_PATH: /data
+      SRC_RELAYS: wss://relay.damus.io,wss://nos.lol,wss://relay.primal.net,wss://purplepag.es,wss://relay.monostr.com
+      FETCH_KINDS: 0,1,30023
+      NEGENTROPY_RELAYS: wss://nos.lol,wss://relay.monostr.com
+      NEGENTROPY_DAYS: "2"
+      # SEARCH_DAYS unset on purpose: profiles (kind 0) are partitioned by created_at, a window would hide stale profiles
+      MAX_SEARCH_THREADS: "2"
+      RELAY_NAME: Monostr Search
+      RELAY_DESCRIPTION: NIP-50 search relay run by monostr.com; read-only index of profiles, notes and long-form posts.
+    volumes:
+      - searchnos-data:/data
+
+  caddy:
+    image: caddy@sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc24061f9b52 # caddy:2 as of 2026-09-25
+    restart: unless-stopped
+    logging: { driver: json-file, options: { max-size: "50m", max-file: "5" } }
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SEARCH_DOMAIN: ${SEARCH_DOMAIN:-search.monostr.com}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  searchnos-data:
+  caddy-data:
+  caddy-config:

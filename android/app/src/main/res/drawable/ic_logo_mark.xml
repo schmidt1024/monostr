@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="37dp" android:height="32dp"
+    android:viewportWidth="62" android:viewportHeight="54">
+    <!-- Monostr "M" from assets/monostr-logo (polyline 24,72 24,28 50,56 76,28 76,72, stroke 10 on a 100 grid), cropped to
+         its stroke edges so the mark sits flush with whatever is aligned to the same left edge; tinted by the caller -->
+    <group android:translateX="-19" android:translateY="-23">
+        <path
+            android:pathData="M24,72 L24,28 L50,56 L76,28 L76,72"
+            android:strokeColor="#FFFFFF" android:strokeWidth="10" android:strokeLineCap="round" android:strokeLineJoin="round" android:fillColor="#00000000" />
+    </group>
+</vector>

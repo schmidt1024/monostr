@@ -1,0 +1,2 @@
+• Profil-Tabs: der nicht gewählte Tab ist grau
+• Leerer Feed, Mitteilungen und Nachrichten: Text zentriert mit Rand

@@ -1,0 +1,6 @@
+.env*
+.git
+/monostr-media
+nsfw
+ops
+*.md

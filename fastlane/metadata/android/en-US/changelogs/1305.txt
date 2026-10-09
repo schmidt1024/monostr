@@ -1,0 +1,3 @@
+• Hashtags in notes, replies and quotes are tagged, so relays find them
+• Notifications: excerpts read as one line
+• Links in a profile bio open

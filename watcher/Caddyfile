@@ -1,0 +1,16 @@
+{$WATCHER_DOMAIN:watcher.monostr.com} {
+	encode zstd gzip
+	@internal path /internal/*
+	respond @internal 404
+	reverse_proxy watcher:8080
+}
+
+{$WATCHER_STAGENET_DOMAIN:stagenet.watcher.monostr.com} {
+	encode zstd gzip
+	@internal path /internal/*
+	respond @internal 404
+	handle /relay* {
+		reverse_proxy stagenet-relay:7777
+	}
+	reverse_proxy stagenet-watcher:8080
+}

@@ -1,0 +1,93 @@
+# Stagenet stack for the E2E checklist (docs/testing/stagenet-e2e.md). No caddy here: the
+# mainnet compose's caddy serves stagenet.watcher.monostr.com through the external `stagenet` network.
+name: monostr-stagenet
+
+services:
+  stagenet-monerod:
+    image: ghcr.io/sethforprivacy/simple-monerod:latest
+    container_name: stagenet-monerod
+    restart: unless-stopped
+    networks: [stagenet]
+    mem_limit: 1536m
+    logging: { driver: json-file, options: { max-size: "50m", max-file: "5" } }
+    volumes:
+      - monerod-stagenet:/home/monero/.bitmonero
+    command: >
+      --stagenet --prune-blockchain
+      --rpc-bind-ip 0.0.0.0 --rpc-bind-port 38081 --restricted-rpc --confirm-external-bind
+      --zmq-rpc-bind-ip 0.0.0.0 --zmq-rpc-bind-port 38082 --confirm-zmq-rpc-external-bind
+      --zmq-pub tcp://0.0.0.0:38083
+
+  stagenet-lws:
+    image: vtnerd/monero-lws@sha256:637bfc6225422eed94950b85b05a0d771490632ad121f0c38b272ee92c73c53d # v1.0.1, same as compose.yml
+    container_name: stagenet-lws
+    restart: unless-stopped
+    networks: [stagenet]
+    mem_limit: 512m
+    logging: { driver: json-file, options: { max-size: "50m", max-file: "5" } }
+    depends_on:
+      - stagenet-monerod
+    volumes:
+      - lws-stagenet:/home/monero-lws/.bitmonero/light_wallet_server
+    command: >
+      monero-lws-daemon
+      --network stage
+      --daemon tcp://stagenet-monerod:38082
+      --sub tcp://stagenet-monerod:38083
+      --rest-server http://0.0.0.0:8443/wallet
+      --admin-rest-server http://0.0.0.0:8443/admin
+      --webhook-ssl-verification none
+      --confirm-external-bind
+      --log-level 1
+
+  stagenet-relay:
+    image: ghcr.io/hoytech/strfry@sha256:36f1886d185a88ca57c66ebe52e6e9e8428dac2486eea0a5d50ff934f18b60c3 # same as compose.yml
+    container_name: stagenet-relay
+    restart: unless-stopped
+    networks: [stagenet]
+    mem_limit: 256m
+    logging: { driver: json-file, options: { max-size: "50m", max-file: "5" } }
+    volumes:
+      - strfry-stagenet:/app/strfry-db
+      - ./strfry.stagenet.conf:/etc/strfry.conf:ro
+
+  stagenet-watcher:
+    build:
+      context: .
+      args:
+        VERSION: ${WATCHER_VERSION:-dev}
+    image: monostr-watcher:current # same image as compose.yml, built by deploy.sh
+    container_name: stagenet-watcher
+    restart: unless-stopped
+    networks: [stagenet]
+    mem_limit: 256m
+    logging: { driver: json-file, options: { max-size: "50m", max-file: "5" } }
+    depends_on:
+      - stagenet-lws
+      - stagenet-relay
+    env_file: .env.stagenet
+    environment:
+      WATCHER_NETWORK: stagenet
+      WATCHER_LISTEN: 0.0.0.0:8080
+      WATCHER_DB: /data/watcher.db
+      WATCHER_HOOK_URL: http://stagenet-watcher:8080/internal/lws-hook
+      LWS_ADMIN_URL: http://stagenet-lws:8443/admin
+      MONEROD_RPC_URL: http://stagenet-monerod:38081
+      WATCHER_RELAYS: ws://stagenet-relay:7777
+    volumes:
+      - watcher-stagenet:/data
+
+networks:
+  stagenet:
+    external: true
+
+# volumes were created under the old project name "watcher"; keep them
+volumes:
+  monerod-stagenet:
+    name: watcher_monerod-stagenet
+  lws-stagenet:
+    name: watcher_lws-stagenet
+  strfry-stagenet:
+    name: watcher_strfry-stagenet
+  watcher-stagenet:
+    name: watcher_watcher-stagenet

@@ -1,0 +1,4 @@
+• Ayarlar: Primal üzerinden takipçi sayısı anahtarı
+• Yeniden üretilebilir sürüm derlemesi
+• Profiller: Gönderiler ve Yanıtlar sekmeleri, eski notlar kaydırınca yüklenir
+• Yanıtlar kime yanıt verdiğini gösterir

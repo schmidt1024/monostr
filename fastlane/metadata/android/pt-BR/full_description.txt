@@ -1,0 +1,21 @@
+monostr é um cliente Nostr para Android com gorjetas em Monero.
+
+<b>Nostr, do jeito que você conhece</b>
+• Feed de quem você segue, conversas, perfis com as abas Publicações e Respostas
+• Curtir, repostar, citar, responder; menções, hashtags e links tocáveis
+• Imagens nas notas e uploads próprios (Blossom), conteúdo sensível desfocado
+• Mensagens privadas (NIP-17), favoritos e contas silenciadas privados (NIP-51)
+• Busca de pessoas e notas (NIP-50), notificações de curtidas, reposts, respostas e gorjetas
+• Sua lista de relays (NIP-65); os relays de escrita de um autor entram enquanto o perfil dele está aberto
+• Login com Amber (NIP-55) ou com uma chave; tema claro e escuro, 8 idiomas
+
+<b>Gorjetas em Monero</b>
+• Dê gorjeta a uma nota ou a um perfil pelo seu próprio app de carteira (Monerujo, Cake, Feather …) via link monero:
+• O monostr não tem carteira nem chave de gasto
+• Para receber gorjetas, você registra seu endereço e sua chave de visualização privada em um watcher (watcher.monostr.com por padrão, ou o seu). O watcher vê seus pagamentos recebidos e publica recibos assinados no Nostr, para que todos vejam a gorjeta na nota
+• Gorjetas anônimas são possíveis
+
+<b>Aberto</b>
+O monostr é software livre (AGPL-3.0-or-later). Notas, curtidas e reposts trazem “via monostr” (pode ser desligado). O número de seguidores pode vir do índice do Primal, um serviço proprietário; isso também pode ser desligado.
+
+O monostr está em beta.

@@ -1,0 +1,74 @@
+# Picture host media.monostr.com on its own VPS (see README): the Go server,
+# the NSFW scorer beside it and Caddy. The pictures live in an S3 bucket; its
+# keys are in .env on the host only (S3_ENDPOINT, S3_REGION, S3_BUCKET,
+# S3_ACCESS_KEY, S3_SECRET_KEY).
+name: media
+
+services:
+  media:
+    build:
+      context: .
+      args:
+        VERSION: ${MEDIA_VERSION:-dev}
+    image: monostr-media:current # tag is fixed; the version is a build arg (deploy.sh sets MEDIA_VERSION)
+    restart: unless-stopped
+    mem_limit: 512m
+    logging: { driver: json-file, options: { max-size: "50m", max-file: "5" } }
+    depends_on:
+      - nsfw
+    env_file: .env
+    environment:
+      MEDIA_LISTEN: 0.0.0.0:8080
+      MEDIA_DB: /data/media.db
+      MEDIA_PUBLIC_URL: https://${MEDIA_DOMAIN:-media.monostr.com}
+      MEDIA_CONTACT_NPUB: npub1zcqletxlyf7amggwx0n3j9unpdymusmtgw7aqv9hnx2g48e8fmfs89e6z2
+      MEDIA_NSFW_URL: http://nsfw:8081
+      # spec section 9: the lowest threshold that refuses at most about 2 % of harmless pictures (nsfw/CALIBRATION.md)
+      MEDIA_NSFW_THRESHOLD: "0.60"
+      # spec section 1: 10 MB a file, 50 uploads a day and 500 MB per pubkey, 100 uploads a day per address, 5 GB a day in all
+      MEDIA_MAX_BYTES: "10485760"
+      MEDIA_PUBKEY_UPLOADS_PER_DAY: "50"
+      MEDIA_PUBKEY_QUOTA_BYTES: "524288000"
+      MEDIA_IP_UPLOADS_PER_DAY: "100"
+      MEDIA_GLOBAL_BYTES_PER_DAY: "5368709120"
+      # every upload in flight holds its picture in memory (about 17 MB for a 10 MB file): 16 of them fit well
+      # below mem_limit; GOMEMLIMIT makes the collector work before the container limit is reached
+      MEDIA_MAX_UPLOADS_IN_FLIGHT: "16"
+      GOMEMLIMIT: 400MiB
+    volumes:
+      - media-data:/data
+
+  nsfw:
+    build:
+      context: ./nsfw
+    image: monostr-nsfw:current
+    restart: unless-stopped
+    mem_limit: 1g
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
+    # no ports: reachable only from the media container over the compose network
+
+  caddy:
+    image: caddy@sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc24061f9b52 # caddy:2 as of 2026-09-25
+    restart: unless-stopped
+    logging: { driver: json-file, options: { max-size: "50m", max-file: "5" } }
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      MEDIA_DOMAIN: ${MEDIA_DOMAIN:-media.monostr.com}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+# IPv6 inside the compose network: without it Docker hands every connection that
+# arrives over IPv6 to Caddy through its userland proxy, all with the same source
+# address, and all IPv6 clients together would share one address limit.
+networks:
+  default:
+    enable_ipv6: true
+
+volumes:
+  media-data:
+  caddy-data:
+  caddy-config:

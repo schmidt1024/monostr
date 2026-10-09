@@ -1,0 +1,21 @@
+monostr, Monero ile bahşiş verilebilen bir Android Nostr istemcisidir.
+
+<b>Bildiğin Nostr</b>
+• Takip ettiklerinin akışı, konuşmalar, Gönderiler ve Yanıtlar sekmeli profiller
+• Beğen, yeniden paylaş, alıntıla, yanıtla; dokunulabilir bahsetmeler, etiketler ve bağlantılar
+• Notlarda görseller ve kendi yüklemelerin (Blossom), hassas içerik bulanık
+• Özel mesajlar (NIP-17), özel yer imleri ve sessize alınanlar (NIP-51)
+• Kişi ve not arama (NIP-50), beğeni, paylaşım, yanıt ve bahşiş bildirimleri
+• Relay listen (NIP-65); bir yazarın yazma relay'leri profili açıkken eklenir
+• Amber (NIP-55) veya anahtarla giriş; açık ve koyu tema, 8 dil
+
+<b>Monero ile bahşiş</b>
+• Bir nota veya profile kendi cüzdan uygulamandan (Monerujo, Cake, Feather …) monero: bağlantısıyla bahşiş ver
+• monostr'da cüzdan ve harcama anahtarı yoktur
+• Bahşiş almak için adresini ve özel görüntüleme anahtarını bir watcher'a kaydedersin (varsayılan watcher.monostr.com ya da kendi watcher'ın). Watcher gelen ödemelerini görür ve imzalı bahşiş makbuzlarını Nostr'da yayımlar; böylece herkes bahşişi notta görür
+• Anonim bahşiş mümkündür
+
+<b>Açık</b>
+monostr özgür yazılımdır (AGPL-3.0-or-later). Notlar, beğeniler ve paylaşımlar “via monostr” taşır (kapatılabilir). Takipçi sayıları özel mülk bir hizmet olan Primal'ın dizininden gelebilir; bu da kapatılabilir.
+
+monostr beta aşamasındadır.

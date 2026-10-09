@@ -1,0 +1,6 @@
+<full-backup-content>
+    <exclude domain="sharedpref" path="secrets.xml" />
+    <exclude domain="file" path="datastore/monostr.preferences_pb" />
+    <!-- the per-account DM databases hold decrypted messages: they never leave the device -->
+    <exclude domain="database" path="." />
+</full-backup-content>

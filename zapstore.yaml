@@ -1,0 +1,35 @@
+# Zapstore listing (https://zapstore.dev), published with `zsp publish` from the project account.
+# APKs come from the GitHub releases of the public repository; texts and screenshots from fastlane/.
+repository: https://github.com/schmidt1024/monostr
+name: monostr
+summary: Nostr client with Monero tips
+license: AGPL-3.0-or-later
+website: https://monostr.com
+icon: ./fastlane/metadata/android/en-US/images/icon.png
+tags:
+  - nostr
+  - monero
+  - social
+metadata_sources:
+  - fastlane
+supported_nips:
+  - "01"
+  - "05"
+  - "09"
+  - "10"
+  - "17"
+  - "18"
+  - "19"
+  - "25"
+  - "36"
+  - "42"
+  - "44"
+  - "45"
+  - "50"
+  - "51"
+  - "55"
+  - "59"
+  - "65"
+  - "89"
+  - "92"
+  - "B7"

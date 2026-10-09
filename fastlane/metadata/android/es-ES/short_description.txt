@@ -1,0 +1,1 @@
+Cliente Nostr con propinas en Monero. Sin Lightning, sin custodio, sin cartera.

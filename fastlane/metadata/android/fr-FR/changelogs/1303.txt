@@ -1,0 +1,4 @@
+• Réglages : interrupteur pour le nombre d'abonnés via Primal
+• Build de publication reproductible
+• Profils : onglets Publications et Réponses, les notes plus anciennes se chargent en défilant
+• Les réponses indiquent à qui elles répondent

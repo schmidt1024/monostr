@@ -1,0 +1,3 @@
+{$RELAY_DOMAIN:relay.monostr.com} {
+	reverse_proxy relay:7777
+}

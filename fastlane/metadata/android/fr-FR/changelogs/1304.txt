@@ -1,0 +1,2 @@
+• Onglets du profil : l’onglet non sélectionné est gris
+• Fil, notifications et messages vides : texte centré avec une marge

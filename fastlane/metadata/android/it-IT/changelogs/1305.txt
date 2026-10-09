@@ -1,0 +1,3 @@
+• Gli hashtag di note, risposte e citazioni sono taggati, i relay li trovano
+• Notifiche: estratti su una riga
+• I link nella bio si aprono

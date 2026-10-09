@@ -1,0 +1,4 @@
+• Settings: switch for follower numbers from Primal
+• Reproducible release build
+• Profiles: Posts and Replies tabs, older notes load as you scroll
+• Replies show whom they answer

@@ -1,0 +1,16 @@
+# No client address is ever stored (spec section 6). Two things are needed for
+# that: no "log" directive in the site block (no access log), and the error
+# log of the HTTP handlers switched off - when the upstream is down, Caddy
+# writes the failed request there, client address included.
+{
+	log {
+		exclude http.log.error
+	}
+}
+
+{$MEDIA_DOMAIN:media.monostr.com} {
+	request_body {
+		max_size 11MB
+	}
+	reverse_proxy media:8080
+}

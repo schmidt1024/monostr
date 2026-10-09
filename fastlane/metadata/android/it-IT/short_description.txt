@@ -1,0 +1,1 @@
+Client Nostr con mance in Monero. Senza Lightning, senza custode, senza wallet.

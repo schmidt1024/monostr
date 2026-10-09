@@ -1,0 +1,3 @@
+{$SEARCH_DOMAIN:search.monostr.com} {
+	reverse_proxy searchnos:3000
+}

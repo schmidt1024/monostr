@@ -1,0 +1,2 @@
+• Kaynak kod GitHub’da açık, derlemeler yeniden üretilebilir
+• Uygulamada değişiklik yok

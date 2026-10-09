@@ -1,0 +1,4 @@
+• Impostazioni: interruttore per il numero di follower tramite Primal
+• Build di rilascio riproducibile
+• Profili: schede Post e Risposte, le note più vecchie si caricano scorrendo
+• Le risposte mostrano a chi rispondono

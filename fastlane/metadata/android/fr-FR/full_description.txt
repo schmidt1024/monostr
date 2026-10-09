@@ -1,0 +1,21 @@
+monostr est un client Nostr pour Android avec des pourboires en Monero.
+
+<b>Nostr, tel que vous le connaissez</b>
+• Fil des personnes que vous suivez, discussions, profils avec les onglets Publications et Réponses
+• Aimer, republier, citer, répondre ; mentions, hashtags et liens cliquables
+• Images dans les notes et vos propres envois (Blossom), contenu sensible flouté
+• Messages privés (NIP-17), favoris et comptes masqués privés (NIP-51)
+• Recherche de personnes et de notes (NIP-50), notifications pour les j'aime, republications, réponses et pourboires
+• Votre liste de relais (NIP-65) ; les relais d'écriture d'un auteur s'ajoutent tant que son profil est ouvert
+• Connexion avec Amber (NIP-55) ou une clé ; thème clair et sombre, 8 langues
+
+<b>Pourboires en Monero</b>
+• Donnez un pourboire à une note ou à un profil depuis votre propre portefeuille (Monerujo, Cake, Feather …) via un lien monero:
+• monostr ne contient ni portefeuille ni clé de dépense
+• Pour recevoir des pourboires, vous enregistrez votre adresse et votre clé d'audit privée auprès d'un watcher (watcher.monostr.com par défaut, ou le vôtre). Le watcher voit vos paiements entrants et publie des reçus signés sur Nostr, pour que chacun voie le pourboire sous la note
+• Les pourboires anonymes sont possibles
+
+<b>Ouvert</b>
+monostr est un logiciel libre (AGPL-3.0-or-later). Les notes, j'aime et republications indiquent « via monostr » (désactivable). Le nombre d'abonnés peut venir de l'index de Primal, un service propriétaire ; c'est désactivable aussi.
+
+monostr est en bêta.

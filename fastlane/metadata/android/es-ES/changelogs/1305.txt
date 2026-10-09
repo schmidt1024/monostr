@@ -1,0 +1,3 @@
+• Los hashtags de notas, respuestas y citas se etiquetan y los relays los encuentran
+• Notificaciones: extractos en una línea
+• Los enlaces de la biografía se abren

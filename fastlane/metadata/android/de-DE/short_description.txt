@@ -1,0 +1,1 @@
+Nostr-Client mit Monero-Tips. Ohne Lightning, ohne Verwahrer, ohne App-Wallet.

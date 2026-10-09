@@ -1,0 +1,21 @@
+monostr ist ein Nostr-Client für Android mit Tips in Monero.
+
+<b>Nostr, wie du es kennst</b>
+• Feed der Leute, denen du folgst, Threads, Profile mit den Tabs Posts und Antworten
+• Liken, reposten, zitieren, antworten; Erwähnungen, Hashtags und Links zum Antippen
+• Bilder in Notes und eigene Uploads (Blossom), sensible Inhalte verschwommen
+• Private Nachrichten (NIP-17), private Lesezeichen und Stummschaltungen (NIP-51)
+• Suche nach Personen und Notes (NIP-50), Mitteilungen zu Likes, Reposts, Antworten und Tips
+• Deine Relay-Liste (NIP-65); die Schreib-Relays eines Autors kommen dazu, solange sein Profil offen ist
+• Anmeldung mit Amber (NIP-55) oder Schlüssel; helles und dunkles Design, 8 Sprachen
+
+<b>Tips in Monero</b>
+• Tip für eine Note oder ein Profil aus deiner eigenen Wallet-App (Monerujo, Cake, Feather …) über einen monero:-Link
+• monostr hat keine Wallet und keinen Spend-Key
+• Um Tips zu empfangen, meldest du Adresse und privaten View-Key bei einem Watcher an (Standard watcher.monostr.com, oder ein eigener). Der Watcher sieht deine eingehenden Zahlungen und veröffentlicht signierte Tip-Belege auf Nostr, damit alle den Tip an der Note sehen
+• Anonyme Tips sind möglich
+
+<b>Offen</b>
+monostr ist freie Software (AGPL-3.0-or-later). Notes, Likes und Reposts tragen „via monostr“ (abschaltbar). Follower-Zahlen können aus Primals Index kommen, einem proprietären Dienst; auch das ist abschaltbar.
+
+monostr ist in der Beta.

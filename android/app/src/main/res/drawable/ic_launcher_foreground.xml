@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- Monostr "M" from assets/monostr-logo (polyline 24,72 24,28 50,56 76,28 76,72 on a 100 grid), placed in the 66 dp safe zone -->
+    <path
+        android:pathData="M41.2,66.4 L41.2,42.6 L54,56.5 L66.8,42.6 L66.8,66.4"
+        android:strokeColor="#16161A" android:strokeWidth="5" android:strokeLineCap="round" android:strokeLineJoin="round" android:fillColor="#00000000" />
+</vector>

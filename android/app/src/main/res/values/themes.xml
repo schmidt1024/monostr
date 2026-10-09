@@ -1,0 +1,24 @@
+<resources>
+    <!--
+      The spec/brief call for parent "android:Theme.Material.DayNight.NoActionBar", but the Android
+      platform has no such style (DayNight is an AppCompat/Material-Components concept; the platform
+      only ships `Theme.DeviceDefault.DayNight`, added in a later API than this app's minSdk, and no
+      `Theme.Material.DayNight` at all — confirmed via `aapt2 dump resources` on android-36). Day/night
+      is implemented the platform-native way instead: this file uses the Light parent, `values-night/`
+      uses the (dark) Material parent, exactly mirroring the `colors.xml` / `values-night/colors.xml`
+      split the brief already specifies. Same window-background behaviour, no new dependency.
+    -->
+    <style name="Theme.Monostr" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+    </style>
+    <!--
+      Spec 3 (Plan 10d): launch theme. The system splash shows only the window colour (transparent icon);
+      @color/window_background resolves to the night value from values-night/colors.xml, so no second
+      style is needed there. installSplashScreen() switches to Theme.Monostr before setContent.
+    -->
+    <style name="Theme.Monostr.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/window_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_blank</item>
+        <item name="postSplashScreenTheme">@style/Theme.Monostr</item>
+    </style>
+</resources>

@@ -1,0 +1,21 @@
+monostr è un client Nostr per Android con mance in Monero.
+
+<b>Nostr, come lo conosci</b>
+• Feed delle persone che segui, thread, profili con le schede Post e Risposte
+• Mi piace, ripubblica, cita, rispondi; menzioni, hashtag e link toccabili
+• Immagini nelle note e caricamenti propri (Blossom), contenuti sensibili sfocati
+• Messaggi privati (NIP-17), segnalibri e account silenziati privati (NIP-51)
+• Ricerca di persone e note (NIP-50), notifiche per mi piace, ripubblicazioni, risposte e mance
+• La tua lista di relay (NIP-65); i relay di scrittura di un autore si aggiungono finché il suo profilo è aperto
+• Accesso con Amber (NIP-55) o con una chiave; tema chiaro e scuro, 8 lingue
+
+<b>Mance in Monero</b>
+• Lascia una mancia a una nota o a un profilo dalla tua app wallet (Monerujo, Cake, Feather …) tramite un link monero:
+• monostr non contiene un wallet né una chiave di spesa
+• Per ricevere mance registri indirizzo e chiave di visualizzazione privata presso un watcher (watcher.monostr.com di default, o il tuo). Il watcher vede i pagamenti in entrata e pubblica ricevute firmate su Nostr, così tutti vedono la mancia sotto la nota
+• Sono possibili mance anonime
+
+<b>Aperto</b>
+monostr è software libero (AGPL-3.0-or-later). Note, mi piace e ripubblicazioni riportano «via monostr» (disattivabile). Il numero di follower può venire dall'indice di Primal, un servizio proprietario; anche questo è disattivabile.
+
+monostr è in beta.

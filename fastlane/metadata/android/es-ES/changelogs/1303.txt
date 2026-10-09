@@ -1,0 +1,4 @@
+• Ajustes: interruptor para el número de seguidores de Primal
+• Compilación reproducible
+• Perfiles: pestañas Publicaciones y Respuestas, las notas antiguas se cargan al desplazarse
+• Las respuestas muestran a quién responden

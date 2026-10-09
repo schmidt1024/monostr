@@ -1,0 +1,2 @@
+• Schede del profilo: la scheda non selezionata è grigia
+• Feed, notifiche e messaggi vuoti: testo centrato con margine

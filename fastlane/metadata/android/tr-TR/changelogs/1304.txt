@@ -1,0 +1,2 @@
+• Profil sekmeleri: seçili olmayan sekme gri
+• Boş akış, bildirimler ve mesajlar: metin ortalı ve kenar boşluklu

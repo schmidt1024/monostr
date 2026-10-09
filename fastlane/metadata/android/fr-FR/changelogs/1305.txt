@@ -1,0 +1,3 @@
+• Les hashtags des notes, réponses et citations sont balisés, les relais les trouvent
+• Notifications : extraits sur une ligne
+• Les liens de la bio s’ouvrent

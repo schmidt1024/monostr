@@ -1,0 +1,1 @@
+Monero bahşişli Nostr istemcisi. Lightning yok, emanetçi yok, cüzdan yok.

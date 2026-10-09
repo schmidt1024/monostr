@@ -1,0 +1,4 @@
+• Configurações: chave para o número de seguidores via Primal
+• Build de lançamento reproduzível
+• Perfis: abas Publicações e Respostas, notas antigas carregam ao rolar
+• Respostas mostram a quem respondem

@@ -1,0 +1,3 @@
+• Hashtags in Notes, Antworten und Zitaten werden getaggt, Relays finden sie
+• Mitteilungen: Ausschnitte als eine Zeile
+• Links in der Profil-Bio lassen sich öffnen

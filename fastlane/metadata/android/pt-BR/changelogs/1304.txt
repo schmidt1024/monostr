@@ -1,0 +1,2 @@
+• Abas do perfil: a aba não selecionada fica cinza
+• Feed, notificações e mensagens vazios: texto centralizado com margem

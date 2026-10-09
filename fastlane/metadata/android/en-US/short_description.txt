@@ -1,0 +1,1 @@
+Nostr client with Monero tips. No Lightning, no custodian, no wallet inside.

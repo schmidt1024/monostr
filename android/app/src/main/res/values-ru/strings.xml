@@ -1,0 +1,461 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- app -->
+    <string name="login_tagline">Nostr с чаевыми в Monero</string>
+
+    <!-- shared actions and states -->
+    <string name="action_back">Назад</string>
+    <string name="action_close">Закрыть</string>
+    <string name="action_done">Готово</string>
+    <string name="action_check">Проверить</string>
+    <string name="action_add">Добавить</string>
+    <string name="action_remove">Удалить</string>
+    <string name="action_send">Отправить</string>
+    <string name="action_send_again">Отправить снова</string>
+    <string name="action_copy_address">Копировать адрес</string>
+    <string name="action_copy_uri">Копировать URI</string>
+    <string name="state_sending">Отправка…</string>
+    <string name="state_loading">Загрузка…</string>
+    <string name="qr_content_description">QR-код</string>
+
+    <!-- relay state -->
+    <string name="relay_connected">подключено</string>
+    <string name="relay_connecting">подключение…</string>
+    <string name="relay_disconnected">отключено</string>
+    <string name="relay_not_connected">не подключено</string>
+    <string name="relay_status">Статус релея: %1$s</string>
+
+    <!-- relative time -->
+    <string name="time_now">сейчас</string>
+    <string name="time_minutes">%1$d мин</string>
+    <string name="time_hours">%1$d ч</string>
+    <string name="time_days">%1$d д</string>
+
+    <!-- errors mapped from exceptions -->
+    <string name="error_signing_rejected">Отклонено подписантом</string>
+    <string name="error_watcher_unreachable">Watcher недоступен</string>
+    <string name="error_watcher_rate_limited">Watcher: слишком много запросов, попробуйте позже</string>
+    <string name="error_watcher_rejected">Watcher отклонил запрос</string>
+    <string name="error_watcher_invalid">Некорректный ответ watcher</string>
+    <string name="error_note_unavailable">Заметка недоступна</string>
+    <string name="error_send_failed">Не удалось отправить</string>
+    <string name="session_restore_failed">Не удалось восстановить сеанс</string>
+
+    <!-- notes and actions -->
+    <string name="note_reply">Ответить</string>
+    <string name="note_open_profile">Открыть профиль</string>
+    <string name="note_repost">Репост</string>
+    <string name="note_like">Нравится</string>
+    <string name="note_tip">Чаевые в Monero</string>
+    <string name="note_bookmark">Закладка</string>
+    <string name="note_bookmarked">Сохранено</string>
+    <string name="note_deleted">Удаление запрошено</string>
+    <string name="note_not_bookmarked">Не сохранено</string>
+    <string name="bookmark_failed">Не удалось сохранить закладку</string>
+    <string name="bookmark_nip44_unsupported">Ваш подписант не поддерживает NIP-44</string>
+    <string name="mute_done">%1$s заглушён</string>
+    <string name="mute_read_only">Список заглушённых нельзя изменить здесь: его приватная часть в формате, который это приложение не может прочитать.</string>
+    <string name="mute_account">Заглушить %1$s</string>
+    <string name="unmute_account">Снять заглушение</string>
+    <string name="mute_undo">Отменить</string>
+    <string name="mute_profile_hint">Заглушён</string>
+    <string name="mute_settings_title">Заглушённые аккаунты</string>
+    <string name="mute_settings_empty">Никто не заглушён. Заглушите аккаунт через меню заметки или его профиль.</string>
+    <string name="note_tips_open">Показать, кто дал чаевые</string>
+    <string name="note_reposted_by">Репост от %1$s</string>
+    <string name="note_tip_pending">Чаевые отправлены, ожидают подтверждения</string>
+    <string name="note_tips_chip">%1$s · %2$d</string>
+    <string name="media_sensitive">Чувствительный контент</string>
+    <string name="media_tap_to_show">Нажмите, чтобы показать</string>
+    <string name="media_tap_to_load">Нажмите, чтобы загрузить изображения</string>
+    <string name="media_failed">Не удалось загрузить изображение</string>
+    <string name="media_video">Воспроизвести видео</string>
+    <string name="media_viewer_close">Закрыть</string>
+    <string name="media_copy_link">Копировать ссылку</string>
+    <string name="media_open_browser">Открыть в браузере</string>
+    <string name="profile_extra_relays">Заметки также с %1$s</string>
+    <!-- profile header: "12 Following · 3,373 Followers"; the numbers are formatted apart -->
+    <string name="profile_following_label">Подписки</string>
+    <plurals name="profile_followers_label">
+        <item quantity="one">%1$s подписчик</item>
+        <item quantity="few">%1$s подписчика</item>
+        <item quantity="many">%1$s подписчиков</item>
+        <item quantity="other">%1$s подписчика</item>
+    </plurals>
+    <string name="settings_amber_renew">Обновить разрешения Amber</string>
+    <string name="settings_msg_amber_updated">Разрешения обновлены</string>
+    <string name="settings_msg_amber_cancelled">Отменено</string>
+    <string name="settings_msg_amber_wrong_key">Выбран другой ключ – ничего не изменилось</string>
+    <string name="action_like_sent">Отметка «Нравится» отправлена</string>
+    <string name="action_repost_sent">Репост отправлен</string>
+    <string name="action_no_relay_local">Нет доступных релеев, сохранено локально</string>
+
+    <!-- tabs -->
+    <string name="tab_feed">Лента</string>
+    <string name="tab_search">Поиск</string>
+    <string name="tab_notifications">Уведомления</string>
+    <string name="tab_messages">Сообщения</string>
+
+    <!-- search -->
+    <string name="search_hint">Имя, npub, заметка или #хэштег</string>
+    <string name="search_clear">Очистить</string>
+    <string name="search_recent_title">Недавние запросы</string>
+    <string name="search_recent_remove">Убрать из недавних запросов</string>
+    <string name="search_recent_clear">Очистить всё</string>
+    <string name="search_people">Люди</string>
+    <string name="search_notes">Заметки</string>
+    <string name="search_empty">Ничего не найдено</string>
+    <string name="search_no_relays">Релеи поиска не заданы — только локальные результаты.</string>
+    <string name="search_open_settings">Релеи поиска…</string>
+
+    <!-- feed -->
+    <string name="feed_settings">Настройки</string>
+    <string name="feed_new_note">Новая заметка</string>
+    <string name="feed_empty">Заметок пока нет. Подпишитесь на кого-нибудь или напишите первую.</string>
+    <string name="feed_error_load">Не удалось загрузить ленту</string>
+    <string name="feed_error_more">Не удалось загрузить больше заметок</string>
+
+    <!-- thread / profile -->
+    <string name="thread_title">Ветка</string>
+    <string name="thread_not_found">Заметка не найдена</string>
+    <string name="profile_title_self">Мой профиль</string>
+    <string name="profile_error_load">Не удалось загрузить профиль</string>
+    <string name="note_replying_one">В ответ %1$s</string>
+    <string name="note_replying_two">В ответ %1$s и %2$s</string>
+    <plurals name="note_replying_more">
+        <item quantity="one">В ответ %1$s, %2$s и ещё %3$d</item>
+        <item quantity="few">В ответ %1$s, %2$s и ещё %3$d</item>
+        <item quantity="many">В ответ %1$s, %2$s и ещё %3$d</item>
+        <item quantity="other">В ответ %1$s, %2$s и ещё %3$d</item>
+    </plurals>
+    <string name="profile_tab_posts">Посты</string>
+    <string name="profile_tab_replies">Ответы</string>
+    <string name="profile_empty_posts">Постов пока нет</string>
+    <string name="profile_empty_replies">Ответов пока нет</string>
+
+    <!-- compose -->
+    <string name="compose_title_reply">Ответ</string>
+    <string name="compose_title_new">Новая заметка</string>
+    <string name="compose_placeholder">Что нового?</string>
+    <string name="compose_error_empty">Пустая заметка</string>
+    <string name="compose_error_reply_target">Не удалось загрузить заметку, на которую вы отвечаете</string>
+    <string name="compose_notice_offline">Нет доступных релеев, заметка сохранена локально</string>
+
+    <!-- login -->
+    <string name="login_amber">Войти через Amber (рекомендуется)</string>
+    <string name="login_or_key">Или с ключом:</string>
+    <string name="login_no_signer">Подписант NIP-55 (например, Amber) не установлен. Войдите с ключом:</string>
+    <string name="login_secret_label">nsec или hex</string>
+    <string name="login_button">Войти</string>
+    <string name="login_error_invalid_key">Недействительный ключ nsec или hex</string>
+    <string name="login_error_rejected">Запрос отклонён подписантом</string>
+    <string name="login_error_signer">Подписант сообщил об ошибке</string>
+    <string name="login_error_failed">Не удалось войти</string>
+
+    <!-- tip sheet -->
+    <string name="tip_title">Отправить чаевые в Monero</string>
+    <string name="tip_amount">Сумма (XMR)</string>
+    <string name="tip_xmr_amount">%1$s XMR</string>
+    <string name="tip_custom_amount">Своя сумма в XMR</string>
+    <string name="tip_pay">Оплатить в кошельке</string>
+    <string name="tip_no_wallet_title">Приложение-кошелёк не найдено</string>
+    <string name="tip_no_wallet_text">Установите Monerujo или Cake Wallet либо переведите сумму вручную на этот адрес:</string>
+    <string name="tip_open_wallet_again">Открыть кошелёк снова</string>
+    <string name="tip_sent">Кошелёк открыт. Чаевые ожидают подтверждения от watcher.</string>
+    <string name="tip_error_amount">Неверная сумма (например, 0.005)</string>
+    <string name="tip_no_monero">Получатель не настроил Monero</string>
+    <string name="tip_notice_offline">Нет доступных релеев, интент сохранён локально</string>
+    <string name="tip_anonymous_switch">Анонимные чаевые</string>
+    <string name="tip_anonymous_hint">Ваше имя не показывается. Получатель тоже не узнает, кто отправил чаевые.</string>
+    <string name="tip_error_anon_unavailable">Анонимные чаевые сейчас невозможны: watcher получателя недоступен.</string>
+    <string name="tip_arrived">Чаевые получены</string>
+    <string name="tip_anonymous">Аноним</string>
+    <string name="tippers_title">Чаевые в Monero</string>
+    <string name="tippers_empty">Чаевых нет</string>
+
+    <!-- monero setup -->
+    <string name="setup_title_intro">Получать чаевые в Monero?</string>
+    <string name="setup_title">Чаевые в Monero</string>
+    <string name="setup_registering">Регистрация у watcher…</string>
+    <string name="setup_intro_text">С адресом Monero другие смогут отправлять вам чаевые. Отправлять чаевые можно и без него.</string>
+    <string name="setup_watcher_heading">Watcher</string>
+    <string name="setup_watcher_text">Watcher отслеживает входящие платежи и публикует квитанции в Nostr.</string>
+    <string name="setup_watcher_url">URL watcher</string>
+    <string name="setup_load_watcher">Проверить watcher</string>
+    <string name="setup_skip">Позже</string>
+    <string name="setup_watcher_info">Watcher %1$s · %2$s · высота %3$d</string>
+    <string name="setup_privacy">Watcher видит все входящие платежи этого кошелька. Поэтому используйте отдельный кошелёк только для чаевых.</string>
+    <string name="setup_watcher_privacy">Watcher хранит только необходимое: ваш публичный ключ Nostr, адрес кошелька с ключом просмотра, а также открытые интенты и квитанции чаевых (они и так публичны в Nostr). IP-адреса не логируются и не сохраняются. Отключение чаевых удаляет ваш аккаунт у watcher; его сканер хранит адрес и ключ просмотра как неактивные, пока оператор их не удалит.</string>
+    <string name="setup_path_new_hint">Создаёт новую сид-фразу из 25 слов на этом телефоне. monostr только отслеживает входящие чаевые; чтобы их потратить, импортируйте сид-фразу в Cake Wallet, Monerujo или Feather.</string>
+    <string name="setup_path_existing_hint">Вставьте основной адрес и приватный ключ просмотра из Cake Wallet, Monerujo или Feather.</string>
+    <string name="setup_new_wallet">Создать новый кошелёк для чаевых (рекомендуется)</string>
+    <string name="setup_existing_wallet">Использовать существующий кошелёк</string>
+    <string name="setup_reuse_wallet">Перенести сохранённый кошелёк на этот watcher</string>
+    <string name="setup_seed_title">Ваша сид-фраза (25 слов)</string>
+    <string name="setup_seed_text">Запишите её на бумаге. Только с ней вы сможете потратить чаевые в Monerujo, Cake или Feather. Приложение хранит только адрес и ключ просмотра.</string>
+    <string name="setup_restore_height">Высота восстановления: %1$d</string>
+    <string name="setup_seed_written">Записано</string>
+    <string name="seed_copy">Скопировать сид-фразу</string>
+    <string name="seed_copy_warning_title">Скопировать сид-фразу в буфер обмена?</string>
+    <string name="seed_copy_warning_text">Другие приложения могут читать буфер обмена. Сразу вставьте сид-фразу в кошелёк; через 60 секунд monostr удалит её из буфера.</string>
+    <string name="seed_copied">Скопировано. Буфер обмена будет очищен через 60 секунд.</string>
+    <string name="setup_verify_title">Три слова для проверки</string>
+    <string name="setup_verify_word">Слово № %1$d</string>
+    <string name="setup_verify_wrong">Как минимум одно слово неверно.</string>
+    <string name="setup_back_to_seed">Назад к сид-фразе</string>
+    <string name="setup_existing_title">Существующий кошелёк</string>
+    <string name="setup_address_label">Основной адрес (4… / 5…)</string>
+    <string name="setup_view_key_label">Приватный ключ просмотра (64 hex)</string>
+    <string name="setup_confirm_title">Подтвердите</string>
+    <string name="setup_confirm_text">Watcher видит все входящие платежи этого кошелька, а не только чаевые. Тратить он ничего не может.</string>
+    <string name="setup_understood">Понятно</string>
+    <string name="setup_register">Зарегистрироваться</string>
+    <string name="setup_done_title">Готово</string>
+    <string name="setup_done_text">Ваша платёжная информация опубликована в Nostr. Чаевые поступают на этот кошелёк:</string>
+    <string name="setup_done_import">Чтобы потратить: импортируйте сид-фразу в Monerujo, Cake или Feather, высота восстановления %1$d.</string>
+    <string name="setup_err_url">URL watcher должен начинаться с https://</string>
+    <string name="setup_err_watcher_network">Watcher сообщает о неизвестной сети</string>
+    <string name="setup_err_subaddress">Субадреса не поддерживаются. Используйте основной адрес (начинается с 4 или 5).</string>
+    <string name="setup_err_integrated">Интегрированные адреса не поддерживаются. Используйте основной адрес.</string>
+    <string name="setup_err_address">Неверный адрес</string>
+    <string name="setup_err_network">Сеть адреса не совпадает с сетью watcher</string>
+    <string name="setup_err_view_key_format">Ключ просмотра должен содержать 64 hex-символа</string>
+    <string name="setup_err_view_key_mismatch">Ключ просмотра не соответствует адресу</string>
+    <string name="setup_err_not_published">Нет доступных релеев – платёжная информация не опубликована, попробуйте снова</string>
+
+    <!-- settings -->
+    <string name="settings_title">Настройки</string>
+    <string name="settings_logged_in_as">Вход выполнен как</string>
+    <string name="settings_relays">Релеи</string>
+    <string name="settings_relay_invalid">Неверный URL релея (ожидается ws:// или wss://)</string>
+    <string name="settings_relay_keep_one">Должен остаться хотя бы один релей</string>
+    <string name="settings_relay_save_failed">Не удалось сохранить релеи</string>
+    <string name="settings_messages">Сообщения</string>
+    <string name="settings_dm_relays">Релеи сообщений (NIP-17)</string>
+    <string name="settings_dm_relays_hint">Сюда другие доставляют ваши сообщения; публикуется как kind 10050. relay.monostr.com требует входа (NIP-42) – Amber нужно разрешение для kind 22242, см. «Обновить разрешения Amber».</string>
+    <string name="settings_dm_preview_name">Показывать отправителя в уведомлениях</string>
+    <string name="settings_dm_preview_text">Показывать текст в уведомлениях</string>
+    <string name="settings_search_relays">Релеи поиска</string>
+    <string name="settings_search_relays_hint">Только для поиска имён и полного текста (NIP-50), никогда для ленты.</string>
+    <string name="settings_search_relays_reset">Сбросить к стандартным</string>
+    <string name="settings_suggested_relays">Рекомендуемые релеи</string>
+    <string name="settings_suggested_relays_hint">Платные Monero-релеи: чтение бесплатно, публикация после разового платежа в XMR на сайте релея. Источник: pmnr.xmr.rocks</string>
+    <string name="settings_suggested_relay_fee">Платный Monero-релей · %1$s XMR за публикацию</string>
+    <string name="settings_media">Медиа</string>
+    <string name="settings_media_blur">Скрывать чувствительные медиа</string>
+    <string name="settings_media_blur_hint">Заметки с пометкой (content warning или #nsfw) показывают размытые изображения до нажатия.</string>
+    <string name="settings_media_on_tap">Загружать изображения только по нажатию</string>
+    <string name="settings_media_on_tap_hint">Экономит трафик; видео никогда не загружается само.</string>
+    <string name="settings_author_relays">Временно подключать релеи автора</string>
+    <string name="settings_author_relays_hint">При открытии профиля заметки берутся и с собственных релеев этого человека. Релей видит ваш IP-адрес и чей профиль вы открываете.</string>
+    <string name="settings_client_tag">Показывать «via monostr»</string>
+    <string name="settings_client_tag_hint">Заметки, лайки и репосты содержат тег клиента, который другие приложения показывают как «via monostr».</string>
+    <string name="settings_primal_stats">Подписчики через Primal</string>
+    <string name="settings_primal_stats_hint">Профили запрашивают у индекса Primal число подписчиков, которое показывают другие приложения. Выключено: считают только релеи, число намного меньше.</string>
+    <string name="note_via">через %1$s</string>
+    <string name="settings_monero">Чаевые в Monero</string>
+    <string name="settings_monero_not_set_up">Не настроено. Для отправки чаевых не требуется.</string>
+    <string name="settings_monero_set_up">Настроить приём чаевых</string>
+    <string name="settings_monero_address">Адрес %1$s…%2$s · %3$s</string>
+    <string name="settings_monero_watcher">Watcher %1$s</string>
+    <string name="settings_monero_switch_watcher">Сменить watcher</string>
+    <string name="settings_monero_disable">Отключить чаевые</string>
+    <string name="settings_monero_delete_view_key">Удалить ключ просмотра локально</string>
+    <string name="settings_presets">Шаблоны сумм (XMR)</string>
+    <string name="settings_preset_n">Шаблон %1$d</string>
+    <string name="settings_presets_save">Сохранить шаблоны</string>
+    <string name="settings_preset_add">Добавить пресет</string>
+    <string name="settings_preset_remove">Удалить пресет</string>
+    <string name="settings_adopt_relays">Заменить эти релеи моим опубликованным списком (NIP-65)</string>
+    <string name="settings_logout">Выйти</string>
+    <string name="settings_msg_presets_saved">Шаблоны сохранены</string>
+    <string name="settings_msg_disabled">Чаевые в Monero отключены</string>
+    <string name="settings_msg_view_key_deleted">Ключ просмотра удалён локально</string>
+    <string name="settings_msg_relays_adopted">Релеи взяты из профиля</string>
+    <string name="settings_msg_no_relay_list">В профиле не найден список релеев (NIP-65)</string>
+    <string name="settings_publish_relays">Опубликовать эти релеи как мой список релеев (NIP-65)</string>
+    <string name="settings_publish_relays_hint">Другие приложения и watcher чаевых ищут вас на релеях из этого списка. Публикация заменяет список из другого приложения.</string>
+    <string name="settings_adopt_relays_hint">Релеи этого приложения будут заменены списком релеев, опубликованным для вашего аккаунта. Список из другого приложения может содержать релеи, которых больше нет.</string>
+    <string name="settings_reset_relays">Восстановить релеи по умолчанию</string>
+    <string name="settings_reset_relays_hint">Релеи этого приложения будут заменены релеями monostr по умолчанию.</string>
+    <string name="settings_msg_relay_list_published">Список релеев опубликован</string>
+    <string name="settings_msg_relay_list_not_published">Ни один релей не принял список релеев</string>
+    <string name="settings_err_presets">Шаблоны: допустимые суммы XMR, например 0.001</string>
+
+    <!-- appearance (Task 5) -->
+    <string name="settings_appearance">Оформление</string>
+    <string name="settings_theme_system">Системная</string>
+    <string name="settings_theme_light">Светлая</string>
+    <string name="settings_theme_dark">Тёмная</string>
+    <string name="settings_accent">Акцентный цвет</string>
+    <string name="settings_accent_mono">Моно</string>
+    <string name="settings_accent_orange">Оранжевый</string>
+    <string name="settings_accent_blue">Синий</string>
+    <string name="settings_accent_purple">Лиловый</string>
+    <string name="settings_accent_custom">Своя</string>
+    <string name="settings_accent_hue">Оттенок</string>
+    <string name="settings_accent_selected">%1$s, выбран</string>
+    <string name="settings_language">Язык</string>
+    <string name="settings_language_text">Язык приложения задаётся в настройках системы.</string>
+    <string name="settings_language_button">Сменить язык приложения</string>
+
+    <!-- notifications -->
+    <string name="notifications_title">Уведомления</string>
+    <string name="notifications_empty">Уведомлений пока нет</string>
+    <string name="notifications_error_load">Не удалось загрузить уведомления</string>
+    <string name="messages_title">Сообщения</string>
+    <string name="messages_empty">Сообщений пока нет. Откройте профиль и нажмите «Сообщение».</string>
+    <plurals name="messages_requests">
+        <item quantity="one">Запрос (%1$d)</item>
+        <item quantity="few">Запросы (%1$d)</item>
+        <item quantity="many">Запросы (%1$d)</item>
+        <item quantity="other">Запросы (%1$d)</item>
+    </plurals>
+    <string name="messages_auth_failed">%1$s требует входа (NIP-42) – обновите разрешения Amber в настройках</string>
+    <string name="messages_auth_rejected">%1$s отклоняет вход (%2$s). Сообщения оттуда загрузить нельзя; остальные ваши релеи работают. Удалите его из релеев сообщений в настройках.</string>
+    <plurals name="messages_pending">
+        <item quantity="one">%1$d сообщение ждёт Amber – нажмите, чтобы расшифровать</item>
+        <item quantity="few">%1$d сообщения ждут Amber – нажмите, чтобы расшифровать</item>
+        <item quantity="many">%1$d сообщений ждут Amber – нажмите, чтобы расшифровать</item>
+        <item quantity="other">%1$d сообщения ждут Amber – нажмите, чтобы расшифровать</item>
+    </plurals>
+    <string name="messages_error_load">Не удалось загрузить сообщения</string>
+    <string name="chat_input_hint">Сообщение</string>
+    <string name="chat_send">Отправить</string>
+    <string name="chat_retry">Повторить</string>
+    <string name="chat_status_sending">Отправка…</string>
+    <string name="chat_status_failed">Не отправлено</string>
+    <string name="chat_error_send">Не удалось отправить сообщение</string>
+    <string name="profile_message">Сообщение</string>
+    <string name="notif_mentioned">упомянул(а) вас</string>
+    <string name="notif_liked_one">%1$s нравится ваша заметка</string>
+    <string name="notif_liked_two">%1$s и %2$s нравится ваша заметка</string>
+    <plurals name="notif_liked_more">
+        <item quantity="one">%1$s, %2$s и ещё %3$d человеку нравится ваша заметка</item>
+        <item quantity="few">%1$s, %2$s и ещё %3$d людям нравится ваша заметка</item>
+        <item quantity="many">%1$s, %2$s и ещё %3$d людям нравится ваша заметка</item>
+        <item quantity="other">%1$s, %2$s и ещё %3$d людям нравится ваша заметка</item>
+    </plurals>
+    <string name="notif_reposted_one">%1$s сделал(а) репост вашей заметки</string>
+    <string name="notif_reposted_two">%1$s и %2$s сделали репост вашей заметки</string>
+    <plurals name="notif_reposted_more">
+        <item quantity="one">%1$s, %2$s и ещё %3$d человек сделали репост вашей заметки</item>
+        <item quantity="few">%1$s, %2$s и ещё %3$d человека сделали репост вашей заметки</item>
+        <item quantity="many">%1$s, %2$s и ещё %3$d человек сделали репост вашей заметки</item>
+        <item quantity="other">%1$s, %2$s и ещё %3$d человек сделали репост вашей заметки</item>
+    </plurals>
+    <string name="notif_about_reply">В ответ на: «%1$s»</string>
+    <string name="notif_about_quote">Цитирует: «%1$s»</string>
+    <string name="notif_tip_profile">в ваш профиль</string>
+    <string name="avatar_of">Профиль %1$s</string>
+    <string name="notif_note_missing">заметка не загружена</string>
+    <string name="notif_note_withdrawn">удалённая заметка</string>
+    <string name="notif_tipped">отправил(а) чаевые %1$s XMR</string>
+    <string name="notif_channel_name">Чаевые в Monero</string>
+    <string name="notif_tip_title">Получены чаевые в Monero</string>
+    <string name="notif_tip_text">%1$s отправил(а) вам чаевые %2$s XMR</string>
+    <string name="notif_dm_channel">Сообщения</string>
+    <string name="notif_dm_title">Сообщение от %1$s</string>
+    <string name="notif_dm_title_anonymous">Новое сообщение</string>
+    <string name="notif_dm_tap">Нажмите, чтобы открыть</string>
+    <plurals name="dm_pending_summary">
+        <item quantity="one">%1$d сообщение ждёт Amber</item>
+        <item quantity="few">%1$d сообщения ждут Amber</item>
+        <item quantity="many">%1$d сообщений ждут Amber</item>
+        <item quantity="other">%1$d сообщения ждут Amber</item>
+    </plurals>
+
+    <!-- bookmarks -->
+    <string name="bookmarks_title">Закладки</string>
+    <string name="bookmarks_empty">Закладок пока нет. Нажмите значок закладки под заметкой.</string>
+    <string name="bookmarks_missing">Заметка не найдена (%1$s)</string>
+    <string name="bookmarks_error_load">Не удалось загрузить закладки</string>
+    <string name="note_ref_label">заметка</string>
+    <string name="quote_missing">Заметка не найдена</string>
+    <string name="mute_quote_placeholder">Заметка заглушённого аккаунта</string>
+    <string name="action_quote">Цитировать</string>
+    <string name="compose_quote_hint">Цитата</string>
+    <string name="profile_edit">Редактировать профиль</string>
+    <string name="feed_profile">Мой профиль</string>
+    <string name="profile_edit_title">Редактировать профиль</string>
+    <string name="profile_edit_banner">URL баннера</string>
+    <string name="profile_edit_picture">URL изображения</string>
+    <string name="profile_edit_display_name">Отображаемое имя</string>
+    <string name="profile_edit_name">Имя</string>
+    <string name="profile_edit_about">О себе</string>
+    <string name="profile_edit_nip05">Адрес NIP-05</string>
+    <string name="profile_edit_save">Сохранить</string>
+    <string name="profile_edit_no_profile">На ваших релеях не найден существующий профиль. При сохранении будет создан новый.</string>
+    <string name="profile_save_failed">Не удалось сохранить профиль</string>
+    <string name="profile_url_invalid">Должен начинаться с https://</string>
+    <string name="action_cancel">Отмена</string>
+    <string name="action_replace">Заменить</string>
+    <string name="profile_follow">Подписаться</string>
+    <string name="profile_following">Вы подписаны</string>
+    <string name="profile_unfollow_title">Отписаться от @%1$s?</string>
+    <string name="profile_unfollow_confirm">Отписаться</string>
+    <string name="follow_no_list">Не удалось загрузить список подписок, ничего не изменено. Попробуйте позже.</string>
+    <string name="support_title">Поддержать monostr</string>
+    <string name="support_text">monostr — открытое ПО без рекламы и слежки. Если приложение вам полезно, поддержите его развитие в Monero.</string>
+    <string name="support_button">Поддержать в Monero</string>
+    <string name="support_contributors">Участники</string>
+    <string name="support_repo">Исходный код</string>
+    <string name="support_hint_title">Нравится monostr?</string>
+    <string name="support_hint_action">Поддержать</string>
+    <string name="support_hint_dismiss">Скрыть</string>
+    <string name="about_title">О monostr</string>
+    <string name="about_version">Версия %1$s (сборка %2$d)</string>
+    <string name="about_beta">Бета</string>
+    <string name="about_feedback">Отзывы в Nostr</string>
+    <string name="about_issues">Сообщить о проблеме</string>
+    <string name="about_license">Лицензия: %1$s</string>
+    <string name="dm_relay_hint_missing">relay.monostr.com нет в вашем списке входящих, поэтому пользователи monostr могут до вас не достучаться.</string>
+    <string name="dm_relay_hint_add">Добавить</string>
+    <string name="dm_relay_hint_second">Второй релей для входящих делает доставку сообщений надёжнее.</string>
+    <string name="dm_relay_hint_dismiss">Скрыть</string>
+    <string name="dm_relay_hint_replace">Список входящих заполнен. Какой релей заменить на relay.monostr.com?</string>
+    <string name="upload_error_nsfw">Этот сервер не принимает контент для взрослых. В настройках можно выбрать другой медиасервер.</string>
+    <string name="upload_error_too_large">Изображение слишком большое для этого сервера</string>
+    <string name="upload_error_quota">Ваше место на этом сервере заполнено</string>
+    <string name="upload_error_rate">Лимит загрузок исчерпан, попробуйте завтра</string>
+    <string name="upload_error_type">Сервер не принимает файлы такого типа</string>
+    <string name="upload_error_banned">Сервер отклоняет эту загрузку</string>
+    <string name="upload_error_auth">Сервер не принял подпись</string>
+    <string name="upload_error_unavailable">Медиасервер недоступен, попробуйте позже</string>
+    <string name="upload_error_network">Нет связи с медиасервером</string>
+    <string name="upload_error_unreadable">Не удалось прочитать это изображение</string>
+    <string name="upload_error_signing">Подпись отклонена. Разрешите её в подписанте или обновите разрешения Amber в настройках.</string>
+    <string name="upload_error_failed">Не удалось загрузить</string>
+    <string name="compose_error_uploads">Дождитесь загрузки изображений или уберите те, что не загрузились</string>
+    <string name="compose_attach">Добавить изображения</string>
+    <string name="compose_attachment_remove">Убрать изображение</string>
+    <string name="upload_retry">Повторить</string>
+    <string name="compose_sensitive">Деликатный контент</string>
+    <string name="compose_sensitive_hint">Читатели видят изображения размытыми, пока не нажмут.</string>
+    <string name="profile_edit_pick">Выбрать изображение</string>
+    <string name="profile_edit_uploading">Загрузка…</string>
+    <string name="settings_media_server">Медиасервер</string>
+    <string name="settings_media_server_hint">Прикреплённые изображения загружаются на этот сервер Blossom. Они общедоступны.</string>
+    <string name="settings_media_server_invalid">Нужен адрес https:// без пути</string>
+    <string name="settings_media_server_reset">По умолчанию</string>
+    <string name="about_media">Загруженные вами изображения хранятся на %1$s и доступны всем, у кого есть ссылка. Чтобы пожаловаться на изображение, отправьте ссылку на него аккаунту проекта monostr в Nostr.</string>
+    <string name="note_menu">Ещё</string>
+    <string name="note_menu_copy_link">Копировать ссылку</string>
+    <string name="note_menu_copy_text">Копировать текст</string>
+    <string name="note_menu_delete">Запросить удаление</string>
+    <string name="note_delete_title">Удалить заметку?</string>
+    <string name="note_delete_text">Реле и другие приложения получат просьбу удалить эту заметку. Заставить их нельзя; у тех, кто её уже видел, она может остаться.</string>
+    <string name="note_delete_pictures">Изображения этой заметки будут удалены с медиасервера.</string>
+    <string name="note_delete_confirm">Удалить</string>
+    <string name="note_copied">Скопировано</string>
+    <string name="note_show_more">Показать ещё</string>
+    <string name="feed_to_top">Наверх и обновить</string>
+    <string name="profile_edit_remove_picture">Убрать изображение</string>
+    <string name="profile_edit_remove_banner">Убрать баннер</string>
+    <plurals name="note_delete_pictures_failed">
+        <item quantity="one">Не удалось удалить %1$d изображение с сервера</item>
+        <item quantity="few">Не удалось удалить %1$d изображения с сервера</item>
+        <item quantity="many">Не удалось удалить %1$d изображений с сервера</item>
+        <item quantity="other">Не удалось удалить %1$d изображений с сервера</item>
+    </plurals>
+</resources>

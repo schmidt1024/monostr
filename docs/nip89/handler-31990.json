@@ -1,0 +1,16 @@
+{
+  "kind": 31990,
+  "content": "{\"name\":\"monostr\",\"display_name\":\"monostr\",\"about\":\"Android Nostr client with Monero tips instead of zaps. No Lightning, no custodian.\",\"picture\":\"https://monostr.com/monostr-icon.png\",\"website\":\"https://monostr.com\",\"nip05\":\"\"}",
+  "tags": [
+    ["d", "monostr"],
+    ["k", "1"],
+    ["k", "6"],
+    ["k", "7"],
+    ["web", "https://monostr.com", "npub"],
+    ["android", "com.monostr.app"],
+    ["r", "https://monostr.com"],
+    ["r", "https://github.com/schmidt1024/monostr", "source"],
+    ["t", "monero"],
+    ["t", "android"]
+  ]
+}

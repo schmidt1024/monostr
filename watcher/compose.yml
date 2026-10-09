@@ -1,0 +1,75 @@
+# Mainnet stack on node.xmr.rocks. Networks `monero` and `stagenet` are created by hand
+# (see README, "Erstinstallation"); monerod lives in `monero` with its ZMQ ports unpublished.
+name: watcher
+
+services:
+  monero-lws:
+    image: vtnerd/monero-lws@sha256:637bfc6225422eed94950b85b05a0d771490632ad121f0c38b272ee92c73c53d # v1.0.1; 1.0.2 (latest) dies with SIGILL on the node host (EPYC-Milan VM)
+    restart: unless-stopped
+    networks: [monero]
+    mem_limit: 512m
+    logging: { driver: json-file, options: { max-size: "50m", max-file: "5" } }
+    volumes:
+      - lws-data:/home/monero-lws/.bitmonero/light_wallet_server
+    command: >
+      monero-lws-daemon
+      --daemon tcp://monerod:18082
+      --sub tcp://monerod:18083
+      --rest-server http://0.0.0.0:8443/wallet
+      --admin-rest-server http://0.0.0.0:8443/admin
+      --webhook-ssl-verification none
+      --confirm-external-bind
+      --log-level 1
+
+  watcher:
+    build:
+      context: .
+      args:
+        VERSION: ${WATCHER_VERSION:-dev}
+    image: monostr-watcher:current # tag is fixed; the version is a build arg (deploy.sh sets WATCHER_VERSION)
+    restart: unless-stopped
+    networks: [monero]
+    mem_limit: 256m
+    logging: { driver: json-file, options: { max-size: "50m", max-file: "5" } }
+    depends_on:
+      - monero-lws
+    env_file: .env
+    environment:
+      WATCHER_NETWORK: mainnet
+      WATCHER_LISTEN: 0.0.0.0:8080
+      WATCHER_DB: /data/watcher.db
+      WATCHER_HOOK_URL: http://watcher:8080/internal/lws-hook
+      LWS_ADMIN_URL: http://monero-lws:8443/admin
+      MONEROD_RPC_URL: http://monerod:18089
+      WATCHER_RELAYS: wss://relay.monostr.com,wss://relay.damus.io,wss://nos.lol
+      WATCHER_PUBLIC_RELAYS: wss://relay.monostr.com,wss://relay.damus.io,wss://nos.lol
+    volumes:
+      - watcher-data:/data
+
+  caddy:
+    image: caddy@sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc24061f9b52 # caddy:2 as of 2026-09-25
+    restart: unless-stopped
+    networks: [monero, stagenet]
+    logging: { driver: json-file, options: { max-size: "50m", max-file: "5" } }
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      WATCHER_DOMAIN: ${WATCHER_DOMAIN:-watcher.monostr.com}
+      WATCHER_STAGENET_DOMAIN: ${WATCHER_STAGENET_DOMAIN:-stagenet.watcher.monostr.com}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+networks:
+  monero:
+    external: true
+  stagenet:
+    external: true
+
+volumes:
+  lws-data:
+  watcher-data:
+  caddy-data:
+  caddy-config:

@@ -1,0 +1,450 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- app -->
+    <string name="login_tagline">Nostr con propinas en Monero</string>
+
+    <!-- shared actions and states -->
+    <string name="action_back">Atrás</string>
+    <string name="action_close">Cerrar</string>
+    <string name="action_done">Listo</string>
+    <string name="action_check">Comprobar</string>
+    <string name="action_add">Añadir</string>
+    <string name="action_remove">Quitar</string>
+    <string name="action_send">Enviar</string>
+    <string name="action_send_again">Enviar de nuevo</string>
+    <string name="action_copy_address">Copiar dirección</string>
+    <string name="action_copy_uri">Copiar URI</string>
+    <string name="state_sending">Enviando…</string>
+    <string name="state_loading">Cargando…</string>
+    <string name="qr_content_description">Código QR</string>
+
+    <!-- relay state -->
+    <string name="relay_connected">conectado</string>
+    <string name="relay_connecting">conectando…</string>
+    <string name="relay_disconnected">desconectado</string>
+    <string name="relay_not_connected">no conectado</string>
+    <string name="relay_status">Estado del relay: %1$s</string>
+
+    <!-- relative time -->
+    <string name="time_now">ahora</string>
+    <string name="time_minutes">%1$d min</string>
+    <string name="time_hours">%1$d h</string>
+    <string name="time_days">%1$d d</string>
+
+    <!-- errors mapped from exceptions -->
+    <string name="error_signing_rejected">Rechazado en el firmante</string>
+    <string name="error_watcher_unreachable">Watcher no accesible</string>
+    <string name="error_watcher_rate_limited">Watcher: demasiadas solicitudes, inténtalo más tarde</string>
+    <string name="error_watcher_rejected">El watcher rechazó la solicitud</string>
+    <string name="error_watcher_invalid">Respuesta del watcher no válida</string>
+    <string name="error_note_unavailable">Nota no disponible</string>
+    <string name="error_send_failed">Error al enviar</string>
+    <string name="session_restore_failed">No se pudo restaurar la sesión</string>
+
+    <!-- notes and actions -->
+    <string name="note_reply">Responder</string>
+    <string name="note_open_profile">Abrir perfil</string>
+    <string name="note_repost">Repostear</string>
+    <string name="note_like">Me gusta</string>
+    <string name="note_tip">Dar propina en Monero</string>
+    <string name="note_bookmark">Marcador</string>
+    <string name="note_bookmarked">Guardado</string>
+    <string name="note_deleted">Eliminación solicitada</string>
+    <string name="note_not_bookmarked">No guardado</string>
+    <string name="bookmark_failed">No se pudo guardar el marcador</string>
+    <string name="bookmark_nip44_unsupported">Tu firmante no admite NIP-44</string>
+    <string name="mute_done">%1$s silenciado</string>
+    <string name="mute_read_only">La lista de silenciados no se puede cambiar aquí: su parte privada está en un formato que esta app no puede leer.</string>
+    <string name="mute_account">Silenciar a %1$s</string>
+    <string name="unmute_account">Dejar de silenciar</string>
+    <string name="mute_undo">Deshacer</string>
+    <string name="mute_profile_hint">Silenciado</string>
+    <string name="mute_settings_title">Cuentas silenciadas</string>
+    <string name="mute_settings_empty">Nadie está silenciado. Silencia una cuenta desde el menú de una nota o desde su perfil.</string>
+    <string name="note_tips_open">Ver quién dio propina</string>
+    <string name="note_reposted_by">%1$s reposteó</string>
+    <string name="note_tip_pending">Propina enviada, esperando confirmación</string>
+    <string name="note_tips_chip">%1$s · %2$d</string>
+    <string name="media_sensitive">Contenido sensible</string>
+    <string name="media_tap_to_show">Toca para mostrar</string>
+    <string name="media_tap_to_load">Toca para cargar las imágenes</string>
+    <string name="media_failed">No se pudo cargar la imagen</string>
+    <string name="media_video">Reproducir vídeo</string>
+    <string name="media_viewer_close">Cerrar</string>
+    <string name="media_copy_link">Copiar enlace</string>
+    <string name="media_open_browser">Abrir en el navegador</string>
+    <string name="profile_extra_relays">Notas también de %1$s</string>
+    <!-- profile header: "12 Following · 3,373 Followers"; the numbers are formatted apart -->
+    <string name="profile_following_label">Siguiendo</string>
+    <plurals name="profile_followers_label">
+        <item quantity="one">%1$s Seguidor</item>
+        <item quantity="other">%1$s Seguidores</item>
+    </plurals>
+    <string name="settings_amber_renew">Renovar permisos de Amber</string>
+    <string name="settings_msg_amber_updated">Permisos actualizados</string>
+    <string name="settings_msg_amber_cancelled">Cancelado</string>
+    <string name="settings_msg_amber_wrong_key">Se eligió otra clave – nada cambió</string>
+    <string name="action_like_sent">Me gusta enviado</string>
+    <string name="action_repost_sent">Repost enviado</string>
+    <string name="action_no_relay_local">Ningún relay accesible, se guarda localmente</string>
+
+    <!-- tabs -->
+    <string name="tab_feed">Feed</string>
+    <string name="tab_search">Buscar</string>
+    <string name="tab_notifications">Notificaciones</string>
+    <string name="tab_messages">Mensajes</string>
+
+    <!-- search -->
+    <string name="search_hint">Nombre, npub, nota o #hashtag</string>
+    <string name="search_clear">Borrar</string>
+    <string name="search_recent_title">Búsquedas recientes</string>
+    <string name="search_recent_remove">Quitar de las búsquedas recientes</string>
+    <string name="search_recent_clear">Borrar todo</string>
+    <string name="search_people">Personas</string>
+    <string name="search_notes">Notas</string>
+    <string name="search_empty">Nada encontrado</string>
+    <string name="search_no_relays">Sin relés de búsqueda: solo resultados locales.</string>
+    <string name="search_open_settings">Relés de búsqueda…</string>
+
+    <!-- feed -->
+    <string name="feed_settings">Ajustes</string>
+    <string name="feed_new_note">Nueva nota</string>
+    <string name="feed_empty">Aún no hay notas. Sigue a alguien o escribe la primera.</string>
+    <string name="feed_error_load">No se pudo cargar el feed</string>
+    <string name="feed_error_more">No se pudieron cargar más notas</string>
+
+    <!-- thread / profile -->
+    <string name="thread_title">Hilo</string>
+    <string name="thread_not_found">Nota no encontrada</string>
+    <string name="profile_title_self">Mi perfil</string>
+    <string name="profile_error_load">No se pudo cargar el perfil</string>
+    <string name="note_replying_one">Respondiendo a %1$s</string>
+    <string name="note_replying_two">Respondiendo a %1$s y %2$s</string>
+    <plurals name="note_replying_more">
+        <item quantity="one">Respondiendo a %1$s, %2$s y %3$d más</item>
+        <item quantity="many">Respondiendo a %1$s, %2$s y %3$d más</item>
+        <item quantity="other">Respondiendo a %1$s, %2$s y %3$d más</item>
+    </plurals>
+    <string name="profile_tab_posts">Publicaciones</string>
+    <string name="profile_tab_replies">Respuestas</string>
+    <string name="profile_empty_posts">Aún no hay publicaciones</string>
+    <string name="profile_empty_replies">Aún no hay respuestas</string>
+
+    <!-- compose -->
+    <string name="compose_title_reply">Responder</string>
+    <string name="compose_title_new">Nueva nota</string>
+    <string name="compose_placeholder">¿Qué pasa?</string>
+    <string name="compose_error_empty">Nota vacía</string>
+    <string name="compose_error_reply_target">No se pudo cargar la nota a la que respondes</string>
+    <string name="compose_notice_offline">Ningún relay accesible, nota guardada localmente</string>
+
+    <!-- login -->
+    <string name="login_amber">Iniciar sesión con Amber (recomendado)</string>
+    <string name="login_or_key">O con una clave:</string>
+    <string name="login_no_signer">No hay ningún firmante NIP-55 (p. ej. Amber) instalado. Inicia sesión con una clave:</string>
+    <string name="login_secret_label">nsec o hex</string>
+    <string name="login_button">Iniciar sesión</string>
+    <string name="login_error_invalid_key">No es una clave nsec o hex válida</string>
+    <string name="login_error_rejected">Solicitud rechazada en el firmante</string>
+    <string name="login_error_signer">El firmante informó de un error</string>
+    <string name="login_error_failed">Error al iniciar sesión</string>
+
+    <!-- tip sheet -->
+    <string name="tip_title">Enviar propina en Monero</string>
+    <string name="tip_amount">Importe (XMR)</string>
+    <string name="tip_xmr_amount">%1$s XMR</string>
+    <string name="tip_custom_amount">Otro importe en XMR</string>
+    <string name="tip_pay">Pagar con la wallet</string>
+    <string name="tip_no_wallet_title">No se encontró ninguna app de wallet</string>
+    <string name="tip_no_wallet_text">Instala Monerujo o Cake Wallet, o paga el importe manualmente a esta dirección:</string>
+    <string name="tip_open_wallet_again">Abrir la wallet de nuevo</string>
+    <string name="tip_sent">Wallet abierta. La propina espera la confirmación del watcher.</string>
+    <string name="tip_error_amount">Importe no válido (p. ej. 0.005)</string>
+    <string name="tip_no_monero">El destinatario no ha configurado Monero</string>
+    <string name="tip_notice_offline">Ningún relay accesible, intent guardado localmente</string>
+    <string name="tip_anonymous_switch">Propina anónima</string>
+    <string name="tip_anonymous_hint">Tu nombre no aparece. El destinatario tampoco sabrá quién envió la propina.</string>
+    <string name="tip_error_anon_unavailable">La propina anónima no es posible ahora: no se puede contactar con el watcher del destinatario.</string>
+    <string name="tip_arrived">La propina llegó</string>
+    <string name="tip_anonymous">Anónimo</string>
+    <string name="tippers_title">Propinas en Monero</string>
+    <string name="tippers_empty">Sin propinas</string>
+
+    <!-- monero setup -->
+    <string name="setup_title_intro">¿Recibir propinas en Monero?</string>
+    <string name="setup_title">Propinas en Monero</string>
+    <string name="setup_registering">Registrando en el watcher…</string>
+    <string name="setup_intro_text">Con una dirección de Monero, otros pueden enviarte propinas. Para enviar propinas no la necesitas.</string>
+    <string name="setup_watcher_heading">Watcher</string>
+    <string name="setup_watcher_text">El watcher detecta los pagos entrantes y publica los recibos en Nostr.</string>
+    <string name="setup_watcher_url">URL del watcher</string>
+    <string name="setup_load_watcher">Comprobar watcher</string>
+    <string name="setup_skip">Más tarde</string>
+    <string name="setup_watcher_info">Watcher %1$s · %2$s · altura %3$d</string>
+    <string name="setup_privacy">El watcher ve todos los pagos entrantes de esta wallet. Por eso conviene usar una wallet aparte solo para propinas.</string>
+    <string name="setup_watcher_privacy">El watcher guarda solo lo necesario: tu clave pública de Nostr, la dirección de la wallet con su clave de visualización y los intents y recibos de propinas abiertos (que de todos modos son públicos en Nostr). No se registran ni guardan direcciones IP. Desactivar las propinas elimina tu cuenta en el watcher; su escáner conserva la dirección y la clave de visualización como inactivas hasta que el operador las borre.</string>
+    <string name="setup_path_new_hint">Crea una semilla nueva de 25 palabras en este teléfono. monostr solo observa las propinas entrantes; para gastarlas, importa la semilla en Cake Wallet, Monerujo o Feather.</string>
+    <string name="setup_path_existing_hint">Pega la dirección principal y la clave de visualización privada de Cake Wallet, Monerujo o Feather.</string>
+    <string name="setup_new_wallet">Crear una wallet nueva para propinas (recomendado)</string>
+    <string name="setup_existing_wallet">Usar una wallet existente</string>
+    <string name="setup_reuse_wallet">Pasar la wallet guardada a este watcher</string>
+    <string name="setup_seed_title">Tu semilla (25 palabras)</string>
+    <string name="setup_seed_text">Anótala en papel. Solo con ella podrás gastar después las propinas en Monerujo, Cake o Feather. La app solo guarda la dirección y la clave de visualización.</string>
+    <string name="setup_restore_height">Altura de restauración: %1$d</string>
+    <string name="setup_seed_written">Anotada</string>
+    <string name="seed_copy">Copiar semilla</string>
+    <string name="seed_copy_warning_title">¿Copiar la semilla al portapapeles?</string>
+    <string name="seed_copy_warning_text">Otras apps pueden leer el portapapeles. Pega la semilla en tu wallet de inmediato; monostr la elimina del portapapeles a los 60 segundos.</string>
+    <string name="seed_copied">Copiado. El portapapeles se vacía a los 60 segundos.</string>
+    <string name="setup_verify_title">Tres palabras para comprobar</string>
+    <string name="setup_verify_word">Palabra n.º %1$d</string>
+    <string name="setup_verify_wrong">Al menos una palabra es incorrecta.</string>
+    <string name="setup_back_to_seed">Volver a la semilla</string>
+    <string name="setup_existing_title">Wallet existente</string>
+    <string name="setup_address_label">Dirección principal (4… / 5…)</string>
+    <string name="setup_view_key_label">Clave de visualización privada (64 hex)</string>
+    <string name="setup_confirm_title">Confirma, por favor</string>
+    <string name="setup_confirm_text">El watcher ve todos los pagos entrantes de esta wallet, no solo las propinas. No puede gastar nada.</string>
+    <string name="setup_understood">Entendido</string>
+    <string name="setup_register">Registrarse en el watcher</string>
+    <string name="setup_done_title">Listo</string>
+    <string name="setup_done_text">Tu información de pago está publicada en Nostr. Las propinas llegan a esta wallet:</string>
+    <string name="setup_done_import">Para gastar: importa la semilla en Monerujo, Cake o Feather, altura de restauración %1$d.</string>
+    <string name="setup_err_url">La URL del watcher debe empezar por https://</string>
+    <string name="setup_err_watcher_network">El watcher indica una red desconocida</string>
+    <string name="setup_err_subaddress">Las subdirecciones no son compatibles. Usa la dirección principal (empieza por 4 o 5).</string>
+    <string name="setup_err_integrated">Las direcciones integradas no son compatibles. Usa la dirección principal.</string>
+    <string name="setup_err_address">Dirección no válida</string>
+    <string name="setup_err_network">La dirección pertenece a una red distinta de la del watcher</string>
+    <string name="setup_err_view_key_format">La clave de visualización debe tener 64 caracteres hex</string>
+    <string name="setup_err_view_key_mismatch">La clave de visualización no corresponde a la dirección</string>
+    <string name="setup_err_not_published">Ningún relay accesible – información de pago no publicada, inténtalo de nuevo</string>
+
+    <!-- settings -->
+    <string name="settings_title">Ajustes</string>
+    <string name="settings_logged_in_as">Sesión iniciada como</string>
+    <string name="settings_relays">Relays</string>
+    <string name="settings_relay_invalid">URL de relay no válida (se espera ws:// o wss://)</string>
+    <string name="settings_relay_keep_one">Debe quedar al menos un relay</string>
+    <string name="settings_relay_save_failed">No se pudieron guardar los relays</string>
+    <string name="settings_messages">Mensajes</string>
+    <string name="settings_dm_relays">Relays de mensajes (NIP-17)</string>
+    <string name="settings_dm_relays_hint">Aquí entregan otros tus mensajes; se publica como kind 10050. relay.monostr.com requiere iniciar sesión (NIP-42): Amber necesita el permiso para kind 22242, ver «Renovar permisos de Amber».</string>
+    <string name="settings_dm_preview_name">Mostrar remitente en las notificaciones</string>
+    <string name="settings_dm_preview_text">Mostrar el texto en las notificaciones</string>
+    <string name="settings_search_relays">Relés de búsqueda</string>
+    <string name="settings_search_relays_hint">Solo para buscar nombres y texto completo (NIP-50), nunca para el feed.</string>
+    <string name="settings_search_relays_reset">Restablecer valores</string>
+    <string name="settings_suggested_relays">Relays sugeridos</string>
+    <string name="settings_suggested_relays_hint">Relays Monero de pago: leer es gratis, publicar tras un pago único en XMR en la web del relay. Fuente: pmnr.xmr.rocks</string>
+    <string name="settings_suggested_relay_fee">Relay Monero de pago · %1$s XMR para publicar</string>
+    <string name="settings_media">Medios</string>
+    <string name="settings_media_blur">Ocultar medios sensibles</string>
+    <string name="settings_media_blur_hint">Las notas marcadas como sensibles (content warning o #nsfw) muestran las imágenes borrosas hasta que toques.</string>
+    <string name="settings_media_on_tap">Cargar imágenes solo al tocar</string>
+    <string name="settings_media_on_tap_hint">Ahorra datos; los vídeos nunca se cargan solos.</string>
+    <string name="settings_author_relays">Conectar temporalmente los relays del autor</string>
+    <string name="settings_author_relays_hint">Al abrir un perfil, las notas también se obtienen de los relays propios de esa persona. El relay ve tu dirección IP y qué perfil abres.</string>
+    <string name="settings_client_tag">Mostrar «vía monostr»</string>
+    <string name="settings_client_tag_hint">Las notas, me gusta y reposts llevan una etiqueta de cliente que otras apps muestran como «vía monostr».</string>
+    <string name="settings_primal_stats">Seguidores desde Primal</string>
+    <string name="settings_primal_stats_hint">Los perfiles consultan el índice de Primal para el número de seguidores que muestran otras apps. Desactivado: solo cuentan los relays y el número es mucho menor.</string>
+    <string name="note_via">vía %1$s</string>
+    <string name="settings_monero">Propinas en Monero</string>
+    <string name="settings_monero_not_set_up">No configurado. No hace falta para enviar propinas.</string>
+    <string name="settings_monero_set_up">Configurar recepción de propinas</string>
+    <string name="settings_monero_address">Dirección %1$s…%2$s · %3$s</string>
+    <string name="settings_monero_watcher">Watcher %1$s</string>
+    <string name="settings_monero_switch_watcher">Cambiar de watcher</string>
+    <string name="settings_monero_disable">Desactivar propinas</string>
+    <string name="settings_monero_delete_view_key">Borrar localmente la clave de visualización</string>
+    <string name="settings_presets">Importes predefinidos (XMR)</string>
+    <string name="settings_preset_n">Importe %1$d</string>
+    <string name="settings_presets_save">Guardar importes</string>
+    <string name="settings_preset_add">Añadir preset</string>
+    <string name="settings_preset_remove">Quitar preset</string>
+    <string name="settings_adopt_relays">Reemplazar estos relays por mi lista publicada (NIP-65)</string>
+    <string name="settings_logout">Cerrar sesión</string>
+    <string name="settings_msg_presets_saved">Importes guardados</string>
+    <string name="settings_msg_disabled">Propinas en Monero desactivadas</string>
+    <string name="settings_msg_view_key_deleted">Clave de visualización borrada localmente</string>
+    <string name="settings_msg_relays_adopted">Relays tomados del perfil</string>
+    <string name="settings_msg_no_relay_list">No se encontró ninguna lista de relays (NIP-65) en el perfil</string>
+    <string name="settings_publish_relays">Publicar estos relays como mi lista de relays (NIP-65)</string>
+    <string name="settings_publish_relays_hint">Otras apps y el watcher de propinas te buscan en los relays de esta lista. Al publicar se reemplaza la lista de otra app.</string>
+    <string name="settings_adopt_relays_hint">Los relays de esta app se reemplazan por la lista de relays publicada para tu cuenta. Una lista de otra app puede incluir relays que ya no existen.</string>
+    <string name="settings_reset_relays">Restaurar los relays predeterminados</string>
+    <string name="settings_reset_relays_hint">Los relays de esta app se reemplazan por los relays predeterminados de monostr.</string>
+    <string name="settings_msg_relay_list_published">Lista de relays publicada</string>
+    <string name="settings_msg_relay_list_not_published">Ningún relay aceptó la lista de relays</string>
+    <string name="settings_err_presets">Importes: importes XMR válidos, p. ej. 0.001</string>
+
+    <!-- appearance (Task 5) -->
+    <string name="settings_appearance">Apariencia</string>
+    <string name="settings_theme_system">Sistema</string>
+    <string name="settings_theme_light">Claro</string>
+    <string name="settings_theme_dark">Oscuro</string>
+    <string name="settings_accent">Color de acento</string>
+    <string name="settings_accent_mono">Mono</string>
+    <string name="settings_accent_orange">Naranja</string>
+    <string name="settings_accent_blue">Azul</string>
+    <string name="settings_accent_purple">Morado</string>
+    <string name="settings_accent_custom">Personalizado</string>
+    <string name="settings_accent_hue">Tono</string>
+    <string name="settings_accent_selected">%1$s, seleccionado</string>
+    <string name="settings_language">Idioma</string>
+    <string name="settings_language_text">El idioma de la app sigue el ajuste del sistema.</string>
+    <string name="settings_language_button">Cambiar idioma de la app</string>
+
+    <!-- notifications -->
+    <string name="notifications_title">Notificaciones</string>
+    <string name="notifications_empty">Aún no hay notificaciones</string>
+    <string name="notifications_error_load">No se pudieron cargar las notificaciones</string>
+    <string name="messages_title">Mensajes</string>
+    <string name="messages_empty">Aún no hay mensajes. Abre un perfil y toca «Mensaje».</string>
+    <plurals name="messages_requests">
+        <item quantity="one">Solicitud (%1$d)</item>
+        <item quantity="many">Solicitudes (%1$d)</item>
+        <item quantity="other">Solicitudes (%1$d)</item>
+    </plurals>
+    <string name="messages_auth_failed">%1$s requiere iniciar sesión (NIP-42): renueva los permisos de Amber en Ajustes</string>
+    <string name="messages_auth_rejected">%1$s rechaza el inicio de sesión (%2$s). Los mensajes guardados allí no se pueden cargar; tus otros relays siguen funcionando. Quítalo de los relays de mensajes en Ajustes.</string>
+    <plurals name="messages_pending">
+        <item quantity="one">%1$d mensaje espera a Amber: toca para descifrar</item>
+        <item quantity="many">%1$d mensajes esperan a Amber: toca para descifrar</item>
+        <item quantity="other">%1$d mensajes esperan a Amber: toca para descifrar</item>
+    </plurals>
+    <string name="messages_error_load">No se pudieron cargar los mensajes</string>
+    <string name="chat_input_hint">Mensaje</string>
+    <string name="chat_send">Enviar</string>
+    <string name="chat_retry">Reintentar</string>
+    <string name="chat_status_sending">Enviando…</string>
+    <string name="chat_status_failed">No enviado</string>
+    <string name="chat_error_send">No se pudo enviar el mensaje</string>
+    <string name="profile_message">Mensaje</string>
+    <string name="notif_mentioned">te mencionó</string>
+    <string name="notif_liked_one">A %1$s le gusta tu nota</string>
+    <string name="notif_liked_two">A %1$s y %2$s les gusta tu nota</string>
+    <plurals name="notif_liked_more">
+        <item quantity="one">A %1$s, %2$s y %3$d persona más les gusta tu nota</item>
+        <item quantity="other">A %1$s, %2$s y %3$d personas más les gusta tu nota</item>
+    </plurals>
+    <string name="notif_reposted_one">%1$s reposteó tu nota</string>
+    <string name="notif_reposted_two">%1$s y %2$s repostearon tu nota</string>
+    <plurals name="notif_reposted_more">
+        <item quantity="one">%1$s, %2$s y %3$d persona más repostearon tu nota</item>
+        <item quantity="other">%1$s, %2$s y %3$d personas más repostearon tu nota</item>
+    </plurals>
+    <string name="notif_about_reply">Respondiendo a: “%1$s”</string>
+    <string name="notif_about_quote">Citando: “%1$s”</string>
+    <string name="notif_tip_profile">a tu perfil</string>
+    <string name="avatar_of">Perfil de %1$s</string>
+    <string name="notif_note_missing">nota no cargada</string>
+    <string name="notif_note_withdrawn">nota eliminada</string>
+    <string name="notif_tipped">dio una propina de %1$s XMR</string>
+    <string name="notif_channel_name">Propinas en Monero</string>
+    <string name="notif_tip_title">Propina en Monero recibida</string>
+    <string name="notif_tip_text">%1$s te dio una propina de %2$s XMR</string>
+    <string name="notif_dm_channel">Mensajes</string>
+    <string name="notif_dm_title">Mensaje de %1$s</string>
+    <string name="notif_dm_title_anonymous">Nuevo mensaje</string>
+    <string name="notif_dm_tap">Toca para abrir</string>
+    <plurals name="dm_pending_summary">
+        <item quantity="one">%1$d mensaje espera a Amber</item>
+        <item quantity="many">%1$d mensajes esperan a Amber</item>
+        <item quantity="other">%1$d mensajes esperan a Amber</item>
+    </plurals>
+
+    <!-- bookmarks -->
+    <string name="bookmarks_title">Marcadores</string>
+    <string name="bookmarks_empty">Aún no hay marcadores. Toca el icono de marcador bajo una nota.</string>
+    <string name="bookmarks_missing">Nota no encontrada (%1$s)</string>
+    <string name="bookmarks_error_load">No se pudieron cargar los marcadores</string>
+    <string name="note_ref_label">nota</string>
+    <string name="quote_missing">Nota no encontrada</string>
+    <string name="mute_quote_placeholder">Nota de una cuenta silenciada</string>
+    <string name="action_quote">Citar</string>
+    <string name="compose_quote_hint">Cita</string>
+    <string name="profile_edit">Editar perfil</string>
+    <string name="feed_profile">Mi perfil</string>
+    <string name="profile_edit_title">Editar perfil</string>
+    <string name="profile_edit_banner">URL del banner</string>
+    <string name="profile_edit_picture">URL de la imagen</string>
+    <string name="profile_edit_display_name">Nombre visible</string>
+    <string name="profile_edit_name">Nombre</string>
+    <string name="profile_edit_about">Biografía</string>
+    <string name="profile_edit_nip05">Dirección NIP-05</string>
+    <string name="profile_edit_save">Guardar</string>
+    <string name="profile_edit_no_profile">No se encontró ningún perfil existente en tus relays. Al guardar se creará uno nuevo.</string>
+    <string name="profile_save_failed">No se pudo guardar el perfil</string>
+    <string name="profile_url_invalid">Debe empezar por https://</string>
+    <string name="action_cancel">Cancelar</string>
+    <string name="action_replace">Reemplazar</string>
+    <string name="profile_follow">Seguir</string>
+    <string name="profile_following">Siguiendo</string>
+    <string name="profile_unfollow_title">¿Dejar de seguir a @%1$s?</string>
+    <string name="profile_unfollow_confirm">Dejar de seguir</string>
+    <string name="follow_no_list">No se pudo cargar tu lista de seguidos, así que no se cambió nada. Inténtalo más tarde.</string>
+    <string name="support_title">Apoyar monostr</string>
+    <string name="support_text">monostr es de código abierto, sin anuncios ni rastreo. Si te resulta útil, puedes apoyar su desarrollo con Monero.</string>
+    <string name="support_button">Apoyar con Monero</string>
+    <string name="support_contributors">Colaboradores</string>
+    <string name="support_repo">Código fuente</string>
+    <string name="support_hint_title">¿Te gusta monostr?</string>
+    <string name="support_hint_action">Apoyar</string>
+    <string name="support_hint_dismiss">Ocultar</string>
+    <string name="about_title">Acerca de monostr</string>
+    <string name="about_version">Versión %1$s (compilación %2$d)</string>
+    <string name="about_beta">Beta</string>
+    <string name="about_feedback">Comentarios en Nostr</string>
+    <string name="about_issues">Informar de un problema</string>
+    <string name="about_license">Licencia: %1$s</string>
+    <string name="dm_relay_hint_missing">relay.monostr.com no está en tu lista de buzones, así que es posible que los usuarios de monostr no te lleguen.</string>
+    <string name="dm_relay_hint_add">Añadir</string>
+    <string name="dm_relay_hint_second">Un segundo relay de buzón hace tus mensajes más fiables.</string>
+    <string name="dm_relay_hint_dismiss">Ocultar</string>
+    <string name="dm_relay_hint_replace">Tu lista de buzones está llena. ¿Qué relay debe reemplazar relay.monostr.com?</string>
+    <string name="upload_error_nsfw">Este servidor no acepta contenido para adultos. Puedes elegir otro servidor de medios en los ajustes.</string>
+    <string name="upload_error_too_large">Imagen demasiado grande para este servidor</string>
+    <string name="upload_error_quota">Tu espacio en este servidor está lleno</string>
+    <string name="upload_error_rate">Límite de subidas alcanzado, inténtalo mañana</string>
+    <string name="upload_error_type">El servidor no acepta este tipo de archivo</string>
+    <string name="upload_error_banned">El servidor rechaza esta subida</string>
+    <string name="upload_error_auth">El servidor no aceptó la firma</string>
+    <string name="upload_error_unavailable">Servidor de medios no disponible, inténtalo más tarde</string>
+    <string name="upload_error_network">No se puede conectar con el servidor de medios</string>
+    <string name="upload_error_unreadable">No se puede leer esta imagen</string>
+    <string name="upload_error_signing">Firma rechazada. Permítela en el firmante o renueva los permisos de Amber en los ajustes.</string>
+    <string name="upload_error_failed">La subida falló</string>
+    <string name="compose_error_uploads">Espera a que se suban las imágenes o quita las que fallaron</string>
+    <string name="compose_attach">Añadir imágenes</string>
+    <string name="compose_attachment_remove">Quitar imagen</string>
+    <string name="upload_retry">Reintentar</string>
+    <string name="compose_sensitive">Contenido sensible</string>
+    <string name="compose_sensitive_hint">Los lectores ven las imágenes borrosas hasta que las tocan.</string>
+    <string name="profile_edit_pick">Elegir imagen</string>
+    <string name="profile_edit_uploading">Subiendo…</string>
+    <string name="settings_media_server">Servidor de medios</string>
+    <string name="settings_media_server_hint">Las imágenes que adjuntas se suben a este servidor Blossom. Son públicas.</string>
+    <string name="settings_media_server_invalid">Debe ser una dirección https:// sin ruta</string>
+    <string name="settings_media_server_reset">Predeterminado</string>
+    <string name="about_media">Las imágenes que subes se guardan en %1$s y son públicas para cualquiera que tenga el enlace. Para denunciar una imagen, envía su enlace a la cuenta del proyecto monostr en Nostr.</string>
+    <string name="note_menu">Más</string>
+    <string name="note_menu_copy_link">Copiar enlace</string>
+    <string name="note_menu_copy_text">Copiar texto</string>
+    <string name="note_menu_delete">Solicitar eliminación</string>
+    <string name="note_delete_title">¿Eliminar la nota?</string>
+    <string name="note_delete_text">Se pide a los relays y a otras apps que eliminen esta nota. No se puede forzar; quien ya la haya visto quizá la conserve.</string>
+    <string name="note_delete_pictures">Las imágenes de esta nota se eliminan del servidor de medios.</string>
+    <string name="note_delete_confirm">Eliminar</string>
+    <string name="note_copied">Copiado</string>
+    <string name="note_show_more">Mostrar más</string>
+    <string name="feed_to_top">Arriba y actualizar</string>
+    <string name="profile_edit_remove_picture">Quitar imagen</string>
+    <string name="profile_edit_remove_banner">Quitar banner</string>
+    <plurals name="note_delete_pictures_failed">
+        <item quantity="one">No se pudo quitar %1$d imagen del servidor</item>
+        <item quantity="many">No se pudieron quitar %1$d imágenes del servidor</item>
+        <item quantity="other">No se pudieron quitar %1$d imágenes del servidor</item>
+    </plurals>
+</resources>

@@ -1,0 +1,2 @@
+• Profile tabs: the unselected tab is grey
+• Empty feed, notifications and messages: text centred with a margin

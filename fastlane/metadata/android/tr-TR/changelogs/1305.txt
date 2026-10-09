@@ -1,0 +1,3 @@
+• Notlar, yanıtlar ve alıntılardaki etiketler işaretlenir, relay’ler bulur
+• Bildirimler: alıntılar tek satır
+• Profil açıklamasındaki bağlantılar açılır

@@ -1,0 +1,4 @@
+• Einstellungen: Schalter für Follower-Zahlen über Primal
+• Reproduzierbarer Release-Build
+• Profile: Tabs Posts und Antworten, ältere Notes laden beim Scrollen nach
+• Antworten zeigen, wem sie antworten

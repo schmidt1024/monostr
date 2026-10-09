@@ -1,0 +1,2 @@
+• Pestañas del perfil: la pestaña no seleccionada es gris
+• Feed, notificaciones y mensajes vacíos: texto centrado con margen

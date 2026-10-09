@@ -1,0 +1,2 @@
+• Code source public sur GitHub, builds reproductibles
+• Aucun changement dans l’app

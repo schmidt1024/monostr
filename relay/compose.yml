@@ -1,0 +1,32 @@
+# Public relay relay.monostr.com on its own VPS (see README). strfry + Caddy only;
+# the watcher stack lives on node.xmr.rocks and reaches this relay over wss://.
+name: relay
+
+services:
+  relay:
+    image: ghcr.io/hoytech/strfry@sha256:36f1886d185a88ca57c66ebe52e6e9e8428dac2486eea0a5d50ff934f18b60c3 # latest as of 2026-09-25
+    restart: unless-stopped
+    mem_limit: 512m
+    logging: { driver: json-file, options: { max-size: "50m", max-file: "5" } }
+    volumes:
+      - strfry-data:/app/strfry-db
+      - ./strfry.conf:/etc/strfry.conf:ro
+
+  caddy:
+    image: caddy@sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc24061f9b52 # caddy:2 as of 2026-09-25
+    restart: unless-stopped
+    logging: { driver: json-file, options: { max-size: "50m", max-file: "5" } }
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      RELAY_DOMAIN: ${RELAY_DOMAIN:-relay.monostr.com}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  strfry-data:
+  caddy-data:
+  caddy-config:

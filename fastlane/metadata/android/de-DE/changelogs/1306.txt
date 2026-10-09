@@ -1,0 +1,2 @@
+• Quellcode öffentlich auf GitHub, Release-Builds daraus reproduzierbar
+• Keine Änderungen an der App

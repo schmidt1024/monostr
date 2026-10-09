@@ -1,0 +1,21 @@
+monostr es un cliente Nostr para Android con propinas en Monero.
+
+<b>Nostr, como ya lo conoces</b>
+• Feed de las personas que sigues, hilos, perfiles con las pestañas Publicaciones y Respuestas
+• Me gusta, republicar, citar, responder; menciones, hashtags y enlaces que se pueden tocar
+• Imágenes en las notas y subidas propias (Blossom), contenido sensible difuminado
+• Mensajes privados (NIP-17), marcadores y silenciados privados (NIP-51)
+• Búsqueda de personas y notas (NIP-50), notificaciones de me gusta, republicaciones, respuestas y propinas
+• Tu lista de relays (NIP-65); los relays de escritura de un autor se añaden mientras su perfil está abierto
+• Inicio de sesión con Amber (NIP-55) o con una clave; tema claro y oscuro, 8 idiomas
+
+<b>Propinas en Monero</b>
+• Da propina a una nota o a un perfil desde tu propia app de cartera (Monerujo, Cake, Feather …) mediante un enlace monero:
+• monostr no tiene cartera ni clave de gasto
+• Para recibir propinas registras tu dirección y tu clave privada de visualización en un watcher (watcher.monostr.com por defecto, o el tuyo). El watcher ve tus pagos entrantes y publica recibos firmados en Nostr, para que todos vean la propina en la nota
+• Las propinas anónimas son posibles
+
+<b>Abierto</b>
+monostr es software libre (AGPL-3.0-or-later). Las notas, me gusta y republicaciones llevan «via monostr» (se puede desactivar). El número de seguidores puede venir del índice de Primal, un servicio propietario; también se puede desactivar.
+
+monostr está en beta.

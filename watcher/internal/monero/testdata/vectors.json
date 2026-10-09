@@ -1,0 +1,525 @@
+{
+  "generator": "monero-python 1.1.1",
+  "vectors": [
+    {
+      "spend_secret": "0000000000000000000000000000000000000000000000000000000000000001",
+      "view_secret": "cea3c5dfea43f31197bd4b7166da59f90af44b4afac2b0732d9fcbe2b7fa0c06",
+      "spend_public": "1ed49357e217e79dab3c5503822f2bdb561e302e24476ee6ff33242c7551d4e7",
+      "view_public": "8944790c0cfa9998c2f196061be89b2b8387f9d397db20ea8e049899cdc947d1",
+      "mainnet": "42nsXK8WbVGTNayQ6Kjw5UdgqbQY5KCCufdxdCgF7NgTfjC69Mna7DJSYyie77hZTQ8H92G2HwgFhgEUYnDzrnLnQdF28r3",
+      "stagenet": "52zucA3UF6NTNayQ6Kjw5UdgqbQY5KCCufdxdCgF7NgTfjC69Mna7DJSYyie77hZTQ8H92G2HwgFhgEUYnDzrnLnQf9eTdc",
+      "mnemonic": [
+        "abbey",
+        "abbey",
+        "abbey",
+        "abbey",
+        "abbey",
+        "abbey",
+        "abbey",
+        "abbey",
+        "abbey",
+        "abbey",
+        "abbey",
+        "abbey",
+        "abbey",
+        "abbey",
+        "abbey",
+        "abbey",
+        "abbey",
+        "abbey",
+        "abbey",
+        "abbey",
+        "abbey",
+        "bamboo",
+        "jaws",
+        "jerseys",
+        "abbey"
+      ],
+      "integrated": [
+        {
+          "pid": "0123456789abcdef",
+          "mainnet": "4CVYY7x1CknTNayQ6Kjw5UdgqbQY5KCCufdxdCgF7NgTfjC69Mna7DJSYyie77hZTQ8H92G2HwgFhgEUYnDzrnLnbxc5xHroTU8U3vykdq",
+          "stagenet": "5ChacxrxrMtTNayQ6Kjw5UdgqbQY5KCCufdxdCgF7NgTfjC69Mna7DJSYyie77hZTQ8H92G2HwgFhgEUYnDzrnLnbxc5xHroTU8TyFqL9U"
+        },
+        {
+          "pid": "75ab2267f2d67bed",
+          "mainnet": "4CVYY7x1CknTNayQ6Kjw5UdgqbQY5KCCufdxdCgF7NgTfjC69Mna7DJSYyie77hZTQ8H92G2HwgFhgEUYnDzrnLnc32DMJ8Avt2TqsbsF2",
+          "stagenet": "5ChacxrxrMtTNayQ6Kjw5UdgqbQY5KCCufdxdCgF7NgTfjC69Mna7DJSYyie77hZTQ8H92G2HwgFhgEUYnDzrnLnc32DMJ8Avt2TpxquBu"
+        },
+        {
+          "pid": "775a1734e998251a",
+          "mainnet": "4CVYY7x1CknTNayQ6Kjw5UdgqbQY5KCCufdxdCgF7NgTfjC69Mna7DJSYyie77hZTQ8H92G2HwgFhgEUYnDzrnLnc35uxJj3KQQ428NvFd",
+          "stagenet": "5ChacxrxrMtTNayQ6Kjw5UdgqbQY5KCCufdxdCgF7NgTfjC69Mna7DJSYyie77hZTQ8H92G2HwgFhgEUYnDzrnLnc35uxJj3KQQ3zyZywg"
+        }
+      ]
+    },
+    {
+      "spend_secret": "726f253706c77e09e281b931c8c0f35728fbc7a4333c4662035b9799f8cccc0a",
+      "view_secret": "b4c9b41540857d0a3dadbae45269eb63823e0cd766e3f202ccd07cf6b2482708",
+      "spend_public": "d8bbb7e57c7fdee0d3e85208a2d9f05c7a8e41bd90840fb4486adc812da7010d",
+      "view_public": "bc67aa19fdae89fd2bb8bc976be169a82725ad4ad1accf72fbfabcb488c6a2e3",
+      "mainnet": "49qUXGDJkmKec7SCQmAMLBGUAFk9ikkEAX9yFKNFvvHe3JFr9Bpbs7ejM5HBGqzAV6V8J3qkfqCoQLEVX4M2Y59TShdHphX",
+      "stagenet": "5A3Wc78GQNRec7SCQmAMLBGUAFk9ikkEAX9yFKNFvvHe3JFr9Bpbs7ejM5HBGqzAV6V8J3qkfqCoQLEVX4M2Y59TSfhXAM3",
+      "mnemonic": [
+        "teardrop",
+        "sixteen",
+        "zebra",
+        "nuns",
+        "tender",
+        "tumbling",
+        "gnome",
+        "tulips",
+        "attire",
+        "husband",
+        "luxury",
+        "tirade",
+        "cynical",
+        "swiftly",
+        "kiwi",
+        "saved",
+        "hectare",
+        "saxophone",
+        "future",
+        "weavers",
+        "names",
+        "incur",
+        "vitals",
+        "yahoo",
+        "swiftly"
+      ],
+      "integrated": [
+        {
+          "pid": "0123456789abcdef",
+          "mainnet": "4KY9Y52oN2qec7SCQmAMLBGUAFk9ikkEAX9yFKNFvvHe3JFr9Bpbs7ejM5HBGqzAV6V8J3qkfqCoQLEVX4M2Y59TeyECCpbgQHSU2EYjnC",
+          "stagenet": "5KkBcuwm1dwec7SCQmAMLBGUAFk9ikkEAX9yFKNFvvHe3JFr9Bpbs7ejM5HBGqzAV6V8J3qkfqCoQLEVX4M2Y59TeyECCpbgQHSU1JpwTQ"
+        },
+        {
+          "pid": "5d830162d06c4442",
+          "mainnet": "4KY9Y52oN2qec7SCQmAMLBGUAFk9ikkEAX9yFKNFvvHe3JFr9Bpbs7ejM5HBGqzAV6V8J3qkfqCoQLEVX4M2Y59Tf2jE5vKyKKh8Y147Jg",
+          "stagenet": "5KkBcuwm1dwec7SCQmAMLBGUAFk9ikkEAX9yFKNFvvHe3JFr9Bpbs7ejM5HBGqzAV6V8J3qkfqCoQLEVX4M2Y59Tf2jE5vKyKKh8UxDyRr"
+        },
+        {
+          "pid": "b46f9a2f27808678",
+          "mainnet": "4KY9Y52oN2qec7SCQmAMLBGUAFk9ikkEAX9yFKNFvvHe3JFr9Bpbs7ejM5HBGqzAV6V8J3qkfqCoQLEVX4M2Y59Tf62HEET36iyEdNzH9B",
+          "stagenet": "5KkBcuwm1dwec7SCQmAMLBGUAFk9ikkEAX9yFKNFvvHe3JFr9Bpbs7ejM5HBGqzAV6V8J3qkfqCoQLEVX4M2Y59Tf62HEET36iyEedD1JH"
+        }
+      ]
+    },
+    {
+      "spend_secret": "9483bc1de63a3cd451f3765f95c877c8e13adb4c5410f53fd9039f31651d8c03",
+      "view_secret": "882cabc3fa56751d7d356c2ceb81278fd94bf476881ea44fef5183a4ad1be108",
+      "spend_public": "1eb87fb9d5049039bc607c6f369c5d41d855f53efcd074d25e12fe94697becaa",
+      "view_public": "765d08bcd0950e7d6872396a242fc3dba721bb8dded7b3a587db8db6ec1cbc98",
+      "mainnet": "42ndYPtvcjhAf7PBNof4eYC1nDW8Rho3hcBq2Yw4g83uVWhWPy9idK3MycebUm4YZGdjuf6QUGmNSUgrbVuG1riXJDgHKk7",
+      "stagenet": "52zfdEotGLoAf7PBNof4eYC1nDW8Rho3hcBq2Yw4g83uVWhWPy9idK3MycebUm4YZGdjuf6QUGmNSUgrbVuG1riXJFPaA7Q",
+      "mnemonic": [
+        "rebel",
+        "identity",
+        "magically",
+        "trolling",
+        "petals",
+        "lawsuit",
+        "vulture",
+        "rumble",
+        "birth",
+        "axle",
+        "depth",
+        "wise",
+        "yoyo",
+        "randomly",
+        "zodiac",
+        "amaze",
+        "unfit",
+        "cause",
+        "nestle",
+        "joking",
+        "pause",
+        "omission",
+        "bogeys",
+        "bunch",
+        "wise"
+      ],
+      "integrated": [
+        {
+          "pid": "0123456789abcdef",
+          "mainnet": "4CVJZCiRE1DAf7PBNof4eYC1nDW8Rho3hcBq2Yw4g83uVWhWPy9idK3MycebUm4YZGdjuf6QUGmNSUgrbVuG1riXSRdkAHBgoDeTysrwAt",
+          "stagenet": "5ChLe3dNscKAf7PBNof4eYC1nDW8Rho3hcBq2Yw4g83uVWhWPy9idK3MycebUm4YZGdjuf6QUGmNSUgrbVuG1riXSRdkAHBgoDeTzBAf1V"
+        },
+        {
+          "pid": "848026ab990fe358",
+          "mainnet": "4CVJZCiRE1DAf7PBNof4eYC1nDW8Rho3hcBq2Yw4g83uVWhWPy9idK3MycebUm4YZGdjuf6QUGmNSUgrbVuG1riXSWcUMt5YBzSAz5hhgp",
+          "stagenet": "5ChLe3dNscKAf7PBNof4eYC1nDW8Rho3hcBq2Yw4g83uVWhWPy9idK3MycebUm4YZGdjuf6QUGmNSUgrbVuG1riXSWcUMt5YBzSB14gtT8"
+        },
+        {
+          "pid": "51cce08a413b5888",
+          "mainnet": "4CVJZCiRE1DAf7PBNof4eYC1nDW8Rho3hcBq2Yw4g83uVWhWPy9idK3MycebUm4YZGdjuf6QUGmNSUgrbVuG1riXSUh34X5j8ThGNGYzZf",
+          "stagenet": "5ChLe3dNscKAf7PBNof4eYC1nDW8Rho3hcBq2Yw4g83uVWhWPy9idK3MycebUm4YZGdjuf6QUGmNSUgrbVuG1riXSUh34X5j8ThGSrRHtB"
+        }
+      ]
+    },
+    {
+      "spend_secret": "4fa636bc47137a58057240a29c896fd480e089bd8b7346a56ac9fbee3312cc0e",
+      "view_secret": "7f19102973893521dd52210b2605215ea0d3682d824e6322593ac90b1607280f",
+      "spend_public": "2b545055d1813c4317de99848030d27a53f4181ea6b180ea8f388e83c89bed31",
+      "view_public": "dac27b74a0d64bacb96f1a3cf9ba9b2d337b61e2d056f57913e70bcbededda51",
+      "mainnet": "43GLu8efPcPCDtXqJ31S3TMTjb8iwqoWwgEXC8qWkWTn9LenHPGagZxVteGckaVSj48ZWRaHDgJ7WMFc8sMXT9FXACGCkzi",
+      "stagenet": "53UNyyZd3DVCDtXqJ31S3TMTjb8iwqoWwgEXC8qWkWTn9LenHPGagZxVteGckaVSj48ZWRaHDgJ7WMFc8sMXT9FXAFGiC1M",
+      "mnemonic": [
+        "shelter",
+        "bite",
+        "textbook",
+        "erected",
+        "regular",
+        "anxiety",
+        "duke",
+        "summon",
+        "judge",
+        "suture",
+        "trolling",
+        "ravine",
+        "glass",
+        "baptism",
+        "taken",
+        "nearby",
+        "goodbye",
+        "yoyo",
+        "vinegar",
+        "jump",
+        "hookup",
+        "hazard",
+        "etiquette",
+        "gauze",
+        "yoyo"
+      ],
+      "integrated": [
+        {
+          "pid": "0123456789abcdef",
+          "mainnet": "4Cy1uwU9zsuCDtXqJ31S3TMTjb8iwqoWwgEXC8qWkWTn9LenHPGagZxVteGckaVSj48ZWRaHDgJ7WMFc8sMXT9FXEYqzAy3fdDvU2wuAfM",
+          "stagenet": "5DB3znP7eV1CDtXqJ31S3TMTjb8iwqoWwgEXC8qWkWTn9LenHPGagZxVteGckaVSj48ZWRaHDgJ7WMFc8sMXT9FXEYqzAy3fdDvU12Zpp5"
+        },
+        {
+          "pid": "db9b611ec039a21b",
+          "mainnet": "4Cy1uwU9zsuCDtXqJ31S3TMTjb8iwqoWwgEXC8qWkWTn9LenHPGagZxVteGckaVSj48ZWRaHDgJ7WMFc8sMXT9FXEh8Ajhr2uEh46V6nsM",
+          "stagenet": "5DB3znP7eV1CDtXqJ31S3TMTjb8iwqoWwgEXC8qWkWTn9LenHPGagZxVteGckaVSj48ZWRaHDgJ7WMFc8sMXT9FXEh8Ajhr2uEh44xSFrp"
+        },
+        {
+          "pid": "9df81d456888767e",
+          "mainnet": "4Cy1uwU9zsuCDtXqJ31S3TMTjb8iwqoWwgEXC8qWkWTn9LenHPGagZxVteGckaVSj48ZWRaHDgJ7WMFc8sMXT9FXEenh89HBSjXFFSTCps",
+          "stagenet": "5DB3znP7eV1CDtXqJ31S3TMTjb8iwqoWwgEXC8qWkWTn9LenHPGagZxVteGckaVSj48ZWRaHDgJ7WMFc8sMXT9FXEenh89HBSjXFGrHn4N"
+        }
+      ]
+    },
+    {
+      "spend_secret": "a2a237983836824d0a2b5fbcc18889c2a0a3a98fd7a187b9bf980eba3c875401",
+      "view_secret": "122b15bfe78366ef9c139c67de3bdb3f8733d79d75cf174057b35997e248580c",
+      "spend_public": "6482e32de51b4c23e124620ab03c71cd2e261a26b6d5860b3cb0a8aebaf8c250",
+      "view_public": "f24b0a3d9d28a719409dbf770a4cbe93c6c0ddab8b37a747d4e94006a74f0d87",
+      "mainnet": "45S2UttGMDV715PiuQsc3JbKWKvzfH2H32t1nxRAyLaDEYHMmXereSJ5Dyqf1LNbqXRicjEQFkMxiD1rj1dJ6JnYGHx7ngU",
+      "stagenet": "55e4ZjoDzpb715PiuQsc3JbKWKvzfH2H32t1nxRAyLaDEYHMmXereSJ5Dyqf1LNbqXRicjEQFkMxiD1rj1dJ6JnYGL3y57D",
+      "mnemonic": [
+        "duckling",
+        "casket",
+        "ruby",
+        "directed",
+        "anchor",
+        "gopher",
+        "total",
+        "drunk",
+        "vulture",
+        "woozy",
+        "juggled",
+        "double",
+        "geometry",
+        "wickets",
+        "melting",
+        "lofty",
+        "succeed",
+        "mobile",
+        "emotion",
+        "upload",
+        "paddles",
+        "aces",
+        "joining",
+        "juggled",
+        "succeed"
+      ],
+      "integrated": [
+        {
+          "pid": "0123456789abcdef",
+          "mainnet": "4F8hVhhkxV1715PiuQsc3JbKWKvzfH2H32t1nxRAyLaDEYHMmXereSJ5Dyqf1LNbqXRicjEQFkMxiD1rj1dJ6JnYPaiJvZGJTfrU5HCBTi",
+          "stagenet": "5FLjaYcic67715PiuQsc3JbKWKvzfH2H32t1nxRAyLaDEYHMmXereSJ5Dyqf1LNbqXRicjEQFkMxiD1rj1dJ6JnYPaiJvZGJTfrTzav64e"
+        },
+        {
+          "pid": "022b8ffc9168901f",
+          "mainnet": "4F8hVhhkxV1715PiuQsc3JbKWKvzfH2H32t1nxRAyLaDEYHMmXereSJ5Dyqf1LNbqXRicjEQFkMxiD1rj1dJ6JnYPakaXuB2VLB4b63kP1",
+          "stagenet": "5FLjaYcic67715PiuQsc3JbKWKvzfH2H32t1nxRAyLaDEYHMmXereSJ5Dyqf1LNbqXRicjEQFkMxiD1rj1dJ6JnYPakaXuB2VLB4WwnrxH"
+        },
+        {
+          "pid": "5ea66254fa3af794",
+          "mainnet": "4F8hVhhkxV1715PiuQsc3JbKWKvzfH2H32t1nxRAyLaDEYHMmXereSJ5Dyqf1LNbqXRicjEQFkMxiD1rj1dJ6JnYPeFquLwBEiAHheqxs3",
+          "stagenet": "5FLjaYcic67715PiuQsc3JbKWKvzfH2H32t1nxRAyLaDEYHMmXereSJ5Dyqf1LNbqXRicjEQFkMxiD1rj1dJ6JnYPeFquLwBEiAHkdDzk3"
+        }
+      ]
+    },
+    {
+      "spend_secret": "d955f52a2e5167d54aba8db8f64cf82e6c870b47f966ce46fa7f87e0db6f2608",
+      "view_secret": "945333ce0f901cba5709f81269c20da3fc29d7e1561a1d367ec4c3a45edd1800",
+      "spend_public": "a6b85f866f07ed404164ae7418c15a3b18fb67671b69259f6d4d6ef184b6bc13",
+      "view_public": "22dc011647cbd8e19965b4e6acccff67bd537dce054acd676ead094073822245",
+      "mainnet": "47wYq8S54o6BkMnG9XcygDAtKbYe4ykhzTfeC9fqyLzf4CeQAAD4bVZejbWJJwsJvAJMQQq4fFeMaJJRYTZiR1NH8rYn8A4",
+      "stagenet": "589auyM2iQCBkMnG9XcygDAtKbYe4ykhzTfeC9fqyLzf4CeQAAD4bVZejbWJJwsJvAJMQQq4fFeMaJJRYTZiR1NH8teXCqj",
+      "mnemonic": [
+        "audio",
+        "potato",
+        "template",
+        "null",
+        "skater",
+        "onward",
+        "bagpipe",
+        "doorway",
+        "veered",
+        "wanted",
+        "acumen",
+        "dexterity",
+        "cake",
+        "width",
+        "else",
+        "irate",
+        "rugged",
+        "adhesive",
+        "ribbon",
+        "lunar",
+        "hookup",
+        "vein",
+        "people",
+        "pruned",
+        "wanted"
+      ],
+      "integrated": [
+        {
+          "pid": "0123456789abcdef",
+          "mainnet": "4HeDqwFZg4cBkMnG9XcygDAtKbYe4ykhzTfeC9fqyLzf4CeQAAD4bVZejbWJJwsJvAJMQQq4fFeMaJJRYTZiR1NHCYRv1HDkL1iU1b148L",
+          "stagenet": "5HrFvnAXKfiBkMnG9XcygDAtKbYe4ykhzTfeC9fqyLzf4CeQAAD4bVZejbWJJwsJvAJMQQq4fFeMaJJRYTZiR1NHCYRv1HDkL1iU1hG3BV"
+        },
+        {
+          "pid": "95be84c808d37d37",
+          "mainnet": "4HeDqwFZg4cBkMnG9XcygDAtKbYe4ykhzTfeC9fqyLzf4CeQAAD4bVZejbWJJwsJvAJMQQq4fFeMaJJRYTZiR1NHCe4YRzsa1mW7HRfpsZ",
+          "stagenet": "5HrFvnAXKfiBkMnG9XcygDAtKbYe4ykhzTfeC9fqyLzf4CeQAAD4bVZejbWJJwsJvAJMQQq4fFeMaJJRYTZiR1NHCe4YRzsa1mW7D4pQNX"
+        },
+        {
+          "pid": "6d68f9ad33938232",
+          "mainnet": "4HeDqwFZg4cBkMnG9XcygDAtKbYe4ykhzTfeC9fqyLzf4CeQAAD4bVZejbWJJwsJvAJMQQq4fFeMaJJRYTZiR1NHCcXtcVfGs9s6hDgSBv",
+          "stagenet": "5HrFvnAXKfiBkMnG9XcygDAtKbYe4ykhzTfeC9fqyLzf4CeQAAD4bVZejbWJJwsJvAJMQQq4fFeMaJJRYTZiR1NHCcXtcVfGs9s6kC7a9A"
+        }
+      ]
+    },
+    {
+      "spend_secret": "6cd6c3d275dc34685a540a2dcce46ecfbd962af80128a7745689588bae52bc08",
+      "view_secret": "8b69d5e14c331419872b41ca8a567a4f59d2219e09eabd54dc13dcd28c87d806",
+      "spend_public": "7ae31817dd9f01980d1f3366506fd4dd5ab0edec94ffe92f76438b89f3500dbd",
+      "view_public": "5f76b8199abf875899d5c4a05fac2e5f35908469674843b8035a71d62d3a372c",
+      "mainnet": "46HCxiNPUoiSS65uARug5qe2QzRrciGvL8wSYzVqG5brYg9xQ8XcRUJFpYKCK8FLNZGvedkohE86WXnA93PeoEjY5zznJSj",
+      "stagenet": "56VF3ZHM8QpSS65uARug5qe2QzRrciGvL8wSYzVqG5brYg9xQ8XcRUJFpYKCK8FLNZGvedkohE86WXnA93PeoEjY65KEBmE",
+      "mnemonic": [
+        "guru",
+        "splendid",
+        "outbreak",
+        "already",
+        "flippant",
+        "refer",
+        "italics",
+        "eggs",
+        "inkling",
+        "inroads",
+        "ritual",
+        "mighty",
+        "boil",
+        "unwind",
+        "trolling",
+        "soothe",
+        "amended",
+        "lively",
+        "boldly",
+        "hamburger",
+        "upgrade",
+        "batch",
+        "meeting",
+        "natural",
+        "batch"
+      ],
+      "integrated": [
+        {
+          "pid": "0123456789abcdef",
+          "mainnet": "4FysyXBt65ESS65uARug5qe2QzRrciGvL8wSYzVqG5brYg9xQ8XcRUJFpYKCK8FLNZGvedkohE86WXnA93PeoEjY8Mu6f6kR8KnU1BZixW",
+          "stagenet": "5GBv4N6qjgLSS65uARug5qe2QzRrciGvL8wSYzVqG5brYg9xQ8XcRUJFpYKCK8FLNZGvedkohE86WXnA93PeoEjY8Mu6f6kR8KnU4DTBKj"
+        },
+        {
+          "pid": "8db3335cc2df912f",
+          "mainnet": "4FysyXBt65ESS65uARug5qe2QzRrciGvL8wSYzVqG5brYg9xQ8XcRUJFpYKCK8FLNZGvedkohE86WXnA93PeoEjY8TE3bxsgfYU6NkVqC8",
+          "stagenet": "5GBv4N6qjgLSS65uARug5qe2QzRrciGvL8wSYzVqG5brYg9xQ8XcRUJFpYKCK8FLNZGvedkohE86WXnA93PeoEjY8TE3bxsgfYU6Mh6EJu"
+        },
+        {
+          "pid": "dcf326919782a762",
+          "mainnet": "4FysyXBt65ESS65uARug5qe2QzRrciGvL8wSYzVqG5brYg9xQ8XcRUJFpYKCK8FLNZGvedkohE86WXnA93PeoEjY8WEEQkBKXkaC7hg2jx",
+          "stagenet": "5GBv4N6qjgLSS65uARug5qe2QzRrciGvL8wSYzVqG5brYg9xQ8XcRUJFpYKCK8FLNZGvedkohE86WXnA93PeoEjY8WEEQkBKXkaC7AYRj8"
+        }
+      ]
+    },
+    {
+      "spend_secret": "15e54bfd92873cc4b70d11d1181c7a39206374e42db6989ea97dc525ffb5c706",
+      "view_secret": "dc72f531d05079d094dfa0761864ebb34700fe05a2251e7ce7aed33a3cab7604",
+      "spend_public": "10f22c4ef794c229a3b6871280e72eeee63a6cf01670665c1fa5f24e1adaf4ab",
+      "view_public": "c655123cc752cd818b055bc4f1f41ce27657e6dbc9c3fa9f903a2566134433ec",
+      "mainnet": "42GMXyQJMZT7xxQnnGAxdKgxd7vmAFEmTGQiSpASCSB5VjRwtR8BPc8NfjLFshCfKyesy8cwSoKjoTgxxN55t6cSTg4nPdr",
+      "stagenet": "52UPcpKG1AZ7xxQnnGAxdKgxd7vmAFEmTGQiSpASCSB5VjRwtR8BPc8NfjLFshCfKyesy8cwSoKjoTgxxN55t6cSTjZG1h7",
+      "mnemonic": [
+        "wise",
+        "fully",
+        "foes",
+        "lexicon",
+        "sack",
+        "lucky",
+        "hazard",
+        "always",
+        "tipsy",
+        "syndrome",
+        "nail",
+        "skew",
+        "saga",
+        "jockey",
+        "gimmick",
+        "ivory",
+        "tapestry",
+        "juicy",
+        "else",
+        "velvet",
+        "avidly",
+        "unveil",
+        "vaults",
+        "wallets",
+        "always"
+      ],
+      "integrated": [
+        {
+          "pid": "0123456789abcdef",
+          "mainnet": "4By2YnDnxpy7xxQnnGAxdKgxd7vmAFEmTGQiSpASCSB5VjRwtR8BPc8NfjLFshCfKyesy8cwSoKjoTgxxN55t6cSgUYFL5y7sh6TygAEnv",
+          "stagenet": "5CB4dd8kcS57xxQnnGAxdKgxd7vmAFEmTGQiSpASCSB5VjRwtR8BPc8NfjLFshCfKyesy8cwSoKjoTgxxN55t6cSgUYFL5y7sh6Tzyb1KA"
+        },
+        {
+          "pid": "76d6d8f3f0b57c66",
+          "mainnet": "4By2YnDnxpy7xxQnnGAxdKgxd7vmAFEmTGQiSpASCSB5VjRwtR8BPc8NfjLFshCfKyesy8cwSoKjoTgxxN55t6cSgYzwyVhw2uZCYw8Rag",
+          "stagenet": "5CB4dd8kcS57xxQnnGAxdKgxd7vmAFEmTGQiSpASCSB5VjRwtR8BPc8NfjLFshCfKyesy8cwSoKjoTgxxN55t6cSgYzwyVhw2uZCZexnns"
+        },
+        {
+          "pid": "e09dc0a3e8e1eba4",
+          "mainnet": "4By2YnDnxpy7xxQnnGAxdKgxd7vmAFEmTGQiSpASCSB5VjRwtR8BPc8NfjLFshCfKyesy8cwSoKjoTgxxN55t6cSgd1SUiZgadgKZzBpBb",
+          "stagenet": "5CB4dd8kcS57xxQnnGAxdKgxd7vmAFEmTGQiSpASCSB5VjRwtR8BPc8NfjLFshCfKyesy8cwSoKjoTgxxN55t6cSgd1SUiZgadgKcWi99A"
+        }
+      ]
+    },
+    {
+      "spend_secret": "8db88eb4b27dddd59b0a112140a14c440fa9adb142fa330f03a61c4547ea7b0b",
+      "view_secret": "7a993f2b03a0c7008561fc661e049c159225b73c68c08c60b7726bba9abcc105",
+      "spend_public": "579e602e356c05b0982631ab6483bdaa395a96585d7ef3713c5e523e6bd27fd0",
+      "view_public": "ff6f4518ee92fa7a34ee2e6bed236d8a317fd017a65fcf24d663e4c74f4a8b22",
+      "mainnet": "44wgvWJXSyrWYBoWVfUKpxVUPQsCzehPYKwXhNepiSnJbxYLqa6VsmjMSZQHxy2Qp4Q7ed7aG1Xst7ANS5UPu8424upDNAN",
+      "stagenet": "559j1MDV6axWYBoWVfUKpxVUPQsCzehPYKwXhNepiSnJbxYLqa6VsmjMSZQHxy2Qp4Q7ed7aG1Xst7ANS5UPu8424wtAd3Y",
+      "mnemonic": [
+        "scoop",
+        "mailed",
+        "dunes",
+        "oaks",
+        "reruns",
+        "muddy",
+        "today",
+        "pylons",
+        "suitcase",
+        "segments",
+        "cowl",
+        "jagged",
+        "lofty",
+        "younger",
+        "pumpkins",
+        "gauze",
+        "solved",
+        "tirade",
+        "weavers",
+        "masterful",
+        "sneeze",
+        "imbalance",
+        "faulty",
+        "gawk",
+        "masterful"
+      ],
+      "integrated": [
+        {
+          "pid": "0123456789abcdef",
+          "mainnet": "4EeMwK824FNWYBoWVfUKpxVUPQsCzehPYKwXhNepiSnJbxYLqa6VsmjMSZQHxy2Qp4Q7ed7aG1Xst7ANS5UPu8426gtNX2ZV3ecU4SyAUW",
+          "stagenet": "5ErQ2A2yhrUWYBoWVfUKpxVUPQsCzehPYKwXhNepiSnJbxYLqa6VsmjMSZQHxy2Qp4Q7ed7aG1Xst7ANS5UPu8426gtNX2ZV3ecU1fCnKE"
+        },
+        {
+          "pid": "0a2d8ec0304105da",
+          "mainnet": "4EeMwK824FNWYBoWVfUKpxVUPQsCzehPYKwXhNepiSnJbxYLqa6VsmjMSZQHxy2Qp4Q7ed7aG1Xst7ANS5UPu8426hEExxZvfpYRg1BBBi",
+          "stagenet": "5ErQ2A2yhrUWYBoWVfUKpxVUPQsCzehPYKwXhNepiSnJbxYLqa6VsmjMSZQHxy2Qp4Q7ed7aG1Xst7ANS5UPu8426hEExxZvfpYRhjbNQB"
+        },
+        {
+          "pid": "d58fe14627dab5b3",
+          "mainnet": "4EeMwK824FNWYBoWVfUKpxVUPQsCzehPYKwXhNepiSnJbxYLqa6VsmjMSZQHxy2Qp4Q7ed7aG1Xst7ANS5UPu8426pwGUQzRVXAMFLtzMP",
+          "stagenet": "5ErQ2A2yhrUWYBoWVfUKpxVUPQsCzehPYKwXhNepiSnJbxYLqa6VsmjMSZQHxy2Qp4Q7ed7aG1Xst7ANS5UPu8426pwGUQzRVXAMEbE2AS"
+        }
+      ]
+    },
+    {
+      "spend_secret": "1f48aad4d91179858e2799be0a4b89439c37e0aa54daefd7177d8e217c66780a",
+      "view_secret": "0d8908b31949c847bc394da77869fd4bd61b7a30331cffb8fe926c2e0494440f",
+      "spend_public": "87e0f4940012fb57e1d79c573e03ffa90594d0f4a8a68cd19ed869119586070b",
+      "view_public": "c6db5e07321a7aef65b91e6fc66a6afd074056ae99cbcbf60c9567bd7ed113a2",
+      "mainnet": "46mm9FrsZkWFhZuhPai6EaVGiwrvqER8oc4aibf1EHux2yFUY3LbdQuh3TM3VUK47bjKh7vZs6d3Yi9z8bBvUcsCKHTX2gL",
+      "stagenet": "56yoE6mqDMcFhZuhPai6EaVGiwrvqER8oc4aibf1EHux2yFUY3LbdQuh3TM3VUK47bjKh7vZs6d3Yi9z8bBvUcsCKKtjqja",
+      "mnemonic": [
+        "luggage",
+        "adult",
+        "testing",
+        "symptoms",
+        "space",
+        "gauze",
+        "dewdrop",
+        "poker",
+        "inkling",
+        "rebel",
+        "evenings",
+        "mesh",
+        "nanny",
+        "twang",
+        "mullet",
+        "thorn",
+        "bogeys",
+        "website",
+        "adopt",
+        "wallets",
+        "axle",
+        "petals",
+        "banjo",
+        "buying",
+        "symptoms"
+      ],
+      "integrated": [
+        {
+          "pid": "0123456789abcdef",
+          "mainnet": "4GUSA4gNB22FhZuhPai6EaVGiwrvqER8oc4aibf1EHux2yFUY3LbdQuh3TM3VUK47bjKh7vZs6d3Yi9z8bBvUcsCU6eUJMNcstpU55nBaS",
+          "stagenet": "5GgUEubKpd8FhZuhPai6EaVGiwrvqER8oc4aibf1EHux2yFUY3LbdQuh3TM3VUK47bjKh7vZs6d3Yi9z8bBvUcsCU6eUJMNcstpTyk25c9"
+        },
+        {
+          "pid": "e3eb4edd5cfc2d26",
+          "mainnet": "4GUSA4gNB22FhZuhPai6EaVGiwrvqER8oc4aibf1EHux2yFUY3LbdQuh3TM3VUK47bjKh7vZs6d3Yi9z8bBvUcsCUFEvWaTHN8c5LHrdnF",
+          "stagenet": "5GgUEubKpd8FhZuhPai6EaVGiwrvqER8oc4aibf1EHux2yFUY3LbdQuh3TM3VUK47bjKh7vZs6d3Yi9z8bBvUcsCUFEvWaTHN8c5Mewf3G"
+        },
+        {
+          "pid": "7e56ed0dac6ee456",
+          "mainnet": "4GUSA4gNB22FhZuhPai6EaVGiwrvqER8oc4aibf1EHux2yFUY3LbdQuh3TM3VUK47bjKh7vZs6d3Yi9z8bBvUcsCUBPf64EukpbAm6mBMk",
+          "stagenet": "5GgUEubKpd8FhZuhPai6EaVGiwrvqER8oc4aibf1EHux2yFUY3LbdQuh3TM3VUK47bjKh7vZs6d3Yi9z8bBvUcsCUBPf64EukpbAnrgR87"
+        }
+      ]
+    }
+  ]
+}

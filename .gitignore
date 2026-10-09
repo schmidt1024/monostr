@@ -1,0 +1,11 @@
+.superpowers/
+.venv/
+watcher/.env
+watcher/.env.stagenet
+watcher/strfry.stagenet.conf
+media/.env
+media/monostr-media
+media/nsfw/calib/
+media/nsfw/scores.csv
+*.onnx
+__pycache__/
