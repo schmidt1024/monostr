@@ -228,6 +228,7 @@ class SearchController(
     }
 
     fun like(note: Note) = actions.like(note, ::onActionResult)
+    fun react(note: Note, emoji: String) = actions.react(note, emoji, ::onActionResult)
     fun delete(note: Note) = actions.delete(note)
     fun repost(note: Note) = actions.repost(note, ::onActionResult)
     fun bookmark(note: Note) = bookmarks.toggle(note) { m -> _state.update { s -> s.copy(notes = s.notes.map(bookmarks::flags), message = m?.asMessage() ?: s.message) } }

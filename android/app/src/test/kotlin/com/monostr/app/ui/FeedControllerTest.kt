@@ -445,4 +445,23 @@ class FeedControllerTest {
         assertFalse(c.state.value.notes.single().deleting) // the menu entry is free again
         assertEquals(1, c.state.value.notes.size)
     }
+
+    @Test
+    fun `the replies tab asks the repository with replies and switching starts the list over`() = runTest {
+        val feed = FakeFeed().apply { current = listOf(note('x')) }
+        val c = FeedController(feed, profiles, FakePublish(), decorations(), BookmarkActions(FakeBookmarks(), eager()), FakeCounts(), eager())
+        c.start(withReplies = true)
+        advanceUntilIdle()
+        assertTrue(c.state.value.withReplies)
+        assertTrue(feed.repliesCalls.isNotEmpty() && feed.repliesCalls.all { it })
+        feed.repliesCalls.clear()
+        c.setWithReplies(false)
+        advanceUntilIdle()
+        assertEquals(false, c.state.value.withReplies)
+        assertTrue(feed.repliesCalls.isNotEmpty() && feed.repliesCalls.none { it })
+        assertEquals(listOf(note('x').id), c.state.value.notes.map { it.note.id })
+        c.loadMore()
+        advanceUntilIdle()
+        assertEquals(false, feed.repliesCalls.last())
+    }
 }

@@ -1,5 +1,6 @@
 package com.monostr.app.ui.common
 
+import com.monostr.nostr.repo.LIKE
 import com.monostr.app.R
 import com.monostr.app.ui.feed.NoteUi
 import com.monostr.app.ui.feed.target
@@ -36,15 +37,53 @@ class NoteActions(
     private val _changes = MutableStateFlow(0)
 
     /** Emits whenever a like/repost flag (also one set on another screen or loaded from the database) or a deletion changes, so screens re-flag at once. */
-    val changes: Flow<Any> = merge(_changes, own.liked, own.reposted)
+    val changes: Flow<Any> = merge(_changes, own.liked, own.reactions, own.reposted)
 
-    fun like(target: Note, onResult: (UiText) -> Unit) = act(target, 7, uiText(R.string.action_like_sent), onResult) { publish.like(target) }
+    /** Like, or unlike when the note carries the user's reaction already (X: a tap on the filled heart takes it back). */
+    fun like(target: Note, onResult: (UiText) -> Unit) =
+        if (target.id in own.liked.value) withdraw(target, 7, uiText(R.string.action_unlike_sent), onResult) else react(target, LIKE, onResult)
 
-    fun repost(target: Note, onResult: (UiText) -> Unit) = act(target, 6, uiText(R.string.action_repost_sent), onResult) { publish.repost(target) }
+    /** A NIP-25 reaction: "+" is the like; an emoji shows in place of the heart. One reaction per note, like the like. */
+    fun react(target: Note, content: String, onResult: (UiText) -> Unit) =
+        act(target, 7, uiText(R.string.action_like_sent), onResult, content) { publish.react(target, content) }
+
+    /** Repost, or undo the user's repost of the note. */
+    fun repost(target: Note, onResult: (UiText) -> Unit) =
+        if (target.id in own.reposted.value) withdraw(target, 6, uiText(R.string.action_unrepost_sent), onResult)
+        else act(target, 6, uiText(R.string.action_repost_sent), onResult) { publish.repost(target) }
+
+    /**
+     * NIP-09 for the user's own reaction ([kind] 7) or repost (6) of [target]: unmarked at once, a request names
+     * the events. Nothing stored to name: the mark just goes. A refusal or failure puts the mark back.
+     */
+    private fun withdraw(target: Note, kind: Int, okMessage: UiText, onResult: (UiText) -> Unit) {
+        val previous = own.reactions.value[target.id] ?: LIKE
+        own.remove(kind, target.id)
+        counts?.bump(target.id, kind, -1)
+        scope.launch {
+            val message = try {
+                val result = publish.withdraw(target.id, kind)
+                if (result == null || result.sentToAny) okMessage else {
+                    restore(target, kind, previous)
+                    uiText(R.string.error_send_failed)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                restore(target, kind, previous)
+                e.userMessage()
+            }
+            onResult(message)
+        }
+    }
+
+    private fun restore(target: Note, kind: Int, content: String) {
+        if (own.add(kind, target.id, content)) counts?.bump(target.id, kind, +1)
+    }
 
     /** [note] with the user's own like and repost of its target, and whether its deletion is on its way. */
     fun flags(note: NoteUi): NoteUi =
-        note.copy(liked = note.target.id in own.liked.value, reposted = note.target.id in own.reposted.value, deleting = note.target.id in deletions.pending.value)
+        note.copy(liked = note.target.id in own.liked.value, reaction = own.reactions.value[note.target.id], reposted = note.target.id in own.reposted.value, deleting = note.target.id in deletions.pending.value)
 
     /**
      * Spec 4.1: asks the relays to delete [note]. It counts as deleted only once a relay accepted the
@@ -81,8 +120,8 @@ class NoteActions(
     }
 
     // once only: a note the user liked or reposted already gets no second event
-    private fun act(target: Note, kind: Int, okMessage: UiText, onResult: (UiText) -> Unit, block: suspend () -> PublishResult) {
-        if (!own.add(kind, target.id)) return
+    private fun act(target: Note, kind: Int, okMessage: UiText, onResult: (UiText) -> Unit, content: String = LIKE, block: suspend () -> PublishResult) {
+        if (!own.add(kind, target.id, content)) return
         counts?.bump(target.id, kind, +1)
         scope.launch {
             val message = try {

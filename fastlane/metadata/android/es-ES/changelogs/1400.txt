@@ -1,0 +1,9 @@
+• Reacciones con emoji: mantén pulsado el corazón; tu lista y orden en Ajustes
+• Deshacer me gusta, reacción o republicación
+• Pestañas del feed: Publicaciones y Respuestas
+• Importes en XMR o mXMR
+• Silenciar vuelve a aparecer con listas de otras apps
+• Copiar tu npub desde el perfil
+• Las notificaciones muestran la imagen de la nota
+• Enlaces sin https://
+• Aviso claro de qué cartera recibe las propinas

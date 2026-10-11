@@ -1,0 +1,9 @@
+• Reazioni emoji: pressione lunga sul cuore; elenco e ordine propri nelle Impostazioni
+• Annullare mi piace, reazione o ripubblicazione
+• Schede del feed: Post e Risposte
+• Importi in XMR o mXMR
+• Silenzia torna con le liste di altre app
+• Copia la tua npub dal profilo
+• Le notifiche mostrano l'immagine della nota
+• Link senza https://
+• Indicazione chiara del wallet che riceve le mance

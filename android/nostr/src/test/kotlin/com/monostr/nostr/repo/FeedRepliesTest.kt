@@ -92,4 +92,20 @@ class FeedRepliesTest {
             e.close()
         }
     }
+
+    @Test
+    fun `the replies tab holds the replies alone, the posts tab the root notes`() = runTest {
+        SilentWsRelay(answerEose = true).use { relay ->
+            val e = engine(relay)
+            val root = note(alice, "root", 1000).also { e.save(it) }
+            val answer = reply(alice, "answer", root, 1001).also { e.save(it) }
+            e.save(repost(bob, answer, 1002))
+            val repo = NostrFeedRepository(e)
+            assertEquals(listOf("answer"), repo.notes(replies = true).map { it.content })
+            assertEquals(listOf("answer"), repo.live(replies = true).first().map { it.content })
+            assertEquals(listOf("answer"), repo.loadMore(before = 1001, replies = true).map { it.content })
+            assertEquals(listOf("root"), repo.notes().map { it.content })
+            e.close()
+        }
+    }
 }

@@ -1,0 +1,9 @@
+• Reações com emoji: toque e segure o coração; sua lista e ordem nas Configurações
+• Desfazer curtida, reação ou repost
+• Abas do feed: Publicações e Respostas
+• Valores em XMR ou mXMR
+• Silenciar volta a aparecer com listas de outros apps
+• Copiar sua npub no perfil
+• Notificações mostram a imagem da nota
+• Links sem https://
+• Aviso claro de qual carteira recebe as gorjetas

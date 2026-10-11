@@ -128,6 +128,7 @@ fun MoneroSetupScreen(onDone: () -> Unit, vm: MoneroSetupViewModel = hiltViewMod
 private fun ColumnScope.WatcherStep(step: SetupStep.Watcher, intro: Boolean, error: String?, c: MoneroSetupController) {
     if (intro) {
         Text(stringResource(R.string.setup_intro_text), style = MaterialTheme.typography.bodyMedium)
+        Text(stringResource(R.string.setup_intro_wallet_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(16.dp))
     }
     Text(stringResource(R.string.setup_watcher_heading), style = MaterialTheme.typography.titleMedium)
@@ -244,6 +245,7 @@ private fun ColumnScope.DoneStep(step: SetupStep.Done, c: MoneroSetupController)
     Spacer(Modifier.height(8.dp))
     Text(step.address, fontFamily = MonostrFonts.mono, style = MaterialTheme.typography.bodySmall)
     OutlinedButton(onClick = { clipboard.setText(AnnotatedString(step.address)) }) { Text(stringResource(R.string.action_copy_address)) }
+    Text(stringResource(R.string.settings_monero_wallet_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     step.restoreHeight?.let {
         Spacer(Modifier.height(12.dp))
         Text(stringResource(R.string.setup_done_import, it), style = MaterialTheme.typography.bodySmall)

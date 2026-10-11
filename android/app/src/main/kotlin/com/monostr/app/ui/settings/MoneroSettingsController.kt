@@ -1,5 +1,7 @@
 package com.monostr.app.ui.settings
 
+import com.monostr.app.data.AmountUnit
+import kotlinx.coroutines.flow.combine
 import com.monostr.app.R
 import com.monostr.app.data.KeystoreSecretStore
 import com.monostr.app.data.MoneroSetup
@@ -22,8 +24,9 @@ import kotlinx.coroutines.launch
 data class MoneroSettingsState(
     val setup: MoneroSetup? = null,
     val hasViewKey: Boolean = false,
-    /** Presets as XMR decimal strings for the input fields: the saved ones plus the fields the user added (blank until typed). */
-    val presets: List<String> = Presets.DEFAULT.map(Presets::format),
+    /** Presets as decimal strings in [unit] for the input fields: the saved ones plus the fields the user added (blank until typed). */
+    val presets: List<String> = Presets.DEFAULT.map { Presets.format(it) },
+    val unit: AmountUnit = AmountUnit.XMR,
     val busy: Boolean = false,
     val error: UiText? = null,
     val message: UiText? = null,
@@ -45,11 +48,20 @@ class MoneroSettingsController(
 
     fun start() {
         scope.launch { settings.setup.collect { s -> _state.update { it.copy(setup = s, hasViewKey = secrets.get(KeystoreSecretStore.SECRET_VIEW_KEY) != null) } } }
-        scope.launch { settings.presets.collect { p -> _state.update { it.copy(presets = p.map(Presets::format)) } } }
+        scope.launch {
+            combine(settings.presets, settings.amountUnit) { p, u -> p to u }.collect { (p, u) ->
+                _state.update { it.copy(presets = p.map { v -> Presets.format(v, u) }, unit = u) }
+            }
+        }
     }
 
     fun editPreset(index: Int, value: String) = _state.update { st ->
         if (index !in st.presets.indices) st else st.copy(presets = st.presets.toMutableList().also { it[index] = value })
+    }
+
+    /** XMR or mXMR; the preset fields read again in the new unit. */
+    fun setUnit(unit: AmountUnit) {
+        scope.launch { settings.setAmountUnit(unit) }
     }
 
     fun addPreset() = _state.update { st -> if (st.canAddPreset) st.copy(presets = st.presets + "") else st }
@@ -60,9 +72,9 @@ class MoneroSettingsController(
     }
 
     fun savePresets(inputs: List<String> = _state.value.presets) {
-        val parsed = Presets.parseXmr(inputs)
+        val parsed = Presets.parseAll(inputs, _state.value.unit)
         if (parsed == null) {
-            _state.update { it.copy(error = ERR_PRESETS) }
+            _state.update { it.copy(error = errPresets(it.unit)) }
             return
         }
         scope.launch {
@@ -121,7 +133,8 @@ class MoneroSettingsController(
     fun clearMessage() = _state.update { it.copy(message = null) }
 
     companion object {
-        val ERR_PRESETS = uiText(R.string.settings_err_presets)
+        /** "Presets: valid … amounts", naming the unit the fields are typed in. */
+        fun errPresets(unit: AmountUnit) = uiText(R.string.settings_err_presets, unit.label)
         val ERR_NOT_PUBLISHED = uiText(R.string.setup_err_not_published)
     }
 }

@@ -1,9 +1,5 @@
 package com.monostr.app.ui.common
 
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.os.Build
-import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -99,11 +95,7 @@ private fun NoteMenuButton(note: NoteUi, shown: Note, authorName: String, menu: 
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val copied = stringResource(R.string.note_copied)
-    fun copy(text: String) {
-        context.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("", text))
-        // Android 13+ confirms a copy itself
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) Toast.makeText(context, copied, Toast.LENGTH_SHORT).show()
-    }
+    fun copy(text: String) = copyToClipboard(context, text, copied)
     Box {
         // IconButton keeps the 48 dp target
         IconButton(onClick = { open = true }, modifier = Modifier.testTag("note-menu-${shown.id.take(8)}")) {

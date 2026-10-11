@@ -1,0 +1,9 @@
+• Emoji-Reaktionen: lange aufs Herz drücken; eigene Auswahl und Reihenfolge in den Einstellungen
+• Like, Reaktion und Repost rückgängig machen
+• Feed-Tabs: Posts und Antworten
+• Beträge in XMR oder mXMR
+• Stummschalten wieder da bei Listen anderer Apps
+• npub im Profil kopieren
+• Mitteilungen zeigen das Bild der Note
+• Links ohne https://
+• Klarer Hinweis, welche Wallet Tips empfängt

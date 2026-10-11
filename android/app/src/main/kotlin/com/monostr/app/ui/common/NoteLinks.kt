@@ -22,6 +22,14 @@ object NoteLinks {
             "|${HashtagTags.HASHTAG}", // the hashtags a published note tags (`t`) are exactly the ones shown as links
     )
 
+    /** How a link reads (user 2026-10-11, like X): no scheme, no "www.", no slash that only ends the host. */
+    fun shownUrl(url: String): String {
+        val bare = url.replaceFirst(SCHEME, "").removePrefix("www.")
+        return if (bare.indexOf('/') == bare.length - 1) bare.dropLast(1) else bare
+    }
+
+    private val SCHEME = Regex("^https?://", RegexOption.IGNORE_CASE) // regex
+
     fun annotate(content: String): List<NoteSpan> {
         if (content.isEmpty()) return emptyList()
         val out = ArrayList<NoteSpan>()
@@ -32,7 +40,7 @@ object NoteLinks {
                 m.groups[1] != null -> {
                     val url = trimUrl(m.value)
                     end = m.range.first + url.length
-                    NoteSpan.Url(url, url)
+                    NoteSpan.Url(shownUrl(url), url)
                 }
                 m.groups[2] != null -> when (val q = SearchQuery.parse(m.value)) {
                     is SearchQuery.Profile -> NoteSpan.Mention(m.value, q.pubkey)

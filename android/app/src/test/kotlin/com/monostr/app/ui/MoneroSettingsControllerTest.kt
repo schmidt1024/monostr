@@ -38,7 +38,7 @@ class MoneroSettingsControllerTest {
         assertEquals(listOf("0.0001", "0.001", "0.01"), c.state.value.presets)
         c.savePresets(listOf("0.002", "abc", ""))
         advanceUntilIdle()
-        assertEquals(MoneroSettingsController.ERR_PRESETS, c.state.value.error)
+        assertEquals(MoneroSettingsController.errPresets(com.monostr.app.data.AmountUnit.XMR), c.state.value.error)
         assertEquals(listOf("0.0001", "0.001", "0.01"), c.state.value.presets)
         c.savePresets(listOf("0,01", "0.002", ""))
         advanceUntilIdle()
@@ -113,5 +113,19 @@ class MoneroSettingsControllerTest {
         c.removePreset(0)
         assertEquals(listOf("0.001"), c.state.value.presets, "the last field stays")
         assertTrue(c.state.value.canAddPreset)
+    }
+
+    @Test
+    fun `in mXMR the preset fields read and save in mXMR`() = runTest {
+        val settings = FakeTipSettings()
+        val c = MoneroSettingsController(settings, FakeSecrets(), FakeTips(), FakeWatcherGateway(), { true }, eager())
+        c.start()
+        advanceUntilIdle()
+        c.setUnit(com.monostr.app.data.AmountUnit.MXMR)
+        advanceUntilIdle()
+        assertEquals(listOf("0.1", "1", "10"), c.state.value.presets)
+        c.savePresets(listOf("2", "0,5"))
+        advanceUntilIdle()
+        assertEquals(listOf(500_000_000L, 2_000_000_000L), settings.presetsState.value)
     }
 }

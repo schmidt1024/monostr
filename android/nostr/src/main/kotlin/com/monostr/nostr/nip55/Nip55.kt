@@ -20,7 +20,7 @@ object Nip55 {
         Permission("sign_event", 0), Permission("sign_event", 1), Permission("sign_event", 3),
         Permission("sign_event", 6), Permission("sign_event", 7), Permission("sign_event", 10002),
         Permission("sign_event", 10037), Permission("sign_event", 9738), Permission("sign_event", 27235),
-        Permission("sign_event", 10003), Permission("nip44_encrypt"), Permission("nip44_decrypt"),
+        Permission("sign_event", 10003), Permission("nip44_encrypt"), Permission("nip44_decrypt"), Permission("nip04_decrypt"),
         // seals (NIP-59), NIP-42 relay auth, and the kind 10050 DM relay list (Plan 10b).
         Permission("sign_event", 13), Permission("sign_event", 22242), Permission("sign_event", 10050),
         // Blossom authorization for picture uploads (Plan 10e).
@@ -58,6 +58,8 @@ object Nip55 {
     enum class Nip44Op(val resolver: String, val type: String) {
         ENCRYPT("NIP44_ENCRYPT", "nip44_encrypt"),
         DECRYPT("NIP44_DECRYPT", "nip44_decrypt"),
+        /** NIP-04, read only: private list parts of older clients (NIP-51). */
+        NIP04_DECRYPT("NIP04_DECRYPT", "nip04_decrypt"),
     }
 
     /** ContentResolver call for NIP-44: `content://<pkg>.NIP44_ENCRYPT|NIP44_DECRYPT`, args = text, peer pubkey, current user. */

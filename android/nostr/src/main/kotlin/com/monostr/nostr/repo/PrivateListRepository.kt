@@ -216,8 +216,14 @@ class NostrPrivateList(
         if (content.isBlank()) return Decrypt.OK
         val tags = try {
             withContext(Dispatchers.Default) {
-                val text = (if (interactive) signer.nip44Decrypt(signer.pubkey, content) else signer.nip44DecryptSilent(signer.pubkey, content))
-                    ?: return@withContext null
+                // NIP-51: older clients wrote the private part with NIP-04 ("…?iv=…"); it is read, and written back as NIP-44
+                val legacy = NIP04.containsMatchIn(content)
+                val text = when {
+                    legacy && interactive -> signer.nip04Decrypt(signer.pubkey, content)
+                    legacy -> signer.nip04DecryptSilent(signer.pubkey, content)
+                    interactive -> signer.nip44Decrypt(signer.pubkey, content)
+                    else -> signer.nip44DecryptSilent(signer.pubkey, content)
+                } ?: return@withContext null
                 parseTags(text)
             } ?: return Decrypt.NO_SILENT_ANSWER
         } catch (e: CancellationException) {
@@ -363,3 +369,6 @@ class NostrPrivateList(
     private fun encodeTags(tags: List<List<String>>): String =
         JsonArray(tags.map { t -> JsonArray(t.map { JsonPrimitive(it) }) }).toString()
 }
+
+/** A NIP-04 payload: base64 ciphertext, "?iv=", base64 IV. NIP-44 payloads are plain base64. */
+private val NIP04 = Regex("\\?iv=[A-Za-z0-9+/=]+$") // regex

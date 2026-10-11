@@ -43,15 +43,38 @@ class NoteActionsTest {
     }
 
     @Test
-    fun `a note liked or reposted already publishes nothing a second time`() = runTest {
+    fun `a second tap takes the like or repost back with a deletion request, a third sends it again`() = runTest {
         val publish = FakePublish()
-        val actions = NoteActions(publish, eager())
+        val counts = FakeCounts()
+        val actions = NoteActions(publish, eager(), counts)
+        val messages = ArrayList<UiText>()
         actions.like(n) {}
-        actions.like(n) {}
-        actions.repost(n) {}
+        advanceUntilIdle()
+        actions.like(n) { messages += it }
+        advanceUntilIdle()
+        assertFalse(actions.flags(ui).liked)
+        assertEquals(listOf(uiText(R.string.action_unlike_sent)), messages)
         actions.repost(n) {}
         advanceUntilIdle()
-        assertEquals(listOf("like:1111", "repost:1111"), publish.calls)
+        actions.repost(n) {}
+        advanceUntilIdle()
+        assertFalse(actions.flags(ui).reposted)
+        actions.like(n) {}
+        advanceUntilIdle()
+        assertEquals(listOf("like:1111", "unlike:1111", "repost:1111", "unrepost:1111", "like:1111"), publish.calls)
+        assertEquals(listOf(1L, -1L, 1L, -1L, 1L), counts.bumps.map { it.third })
+    }
+
+    @Test
+    fun `a refused unlike brings the reaction back`() = runTest {
+        val own = MemoryOwnReactions().apply { add(7, n.id, "🔥") }
+        val actions = NoteActions(FakePublish(relaysOk = false), eager(), own = own)
+        val messages = ArrayList<UiText>()
+        actions.like(n) { messages += it }
+        advanceUntilIdle()
+        assertTrue(actions.flags(ui).liked)
+        assertEquals("🔥", actions.flags(ui).reaction)
+        assertEquals(listOf(uiText(R.string.error_send_failed)), messages)
     }
 
     @Test
@@ -64,10 +87,11 @@ class NoteActionsTest {
         assertTrue(thread.flags(ui).liked)
         own.add(6, n.id) // as if read from the user's stored kind 6
         assertTrue(feed.flags(ui).reposted)
+        // a repost loaded from the database is undone by the next tap, not sent twice
         val publish = FakePublish()
         NoteActions(publish, eager(), own = own).repost(n) {}
         advanceUntilIdle()
-        assertTrue(publish.calls.isEmpty())
+        assertEquals(listOf("unrepost:1111"), publish.calls)
     }
 
     @Test

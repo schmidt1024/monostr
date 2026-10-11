@@ -1,0 +1,9 @@
+• Emoji tepkileri: kalbe uzun bas; kendi listen ve sıran Ayarlar’da
+• Beğeni, tepki veya paylaşımı geri al
+• Akış sekmeleri: Gönderiler ve Yanıtlar
+• Tutarlar XMR veya mXMR
+• Sessize alma, başka uygulamaların listeleriyle yeniden görünür
+• Profilden npub kopyala
+• Bildirimler notun görselini gösterir
+• https:// olmadan bağlantılar
+• Bahşişleri hangi cüzdanın aldığı açıkça belirtilir

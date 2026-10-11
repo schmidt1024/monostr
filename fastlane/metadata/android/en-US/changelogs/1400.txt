@@ -1,0 +1,9 @@
+• Emoji reactions: long-press the heart; your own quick list and order in Settings
+• Undo a like, reaction or repost
+• Feed tabs: Posts and Replies
+• Amounts in XMR or mXMR
+• Mute shows again for lists from other apps
+• Copy your npub from the profile
+• Notifications show the note's picture
+• Links without https://
+• Clearer hint which wallet receives tips

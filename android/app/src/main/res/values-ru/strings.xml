@@ -88,6 +88,9 @@
     <string name="settings_msg_amber_wrong_key">Выбран другой ключ – ничего не изменилось</string>
     <string name="action_like_sent">Отметка «Нравится» отправлена</string>
     <string name="action_repost_sent">Репост отправлен</string>
+    <string name="action_unlike_sent">Лайк убран</string>
+    <string name="action_unrepost_sent">Репост убран</string>
+    <string name="action_undo_repost">Отменить репост</string>
     <string name="action_no_relay_local">Нет доступных релеев, сохранено локально</string>
 
     <!-- tabs -->
@@ -112,6 +115,8 @@
     <string name="feed_settings">Настройки</string>
     <string name="feed_new_note">Новая заметка</string>
     <string name="feed_empty">Заметок пока нет. Подпишитесь на кого-нибудь или напишите первую.</string>
+    <string name="feed_tab_posts">Посты</string>
+    <string name="feed_tab_replies">Ответы</string>
     <string name="feed_error_load">Не удалось загрузить ленту</string>
     <string name="feed_error_more">Не удалось загрузить больше заметок</string>
 
@@ -120,6 +125,7 @@
     <string name="thread_not_found">Заметка не найдена</string>
     <string name="profile_title_self">Мой профиль</string>
     <string name="profile_error_load">Не удалось загрузить профиль</string>
+    <string name="profile_copy_npub">Скопировать npub</string>
     <string name="note_replying_one">В ответ %1$s</string>
     <string name="note_replying_two">В ответ %1$s и %2$s</string>
     <plurals name="note_replying_more">
@@ -154,9 +160,9 @@
 
     <!-- tip sheet -->
     <string name="tip_title">Отправить чаевые в Monero</string>
-    <string name="tip_amount">Сумма (XMR)</string>
-    <string name="tip_xmr_amount">%1$s XMR</string>
-    <string name="tip_custom_amount">Своя сумма в XMR</string>
+    <string name="tip_amount">Сумма (%1$s)</string>
+    <string name="tip_xmr_amount">%1$s %2$s</string>
+    <string name="tip_custom_amount">Своя сумма в %1$s</string>
     <string name="tip_pay">Оплатить в кошельке</string>
     <string name="tip_no_wallet_title">Приложение-кошелёк не найдено</string>
     <string name="tip_no_wallet_text">Установите Monerujo или Cake Wallet либо переведите сумму вручную на этот адрес:</string>
@@ -178,6 +184,7 @@
     <string name="setup_title">Чаевые в Monero</string>
     <string name="setup_registering">Регистрация у watcher…</string>
     <string name="setup_intro_text">С адресом Monero другие смогут отправлять вам чаевые. Отправлять чаевые можно и без него.</string>
+    <string name="setup_intro_wallet_hint">Чаевые идут в кошелёк, который вы настроите здесь, а не на адрес из описания.</string>
     <string name="setup_watcher_heading">Watcher</string>
     <string name="setup_watcher_text">Watcher отслеживает входящие платежи и публикует квитанции в Nostr.</string>
     <string name="setup_watcher_url">URL watcher</string>
@@ -256,12 +263,15 @@
     <string name="settings_monero">Чаевые в Monero</string>
     <string name="settings_monero_not_set_up">Не настроено. Для отправки чаевых не требуется.</string>
     <string name="settings_monero_set_up">Настроить приём чаевых</string>
-    <string name="settings_monero_address">Адрес %1$s…%2$s · %3$s</string>
+    <string name="settings_monero_address">Чаевые приходят в этот кошелёк: %1$s…%2$s · %3$s</string>
+    <string name="settings_monero_wallet_hint">Не на адрес Monero из описания или других полей профиля. Квитанции приходят через watcher и ваши релеи; платные релеи не нужны.</string>
     <string name="settings_monero_watcher">Watcher %1$s</string>
     <string name="settings_monero_switch_watcher">Сменить watcher</string>
     <string name="settings_monero_disable">Отключить чаевые</string>
     <string name="settings_monero_delete_view_key">Удалить ключ просмотра локально</string>
-    <string name="settings_presets">Шаблоны сумм (XMR)</string>
+    <string name="settings_amount_unit">Единица</string>
+    <string name="settings_amount_unit_hint">Как показываются и вводятся суммы. 1 mXMR = 0,001 XMR; кошелёк всегда получает XMR.</string>
+    <string name="settings_presets">Шаблоны сумм (%1$s)</string>
     <string name="settings_preset_n">Шаблон %1$d</string>
     <string name="settings_presets_save">Сохранить шаблоны</string>
     <string name="settings_preset_add">Добавить пресет</string>
@@ -280,7 +290,7 @@
     <string name="settings_reset_relays_hint">Релеи этого приложения будут заменены релеями monostr по умолчанию.</string>
     <string name="settings_msg_relay_list_published">Список релеев опубликован</string>
     <string name="settings_msg_relay_list_not_published">Ни один релей не принял список релеев</string>
-    <string name="settings_err_presets">Шаблоны: допустимые суммы XMR, например 0.001</string>
+    <string name="settings_err_presets">Шаблоны: допустимые суммы %1$s, например 0.001</string>
 
     <!-- appearance (Task 5) -->
     <string name="settings_appearance">Оформление</string>
@@ -328,6 +338,26 @@
     <string name="chat_error_send">Не удалось отправить сообщение</string>
     <string name="profile_message">Сообщение</string>
     <string name="notif_mentioned">упомянул(а) вас</string>
+    <string name="settings_reactions">Реакции</string>
+    <string name="settings_reactions_hint">Быстрый выбор при долгом нажатии на сердце, в этом порядке.</string>
+    <string name="settings_reactions_add">Добавить эмодзи</string>
+    <string name="settings_reactions_add_button">Добавить</string>
+    <string name="settings_reactions_reset">Восстановить по умолчанию</string>
+    <string name="settings_reactions_up">Переместить %1$s вверх</string>
+    <string name="settings_reactions_down">Переместить %1$s вниз</string>
+    <string name="settings_reactions_remove">Удалить %1$s</string>
+    <string name="note_react">Реакция</string>
+    <string name="note_reacted_with">Ваша реакция: %1$s</string>
+    <string name="note_react_other">Другой эмодзи</string>
+    <string name="note_react_send">Отправить</string>
+    <string name="notif_reacted_one">%1$s реагирует: %2$s</string>
+    <string name="notif_reacted_two">%1$s и %2$s отреагировали</string>
+    <plurals name="notif_reacted_more">
+        <item quantity="one">%1$s, %2$s и ещё %3$d отреагировали</item>
+        <item quantity="few">%1$s, %2$s и ещё %3$d отреагировали</item>
+        <item quantity="many">%1$s, %2$s и ещё %3$d отреагировали</item>
+        <item quantity="other">%1$s, %2$s и ещё %3$d отреагировали</item>
+    </plurals>
     <string name="notif_liked_one">%1$s нравится ваша заметка</string>
     <string name="notif_liked_two">%1$s и %2$s нравится ваша заметка</string>
     <plurals name="notif_liked_more">
@@ -350,10 +380,10 @@
     <string name="avatar_of">Профиль %1$s</string>
     <string name="notif_note_missing">заметка не загружена</string>
     <string name="notif_note_withdrawn">удалённая заметка</string>
-    <string name="notif_tipped">отправил(а) чаевые %1$s XMR</string>
+    <string name="notif_tipped">отправил(а) чаевые %1$s %2$s</string>
     <string name="notif_channel_name">Чаевые в Monero</string>
     <string name="notif_tip_title">Получены чаевые в Monero</string>
-    <string name="notif_tip_text">%1$s отправил(а) вам чаевые %2$s XMR</string>
+    <string name="notif_tip_text">%1$s отправил(а) вам чаевые %2$s %3$s</string>
     <string name="notif_dm_channel">Сообщения</string>
     <string name="notif_dm_title">Сообщение от %1$s</string>
     <string name="notif_dm_title_anonymous">Новое сообщение</string>

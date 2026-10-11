@@ -1,5 +1,7 @@
 package com.monostr.app.ui.feed
 
+import com.monostr.app.data.UiSettingsStore
+import kotlinx.coroutines.flow.first
 import com.monostr.nostr.repo.OwnReactions
 import com.monostr.nostr.repo.MemoryOwnReactions
 import com.monostr.app.data.dm.unreadTotalExcept
@@ -57,6 +59,8 @@ data class NoteUi(
     val author: Profile,
     val repostedAuthor: Profile,
     val liked: Boolean = false,
+    /** The user's own reaction when [liked]: "+" (the heart) or an emoji (NIP-25). */
+    val reaction: String? = null,
     val reposted: Boolean = false,
     /** Valid receipts of the target note (spec 5.6); null when there are none. */
     val tips: TipSummary? = null,
@@ -83,6 +87,8 @@ data class FeedUiState(
     val loadingMore: Boolean = false,
     /** The snackbar's message; after a mute it offers to unmute the account (spec 9.4). */
     val message: Message? = null,
+    /** The "Replies" tab is open, replies alone (launch feedback 2026-10-09); else "Posts", root notes only. */
+    val withReplies: Boolean = false,
 )
 
 /** Feed logic shared by the Hilt ViewModel and the JVM tests. */
@@ -117,7 +123,8 @@ class FeedController(
      * Local notes first: the live collector emits the database window immediately, while the
      * relay refresh runs separately. `loading` ends on whichever finishes first.
      */
-    fun start() {
+    fun start(withReplies: Boolean = false) {
+        _state.update { it.copy(withReplies = withReplies) }
         mentions.follow(_state.map { s -> s.notes.map { it.note } })
         bookmarks.ensureLoaded()
         scope.launch { bookmarks.changes.collect { _state.update { s -> s.copy(notes = s.notes.map(bookmarks::flags)) } } }
@@ -135,7 +142,7 @@ class FeedController(
         scope.launch {
             try {
                 feed.refresh()
-                val decorated = decorate(feed.notes())
+                val decorated = decorate(feed.notes(replies = replies))
                 setNotes(loading = false) { s -> merge(decorated, s.notes) }
             } catch (e: CancellationException) {
                 throw e
@@ -148,11 +155,21 @@ class FeedController(
 
     private var liveJob: Job? = null
 
+    private val replies: Boolean get() = _state.value.withReplies
+
+    /** Switches between "Posts" and "Replies": the list starts over from the database, then the relays. */
+    fun setWithReplies(on: Boolean) {
+        if (on == _state.value.withReplies) return
+        _state.update { it.copy(withReplies = on, notes = emptyList(), loading = true) }
+        startLive()
+        refresh()
+    }
+
     private fun startLive() {
         liveJob?.cancel()
         liveJob = scope.launch {
             try {
-                feed.live().collect { notes ->
+                feed.live(replies = replies).collect { notes ->
                     val decorated = decorate(notes)
                     setNotes(loading = false) { s -> merge(decorated, s.notes) }
                 }
@@ -169,7 +186,7 @@ class FeedController(
             _state.update { it.copy(refreshing = true) }
             try {
                 feed.refresh()
-                val decorated = decorate(feed.notes())
+                val decorated = decorate(feed.notes(replies = replies))
                 setNotes(loading = false, refreshing = false) { s -> merge(decorated, s.notes) }
             } catch (e: CancellationException) {
                 throw e
@@ -187,7 +204,7 @@ class FeedController(
         _state.update { it.copy(loadingMore = true) }
         scope.launch {
             try {
-                val older = feed.loadMore(oldest)
+                val older = feed.loadMore(oldest, replies = replies)
                 val decorated = decorate(older)
                 setNotes { s -> (s.notes + decorated).distinctBy { it.note.id } }
             } catch (e: CancellationException) {
@@ -220,6 +237,7 @@ class FeedController(
     fun like(note: NoteUi) = like(note.target)
     fun repost(note: NoteUi) = repost(note.target)
     fun like(note: Note) = actions.like(note, ::onActionResult)
+    fun react(note: Note, emoji: String) = actions.react(note, emoji, ::onActionResult)
     fun delete(note: Note) = actions.delete(note)
     fun repost(note: Note) = actions.repost(note, ::onActionResult)
     fun bookmark(note: NoteUi) = bookmarks.toggle(note.target) { m -> _state.update { s -> s.copy(notes = s.notes.map(bookmarks::flags), message = m?.asMessage() ?: s.message) } }
@@ -263,7 +281,7 @@ class FeedController(
 val NoteUi.target: Note get() = note.repostOf ?: note
 
 @HiltViewModel
-class FeedViewModel @Inject constructor(session: NostrSession, factory: TipSheetFactory, settings: TipSettingsStore, private val hints: HintStore) : ViewModel() {
+class FeedViewModel @Inject constructor(session: NostrSession, factory: TipSheetFactory, settings: TipSettingsStore, private val hints: HintStore, private val uiSettings: UiSettingsStore) : ViewModel() {
     private val ready = session.requireReady()
     val decorations = factory.decorations(viewModelScope)
     val bookmarks = BookmarkActions(ready.bookmarks, viewModelScope, background = ready.engine.backgroundScope)
@@ -291,8 +309,14 @@ class FeedViewModel @Inject constructor(session: NostrSession, factory: TipSheet
         viewModelScope.launch { runCatching { hints.setSupportHintDone(ready.pubkey) } }
     }
 
+    /** The tab choice is kept per device; the controller starts with it. */
+    fun setWithReplies(on: Boolean) {
+        controller.setWithReplies(on)
+        viewModelScope.launch { runCatching { uiSettings.setFeedWithReplies(on) } }
+    }
+
     init {
-        controller.start()
+        viewModelScope.launch { controller.start(runCatching { uiSettings.feedWithReplies.first() }.getOrDefault(false)) }
         viewModelScope.launch {
             try {
                 ready.profiles.get(ready.pubkey)

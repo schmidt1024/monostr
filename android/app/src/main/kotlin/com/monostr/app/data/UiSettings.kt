@@ -1,5 +1,6 @@
 package com.monostr.app.data
 
+import com.monostr.app.ui.common.Reactions
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -50,6 +51,10 @@ interface UiSettingsStore {
     val clientTag: Flow<Boolean>
     /** Follower numbers from Primal's cache (a proprietary service); on by default, off leaves the relays' NIP-45 COUNTs. */
     val primalStats: Flow<Boolean>
+    /** The home feed shows the "Replies" tab (replies alone); off by default ("Posts"). */
+    val feedWithReplies: Flow<Boolean>
+    /** The quick reactions of the long press on the heart, in the user's order; the default until edited. */
+    val quickReactions: Flow<List<String>>
     suspend fun setThemeMode(mode: ThemeMode)
     suspend fun setAccent(accent: Accent)
     suspend fun setBlurSensitive(on: Boolean)
@@ -59,6 +64,9 @@ interface UiSettingsStore {
     suspend fun setCustomHue(hue: Float)
     suspend fun setClientTag(on: Boolean)
     suspend fun setPrimalStats(on: Boolean)
+    suspend fun setFeedWithReplies(on: Boolean)
+    /** An empty list restores the default. */
+    suspend fun setQuickReactions(list: List<String>)
 }
 
 class PrefsUiSettingsStore(private val store: DataStore<Preferences>) : UiSettingsStore {
@@ -72,6 +80,8 @@ class PrefsUiSettingsStore(private val store: DataStore<Preferences>) : UiSettin
     override val mediaServer: Flow<String> = data.map { it[MEDIA_SERVER]?.takeIf { v -> v.isNotBlank() } ?: MediaServer.DEFAULT }
     override val clientTag: Flow<Boolean> = data.map { it[CLIENT_TAG] ?: true }
     override val primalStats: Flow<Boolean> = data.map { it[PRIMAL_STATS] ?: true }
+    override val feedWithReplies: Flow<Boolean> = data.map { it[FEED_WITH_REPLIES] ?: false }
+    override val quickReactions: Flow<List<String>> = data.map { Reactions.decode(it[QUICK_REACTIONS]) }
     override val customHue: Flow<Float> = data.map { p -> p[CUSTOM_HUE]?.takeIf { h -> h >= 0f && h < 360f } ?: Accent.LEGACY_HUES[p[ACCENT]] ?: AccentSeed.DEFAULT_HUE }
 
     override suspend fun setThemeMode(mode: ThemeMode) { store.edit { it[THEME_MODE] = mode.name } }
@@ -83,6 +93,10 @@ class PrefsUiSettingsStore(private val store: DataStore<Preferences>) : UiSettin
     override suspend fun setMediaServer(url: String) { store.edit { it[MEDIA_SERVER] = url } }
     override suspend fun setClientTag(on: Boolean) { store.edit { it[CLIENT_TAG] = on } }
     override suspend fun setPrimalStats(on: Boolean) { store.edit { it[PRIMAL_STATS] = on } }
+    override suspend fun setFeedWithReplies(on: Boolean) { store.edit { it[FEED_WITH_REPLIES] = on } }
+    override suspend fun setQuickReactions(list: List<String>) {
+        store.edit { if (list.isEmpty()) it.remove(QUICK_REACTIONS) else it[QUICK_REACTIONS] = Reactions.encode(list) }
+    }
 
     private companion object {
         val THEME_MODE = stringPreferencesKey("ui.theme_mode")
@@ -90,6 +104,8 @@ class PrefsUiSettingsStore(private val store: DataStore<Preferences>) : UiSettin
         val CUSTOM_HUE = floatPreferencesKey("ui.custom_hue")
         val CLIENT_TAG = booleanPreferencesKey("ui.client_tag")
         val PRIMAL_STATS = booleanPreferencesKey("ui.primal_stats")
+        val FEED_WITH_REPLIES = booleanPreferencesKey("ui.feed_with_replies")
+        val QUICK_REACTIONS = stringPreferencesKey("ui.quick_reactions")
         val BLUR_SENSITIVE = booleanPreferencesKey("ui.blur_sensitive")
         val MEDIA_ON_TAP = booleanPreferencesKey("ui.media_on_tap")
         val AUTHOR_RELAYS = booleanPreferencesKey("ui.author_relays")

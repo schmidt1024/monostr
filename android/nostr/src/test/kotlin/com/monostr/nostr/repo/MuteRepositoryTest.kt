@@ -153,4 +153,22 @@ class MuteRepositoryTest {
         assertEquals(setOf(b), repo.muted.value)
         e.close()
     }
+
+    @Test
+    fun `a list with a NIP-04 private part from another client is read, writable, and written back as NIP-44`() = runTest {
+        // older clients encrypted NIP-51 private parts with NIP-04 ("…?iv=…"); NIP-51 says to keep reading them
+        val e = engine()
+        val legacy = rust.nostr.sdk.nip04Encrypt(me.secretKey(), me.publicKey(), JsonArray(listOf(pTag(b))).toString())
+        assertTrue("?iv=" in legacy)
+        e.save(EventBuilder(Kind(10000u), legacy).tags(listOf(Tag.parse(listOf("p", a)))).customCreatedAt(Timestamp.fromSecs(1000u)).signWithKeys(me))
+        val repo = NostrMuteRepository(e, signer, now = { 2000 }, send = okSend(e))
+        repo.ensureLoaded()
+        assertEquals(setOf(a, b), repo.muted.value)
+        assertTrue(repo.state.value.writable)
+        assertEquals(ListOutcome.Ok, repo.mute(c))
+        val stored = e.query(Filter().kind(Kind(10000u)).author(me.publicKey())).single()
+        assertFalse("?iv=" in stored.content())
+        assertTrue(signer.nip44Decrypt(signer.pubkey, stored.content()).let { it.contains(b) && it.contains(c) })
+        e.close()
+    }
 }

@@ -173,6 +173,7 @@ class BookmarksController(
         }
     }
     fun like(note: Note) = noteActions.like(note, ::onActionResult)
+    fun react(note: Note, emoji: String) = noteActions.react(note, emoji, ::onActionResult)
     fun delete(note: Note) = noteActions.delete(note)
     fun repost(note: Note) = noteActions.repost(note, ::onActionResult)
     fun clearMessage() = _state.update { it.copy(message = null) }
@@ -280,7 +281,7 @@ fun BookmarksScreen(
                         } else {
                             NoteCard(
                                 note = n, onOpen = { onOpenThread(n.target.id) }, onOpenProfile = onOpenProfile, onReply = { onReply(n.target.id) },
-                                onLike = { vm.controller.like(n.target) }, onRepost = { vm.controller.repost(n.target) }, onQuote = { onQuote(n.target.id) }, onTip = { vm.tipSheet.open(n.target) },
+                                onLike = { vm.controller.like(n.target) }, onReact = { e -> vm.controller.react(n.target, e) }, onRepost = { vm.controller.repost(n.target) }, onQuote = { onQuote(n.target.id) }, onTip = { vm.tipSheet.open(n.target) },
                                 onShowTippers = { tippersFor = n.target }, onBookmark = { vm.controller.remove(n.target) }, onHashtag = onHashtag, onOpenNote = onOpenThread,
                                 onOpenMedia = onOpenMedia, onOpenVideo = onOpenVideo, names = names,
                                 menu = vm.menu,

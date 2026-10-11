@@ -23,7 +23,7 @@ class NoteLinksTest {
         val spans = NoteLinks.annotate("see https://x.org/a#top and nostr:$npub!")
         assertEquals(
             listOf(
-                NoteSpan.Plain("see "), NoteSpan.Url("https://x.org/a#top", "https://x.org/a#top"), NoteSpan.Plain(" and "),
+                NoteSpan.Plain("see "), NoteSpan.Url("x.org/a#top", "https://x.org/a#top"), NoteSpan.Plain(" and "),
                 NoteSpan.Mention("nostr:$npub", keys.publicKey().toHex()), NoteSpan.Plain("!"),
             ),
             spans,
@@ -39,22 +39,22 @@ class NoteLinksTest {
     @Test
     fun `urls leave sentence punctuation and an unmatched closing paren to the surrounding text`() {
         assertEquals(
-            listOf(NoteSpan.Plain("see "), NoteSpan.Url("https://x.org/a", "https://x.org/a"), NoteSpan.Plain(".")),
+            listOf(NoteSpan.Plain("see "), NoteSpan.Url("x.org/a", "https://x.org/a"), NoteSpan.Plain(".")),
             NoteLinks.annotate("see https://x.org/a."),
         )
         assertEquals(
-            listOf(NoteSpan.Plain("("), NoteSpan.Url("https://x.org/a", "https://x.org/a"), NoteSpan.Plain(")")),
+            listOf(NoteSpan.Plain("("), NoteSpan.Url("x.org/a", "https://x.org/a"), NoteSpan.Plain(")")),
             NoteLinks.annotate("(https://x.org/a)"),
         )
         assertEquals(
             listOf(
-                NoteSpan.Url("https://en.wikipedia.org/wiki/Foo_(bar)", "https://en.wikipedia.org/wiki/Foo_(bar)"),
+                NoteSpan.Url("en.wikipedia.org/wiki/Foo_(bar)", "https://en.wikipedia.org/wiki/Foo_(bar)"),
                 NoteSpan.Plain(" x"),
             ),
             NoteLinks.annotate("https://en.wikipedia.org/wiki/Foo_(bar) x"),
         )
         assertEquals(
-            listOf(NoteSpan.Url("https://x.org/a?q=1", "https://x.org/a?q=1"), NoteSpan.Plain(",")),
+            listOf(NoteSpan.Url("x.org/a?q=1", "https://x.org/a?q=1"), NoteSpan.Plain(",")),
             NoteLinks.annotate("https://x.org/a?q=1,"),
         )
     }
@@ -63,5 +63,13 @@ class NoteLinksTest {
     fun `an upper-case nostr link is a mention too`() {
         val link = "NOSTR:" + npub.uppercase()
         assertEquals(listOf(NoteSpan.Plain("hi "), NoteSpan.Mention(link, keys.publicKey().toHex())), NoteLinks.annotate("hi $link"))
+    }
+
+    @Test
+    fun `a link shows without scheme, www and a lone trailing slash, and opens the full address`() {
+        assertEquals(
+            listOf(NoteSpan.Url("monostr.com", "https://monostr.com/"), NoteSpan.Plain(" "), NoteSpan.Url("example.org/a/", "http://www.example.org/a/")),
+            NoteLinks.annotate("https://monostr.com/ http://www.example.org/a/"),
+        )
     }
 }

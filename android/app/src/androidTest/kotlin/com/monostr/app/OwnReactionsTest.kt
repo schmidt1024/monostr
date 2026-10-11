@@ -1,5 +1,6 @@
 package com.monostr.app
 
+import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -27,7 +28,7 @@ import rust.nostr.sdk.Keys
 import rust.nostr.sdk.Kind
 import rust.nostr.sdk.PublicKey
 
-/** v0.13.9: a like is remembered (also one stored before the session started), shows on every screen and is sent once. */
+/** A like is remembered (also one stored before the session started), shows on every screen; a second tap takes it back. */
 @RunWith(AndroidJUnit4::class)
 class OwnReactionsTest {
     @get:Rule val rule = createAndroidComposeRule<MainActivity>()
@@ -70,14 +71,19 @@ class OwnReactionsTest {
         rule.onNodeWithTag(freshTag).performClick()
         rule.waitForIdle()
         rule.onNodeWithTag(freshTag).assertIsSelected()
-        rule.onNodeWithTag(freshTag).performClick() // a second tap sends nothing
-        rule.waitForIdle()
         val likes = runBlocking {
             ready.engine.query(Filter().kind(Kind(7u)).author(PublicKey.parse(me.publicKey().toHex()))).count { ev ->
                 ev.tags().toVec().any { t -> t.asVec().let { it.size >= 2 && it[0] == "e" && it[1] == fresh.id().toHex() } }
             }
         }
         assertEquals(1, likes)
+        // a second tap takes it back (X), a third likes again: the thread below must show the like
+        rule.onNodeWithTag(freshTag).performClick()
+        rule.waitForIdle()
+        rule.onNodeWithTag(freshTag).assertIsNotSelected()
+        rule.onNodeWithTag(freshTag).performClick()
+        rule.waitForIdle()
+        rule.onNodeWithTag(freshTag).assertIsSelected()
 
         // the thread is another screen with its own controller: it shows the like as well
         rule.onAllNodesWithText("own reactions fresh note")[0].performClick()

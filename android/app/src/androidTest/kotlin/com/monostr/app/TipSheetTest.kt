@@ -50,7 +50,7 @@ class TipSheetTest {
     fun presetsAreShownAndSelectable() {
         val picked = ArrayList<Long>()
         render(TipSheetState(target = TipTarget.Note(note), phase = TipPhase.Ready, selected = 1_000_000_000L), onSelect = { picked += it })
-        rule.onNodeWithText(str(R.string.tip_amount)).assertIsDisplayed()
+        rule.onNodeWithText(str(R.string.tip_amount, "XMR")).assertIsDisplayed()
         rule.onNodeWithText("0.0001").assertIsDisplayed()
         rule.onNodeWithText("0.001").assertIsDisplayed()
         rule.onNodeWithText("0.01").assertIsDisplayed()
@@ -88,7 +88,7 @@ class TipSheetTest {
         render(TipSheetState(target = TipTarget.Note(note), phase = TipPhase.Pay("monero:$address?tx_amount=0.005", address, 5_000_000_000L, walletMissing = true)))
         rule.onNodeWithTag("tip-fallback").assertIsDisplayed()
         rule.onNodeWithTag("tip-fallback-amount").assertIsDisplayed()
-        rule.onNodeWithText(str(R.string.tip_xmr_amount, "0.005")).assertIsDisplayed()
+        rule.onNodeWithText(str(R.string.tip_xmr_amount, "0.005", "XMR")).assertIsDisplayed()
         rule.onNodeWithTag("tip-fallback-address").assertIsDisplayed()
         rule.onNodeWithTag("tip-copy-address").assertIsDisplayed()
         rule.onNodeWithTag("tip-open-wallet").assertIsDisplayed()

@@ -1,5 +1,7 @@
 package com.monostr.app.work
 
+import com.monostr.app.data.AmountUnit
+import kotlinx.coroutines.flow.first
 import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -61,14 +63,14 @@ object TipChecker {
 
 /** Local notifications for received tips (spec 5.7: no push server). */
 class TipNotifier(private val context: Context) {
-    fun show(fromName: String, item: NotificationItem) {
+    fun show(fromName: String, item: NotificationItem, unit: AmountUnit = AmountUnit.XMR) {
         if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
         ensureChannel()
         val open = PendingIntent.getActivity(context, 0, Intent(context, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val notification = NotificationCompat.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(context.getString(R.string.notif_tip_title))
-            .setContentText(context.getString(R.string.notif_tip_text, fromName, Presets.format(item.amount ?: 0)))
+            .setContentText(context.getString(R.string.notif_tip_text, fromName, Presets.format(item.amount ?: 0, unit), unit.label))
             .setContentIntent(open)
             .setAutoCancel(true)
             .build()
@@ -129,7 +131,7 @@ class TipCheckWorker(context: Context, params: WorkerParameters) : CoroutineWork
                             Profile.shortPubkey(sender)
                         }
                     }
-                    notifier.show(name, item)
+                    notifier.show(name, item, settings.amountUnit.first())
                 }
             }
             try {

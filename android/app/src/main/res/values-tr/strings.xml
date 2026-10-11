@@ -86,6 +86,9 @@
     <string name="settings_msg_amber_wrong_key">Farklı bir anahtar seçildi – hiçbir şey değişmedi</string>
     <string name="action_like_sent">Beğeni gönderildi</string>
     <string name="action_repost_sent">Yeniden paylaşım gönderildi</string>
+    <string name="action_unlike_sent">Beğeni kaldırıldı</string>
+    <string name="action_unrepost_sent">Paylaşım kaldırıldı</string>
+    <string name="action_undo_repost">Paylaşımı geri al</string>
     <string name="action_no_relay_local">Ulaşılabilir relay yok, yerel olarak tutuluyor</string>
 
     <!-- tabs -->
@@ -110,6 +113,8 @@
     <string name="feed_settings">Ayarlar</string>
     <string name="feed_new_note">Yeni not</string>
     <string name="feed_empty">Henüz not yok. Birini takip et ya da ilkini yaz.</string>
+    <string name="feed_tab_posts">Gönderiler</string>
+    <string name="feed_tab_replies">Yanıtlar</string>
     <string name="feed_error_load">Akış yüklenemedi</string>
     <string name="feed_error_more">Daha fazla not yüklenemedi</string>
 
@@ -118,6 +123,7 @@
     <string name="thread_not_found">Not bulunamadı</string>
     <string name="profile_title_self">Profilim</string>
     <string name="profile_error_load">Profil yüklenemedi</string>
+    <string name="profile_copy_npub">npub’u kopyala</string>
     <string name="note_replying_one">Yanıtlanan: %1$s</string>
     <string name="note_replying_two">Yanıtlanan: %1$s ve %2$s</string>
     <plurals name="note_replying_more">
@@ -150,9 +156,9 @@
 
     <!-- tip sheet -->
     <string name="tip_title">Monero bahşişi gönder</string>
-    <string name="tip_amount">Tutar (XMR)</string>
-    <string name="tip_xmr_amount">%1$s XMR</string>
-    <string name="tip_custom_amount">XMR cinsinden özel tutar</string>
+    <string name="tip_amount">Tutar (%1$s)</string>
+    <string name="tip_xmr_amount">%1$s %2$s</string>
+    <string name="tip_custom_amount">%1$s cinsinden özel tutar</string>
     <string name="tip_pay">Cüzdanla öde</string>
     <string name="tip_no_wallet_title">Cüzdan uygulaması bulunamadı</string>
     <string name="tip_no_wallet_text">Monerujo veya Cake Wallet yükle ya da tutarı bu adrese elle öde:</string>
@@ -174,6 +180,7 @@
     <string name="setup_title">Monero bahşişleri</string>
     <string name="setup_registering">Watcher\'a kaydolunuyor…</string>
     <string name="setup_intro_text">Bir Monero adresiyle başkaları sana bahşiş gönderebilir. Bahşiş göndermek için gerekmez.</string>
+    <string name="setup_intro_wallet_hint">Bahşişler burada kurduğun cüzdana gider, açıklamandaki bir adrese değil.</string>
     <string name="setup_watcher_heading">Watcher</string>
     <string name="setup_watcher_text">Watcher gelen ödemeleri algılar ve makbuzları Nostr\'da yayınlar.</string>
     <string name="setup_watcher_url">Watcher URL\'si</string>
@@ -252,12 +259,15 @@
     <string name="settings_monero">Monero bahşişleri</string>
     <string name="settings_monero_not_set_up">Kurulmadı. Bahşiş göndermek için gerekmez.</string>
     <string name="settings_monero_set_up">Monero bahşişi almayı kur</string>
-    <string name="settings_monero_address">Adres %1$s…%2$s · %3$s</string>
+    <string name="settings_monero_address">Bahşişler bu cüzdana gelir: %1$s…%2$s · %3$s</string>
+    <string name="settings_monero_wallet_hint">Profil açıklamandaki veya diğer profil alanlarındaki bir Monero adresine değil. Makbuzlar sana watcher ve kendi relay’lerin üzerinden ulaşır; ücretli relay’ler gerekmez.</string>
     <string name="settings_monero_watcher">Watcher %1$s</string>
     <string name="settings_monero_switch_watcher">Watcher\'ı değiştir</string>
     <string name="settings_monero_disable">Bahşişleri kapat</string>
     <string name="settings_monero_delete_view_key">Görüntüleme anahtarını yerelden sil</string>
-    <string name="settings_presets">Hazır bahşiş tutarları (XMR)</string>
+    <string name="settings_amount_unit">Birim</string>
+    <string name="settings_amount_unit_hint">Tutarların nasıl gösterilip girildiği. 1 mXMR = 0,001 XMR; cüzdana her zaman XMR gider.</string>
+    <string name="settings_presets">Hazır bahşiş tutarları (%1$s)</string>
     <string name="settings_preset_n">Hazır tutar %1$d</string>
     <string name="settings_presets_save">Hazır tutarları kaydet</string>
     <string name="settings_preset_add">Ön ayar ekle</string>
@@ -276,7 +286,7 @@
     <string name="settings_reset_relays_hint">Bu uygulamanın relay\'leri monostr\'un varsayılan relay\'leriyle değiştirilir.</string>
     <string name="settings_msg_relay_list_published">Relay listesi yayınlandı</string>
     <string name="settings_msg_relay_list_not_published">Hiçbir relay, relay listesini kabul etmedi</string>
-    <string name="settings_err_presets">Hazır tutarlar: geçerli XMR tutarları, ör. 0.001</string>
+    <string name="settings_err_presets">Hazır tutarlar: geçerli %1$s tutarları, ör. 0.001</string>
 
     <!-- appearance (Task 5) -->
     <string name="settings_appearance">Görünüm</string>
@@ -320,6 +330,24 @@
     <string name="chat_error_send">Mesaj gönderilemedi</string>
     <string name="profile_message">Mesaj</string>
     <string name="notif_mentioned">senden bahsetti</string>
+    <string name="settings_reactions">Tepkiler</string>
+    <string name="settings_reactions_hint">Kalbe uzun basınca çıkan hızlı seçenekler, bu sırayla.</string>
+    <string name="settings_reactions_add">Emoji ekle</string>
+    <string name="settings_reactions_add_button">Ekle</string>
+    <string name="settings_reactions_reset">Varsayılanlara dön</string>
+    <string name="settings_reactions_up">%1$s yukarı taşı</string>
+    <string name="settings_reactions_down">%1$s aşağı taşı</string>
+    <string name="settings_reactions_remove">%1$s kaldır</string>
+    <string name="note_react">Tepki ver</string>
+    <string name="note_reacted_with">%1$s ile tepki verdin</string>
+    <string name="note_react_other">Başka emoji</string>
+    <string name="note_react_send">Gönder</string>
+    <string name="notif_reacted_one">%1$s %2$s ile tepki verdi</string>
+    <string name="notif_reacted_two">%1$s ve %2$s tepki verdi</string>
+    <plurals name="notif_reacted_more">
+        <item quantity="one">%1$s, %2$s ve %3$d kişi daha tepki verdi</item>
+        <item quantity="other">%1$s, %2$s ve %3$d kişi daha tepki verdi</item>
+    </plurals>
     <string name="notif_liked_one">%1$s notunu beğendi</string>
     <string name="notif_liked_two">%1$s ve %2$s notunu beğendi</string>
     <plurals name="notif_liked_more">
@@ -338,10 +366,10 @@
     <string name="avatar_of">%1$s profili</string>
     <string name="notif_note_missing">not yüklenmedi</string>
     <string name="notif_note_withdrawn">silinmiş not</string>
-    <string name="notif_tipped">%1$s XMR bahşiş verdi</string>
+    <string name="notif_tipped">%1$s %2$s bahşiş verdi</string>
     <string name="notif_channel_name">Monero bahşişleri</string>
     <string name="notif_tip_title">Monero bahşişi alındı</string>
-    <string name="notif_tip_text">%1$s sana %2$s XMR bahşiş verdi</string>
+    <string name="notif_tip_text">%1$s sana %2$s %3$s bahşiş verdi</string>
     <string name="notif_dm_channel">Mesajlar</string>
     <string name="notif_dm_title">%1$s kişisinden mesaj</string>
     <string name="notif_dm_title_anonymous">Yeni mesaj</string>

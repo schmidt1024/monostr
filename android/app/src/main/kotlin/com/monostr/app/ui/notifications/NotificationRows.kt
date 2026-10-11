@@ -1,5 +1,9 @@
 package com.monostr.app.ui.notifications
 
+import com.monostr.app.ui.tips.LocalAmountUnit
+import com.monostr.app.ui.media.NoteThumbnail
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -87,7 +91,14 @@ private fun GroupRow(group: NotificationRow.Group, row: NotificationRowUi, names
             .testTag("notification-${group.key}"),
         verticalAlignment = Alignment.Top,
     ) {
-        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(24.dp))
+        if (group.reactions.isNotEmpty()) {
+            // emoji reactions show themselves instead of the heart
+            Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+                Text(group.reactions.first(), fontSize = 18.sp, maxLines = 1, softWrap = false, modifier = Modifier.testTag("notification-emoji-${group.key}"))
+            }
+        } else {
+            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(24.dp))
+        }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Row {
@@ -101,6 +112,7 @@ private fun GroupRow(group: NotificationRow.Group, row: NotificationRowUi, names
             Text(aboutText(row.about, names), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.testTag("notification-about-${group.key}"))
             Text(relativeTime(group.createdAt).asString(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+        Thumbnail(row.about)
     }
 }
 
@@ -111,6 +123,12 @@ private fun groupSentence(group: NotificationRow.Group, names: Map<String, Strin
     val b = group.actors.getOrNull(1)?.let { names[it] ?: it.take(8) }
     val others = group.count - 2
     val liked = group.kind != NotificationKind.REPOST
+    // with an emoji among them the row says "reacted"; one person's emoji is named
+    if (liked && group.reactions.isNotEmpty()) return when {
+        b == null -> stringResource(R.string.notif_reacted_one, a, group.reactions.first())
+        others <= 0 -> stringResource(R.string.notif_reacted_two, a, b)
+        else -> pluralStringResource(R.plurals.notif_reacted_more, others, a, b, others)
+    }
     return when {
         b == null -> stringResource(if (liked) R.string.notif_liked_one else R.string.notif_reposted_one, a)
         others <= 0 -> stringResource(if (liked) R.string.notif_liked_two else R.string.notif_reposted_two, a, b)
@@ -175,9 +193,18 @@ private fun TipRow(single: NotificationRow.Single, row: NotificationRowUi, names
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             val name = item.from?.let { row.names[it] } ?: stringResource(R.string.tip_anonymous)
-            Text("$name ${stringResource(R.string.notif_tipped, Presets.format(item.amount ?: 0))}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+            Text("$name ${stringResource(R.string.notif_tipped, Presets.format(item.amount ?: 0, LocalAmountUnit.current), LocalAmountUnit.current.label)}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
             Text(if (item.aboutId == null) stringResource(R.string.notif_tip_profile) else aboutText(row.about, names), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.testTag("notification-about-${item.id}"))
             Text(relativeTime(item.createdAt).asString(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+        Thumbnail(row.about)
     }
+}
+
+/** X: a small picture at the right when the note the row is about has one. */
+@Composable
+private fun Thumbnail(about: AboutNote?) {
+    val note = (about as? AboutNote.Found)?.note ?: return
+    Spacer(Modifier.width(12.dp))
+    NoteThumbnail(note.repostOf ?: note)
 }

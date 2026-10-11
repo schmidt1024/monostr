@@ -22,6 +22,15 @@ interface Signer : EventSigner {
     suspend fun nip44DecryptSilent(peerPubkey: String, payload: String): String?
 
     /**
+     * NIP-04, read only: NIP-51 private parts that older clients wrote ("…?iv=…"). Lists are written back as
+     * NIP-44. Unsupported by default (test signers).
+     */
+    suspend fun nip04Decrypt(peerPubkey: String, payload: String): String = throw UnsupportedOperationException("nip04")
+
+    /** Like [nip04Decrypt], but never asks the user; null when that would need an interaction. */
+    suspend fun nip04DecryptSilent(peerPubkey: String, payload: String): String? = throw UnsupportedOperationException("nip04")
+
+    /**
      * Like [sign], but never asks the user: throws [SilentSignUnavailable] when signing would need
      * an interaction. Used for signatures nobody asked for, e.g. NIP-42 AUTH answering a relay's
      * challenge. A local key signs as [sign] does.

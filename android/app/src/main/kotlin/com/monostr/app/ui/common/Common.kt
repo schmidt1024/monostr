@@ -170,11 +170,13 @@ fun NoteCard(
     detail: Boolean = false,
     /** "Replying to @name" on a reply; off in a thread, where the parent stands right above. */
     replyContext: Boolean = true,
+    /** A long press on the heart: react with this emoji (NIP-25). */
+    onReact: (String) -> Unit = {},
 ) {
     if (detail) {
-        DetailNoteCard(note, onOpen, onOpenProfile, onReply, onLike, onRepost, onQuote, onTip, onShowTippers, onBookmark, onHashtag, onOpenNote, onOpenMedia, onOpenVideo, names, menu, showActions)
+        DetailNoteCard(note, onOpen, onOpenProfile, onReply, onLike, onRepost, onQuote, onTip, onShowTippers, onBookmark, onHashtag, onOpenNote, onOpenMedia, onOpenVideo, names, menu, showActions, onReact)
     } else {
-        ListNoteCard(note, onOpen, onOpenProfile, onReply, onLike, onRepost, onQuote, onTip, onShowTippers, onBookmark, onHashtag, onOpenNote, onOpenMedia, onOpenVideo, names, menu, showActions, collapsed, replyContext)
+        ListNoteCard(note, onOpen, onOpenProfile, onReply, onLike, onRepost, onQuote, onTip, onShowTippers, onBookmark, onHashtag, onOpenNote, onOpenMedia, onOpenVideo, names, menu, showActions, collapsed, replyContext, onReact)
     }
 }
 
@@ -200,6 +202,7 @@ private fun ListNoteCard(
     showActions: Boolean,
     collapsed: Boolean,
     replyContext: Boolean,
+    onReact: (String) -> Unit,
 ) {
     val shown = note.note.repostOf ?: note.note
     val shownAuthor = if (note.note.isRepost) note.repostedAuthor else note.author
@@ -237,7 +240,7 @@ private fun ListNoteCard(
                 NoteMediaRow(shown, onOpenMedia = { i -> onOpenMedia(shown.id, i) }, onOpenVideo = onOpenVideo)
                 if (showActions) {
                     Spacer(Modifier.height(4.dp))
-                    NoteActionRow(note, shown, onReply, onRepost, onQuote, onLike, onBookmark, onTip, onShowTippers)
+                    NoteActionRow(note, shown, onReply, onRepost, onQuote, onLike, onBookmark, onTip, onShowTippers, onReact = onReact)
                 }
             }
         }
@@ -268,6 +271,7 @@ private fun DetailNoteCard(
     names: Map<String, String>,
     menu: NoteMenu?,
     showActions: Boolean,
+    onReact: (String) -> Unit,
 ) {
     val shown = note.note.repostOf ?: note.note
     val id8 = shown.id.take(8)
@@ -285,7 +289,7 @@ private fun DetailNoteCard(
         Spacer(Modifier.height(12.dp))
         Text(detailTimeLine(fullTime(shown.createdAt), shown.client, stringResource(R.string.note_via)), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("note-time-$id8"))
         HorizontalDivider(Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
-        if (showActions) NoteActionRow(note, shown, onReply, onRepost, onQuote, onLike, onBookmark, onTip, onShowTippers, spread = true)
+        if (showActions) NoteActionRow(note, shown, onReply, onRepost, onQuote, onLike, onBookmark, onTip, onShowTippers, spread = true, onReact = onReact)
     }
 }
 

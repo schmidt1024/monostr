@@ -39,6 +39,12 @@ class LocalSigner(secretKey: String) : Signer {
     /** A local key never needs the user. */
     override suspend fun nip44DecryptSilent(peerPubkey: String, payload: String): String? = nip44Decrypt(peerPubkey, payload)
 
+    override suspend fun nip04Decrypt(peerPubkey: String, payload: String): String = withContext(Dispatchers.IO) {
+        rust.nostr.sdk.nip04Decrypt(keys.secretKey(), PublicKey.parse(peerPubkey), payload)
+    }
+
+    override suspend fun nip04DecryptSilent(peerPubkey: String, payload: String): String? = nip04Decrypt(peerPubkey, payload)
+
     companion object {
         /** Accepts hex or nsec; returns null when the input is not a valid secret key. */
         fun parseOrNull(input: String): LocalSigner? = try {

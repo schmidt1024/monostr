@@ -48,7 +48,7 @@ fun TippersDialog(note: Note, load: suspend (Note) -> List<TipperUi>, onDismiss:
                         Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
                             Row {
                                 Text(t.name ?: stringResource(R.string.tip_anonymous), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                                Text(stringResource(R.string.tip_xmr_amount, Presets.format(t.amount)), style = MaterialTheme.typography.titleSmall)
+                                Text(stringResource(R.string.tip_xmr_amount, Presets.format(t.amount, LocalAmountUnit.current), LocalAmountUnit.current.label), style = MaterialTheme.typography.titleSmall)
                             }
                             if (t.comment.isNotBlank()) Text(t.comment, style = MaterialTheme.typography.bodySmall)
                             Text(relativeTime(t.createdAt).asString(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

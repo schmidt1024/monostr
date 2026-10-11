@@ -1,5 +1,6 @@
 package com.monostr.app.ui.tips
 
+import com.monostr.app.data.AmountUnit
 import com.monostr.app.R
 import com.monostr.app.data.PendingTip
 import com.monostr.app.data.PendingTipStore
@@ -42,6 +43,8 @@ data class TipSheetState(
     val presets: List<Long> = Presets.DEFAULT,
     val selected: Long? = null,
     val custom: String = "",
+    /** The unit the presets read in and the free field is typed in. */
+    val unit: AmountUnit = AmountUnit.XMR,
     /** The sender is not named (protocol 0.2 `anon`); on unless the user switched it off. */
     val anonymous: Boolean = true,
     val error: UiText? = null,
@@ -51,9 +54,7 @@ data class TipSheetState(
 
     /** Piconero from the selected preset or the free field; null when nothing valid is entered. */
     val amount: Long?
-        get() = selected ?: custom.takeIf { it.isNotBlank() }?.let { text ->
-            runCatching { MoneroUri.parseAmount(text) }.getOrNull()?.takeIf { it > 0 }
-        }
+        get() = selected ?: custom.takeIf { it.isNotBlank() }?.let { Presets.parse(it, unit) }
 }
 
 /**
@@ -87,8 +88,9 @@ class TipSheetController(
         scope.launch {
             val presets = settings.presets.first()
             val anonymous = settings.anonymous.first()
+            val unit = settings.amountUnit.first()
             // the middle preset (0.001 XMR by default) is the sensible starting point, not the smallest
-            _state.update { it.copy(presets = presets, selected = presets.getOrNull(presets.size / 2), anonymous = anonymous) }
+            _state.update { it.copy(presets = presets, selected = presets.getOrNull(presets.size / 2), anonymous = anonymous, unit = unit) }
             val info = try {
                 // ask the relays first: a cached copy may still say "enabled" after the recipient disabled tips
                 withTimeoutOrNull(FRESH_INFO_TIMEOUT_MS) { tips.paymentInfo(target.recipient, maxAgeSeconds = 0) }

@@ -1,5 +1,6 @@
 package com.monostr.nostr.repo
 
+import rust.nostr.sdk.Filter
 import com.monostr.nostr.ClientTag
 import com.monostr.nostr.NOTE_NOT_IN_DATABASE
 import com.monostr.nostr.NostrEngine
@@ -23,8 +24,15 @@ interface PublishRepository {
     suspend fun reply(text: String, to: Note, attachments: List<NoteAttachment> = emptyList(), sensitive: Boolean = false): PublishResult
     /** NIP-18 quote (spec 4.1): [text], the pictures, a blank line and `nostr:nevent…` of [of]; tags `q` and `p` plus the text's mentions. An empty [text] is allowed. */
     suspend fun quote(text: String, of: Note, attachments: List<NoteAttachment> = emptyList(), sensitive: Boolean = false): PublishResult
-    suspend fun like(note: Note): PublishResult
+    suspend fun like(note: Note): PublishResult = react(note, LIKE)
+    /** NIP-25 reaction (kind 7) to [note] with [content]: "+" is a like, anything else an emoji reaction. */
+    suspend fun react(note: Note, content: String): PublishResult
     suspend fun repost(note: Note): PublishResult
+    /**
+     * Unlike (kind 7) or undo repost (kind 6): a NIP-09 request naming every own event of [kind] that targets
+     * [noteId]. Stored locally only once a relay accepted it, like [delete]. Null when the database holds none.
+     */
+    suspend fun withdraw(noteId: String, kind: Int): PublishResult?
     /**
      * NIP-09 deletion request for [note] (kind 5, tags `e` and `k`). Stored locally only once a relay
      * accepted it; the stored request is what removes the note from the local database.
@@ -94,14 +102,28 @@ class NostrPublishRepository(
 
     override suspend fun profile(json: String): PublishResult = engine.signAndPublish(EventBuilder(Kind(0u), json))
 
-    override suspend fun like(note: Note): PublishResult {
+    override suspend fun react(note: Note, content: String): PublishResult {
         val target = requireNotNull(engine.eventById(note.id)) { NOTE_NOT_IN_DATABASE }
-        return engine.signAndSend(EventBuilder.reaction(target, "+").tags(viaTag()))
+        return engine.signAndSend(EventBuilder.reaction(target, content).tags(viaTag()))
     }
 
     override suspend fun repost(note: Note): PublishResult {
         val target = requireNotNull(engine.eventById(note.id)) { NOTE_NOT_IN_DATABASE }
         return engine.signAndSend(EventBuilder.repost(target, null).tags(viaTag()))
+    }
+
+    override suspend fun withdraw(noteId: String, kind: Int): PublishResult? {
+        val tags = withdrawTags(noteId, kind) ?: return null
+        return engine.signAndPublishUnstored(EventBuilder(Kind(5u), "").tags(tags.map { Tag.parse(it) }))
+    }
+
+    /** The tags of the [withdraw] request: one `e` per own event of [kind] whose target (the last `e` tag) is [noteId], and `k`. */
+    internal suspend fun withdrawTags(noteId: String, kind: Int): List<List<String>>? {
+        val me = PublicKey.parse(requireNotNull(engine.pubkey) { "withdraw needs a logged-in user" })
+        val own = engine.query(Filter().kind(Kind(kind.toUShort())).author(me).event(EventId.parse(noteId)))
+            .filter { ev -> ev.tags().toVec().map { it.asVec() }.lastOrNull { it.size >= 2 && it[0] == "e" }?.get(1) == noteId }
+        if (own.isEmpty()) return null
+        return own.map { listOf("e", it.id().toHex()) } + listOf(listOf("k", kind.toString()))
     }
 
     override suspend fun delete(note: Note): PublishResult =
@@ -135,3 +157,6 @@ class NostrPublishRepository(
     override suspend fun dmRelayList(relays: List<String>): PublishResult =
         engine.signAndPublish(EventBuilder(Kind(10050u), "").tags(relays.map { Tag.parse(listOf("relay", it.trim().trimEnd('/'))) }))
 }
+
+/** The content of a plain like (NIP-25). */
+const val LIKE = "+"

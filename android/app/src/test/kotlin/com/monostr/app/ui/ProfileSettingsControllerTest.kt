@@ -151,10 +151,10 @@ class ProfileSettingsControllerTest {
 private class FailingFeed : FeedRepository {
     override suspend fun follows(): List<String> = emptyList()
     override suspend fun followsLocal(): List<String> = emptyList()
-    override suspend fun notes(limit: Int, until: Long?): List<Note> = emptyList()
+    override suspend fun notes(limit: Int, until: Long?, replies: Boolean): List<Note> = emptyList()
     override suspend fun refresh(limit: Int) {}
-    override suspend fun loadMore(before: Long, limit: Int): List<Note> = emptyList()
-    override fun live(limit: Int): Flow<List<Note>> = throw NotImplementedError()
+    override suspend fun loadMore(before: Long, limit: Int, replies: Boolean): List<Note> = emptyList()
+    override fun live(limit: Int, replies: Boolean): Flow<List<Note>> = throw NotImplementedError()
     override suspend fun notesBy(author: String, limit: Int, fetch: Boolean): List<Note> = throw IllegalStateException("boom")
     override suspend fun profileNotes(author: String, section: ProfileSection, limit: Int, fetch: Boolean): List<Note> = throw IllegalStateException("boom")
     override suspend fun moreProfileNotes(author: String, section: ProfileSection, before: Long, limit: Int): List<Note> = throw IllegalStateException("boom")

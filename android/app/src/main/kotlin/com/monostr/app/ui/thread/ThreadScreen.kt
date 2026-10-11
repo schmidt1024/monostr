@@ -155,6 +155,7 @@ class ThreadController(
     }
 
     fun like(note: Note) = actions.like(note, ::onActionResult)
+    fun react(note: Note, emoji: String) = actions.react(note, emoji, ::onActionResult)
     fun delete(note: Note) = actions.delete(note)
     fun repost(note: Note) = actions.repost(note, ::onActionResult)
     fun bookmark(note: Note) = bookmarks.toggle(note) { m -> _state.update { s -> s.copy(items = s.items.map(bookmarks::flags), message = m?.asMessage() ?: s.message) } }
@@ -259,6 +260,7 @@ fun ThreadScreen(
                             onOpenProfile = onOpenProfile,
                             onReply = { onReply(n.note.id) },
                             onLike = { vm.controller.like(n.target) },
+                            onReact = { e -> vm.controller.react(n.target, e) },
                             onRepost = { vm.controller.repost(n.target) },
                             onQuote = { onQuote(n.target.id) },
                             onTip = { vm.tipSheet.open(n.target) },

@@ -67,6 +67,11 @@ class AmberSigner(
     override suspend fun nip44Decrypt(peerPubkey: String, payload: String): String = nip44(Nip55.Nip44Op.DECRYPT, payload, peerPubkey)
 
     /** ContentResolver only: null unless the signer has a remembered permission for us; never opens the signer activity. */
+    override suspend fun nip04Decrypt(peerPubkey: String, payload: String): String = nip44(Nip55.Nip44Op.NIP04_DECRYPT, payload, peerPubkey)
+
+    override suspend fun nip04DecryptSilent(peerPubkey: String, payload: String): String? =
+        viaResolverText(Nip55.nip44Query(packageName, Nip55.Nip44Op.NIP04_DECRYPT, payload, peerPubkey, pubkey))
+
     override suspend fun nip44DecryptSilent(peerPubkey: String, payload: String): String? =
         viaResolverText(Nip55.nip44Query(packageName, Nip55.Nip44Op.DECRYPT, payload, peerPubkey, pubkey))
 

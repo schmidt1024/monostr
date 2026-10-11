@@ -86,6 +86,9 @@
     <string name="settings_msg_amber_wrong_key">Une autre clé a été choisie – rien n\'a changé</string>
     <string name="action_like_sent">J\'aime envoyé</string>
     <string name="action_repost_sent">Repost envoyé</string>
+    <string name="action_unlike_sent">J’aime retiré</string>
+    <string name="action_unrepost_sent">Republication retirée</string>
+    <string name="action_undo_repost">Annuler la republication</string>
     <string name="action_no_relay_local">Aucun relais joignable, conservé localement</string>
 
     <!-- tabs -->
@@ -110,6 +113,8 @@
     <string name="feed_settings">Paramètres</string>
     <string name="feed_new_note">Nouvelle note</string>
     <string name="feed_empty">Pas encore de notes. Suivez quelqu\'un ou écrivez la première.</string>
+    <string name="feed_tab_posts">Publications</string>
+    <string name="feed_tab_replies">Réponses</string>
     <string name="feed_error_load">Impossible de charger le fil</string>
     <string name="feed_error_more">Impossible de charger plus de notes</string>
 
@@ -118,6 +123,7 @@
     <string name="thread_not_found">Note introuvable</string>
     <string name="profile_title_self">Mon profil</string>
     <string name="profile_error_load">Impossible de charger le profil</string>
+    <string name="profile_copy_npub">Copier la npub</string>
     <string name="note_replying_one">En réponse à %1$s</string>
     <string name="note_replying_two">En réponse à %1$s et %2$s</string>
     <plurals name="note_replying_more">
@@ -151,9 +157,9 @@
 
     <!-- tip sheet -->
     <string name="tip_title">Envoyer un pourboire en Monero</string>
-    <string name="tip_amount">Montant (XMR)</string>
-    <string name="tip_xmr_amount">%1$s XMR</string>
-    <string name="tip_custom_amount">Montant libre en XMR</string>
+    <string name="tip_amount">Montant (%1$s)</string>
+    <string name="tip_xmr_amount">%1$s %2$s</string>
+    <string name="tip_custom_amount">Montant libre en %1$s</string>
     <string name="tip_pay">Payer avec le portefeuille</string>
     <string name="tip_no_wallet_title">Aucune app de portefeuille trouvée</string>
     <string name="tip_no_wallet_text">Installez Monerujo ou Cake Wallet, ou payez le montant manuellement à cette adresse :</string>
@@ -175,6 +181,7 @@
     <string name="setup_title">Pourboires Monero</string>
     <string name="setup_registering">Inscription auprès du watcher…</string>
     <string name="setup_intro_text">Avec une adresse Monero, d\'autres personnes peuvent vous envoyer des pourboires. Elle n\'est pas nécessaire pour envoyer des pourboires.</string>
+    <string name="setup_intro_wallet_hint">Les pourboires vont au portefeuille que vous configurez ici, pas à une adresse de votre bio.</string>
     <string name="setup_watcher_heading">Watcher</string>
     <string name="setup_watcher_text">Le watcher détecte les paiements entrants et publie les reçus sur Nostr.</string>
     <string name="setup_watcher_url">URL du watcher</string>
@@ -253,12 +260,15 @@
     <string name="settings_monero">Pourboires Monero</string>
     <string name="settings_monero_not_set_up">Non configuré. Pas nécessaire pour envoyer des pourboires.</string>
     <string name="settings_monero_set_up">Configurer la réception de pourboires</string>
-    <string name="settings_monero_address">Adresse %1$s…%2$s · %3$s</string>
+    <string name="settings_monero_address">Les pourboires arrivent dans ce portefeuille : %1$s…%2$s · %3$s</string>
+    <string name="settings_monero_wallet_hint">Pas à une adresse Monero de votre bio ou d’autres champs du profil. Les reçus vous parviennent par le watcher et vos propres relais ; les relais payants ne sont pas nécessaires.</string>
     <string name="settings_monero_watcher">Watcher %1$s</string>
     <string name="settings_monero_switch_watcher">Changer de watcher</string>
     <string name="settings_monero_disable">Désactiver les pourboires</string>
     <string name="settings_monero_delete_view_key">Supprimer localement la clé de visualisation</string>
-    <string name="settings_presets">Montants prédéfinis (XMR)</string>
+    <string name="settings_amount_unit">Unité</string>
+    <string name="settings_amount_unit_hint">Comment les montants s’affichent et se saisissent. 1 mXMR = 0,001 XMR ; le portefeuille reçoit toujours des XMR.</string>
+    <string name="settings_presets">Montants prédéfinis (%1$s)</string>
     <string name="settings_preset_n">Montant %1$d</string>
     <string name="settings_presets_save">Enregistrer les montants</string>
     <string name="settings_preset_add">Ajouter un préréglage</string>
@@ -277,7 +287,7 @@
     <string name="settings_reset_relays_hint">Les relais de cette application sont remplacés par les relais par défaut de monostr.</string>
     <string name="settings_msg_relay_list_published">Liste de relais publiée</string>
     <string name="settings_msg_relay_list_not_published">Aucun relais n\'a accepté la liste de relais</string>
-    <string name="settings_err_presets">Montants : valeurs XMR valides, p. ex. 0.001</string>
+    <string name="settings_err_presets">Montants : valeurs %1$s valides, p. ex. 0.001</string>
 
     <!-- appearance (Task 5) -->
     <string name="settings_appearance">Apparence</string>
@@ -323,6 +333,25 @@
     <string name="chat_error_send">Impossible d\'envoyer le message</string>
     <string name="profile_message">Message</string>
     <string name="notif_mentioned">vous a mentionné</string>
+    <string name="settings_reactions">Réactions</string>
+    <string name="settings_reactions_hint">Choix rapides par appui long sur le cœur, dans cet ordre.</string>
+    <string name="settings_reactions_add">Ajouter un emoji</string>
+    <string name="settings_reactions_add_button">Ajouter</string>
+    <string name="settings_reactions_reset">Rétablir les valeurs par défaut</string>
+    <string name="settings_reactions_up">Monter %1$s</string>
+    <string name="settings_reactions_down">Descendre %1$s</string>
+    <string name="settings_reactions_remove">Retirer %1$s</string>
+    <string name="note_react">Réagir</string>
+    <string name="note_reacted_with">Réagi avec %1$s</string>
+    <string name="note_react_other">Autre emoji</string>
+    <string name="note_react_send">Envoyer</string>
+    <string name="notif_reacted_one">%1$s a réagi avec %2$s</string>
+    <string name="notif_reacted_two">%1$s et %2$s ont réagi</string>
+    <plurals name="notif_reacted_more">
+        <item quantity="one">%1$s, %2$s et %3$d autre ont réagi</item>
+        <item quantity="many">%1$s, %2$s et %3$d autres ont réagi</item>
+        <item quantity="other">%1$s, %2$s et %3$d autres ont réagi</item>
+    </plurals>
     <string name="notif_liked_one">%1$s a aimé votre note</string>
     <string name="notif_liked_two">%1$s et %2$s ont aimé votre note</string>
     <plurals name="notif_liked_more">
@@ -341,10 +370,10 @@
     <string name="avatar_of">Profil de %1$s</string>
     <string name="notif_note_missing">note non chargée</string>
     <string name="notif_note_withdrawn">note supprimée</string>
-    <string name="notif_tipped">a donné un pourboire de %1$s XMR</string>
+    <string name="notif_tipped">a donné un pourboire de %1$s %2$s</string>
     <string name="notif_channel_name">Pourboires Monero</string>
     <string name="notif_tip_title">Pourboire Monero reçu</string>
-    <string name="notif_tip_text">%1$s vous a donné un pourboire de %2$s XMR</string>
+    <string name="notif_tip_text">%1$s vous a donné un pourboire de %2$s %3$s</string>
     <string name="notif_dm_channel">Messages</string>
     <string name="notif_dm_title">Message de %1$s</string>
     <string name="notif_dm_title_anonymous">Nouveau message</string>

@@ -35,6 +35,20 @@ class OwnReactionsTest {
         own.load(fetch = false)
         assertEquals(setOf(notes[0].id().toHex()), own.liked.value)
         assertEquals(setOf(notes[2].id().toHex()), own.reposted.value)
+        assertEquals(mapOf(notes[0].id().toHex() to "+"), own.reactions.value)
+        e.close()
+    }
+
+    @Test
+    fun `an emoji reaction is kept with its content, the newest one wins`() = runTest {
+        val e = engine()
+        val note = EventBuilder.textNote("note").signWithKeys(alice).also { e.save(it) }
+        e.save(EventBuilder.reaction(note, "🤙").customCreatedAt(rust.nostr.sdk.Timestamp.fromSecs(1000u)).signWithKeys(me))
+        e.save(EventBuilder.reaction(note, "🔥").customCreatedAt(rust.nostr.sdk.Timestamp.fromSecs(2000u)).signWithKeys(me))
+        val own = NostrOwnReactions(e)
+        own.load(fetch = false)
+        assertEquals(mapOf(note.id().toHex() to "🔥"), own.reactions.value)
+        assertEquals(setOf(note.id().toHex()), own.liked.value)
         e.close()
     }
 
@@ -49,5 +63,8 @@ class OwnReactionsTest {
         assertEquals(emptySet<String>(), own.liked.value)
         assertEquals(true, own.add(6, id))
         assertEquals(setOf(id), own.reposted.value)
+        assertEquals(true, own.add(7, id, "🔥"))
+        assertEquals(false, own.add(7, id, "🤙"))
+        assertEquals(mapOf(id to "🔥"), own.reactions.value)
     }
 }

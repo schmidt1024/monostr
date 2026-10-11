@@ -63,6 +63,13 @@ class ProfileTabsTest {
         rule.onNodeWithTag("profile-tab-replies").performClick()
         rule.waitUntil(15_000) { texts("tabs own reply").isNotEmpty() }
         assertTrue("the post shows under Replies", texts("tabs own post").isEmpty())
+        // the profile copies the whole npub
+        rule.onNodeWithTag("profile-copy-npub").performClick()
+        var clip: String? = null
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            clip = ctx.getSystemService(android.content.ClipboardManager::class.java).primaryClip?.getItemAt(0)?.text?.toString()
+        }
+        assertTrue("clipboard: $clip", clip == rust.nostr.sdk.PublicKey.parse(me.publicKey().toHex()).toBech32())
         // v0.13.1: the row names whom it answers
         rule.waitUntil(15_000) { nodes("note-reply-to-${reply.id().toHex().take(8)}").isNotEmpty() }
     }

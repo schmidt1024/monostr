@@ -21,13 +21,13 @@ class TipStoresTest {
     @Test
     fun `presets parse decimal xmr, reject garbage and format without float artifacts`() {
         assertEquals(listOf(100_000_000L, 1_000_000_000L, 10_000_000_000L), Presets.DEFAULT)
-        assertEquals(listOf(1_000_000_000L, 5_000_000_000L, 20_000_000L), Presets.parseXmr(listOf("0.001", "0,005", "0.00002")))
-        assertNull(Presets.parseXmr(listOf("abc")))
-        assertNull(Presets.parseXmr(listOf("0")))
-        assertNull(Presets.parseXmr(listOf("-1")))
-        assertNull(Presets.parseXmr(listOf("0.0000000000001")))
-        assertNull(Presets.parseXmr(emptyList()))
-        assertEquals(listOf(1_000_000_000L), Presets.parseXmr(listOf("0.001", " ", "0.001")), "blanks dropped, duplicates merged")
+        assertEquals(listOf(1_000_000_000L, 5_000_000_000L, 20_000_000L), Presets.parseAll(listOf("0.001", "0,005", "0.00002")))
+        assertNull(Presets.parseAll(listOf("abc")))
+        assertNull(Presets.parseAll(listOf("0")))
+        assertNull(Presets.parseAll(listOf("-1")))
+        assertNull(Presets.parseAll(listOf("0.0000000000001")))
+        assertNull(Presets.parseAll(emptyList()))
+        assertEquals(listOf(1_000_000_000L), Presets.parseAll(listOf("0.001", " ", "0.001")), "blanks dropped, duplicates merged")
         assertEquals("0.005", Presets.format(5_000_000_000))
         assertEquals("1.5", Presets.format(1_500_000_000_000))
     }

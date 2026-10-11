@@ -1,5 +1,6 @@
 package com.monostr.app.ui.notifications
 
+import com.monostr.app.ui.common.Reactions
 import com.monostr.nostr.repo.NotificationItem
 import com.monostr.nostr.repo.NotificationKind
 
@@ -9,7 +10,11 @@ sealed interface NotificationRow {
     val createdAt: Long
 
     /** Likes or reposts of one note: [actors] distinct, newest first; [count] = all of them. */
-    data class Group(val kind: NotificationKind, val aboutId: String, val actors: List<String>, override val createdAt: Long) : NotificationRow {
+    data class Group(
+        val kind: NotificationKind, val aboutId: String, val actors: List<String>, override val createdAt: Long,
+        /** Emoji reactions among them (not the plain likes), distinct, newest first, at most [NotificationGroups.MAX_REACTIONS]. */
+        val reactions: List<String> = emptyList(),
+    ) : NotificationRow {
         override val key: String get() = "${kind.name}:$aboutId"
         val count: Int get() = actors.size
     }
@@ -22,6 +27,8 @@ sealed interface NotificationRow {
 }
 
 object NotificationGroups {
+    const val MAX_REACTIONS = 3
+
     /** The kinds that say "your note": grouped per note, and dropped when the note turns out to be somebody else's. */
     val GROUPED = setOf(NotificationKind.REACTION, NotificationKind.REPOST)
 
@@ -37,7 +44,10 @@ object NotificationGroups {
         }
         val grouped = groups.values.map { events ->
             val newestFirst = events.sortedByDescending { it.createdAt }
-            NotificationRow.Group(newestFirst.first().kind, newestFirst.first().aboutId!!, newestFirst.map { it.from!! }.distinct(), newestFirst.first().createdAt)
+            val reactions = if (newestFirst.first().kind != NotificationKind.REACTION) emptyList()
+                // only real emojis: the content is relay input and shows as the row's symbol and in its sentence
+                else newestFirst.mapNotNull { Reactions.shown(it.text) }.distinct().take(MAX_REACTIONS)
+            NotificationRow.Group(newestFirst.first().kind, newestFirst.first().aboutId!!, newestFirst.map { it.from!! }.distinct(), newestFirst.first().createdAt, reactions)
         }
         return (grouped + singles).sortedByDescending { it.createdAt }
     }

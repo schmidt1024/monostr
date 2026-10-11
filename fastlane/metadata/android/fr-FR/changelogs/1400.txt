@@ -1,0 +1,9 @@
+• Réactions emoji : appui long sur le cœur ; votre liste et ordre dans les Réglages
+• Annuler un j'aime, une réaction ou une republication
+• Onglets du fil : Publications et Réponses
+• Montants en XMR ou mXMR
+• Masquer réapparaît avec les listes d'autres apps
+• Copier votre npub depuis le profil
+• Les notifications montrent l'image de la note
+• Liens sans https://
+• Indication claire du portefeuille qui reçoit

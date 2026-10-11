@@ -1,5 +1,9 @@
 package com.monostr.app.ui.profile
 
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.ui.platform.LocalContext
+import com.monostr.app.ui.common.copyToClipboard
+import com.monostr.nostr.Npub
 import com.monostr.nostr.repo.OwnReactions
 import com.monostr.nostr.repo.MemoryOwnReactions
 import kotlinx.coroutines.Dispatchers
@@ -387,6 +391,7 @@ class ProfileController(
     }
 
     fun like(note: Note) = actions.like(note, ::onActionResult)
+    fun react(note: Note, emoji: String) = actions.react(note, emoji, ::onActionResult)
     fun delete(note: Note) = actions.delete(note)
     fun repost(note: Note) = actions.repost(note, ::onActionResult)
     fun bookmark(note: Note) = bookmarks.toggle(note) { m -> _state.update { s -> s.mapNotes { l -> l.map(bookmarks::flags) }.copy(message = m?.asMessage() ?: s.message) } }
@@ -552,7 +557,7 @@ fun ProfileScreen(
                         Column {
                             Text(state.profile.shownName, style = MaterialTheme.typography.titleMedium)
                             state.profile.nip05?.let { Text(it, style = MaterialTheme.typography.labelSmall) }
-                            Text(Profile.shortPubkey(state.profile.pubkey), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            NpubLine(state.profile.pubkey)
                         }
                     }
                     // the bio links like a note: URLs, nostr: mentions and hashtags open
@@ -605,6 +610,7 @@ fun ProfileScreen(
                     onOpenProfile = onOpenProfile,
                     onReply = { onReply(n.target.id) },
                     onLike = { vm.controller.like(n.target) },
+                    onReact = { e -> vm.controller.react(n.target, e) },
                     onRepost = { vm.controller.repost(n.target) },
                     onQuote = { onQuote(n.target.id) },
                     onTip = { vm.tipSheet.open(n.target) },
@@ -648,6 +654,22 @@ fun ProfileScreen(
         )
     }
     tippersFor?.let { TippersDialog(it, load = vm.decorations::tippers, onDismiss = { tippersFor = null }) }
+}
+
+/** The shortened npub with a button that copies the whole one (launch feedback 2026-10-09: "copy your npub from your profile"). */
+@Composable
+private fun NpubLine(pubkey: String) {
+    val context = LocalContext.current
+    val copied = stringResource(R.string.note_copied)
+    val npub = remember(pubkey) { runCatching { Npub.encode(pubkey) }.getOrNull() }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(npub?.let { it.take(9) + "…" + it.takeLast(4) } ?: Profile.shortPubkey(pubkey), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("profile-npub"))
+        if (npub != null) {
+            IconButton(onClick = { copyToClipboard(context, npub, copied) }, modifier = Modifier.size(32.dp).testTag("profile-copy-npub")) {
+                Icon(Icons.Outlined.ContentCopy, contentDescription = stringResource(R.string.profile_copy_npub), tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+            }
+        }
+    }
 }
 
 @Composable

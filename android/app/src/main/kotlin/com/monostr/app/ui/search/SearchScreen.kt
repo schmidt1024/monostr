@@ -247,6 +247,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.noteItems(
             onOpenProfile = onOpenProfile,
             onReply = { onReply(n.target.id) },
             onLike = { vm.controller.like(n.target) },
+            onReact = { e -> vm.controller.react(n.target, e) },
             onRepost = { vm.controller.repost(n.target) },
             onQuote = { onQuote(n.target.id) },
             onTip = { vm.tipSheet.open(n.target) },

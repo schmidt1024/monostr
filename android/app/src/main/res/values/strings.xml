@@ -89,6 +89,9 @@
     <string name="notification_has_media" translatable="false">📷 %1$s</string>
     <string name="action_like_sent">Like sent</string>
     <string name="action_repost_sent">Repost sent</string>
+    <string name="action_unlike_sent">Like removed</string>
+    <string name="action_unrepost_sent">Repost removed</string>
+    <string name="action_undo_repost">Undo repost</string>
     <string name="action_no_relay_local">No relay reachable, kept locally</string>
 
     <!-- tabs -->
@@ -113,6 +116,8 @@
     <string name="feed_settings">Settings</string>
     <string name="feed_new_note">New note</string>
     <string name="feed_empty">No notes yet. Follow someone or write the first one.</string>
+    <string name="feed_tab_posts">Posts</string>
+    <string name="feed_tab_replies">Replies</string>
     <string name="feed_error_load">Feed could not be loaded</string>
     <string name="feed_error_more">More notes could not be loaded</string>
 
@@ -121,6 +126,7 @@
     <string name="thread_not_found">Note not found</string>
     <string name="profile_title_self">My profile</string>
     <string name="profile_error_load">Profile could not be loaded</string>
+    <string name="profile_copy_npub">Copy npub</string>
     <string name="note_replying_one">Replying to %1$s</string>
     <string name="note_replying_two">Replying to %1$s and %2$s</string>
     <plurals name="note_replying_more">
@@ -153,9 +159,9 @@
 
     <!-- tip sheet -->
     <string name="tip_title">Send a Monero tip</string>
-    <string name="tip_amount">Amount (XMR)</string>
-    <string name="tip_xmr_amount">%1$s XMR</string>
-    <string name="tip_custom_amount">Custom amount in XMR</string>
+    <string name="tip_amount">Amount (%1$s)</string>
+    <string name="tip_xmr_amount">%1$s %2$s</string>
+    <string name="tip_custom_amount">Custom amount in %1$s</string>
     <string name="tip_pay">Pay with wallet</string>
     <string name="tip_no_wallet_title">No wallet app found</string>
     <string name="tip_no_wallet_text">Install Monerujo or Cake Wallet, or pay the amount manually to this address:</string>
@@ -177,6 +183,7 @@
     <string name="setup_title">Monero tips</string>
     <string name="setup_registering">Registering with the watcher…</string>
     <string name="setup_intro_text">With a Monero address, others can send you tips. Sending tips works without it.</string>
+    <string name="setup_intro_wallet_hint">Tips go to the wallet you set up here, not to an address in your bio.</string>
     <string name="setup_watcher_heading">Watcher</string>
     <string name="setup_watcher_text">The watcher detects incoming payments and publishes the receipts on Nostr.</string>
     <string name="setup_watcher_url">Watcher URL</string>
@@ -256,12 +263,15 @@
     <string name="settings_monero">Monero tips</string>
     <string name="settings_monero_not_set_up">Not set up. Not needed for sending tips.</string>
     <string name="settings_monero_set_up">Set up receiving Monero tips</string>
-    <string name="settings_monero_address">Address %1$s…%2$s · %3$s</string>
+    <string name="settings_monero_address">Tips arrive in this wallet: %1$s…%2$s · %3$s</string>
+    <string name="settings_monero_wallet_hint">Not at a Monero address in your bio or other profile fields. Tip receipts reach you through the watcher and your own relays; paid relays are not needed.</string>
     <string name="settings_monero_watcher">Watcher %1$s</string>
     <string name="settings_monero_switch_watcher">Switch watcher</string>
     <string name="settings_monero_disable">Disable tips</string>
     <string name="settings_monero_delete_view_key">Delete view key locally</string>
-    <string name="settings_presets">Tip presets (XMR)</string>
+    <string name="settings_amount_unit">Unit</string>
+    <string name="settings_amount_unit_hint">How amounts read and are typed. 1 mXMR = 0.001 XMR; the wallet always gets XMR.</string>
+    <string name="settings_presets">Tip presets (%1$s)</string>
     <string name="settings_preset_n">Preset %1$d</string>
     <string name="settings_presets_save">Save presets</string>
     <string name="settings_preset_add">Add preset</string>
@@ -280,7 +290,7 @@
     <string name="settings_reset_relays_hint">The relays of this app are replaced by monostr\'s default relays.</string>
     <string name="settings_msg_relay_list_published">Relay list published</string>
     <string name="settings_msg_relay_list_not_published">No relay accepted the relay list</string>
-    <string name="settings_err_presets">Presets: valid XMR amounts, e.g. 0.001</string>
+    <string name="settings_err_presets">Presets: valid %1$s amounts, e.g. 0.001</string>
 
     <!-- appearance (Task 5) -->
     <string name="settings_appearance">Appearance</string>
@@ -324,6 +334,24 @@
     <string name="chat_error_send">Message could not be sent</string>
     <string name="profile_message">Message</string>
     <string name="notif_mentioned">mentioned you</string>
+    <string name="settings_reactions">Reactions</string>
+    <string name="settings_reactions_hint">Quick choices for a long press on the heart, in this order.</string>
+    <string name="settings_reactions_add">Add emoji</string>
+    <string name="settings_reactions_add_button">Add</string>
+    <string name="settings_reactions_reset">Restore defaults</string>
+    <string name="settings_reactions_up">Move %1$s up</string>
+    <string name="settings_reactions_down">Move %1$s down</string>
+    <string name="settings_reactions_remove">Remove %1$s</string>
+    <string name="note_react">React</string>
+    <string name="note_reacted_with">Reacted with %1$s</string>
+    <string name="note_react_other">Other emoji</string>
+    <string name="note_react_send">Send</string>
+    <string name="notif_reacted_one">%1$s reacted with %2$s</string>
+    <string name="notif_reacted_two">%1$s and %2$s reacted</string>
+    <plurals name="notif_reacted_more">
+        <item quantity="one">%1$s, %2$s and %3$d other reacted</item>
+        <item quantity="other">%1$s, %2$s and %3$d others reacted</item>
+    </plurals>
     <string name="notif_liked_one">%1$s liked your note</string>
     <string name="notif_liked_two">%1$s and %2$s liked your note</string>
     <plurals name="notif_liked_more">
@@ -343,10 +371,10 @@
     <string name="notif_note_missing">note not loaded</string>
     <string name="notif_note_withdrawn">deleted note</string>
     <string name="notif_note_loading" translatable="false">…</string>
-    <string name="notif_tipped">tipped %1$s XMR</string>
+    <string name="notif_tipped">tipped %1$s %2$s</string>
     <string name="notif_channel_name">Monero tips</string>
     <string name="notif_tip_title">Monero tip received</string>
-    <string name="notif_tip_text">%1$s tipped you %2$s XMR</string>
+    <string name="notif_tip_text">%1$s tipped you %2$s %3$s</string>
     <string name="notif_dm_channel">Messages</string>
     <string name="notif_dm_title">Message from %1$s</string>
     <string name="notif_dm_title_anonymous">New message</string>

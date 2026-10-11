@@ -102,12 +102,15 @@ class FakeFeed : FeedRepository {
     var followList: List<String> = listOf("a".repeat(64))
     override suspend fun follows() = followList
     override suspend fun followsLocal() = followList
-    override suspend fun notes(limit: Int, until: Long?) = current
+    /** The `replies` flag of every notes/loadMore/live call, in order. */
+    val repliesCalls = ArrayList<Boolean>()
+    override suspend fun notes(limit: Int, until: Long?, replies: Boolean) = current.also { repliesCalls += replies }
     override suspend fun refresh(limit: Int) {
         refreshCalls++
         refreshGate?.await()
     }
-    override suspend fun loadMore(before: Long, limit: Int): List<Note> {
+    override suspend fun loadMore(before: Long, limit: Int, replies: Boolean): List<Note> {
+        repliesCalls += replies
         loadMoreCalls++
         loadMoreGate?.await()
         loadMoreError?.let { throw it }
@@ -115,7 +118,7 @@ class FakeFeed : FeedRepository {
     }
     /** How often [live] was started (each restart counts). */
     var liveCalls = 0
-    override fun live(limit: Int): Flow<List<Note>> = flow { liveCalls++; emit(current); liveUpdates.collect { emit(it) } }
+    override fun live(limit: Int, replies: Boolean): Flow<List<Note>> = flow { liveCalls++; repliesCalls += replies; emit(current); liveUpdates.collect { emit(it) } }
     /** The `fetch` flag of every notesBy call, in order. */
     val notesByCalls = ArrayList<Boolean>()
     override suspend fun notesBy(author: String, limit: Int, fetch: Boolean): List<Note> {
@@ -199,8 +202,9 @@ class FakePublish(var relaysOk: Boolean = true, private val fail: Boolean = fals
     /** JSON of every profile publish, in order. */
     val profileJson = ArrayList<String>()
     override suspend fun profile(json: String) = result(0).also { calls += "profile"; profileJson += json }
-    override suspend fun like(note: Note) = result(7).also { calls += "like:${note.id.take(4)}" }
+    override suspend fun react(note: Note, content: String) = result(7).also { calls += if (content == "+") "like:${note.id.take(4)}" else "react:${note.id.take(4)}:$content" }
     override suspend fun repost(note: Note) = result(6).also { calls += "repost:${note.id.take(4)}" }
+    override suspend fun withdraw(noteId: String, kind: Int) = result(5).also { calls += (if (kind == 7) "unlike:" else "unrepost:") + noteId.take(4) }
     override suspend fun delete(note: Note) = result(5).also { calls += "delete:${note.id.take(4)}" }
     override suspend fun noteLink(note: Note) = "nostr:nevent1fake${note.id.take(8)}"
     /** When set, a resend throws. */
@@ -382,6 +386,9 @@ class FakeTipSettings(
     val anonymousState = MutableStateFlow(true)
     override val anonymous: Flow<Boolean> = anonymousState
     override suspend fun setAnonymous(value: Boolean) { anonymousState.value = value }
+    val amountUnitState = MutableStateFlow(com.monostr.app.data.AmountUnit.XMR)
+    override val amountUnit: Flow<com.monostr.app.data.AmountUnit> = amountUnitState
+    override suspend fun setAmountUnit(unit: com.monostr.app.data.AmountUnit) { amountUnitState.value = unit }
     override suspend fun setPresets(piconero: List<Long>) { presetsState.value = piconero.sorted() }
     override suspend fun setSetup(setup: MoneroSetup?) { setupState.value = setup }
     override suspend fun setOnboardingSeen() { seenState.value = true }
@@ -459,6 +466,12 @@ class FakeUiSettings : UiSettingsStore {
     val primalStatsState = MutableStateFlow(true)
     override val primalStats: Flow<Boolean> = primalStatsState
     override suspend fun setPrimalStats(on: Boolean) { primalStatsState.value = on }
+    val feedWithRepliesState = MutableStateFlow(false)
+    override val feedWithReplies: Flow<Boolean> = feedWithRepliesState
+    override suspend fun setFeedWithReplies(on: Boolean) { feedWithRepliesState.value = on }
+    val quickReactionsState = MutableStateFlow(com.monostr.app.ui.common.Reactions.QUICK)
+    override val quickReactions: Flow<List<String>> = quickReactionsState
+    override suspend fun setQuickReactions(list: List<String>) { quickReactionsState.value = list.ifEmpty { com.monostr.app.ui.common.Reactions.QUICK } }
 }
 
 class FakeAuthorRelays(private val lists: Map<String, List<String>> = emptyMap()) : AuthorRelaysRepository {

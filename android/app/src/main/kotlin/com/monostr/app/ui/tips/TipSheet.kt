@@ -115,14 +115,14 @@ fun TipSheetContent(
                 // only the amount error belongs to the amount field; every other error sits below the switch
                 val error = state.error
                 val amountError = error == TipSheetController.ERROR_AMOUNT
-                Text(stringResource(R.string.tip_amount), style = MaterialTheme.typography.labelLarge)
+                Text(stringResource(R.string.tip_amount, state.unit.label), style = MaterialTheme.typography.labelLarge)
                 // numbers only (the unit sits in the heading); FlowRow wraps instead of clipping at large font scales
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     state.presets.forEachIndexed { i, p ->
                         val selected = state.selected == p
                         FilterChip(
                             selected = selected, onClick = { onSelect(p) },
-                            label = { Text(Presets.format(p), fontFamily = MonostrFonts.mono, maxLines = 1) },
+                            label = { Text(Presets.format(p, state.unit), fontFamily = MonostrFonts.mono, maxLines = 1) },
                             leadingIcon = if (selected) { { Icon(Icons.Filled.Check, contentDescription = null, Modifier.size(FilterChipDefaults.IconSize)) } } else null,
                             border = FilterChipDefaults.filterChipBorder(enabled = true, selected = selected, selectedBorderColor = MaterialTheme.colorScheme.primary, selectedBorderWidth = 1.dp),
                             modifier = Modifier.testTag("tip-preset-$i"),
@@ -131,7 +131,7 @@ fun TipSheetContent(
                 }
                 OutlinedTextField(
                     value = state.custom, onValueChange = onCustom, singleLine = true,
-                    label = { Text(stringResource(R.string.tip_custom_amount)) },
+                    label = { Text(stringResource(R.string.tip_custom_amount, state.unit.label)) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     isError = amountError,
                     supportingText = if (amountError && error != null) { { Text(error.asString()) } } else null,
@@ -181,7 +181,7 @@ fun TipSheetContent(
                         }
                         QrCode(phase.uri, Modifier.size(200.dp).align(Alignment.CenterHorizontally))
                         Spacer(Modifier.height(8.dp))
-                        Text(stringResource(R.string.tip_xmr_amount, Presets.format(phase.amount)), style = MaterialTheme.typography.titleMedium, fontFamily = MonostrFonts.mono, modifier = Modifier.testTag("tip-fallback-amount"))
+                        Text(stringResource(R.string.tip_xmr_amount, Presets.format(phase.amount, state.unit), state.unit.label), style = MaterialTheme.typography.titleMedium, fontFamily = MonostrFonts.mono, modifier = Modifier.testTag("tip-fallback-amount"))
                         Text(phase.address, style = MaterialTheme.typography.bodySmall, fontFamily = MonostrFonts.mono, modifier = Modifier.testTag("tip-fallback-address"))
                         Spacer(Modifier.height(8.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

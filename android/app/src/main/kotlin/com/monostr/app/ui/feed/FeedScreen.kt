@@ -1,5 +1,7 @@
 package com.monostr.app.ui.feed
 
+import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.Tab
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -169,7 +171,15 @@ fun FeedScreen(
         bottomBar = { MonostrBottomBar(BottomTab.FEED, unread = unread, dmUnread = dmUnread, onFeed = toTop, onSearch = onSearch, onBookmarks = onBookmarks, onMessages = onMessages, onNotifications = onNotifications) },
         snackbarHost = { SnackbarHost(snackbar, Modifier.muteUndoTag(state.message)) },
     ) { padding ->
-        PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = vm.controller::refresh, modifier = Modifier.padding(padding).fillMaxSize().testTag("feed-refresh")) {
+        Column(Modifier.padding(padding).fillMaxSize()) {
+        // launch feedback: posts and replies apart, as tabs like the profile
+        PrimaryTabRow(selectedTabIndex = if (state.withReplies) 1 else 0, modifier = Modifier.testTag("feed-tabs")) {
+            Tab(selected = !state.withReplies, onClick = { vm.setWithReplies(false) }, text = { Text(stringResource(R.string.feed_tab_posts)) },
+                unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("feed-tab-posts"))
+            Tab(selected = state.withReplies, onClick = { vm.setWithReplies(true) }, text = { Text(stringResource(R.string.feed_tab_replies)) },
+                unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("feed-tab-replies"))
+        }
+        PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = vm.controller::refresh, modifier = Modifier.fillMaxSize().testTag("feed-refresh")) {
             if (state.loading) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             } else if (state.notes.isEmpty()) {
@@ -189,6 +199,7 @@ fun FeedScreen(
                             onOpenProfile = onOpenProfile,
                             onReply = { onReply(n.target.id) },
                             onLike = { vm.controller.like(n) },
+                            onReact = { e -> vm.controller.react(n.target, e) },
                             onRepost = { vm.controller.repost(n) },
                             onQuote = { onQuote(n.target.id) },
                             onTip = { vm.tipSheet.open(n.target) },
@@ -207,6 +218,7 @@ fun FeedScreen(
                 }
                 VisibleNotes(listState, vm.controller::visible)
             }
+        }
         }
     }
     TipSheetHost(vm.tipSheet)

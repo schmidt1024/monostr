@@ -64,4 +64,16 @@ class NotificationGroupsTest {
         assertEquals(100, group.count)
         assertEquals("99".padStart(64, 'e'), group.actors.first())
     }
+
+    @Test
+    fun `emoji reactions of a note are kept for the row, newest first, without the plain likes`() {
+        val x = "x".repeat(64)
+        fun r(n: Int, content: String) = NotificationItem(n.toString().padStart(64, '0'), NotificationKind.REACTION, n.toString().padStart(64, 'e'), 1000L + n, x, x, content, null)
+        val group = NotificationGroups.build(listOf(r(1, "+"), r(2, "🔥"), r(3, "🤙"), r(4, "🔥"), r(5, ""), r(6, "sent you 10 XMR"))).single() as NotificationRow.Group
+        // newest first; text that is no emoji never shows (spoofing), its sender still counts as a liker
+        assertEquals(listOf("🔥", "🤙"), group.reactions)
+        assertEquals(6, group.count)
+        val likes = NotificationGroups.build(listOf(r(1, "+"), r(2, "+"))).single() as NotificationRow.Group
+        assertEquals(emptyList<String>(), likes.reactions)
+    }
 }

@@ -1,5 +1,12 @@
 package com.monostr.app.ui.settings
 
+import com.monostr.app.data.AmountUnit
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import com.monostr.app.ui.common.Reactions
+import androidx.compose.ui.platform.LocalContext
+import com.monostr.app.ui.common.copyToClipboard
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -232,6 +239,8 @@ class SettingsViewModel @Inject constructor(
     fun setClientTag(on: Boolean) = viewModelScope.launch { uiSettings.setClientTag(on) }
     val primalStats: StateFlow<Boolean> = uiSettings.primalStats.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
     fun setPrimalStats(on: Boolean) = viewModelScope.launch { uiSettings.setPrimalStats(on) }
+    val quickReactions: StateFlow<List<String>> = uiSettings.quickReactions.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), Reactions.QUICK)
+    fun setQuickReactions(list: List<String>) = viewModelScope.launch { uiSettings.setQuickReactions(list) }
 
     val mediaServer: StateFlow<String> = uiSettings.mediaServer.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MediaServer.DEFAULT)
 
@@ -325,6 +334,9 @@ fun SettingsScreen(onBack: () -> Unit, onMoneroSetup: () -> Unit, onSupport: () 
             val customHue by vm.customHue.collectAsStateWithLifecycle()
             AppearanceSection(mode, accent, customHue, vm::setThemeMode, vm::setAccent, vm::setCustomHue)
             Spacer(Modifier.height(24.dp))
+            val quick by vm.quickReactions.collectAsStateWithLifecycle()
+            QuickReactionsSection(quick, onChange = vm::setQuickReactions)
+            Spacer(Modifier.height(24.dp))
             Text(stringResource(R.string.settings_media), style = MaterialTheme.typography.titleMedium)
             val blur by vm.blurSensitive.collectAsStateWithLifecycle()
             val onTap by vm.mediaOnTap.collectAsStateWithLifecycle()
@@ -379,7 +391,14 @@ fun SettingsScreen(onBack: () -> Unit, onMoneroSetup: () -> Unit, onSupport: () 
                 Text(stringResource(R.string.settings_monero_not_set_up), style = MaterialTheme.typography.bodySmall)
                 Button(onClick = onMoneroSetup, modifier = Modifier.fillMaxWidth().testTag("settings-monero-setup")) { Text(stringResource(R.string.settings_monero_set_up)) }
             } else {
-                Text(stringResource(R.string.settings_monero_address, setup.address.take(8), setup.address.takeLast(6), setup.network), style = MaterialTheme.typography.bodySmall)
+                // launch feedback: people expected tips at a Monero address in their bio; say plainly where they go
+                val copied = stringResource(R.string.note_copied)
+                val context = LocalContext.current
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.settings_monero_address, setup.address.take(8), setup.address.takeLast(6), setup.network), style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f, fill = false).testTag("settings-monero-address"))
+                    TextButton(onClick = { copyToClipboard(context, setup.address, copied) }, modifier = Modifier.testTag("settings-monero-copy-address")) { Text(stringResource(R.string.action_copy_address)) }
+                }
+                Text(stringResource(R.string.settings_monero_wallet_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("settings-monero-wallet-hint"))
                 Text(stringResource(R.string.settings_monero_watcher, setup.watcherUrl), style = MaterialTheme.typography.bodySmall)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = onMoneroSetup, modifier = Modifier.testTag("settings-monero-setup")) { Text(stringResource(R.string.settings_monero_switch_watcher)) }
@@ -390,7 +409,18 @@ fun SettingsScreen(onBack: () -> Unit, onMoneroSetup: () -> Unit, onSupport: () 
                 TextButton(onClick = vm.monero::deleteViewKey) { Text(stringResource(R.string.settings_monero_delete_view_key)) }
             }
             Spacer(Modifier.height(16.dp))
-            Text(stringResource(R.string.settings_presets), style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.settings_amount_unit), style = MaterialTheme.typography.titleMedium)
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().testTag("settings-amount-unit")) {
+                AmountUnit.entries.forEachIndexed { i, u ->
+                    SegmentedButton(
+                        selected = monero.unit == u, onClick = { vm.monero.setUnit(u) },
+                        shape = SegmentedButtonDefaults.itemShape(i, AmountUnit.entries.size), modifier = Modifier.testTag("settings-amount-unit-${u.name.lowercase()}"),
+                    ) { Text(u.label) }
+                }
+            }
+            Text(stringResource(R.string.settings_amount_unit_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(16.dp))
+            Text(stringResource(R.string.settings_presets, monero.unit.label), style = MaterialTheme.typography.titleMedium)
             monero.presets.forEachIndexed { i, v ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(
