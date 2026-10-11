@@ -1,0 +1,2 @@
+• Les j’aime et republications sont mémorisés : pleins sur tous les écrans, même après un redémarrage
+• Une note ne peut être aimée et republiée qu’une fois

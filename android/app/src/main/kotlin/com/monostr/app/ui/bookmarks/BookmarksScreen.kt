@@ -1,5 +1,7 @@
 package com.monostr.app.ui.bookmarks
 
+import com.monostr.nostr.repo.OwnReactions
+import com.monostr.nostr.repo.MemoryOwnReactions
 import kotlinx.coroutines.Dispatchers
 import com.monostr.app.ui.common.MentionResolver
 import androidx.compose.foundation.layout.Box
@@ -107,6 +109,8 @@ class BookmarksController(
     private val deletions: NoteDeletions = NoteDeletions(),
     private val visibility: NoteVisibility = NoteVisibility(deletions, MutableStateFlow(emptySet())),
     private val afterDelete: suspend (Note) -> UiText? = { null },
+    /** The session's own likes and reposts, shared by every screen; a fresh one in tests. */
+    private val own: OwnReactions = MemoryOwnReactions(),
     /** Null (tests that do not mute): [mute] and [unmute] do nothing. */
     mute: MuteRepository? = null,
     /** The scope mute writes run on, so they survive the screen that started them (session: the engine's background scope); null (tests) = [scope]. */
@@ -115,7 +119,7 @@ class BookmarksController(
     val names: StateFlow<Map<String, String>> get() = mentions.names
     private val _state = MutableStateFlow(BookmarksUiState())
     val state: StateFlow<BookmarksUiState> = _state.asStateFlow()
-    private val noteActions = NoteActions(publish, scope, counts, deletions, afterDelete)
+    private val noteActions = NoteActions(publish, scope, counts, deletions, afterDelete, own)
     private val muteActions = mute?.let { MuteActions(it, scope, profiles, background = muteScope) }
     /** Ids whose removal is in flight: their rows stay until the outcome. */
     private val pendingRemoval = MutableStateFlow<Set<String>>(emptySet())
@@ -223,7 +227,7 @@ class BookmarksController(
 class BookmarksViewModel @Inject constructor(session: NostrSession, factory: TipSheetFactory) : ViewModel() {
     private val ready = session.requireReady()
     val decorations = factory.decorations(viewModelScope)
-    val controller = BookmarksController(ready.bookmarks, BookmarkActions(ready.bookmarks, viewModelScope, background = ready.engine.backgroundScope), ready.profiles, ready.publish, decorations, ready.counts, viewModelScope, mentions = MentionResolver(ready.profiles, viewModelScope, Dispatchers.Default), deletions = ready.deletions, visibility = ready.visibility, afterDelete = ready.afterNoteDelete, mute = ready.mute, muteScope = ready.engine.backgroundScope)
+    val controller = BookmarksController(ready.bookmarks, BookmarkActions(ready.bookmarks, viewModelScope, background = ready.engine.backgroundScope), ready.profiles, ready.publish, decorations, ready.counts, viewModelScope, mentions = MentionResolver(ready.profiles, viewModelScope, Dispatchers.Default), deletions = ready.deletions, visibility = ready.visibility, afterDelete = ready.afterNoteDelete, own = ready.ownReactions, mute = ready.mute, muteScope = ready.engine.backgroundScope)
     val deletions = ready.deletions
     val menu = ready.noteMenu(delete = controller::delete, mute = controller::mute)
     val tipSheet = factory.tipSheet(viewModelScope)

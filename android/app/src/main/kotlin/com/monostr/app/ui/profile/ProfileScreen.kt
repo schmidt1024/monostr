@@ -1,5 +1,7 @@
 package com.monostr.app.ui.profile
 
+import com.monostr.nostr.repo.OwnReactions
+import com.monostr.nostr.repo.MemoryOwnReactions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.map
 import com.monostr.app.ui.common.MentionResolver
@@ -188,6 +190,8 @@ class ProfileController(
     // only deletions filter here: a muted account's profile keeps showing its notes (spec 9.3)
     private val deletions: NoteDeletions = NoteDeletions(),
     private val afterDelete: suspend (Note) -> UiText? = { null },
+    /** The session's own likes and reposts, shared by every screen; a fresh one in tests. */
+    private val own: OwnReactions = MemoryOwnReactions(),
     /** Null (tests that do not mute): [mute] and [unmute] do nothing. */
     private val mute: MuteRepository? = null,
     /** The scope mute writes run on, so they survive the screen that started them (session: the engine's background scope); null (tests) = [scope]. */
@@ -198,7 +202,7 @@ class ProfileController(
     val names: StateFlow<Map<String, String>> get() = mentions.names
     private val _state = MutableStateFlow(ProfileUiState(Profile.empty(pubkey), isSelf = pubkey == selfPubkey))
     val state: StateFlow<ProfileUiState> = _state.asStateFlow()
-    private val actions = NoteActions(publish, scope, counts, deletions, afterDelete)
+    private val actions = NoteActions(publish, scope, counts, deletions, afterDelete, own)
     private val muteActions = mute?.let { MuteActions(it, scope, profiles, background = muteScope) }
 
     /** The author's write relays currently attached (spec 5); empty when the setting is off or none were found. */
@@ -463,7 +467,7 @@ class ProfileViewModel @Inject constructor(
         ready.authorRelays, { uiSettings.authorRelays.first() }, viewModelScope,
         mentions = MentionResolver(ready.profiles, viewModelScope, Dispatchers.Default),
         follows = ready.follows,
-        deletions = ready.deletions, afterDelete = ready.afterNoteDelete,
+        deletions = ready.deletions, afterDelete = ready.afterNoteDelete, own = ready.ownReactions,
         mute = ready.mute, muteScope = ready.engine.backgroundScope,
         followCounts = ready.followCounts,
     )

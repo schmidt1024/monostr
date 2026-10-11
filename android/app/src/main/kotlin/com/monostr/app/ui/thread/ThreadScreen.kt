@@ -1,5 +1,7 @@
 package com.monostr.app.ui.thread
 
+import com.monostr.nostr.repo.OwnReactions
+import com.monostr.nostr.repo.MemoryOwnReactions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.map
 import com.monostr.app.ui.common.MentionResolver
@@ -94,6 +96,8 @@ class ThreadController(
     private val deletions: NoteDeletions = NoteDeletions(),
     private val visibility: NoteVisibility = NoteVisibility(deletions, MutableStateFlow(emptySet())),
     private val afterDelete: suspend (Note) -> UiText? = { null },
+    /** The session's own likes and reposts, shared by every screen; a fresh one in tests. */
+    private val own: OwnReactions = MemoryOwnReactions(),
     /** Null (tests that do not mute): [mute] and [unmute] do nothing. */
     mute: MuteRepository? = null,
     /** The scope mute writes run on, so they survive the screen that started them (session: the engine's background scope); null (tests) = [scope]. */
@@ -102,7 +106,7 @@ class ThreadController(
     val names: StateFlow<Map<String, String>> get() = mentions.names
     private val _state = MutableStateFlow(ThreadUiState())
     val state: StateFlow<ThreadUiState> = _state.asStateFlow()
-    private val actions = NoteActions(publish, scope, counts, deletions, afterDelete)
+    private val actions = NoteActions(publish, scope, counts, deletions, afterDelete, own)
     private val muteActions = mute?.let { MuteActions(it, scope, profiles, background = muteScope) }
 
     fun start() {
@@ -202,7 +206,7 @@ class ThreadViewModel @Inject constructor(session: NostrSession, handle: SavedSt
     private val ready = session.requireReady()
     val decorations = factory.decorations(viewModelScope)
     val bookmarks = BookmarkActions(ready.bookmarks, viewModelScope, background = ready.engine.backgroundScope)
-    val controller = ThreadController(checkNotNull(handle["id"]), ready.threads, ready.profiles, ready.publish, decorations, bookmarks, ready.counts, viewModelScope, mentions = MentionResolver(ready.profiles, viewModelScope, Dispatchers.Default), deletions = ready.deletions, visibility = ready.visibility, afterDelete = ready.afterNoteDelete, mute = ready.mute, muteScope = ready.engine.backgroundScope)
+    val controller = ThreadController(checkNotNull(handle["id"]), ready.threads, ready.profiles, ready.publish, decorations, bookmarks, ready.counts, viewModelScope, mentions = MentionResolver(ready.profiles, viewModelScope, Dispatchers.Default), deletions = ready.deletions, visibility = ready.visibility, afterDelete = ready.afterNoteDelete, own = ready.ownReactions, mute = ready.mute, muteScope = ready.engine.backgroundScope)
     val deletions = ready.deletions
     val menu = ready.noteMenu(delete = controller::delete, mute = controller::mute)
     val tipSheet = factory.tipSheet(viewModelScope)

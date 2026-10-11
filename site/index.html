@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>monostr - Nostr client with Monero tips</title>
+<meta name="description" content="monostr is a Nostr client for Android with tips in Monero. No Lightning, no custodian, no wallet inside the app. Public beta.">
+<meta property="og:title" content="monostr - Nostr client with Monero tips">
+<meta property="og:description" content="Tip any note or profile in Monero from your own wallet. Public beta for Android.">
+<meta property="og:image" content="https://monostr.com/assets/monostr-banner.png">
+<meta property="og:url" content="https://monostr.com/">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e0e0e" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+
+<style>
+:root {
+    --bg: #ffffff;
+    --text: #111111;
+    --muted: #5a5a5a;
+    --line: #e2e2e2;
+    --card: #f6f6f4;
+    --accent: #c44f00;
+    --on-accent: #ffffff;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --bg: #0e0e0e;
+        --text: #f5f5f5;
+        --muted: #a8a8a8;
+        --line: #2a2a2a;
+        --card: #171717;
+        --accent: #ff6600;
+        --on-accent: #111111;
+    }
+}
+
+:root[data-theme="dark"] {
+    --bg: #0e0e0e;
+    --text: #f5f5f5;
+    --muted: #a8a8a8;
+    --line: #2a2a2a;
+    --card: #171717;
+    --accent: #ff6600;
+    --on-accent: #111111;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.55;
+    padding: 48px 16px 40px;
+    transition: background 0.4s ease, color 0.4s ease;
+}
+
+main { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 3rem; }
+
+header { display: flex; flex-direction: column; align-items: center; gap: 1.25rem; text-align: center; }
+
+.logo { width: min(70vw, 320px); height: auto; }
+.logo-dark { display: none; }
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .logo-light { display: none; }
+    :root:not([data-theme="light"]) .logo-dark { display: block; }
+}
+:root[data-theme="dark"] .logo-light { display: none; }
+:root[data-theme="dark"] .logo-dark { display: block; }
+
+.badge {
+    display: inline-block;
+    padding: 0.3rem 0.9rem;
+    border: 1px solid var(--accent);
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+}
+
+.tagline { font-size: clamp(1.15rem, 3vw, 1.6rem); font-weight: 400; color: var(--muted); }
+.tagline strong { font-weight: 600; color: var(--text); }
+.lead { max-width: 34rem; color: var(--muted); }
+
+.buttons { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.75rem; }
+.button {
+    display: inline-flex; flex-direction: column; align-items: center;
+    min-width: 11rem; padding: 0.7rem 1.2rem;
+    border: 1px solid var(--line); border-radius: 12px;
+    color: var(--text); text-decoration: none; background: var(--card);
+}
+.button small { font-size: 0.75rem; color: var(--muted); }
+.button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+.button.primary small { color: var(--on-accent); opacity: 0.8; }
+.button.pending { cursor: default; }
+
+h2 { font-size: 1.15rem; margin-bottom: 0.75rem; }
+p + p, ol + p, ul + p { margin-top: 0.6rem; }
+a { color: var(--accent); }
+
+.shots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.shots img { width: 100%; height: auto; border-radius: 16px; border: 1px solid var(--line); }
+
+ol, ul { padding-left: 1.3rem; }
+li + li { margin-top: 0.4rem; }
+
+.note { border-left: 3px solid var(--accent); padding: 0.6rem 0 0.6rem 1rem; background: var(--card); border-radius: 0 8px 8px 0; }
+
+footer { border-top: 1px solid var(--line); padding-top: 1.25rem; font-size: 0.85rem; color: var(--muted); }
+footer p + p { margin-top: 0.4rem; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.8rem; word-break: break-all; }
+
+@media (max-width: 520px) {
+    body { padding-top: 32px; }
+    .button { min-width: 100%; }
+}
+</style>
+</head>
+
+<body>
+<main>
+    <header>
+        <span class="badge">Public beta</span>
+        <img class="logo logo-light" src="/assets/monostr-lockup-light.svg" alt="monostr" width="296" height="178">
+        <img class="logo logo-dark" src="/assets/monostr-lockup-dark.svg" alt="monostr" width="296" height="178">
+        <h1 class="tagline"><strong>monostr</strong> - Nostr client with Monero tips</h1>
+        <p class="lead">Tip any note or profile in Monero from your own wallet. No Lightning, no custodian, no wallet inside the app. Free software for Android.</p>
+        <div class="buttons">
+            <a class="button primary" href="https://zapstore.dev/apps/com.monostr.app">Zapstore<small>recommended</small></a>
+            <a class="button" href="https://github.com/schmidt1024/monostr/releases/latest">GitHub<small>APK, also via Obtainium</small></a>
+            <span class="button pending">F-Droid<small>in review</small></span>
+        </div>
+    </header>
+
+    <section class="shots" aria-label="Screenshots">
+        <img src="/assets/shot-feed.webp" alt="The monostr feed" width="540" height="1200" loading="lazy">
+        <img src="/assets/shot-tip.webp" alt="Sending a Monero tip" width="540" height="1200" loading="lazy">
+    </section>
+
+    <section>
+        <h2>How a tip works</h2>
+        <ol>
+            <li>Tap the Monero sign under a note or on a profile and pick an amount. Your own wallet app (Monerujo, Cake, Feather …) opens with the payment.</li>
+            <li>The recipient has registered their address and private view key with a watcher. The view key lets it see incoming payments; it can never spend them.</li>
+            <li>The watcher publishes a signed receipt on Nostr, and the tip shows under the note.</li>
+        </ol>
+        <p>The default watcher is watcher.monostr.com; you can run your own from the same repository. Tips can be anonymous.</p>
+    </section>
+
+    <section>
+        <h2>Everything else you expect</h2>
+        <ul>
+            <li>Feed, threads, profiles with posts and replies; like, repost, quote, reply</li>
+            <li>Private messages (NIP-17), private bookmarks and mutes, picture uploads, search, notifications</li>
+            <li>Sign in with Amber or a key; light and dark; English, German, Spanish, French, Italian, Portuguese, Russian, Turkish</li>
+        </ul>
+    </section>
+
+    <section class="note">
+        <p><strong>Beta:</strong> tips are real Monero on mainnet. Start with small amounts, and check the address you register for receiving. Found a bug or missing something? Open an <a href="https://github.com/schmidt1024/monostr/issues">issue</a> or mention monostr on Nostr.</p>
+    </section>
+
+    <footer>
+        <p>Source code: <a href="https://github.com/schmidt1024/monostr">github.com/schmidt1024/monostr</a> (AGPL-3.0-or-later). Release builds are reproducible.</p>
+        <p>Nostr: <a href="https://njump.me/npub1zcqletxlyf7amggwx0n3j9unpdymusmtgw7aqv9hnx2g48e8fmfs89e6z2">monostr@monostr.com</a> · Relay: <code>wss://relay.monostr.com</code></p>
+        <p>APK signing certificate (SHA-256): <code>61:9D:7B:95:C3:ED:13:1C:35:BC:EE:F6:34:89:34:2D:45:5B:3A:99:F4:AB:B8:BE:28:91:9E:33:33:02:FE:1E</code></p>
+    </footer>
+</main>
+
+<script>
+function applyTheme(theme) {
+    document.documentElement.setAttribute("data-theme", theme);
+    try { localStorage.setItem("theme", theme); } catch (e) {}
+}
+
+(function () {
+    let saved = null;
+    try { saved = localStorage.getItem("theme"); } catch (e) {}
+    if (saved === "dark" || saved === "light") {
+        applyTheme(saved);
+    }
+})();
+</script>
+</body>
+</html>

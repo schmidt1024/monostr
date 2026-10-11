@@ -7,6 +7,7 @@ import com.monostr.app.ui.common.NoteDeletions
 import com.monostr.app.ui.common.UiText
 import com.monostr.app.ui.feed.NoteUi
 import com.monostr.nostr.model.Profile
+import com.monostr.nostr.repo.MemoryOwnReactions
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -39,6 +40,34 @@ class NoteActionsTest {
         assertEquals(listOf(uiText(R.string.action_like_sent), uiText(R.string.action_repost_sent)), messages)
         assertTrue(actions.flags(ui).liked)
         assertTrue(actions.flags(ui).reposted)
+    }
+
+    @Test
+    fun `a note liked or reposted already publishes nothing a second time`() = runTest {
+        val publish = FakePublish()
+        val actions = NoteActions(publish, eager())
+        actions.like(n) {}
+        actions.like(n) {}
+        actions.repost(n) {}
+        actions.repost(n) {}
+        advanceUntilIdle()
+        assertEquals(listOf("like:1111", "repost:1111"), publish.calls)
+    }
+
+    @Test
+    fun `the own reactions are shared, a like on one screen shows on another, also one the session loaded`() = runTest {
+        val own = MemoryOwnReactions()
+        val feed = NoteActions(FakePublish(), eager(), own = own)
+        val thread = NoteActions(FakePublish(), eager(), own = own)
+        feed.like(n) {}
+        advanceUntilIdle()
+        assertTrue(thread.flags(ui).liked)
+        own.add(6, n.id) // as if read from the user's stored kind 6
+        assertTrue(feed.flags(ui).reposted)
+        val publish = FakePublish()
+        NoteActions(publish, eager(), own = own).repost(n) {}
+        advanceUntilIdle()
+        assertTrue(publish.calls.isEmpty())
     }
 
     @Test

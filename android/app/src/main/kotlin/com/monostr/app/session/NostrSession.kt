@@ -1,5 +1,7 @@
 package com.monostr.app.session
 
+import com.monostr.nostr.repo.NostrOwnReactions
+import com.monostr.nostr.repo.OwnReactions
 import android.content.Context
 import com.monostr.app.MainActivity
 import com.monostr.app.R
@@ -131,6 +133,8 @@ class Ready(
     val afterNoteDelete: suspend (Note) -> UiText?,
     /** Plan 11-B: the NIP-51 mute list (spec 9). */
     val mute: MuteRepository,
+    /** v0.13.9: the user's own likes and reposts for the filled icons on every screen. */
+    val ownReactions: OwnReactions,
 ) {
     /** Pubkeys of the muted accounts; every note list filters against them (spec 9.3). */
     val muted: StateFlow<Set<String>> get() = mute.muted
@@ -385,6 +389,9 @@ class NostrSession @Inject constructor(
             val follows = NostrFollowRepository(engine, feed)
             // Primal's cache has every contact list ever indexed: the number other clients show; the relays' COUNTs stay as a floor
             // read per lookup (privacy setting: never a seeded default); a switch counts every profile afresh
+            // the database at once, the relays' latest behind it (a new install, another client)
+            val ownReactions = NostrOwnReactions(engine)
+            engine.backgroundScope.launch { bestEffort { ownReactions.load() } }
             val followCounts = NostrFollowCountsRepository(engine, indexers = listOf(PrimalStats(http, enabled = { uiSettings.primalStats.first() })))
             engine.backgroundScope.launch { uiSettings.primalStats.drop(1).collect { followCounts.invalidateAll() } }
             // a follow or unfollow changes the own Following number and the target's Followers: counted afresh
@@ -424,6 +431,7 @@ class NostrSession @Inject constructor(
                         .takeIf { it > 0 }?.let { pluralText(R.plurals.note_delete_pictures_failed, it) }
                 },
                 mute = mute,
+                ownReactions = ownReactions,
             )
         } catch (e: Exception) {
             SessionCleanup.closeAll({ dmStore.close() }, { engine.close() })

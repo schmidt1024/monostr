@@ -1,0 +1,2 @@
+• Likes and reposts are remembered: shown filled on every screen, also after a restart
+• A note can be liked and reposted only once

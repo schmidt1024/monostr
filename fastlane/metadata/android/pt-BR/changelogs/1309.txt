@@ -1,0 +1,2 @@
+• Curtidas e reposts são lembrados: aparecem preenchidos em todas as telas, também após reiniciar
+• Uma nota só pode ser curtida e repostada uma vez

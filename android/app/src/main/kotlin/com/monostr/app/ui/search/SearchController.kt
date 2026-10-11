@@ -1,5 +1,7 @@
 package com.monostr.app.ui.search
 
+import com.monostr.nostr.repo.OwnReactions
+import com.monostr.nostr.repo.MemoryOwnReactions
 import kotlinx.coroutines.flow.map
 import com.monostr.app.data.RecentSearchesStore
 import com.monostr.app.ui.common.MentionResolver
@@ -82,6 +84,8 @@ class SearchController(
     private val deletions: NoteDeletions = NoteDeletions(),
     private val visibility: NoteVisibility = NoteVisibility(deletions, MutableStateFlow(emptySet())),
     private val afterDelete: suspend (Note) -> UiText? = { null },
+    /** The session's own likes and reposts, shared by every screen; a fresh one in tests. */
+    private val own: OwnReactions = MemoryOwnReactions(),
     /** Null (tests that do not mute): [mute] and [unmute] do nothing. */
     mute: MuteRepository? = null,
     /** The scope mute writes run on, so they survive the screen that started them (session: the engine's background scope); null (tests) = [scope]. */
@@ -94,7 +98,7 @@ class SearchController(
     val state: StateFlow<SearchUiState> = _state.asStateFlow()
     private val _nav = MutableSharedFlow<SearchNav>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     val nav: SharedFlow<SearchNav> = _nav
-    private val actions = NoteActions(publish, scope, deletions = deletions, afterDelete = afterDelete)
+    private val actions = NoteActions(publish, scope, deletions = deletions, afterDelete = afterDelete, own = own)
     private val muteActions = mute?.let { MuteActions(it, scope, profiles, background = muteScope) }
     private var debounce: Job? = null
     private var running: Job? = null
