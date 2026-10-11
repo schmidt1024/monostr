@@ -1,0 +1,2 @@
+• Notlardaki web bağlantıları için önizleme (varsayılan kapalı; Ayarlar → Bağlantı önizlemeleri)
+• İş ispatı artık varsayılan olarak 8 bit ile açık; seçenekler Kapalı, 8, 16, 20 (Ayarlar → İş ispatı)

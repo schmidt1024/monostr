@@ -1,0 +1,2 @@
+• Anteprime dei link web nelle note (disattivate di default; Impostazioni → Anteprime dei link)
+• Proof of work attiva di default a 8 bit; scelte No, 8, 16, 20 (Impostazioni → Proof of work)

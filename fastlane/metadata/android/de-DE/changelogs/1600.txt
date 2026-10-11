@@ -1,0 +1,2 @@
+• Linkvorschauen für Weblinks in Notes (standardmäßig aus; Einstellungen → Linkvorschauen)
+• Proof of Work jetzt standardmäßig an mit 8 Bit; Auswahl Aus, 8, 16, 20 (Einstellungen → Proof of Work)

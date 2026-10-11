@@ -1,5 +1,6 @@
 package com.monostr.app.ui.common
 
+import com.monostr.app.ui.media.NoteLinkPreview
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -238,6 +239,7 @@ private fun ListNoteCard(
                     QuoteCard(qid, shown.quoteRelays, names, onOpenNote = onOpenNote, onOpenProfile = onOpenProfile, onHashtag = onHashtag, modifier = Modifier.padding(top = 8.dp))
                 }
                 NoteMediaRow(shown, onOpenMedia = { i -> onOpenMedia(shown.id, i) }, onOpenVideo = onOpenVideo)
+                NoteLinkPreview(shown)
                 if (showActions) {
                     Spacer(Modifier.height(4.dp))
                     NoteActionRow(note, shown, onReply, onRepost, onQuote, onLike, onBookmark, onTip, onShowTippers, onReact = onReact)
@@ -286,6 +288,7 @@ private fun DetailNoteCard(
             QuoteCard(qid, shown.quoteRelays, names, onOpenNote = onOpenNote, onOpenProfile = onOpenProfile, onHashtag = onHashtag, modifier = Modifier.padding(top = 8.dp))
         }
         NoteMediaRow(shown, onOpenMedia = { i -> onOpenMedia(shown.id, i) }, onOpenVideo = onOpenVideo)
+        NoteLinkPreview(shown)
         Spacer(Modifier.height(12.dp))
         Text(detailTimeLine(fullTime(shown.createdAt), shown.client, stringResource(R.string.note_via)), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("note-time-$id8"))
         HorizontalDivider(Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)

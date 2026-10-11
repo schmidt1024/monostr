@@ -10,7 +10,7 @@ monostr es un cliente Nostr para Android con propinas en Monero.
 • Inicio de sesión con Amber (NIP-55) o con una clave; tema claro y oscuro, 8 idiomas
 
 <b>Propinas en Monero</b>
-• Da propina a una nota o a un perfil desde tu propia app de cartera (Monerujo, Cake, Feather …) mediante un enlace monero:
+• Da propina a una nota o a un perfil desde tu propia app de cartera (monfluo, Monerujo, Cake …) mediante un enlace monero:
 • monostr no tiene cartera ni clave de gasto
 • Para recibir propinas registras tu dirección y tu clave privada de visualización en un watcher (watcher.monostr.com por defecto, o el tuyo). El watcher ve tus pagos entrantes y publica recibos firmados en Nostr, para que todos vean la propina en la nota
 • Las propinas anónimas son posibles

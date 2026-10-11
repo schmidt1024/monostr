@@ -251,6 +251,9 @@
     <string name="settings_media_blur_hint">Notas marcadas como sensíveis (content warning ou #nsfw) mostram as imagens desfocadas até você tocar.</string>
     <string name="settings_media_on_tap">Carregar imagens só ao tocar</string>
     <string name="settings_media_on_tap_hint">Economiza dados; vídeos nunca carregam sozinhos.</string>
+    <string name="settings_link_previews">Pré-visualização de links</string>
+    <string name="settings_link_previews_hint">Mostra o título e a imagem das páginas vinculadas. Esses sites e os servidores das imagens verão seu endereço IP.</string>
+    <string name="link_preview_cd">Pré-visualização do link: %1$s, %2$s</string>
     <string name="settings_author_relays">Conectar temporariamente os relays do autor</string>
     <string name="settings_author_relays_hint">Ao abrir um perfil, as notas também são buscadas nos relays dessa pessoa. O relay vê seu endereço IP e qual perfil você abre.</string>
     <string name="settings_pow">Prova de trabalho</string>

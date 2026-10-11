@@ -100,6 +100,7 @@ header { display: flex; flex-direction: column; align-items: center; gap: 1.25re
 .button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
 .button.primary small { color: var(--on-accent); opacity: 0.8; }
 .button.pending { cursor: default; }
+.applink { font-size: 0.85rem; color: var(--muted); }
 
 h2 { font-size: 1.15rem; margin-bottom: 0.75rem; }
 p + p, ol + p, ul + p { margin-top: 0.6rem; }
@@ -137,6 +138,8 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
             <a class="button" href="https://github.com/schmidt1024/monostr/releases/latest">GitHub<small>APK, also via Obtainium</small></a>
             <span class="button pending">F-Droid<small>in review</small></span>
         </div>
+        <!-- the Zapstore app (1.0.1) catches zapstore.dev/apps links and cannot route them; market:// opens it right -->
+        <p class="applink">Zapstore already installed? <a href="market://details?id=com.monostr.app">Open in the app</a></p>
     </header>
 
     <section class="shots" aria-label="Screenshots">
@@ -147,7 +150,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
     <section>
         <h2>How a tip works</h2>
         <ol>
-            <li>Tap the Monero sign under a note or on a profile and pick an amount. Your own wallet app (Monerujo, Cake, Feather …) opens with the payment.</li>
+            <li>Tap the Monero sign under a note or on a profile and pick an amount. Your own wallet app (monfluo, Monerujo, Cake …) opens with the payment.</li>
             <li>The recipient has registered their address and private view key with a watcher. The view key lets it see incoming payments; it can never spend them.</li>
             <li>The watcher publishes a signed receipt on Nostr, and the tip shows under the note.</li>
         </ol>

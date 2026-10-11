@@ -1,0 +1,2 @@
+• Pré-visualização de links nas notas (desligada por padrão; Configurações → Pré-visualização de links)
+• Prova de trabalho ligada por padrão com 8 bits; opções Não, 8, 16, 20 (Configurações → Prova de trabalho)

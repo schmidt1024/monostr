@@ -1,0 +1,2 @@
+• Link previews for web links in notes (off by default; Settings → Link previews)
+• Proof of work now on by default at 8 bits; choices Off, 8, 16, 20 (Settings → Proof of work)

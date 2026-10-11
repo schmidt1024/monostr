@@ -82,4 +82,29 @@ class UiSettingsStoreTest {
         assertEquals(MediaServer.DEFAULT, settings.mediaServer.first())
         scope.cancel()
     }
+
+    @Test
+    fun `link previews are off by default and round-trip`() = runTest {
+        val settings = PrefsUiSettingsStore(store())
+        assertFalse(settings.linkPreviews.first())
+        settings.setLinkPreviews(true)
+        assertTrue(settings.linkPreviews.first())
+        settings.setLinkPreviews(false)
+        assertFalse(settings.linkPreviews.first())
+    }
+
+    @Test
+    fun `proof of work is 8 bits by default, off stays off and an old 24 becomes 20`() = runTest {
+        // user 2026-10-11: a small PoW on every note by default (Off · 8 · 16 · 20), still switchable off
+        val data = store()
+        val settings = PrefsUiSettingsStore(data)
+        assertEquals(listOf(0, 8, 16, 20), POW_CHOICES)
+        assertEquals(8, settings.powBits.first())
+        settings.setPowBits(0)
+        assertEquals(0, settings.powBits.first())
+        data.edit { it[androidx.datastore.preferences.core.intPreferencesKey("ui.pow_bits")] = 24 }
+        assertEquals(20, settings.powBits.first())
+        settings.setPowBits(13)
+        assertEquals(8, settings.powBits.first())
+    }
 }

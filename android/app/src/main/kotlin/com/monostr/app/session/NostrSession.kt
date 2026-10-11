@@ -1,5 +1,6 @@
 package com.monostr.app.session
 
+import com.monostr.app.data.linkpreview.LinkPreviews
 import com.monostr.nostr.repo.NostrOwnReactions
 import com.monostr.nostr.repo.OwnReactions
 import android.content.Context
@@ -190,6 +191,7 @@ class NostrSession @Inject constructor(
     private val dmSettings: DmSettingsStore,
     private val hints: HintStore,
     private val uiSettings: UiSettingsStore,
+    private val linkPreviews: LinkPreviews,
 ) {
     private val _state = MutableStateFlow<SessionState>(SessionState.Loading)
     val state: StateFlow<SessionState> = _state.asStateFlow()
@@ -278,6 +280,8 @@ class NostrSession @Inject constructor(
             ready?.engine?.close()
         } finally {
             MediaReveals.clear()
+            // the next account must not see which links this one opened (spec link previews 3.4)
+            bestEffort { linkPreviews.clear() }
             // a run in flight is cancelled too; the next login schedules the check again
             bestEffort { DmCheckWorker.cancel(context) }
             bestEffort { DmNotifier(context).cancelAll() }

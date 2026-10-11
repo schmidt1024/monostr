@@ -1,5 +1,10 @@
 package com.monostr.app.nav
 
+import com.monostr.app.data.linkpreview.PreviewImages
+import com.monostr.app.ui.media.LocalPreviewImageLoader
+import com.monostr.app.data.linkpreview.LinkPreviews
+import com.monostr.app.ui.media.LinkPreviewLoader
+import com.monostr.app.ui.media.LocalLinkPreviewLoader
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -84,8 +89,8 @@ object Routes {
 
 /** Spec 3.2/3.4: how the note cards treat media, from UiSettingsStore, provided once for the whole nav host. */
 @HiltViewModel
-class MediaSettingsViewModel @Inject constructor(ui: UiSettingsStore) : ViewModel() {
-    val settings: StateFlow<MediaSettings> = combine(ui.blurSensitive, ui.mediaOnTap) { b, t -> MediaSettings(b, t) }
+class MediaSettingsViewModel @Inject constructor(ui: UiSettingsStore, val linkPreviews: LinkPreviews, val previewImages: PreviewImages) : ViewModel() {
+    val settings: StateFlow<MediaSettings> = combine(ui.blurSensitive, ui.mediaOnTap, ui.linkPreviews) { b, t, l -> MediaSettings(b, t, l) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, MediaSettings())
 }
 
@@ -116,6 +121,7 @@ private fun LoggedInNavHost(ready: Ready, gate: OnboardingGateViewModel = hiltVi
     val mediaSettings by media.settings.collectAsState()
     // one loader per logged-in account; a new login gets a new Ready and so a new loader
     val quoteLoader = remember(ready) { QuoteLoader(ready.quotes, ready.profiles, ready.muted) }
+    val linkPreviewLoader = remember(ready) { LinkPreviewLoader(media.linkPreviews, ready.muted, ready.mute.state) }
     var introShown by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(showIntro) {
         if (showIntro == true && !introShown) {
@@ -144,7 +150,7 @@ private fun LoggedInNavHost(ready: Ready, gate: OnboardingGateViewModel = hiltVi
     val onMessages: () -> Unit = { nav.navigate(Routes.MESSAGES) { popUpTo(Routes.FEED); launchSingleTop = true } }
     // spec 11.1: bookmarks are a tab, so they navigate like the other tabs
     val onBookmarks: () -> Unit = { nav.navigate(Routes.BOOKMARKS) { popUpTo(Routes.FEED); launchSingleTop = true } }
-    CompositionLocalProvider(LocalMediaSettings provides mediaSettings, LocalQuoteLoader provides quoteLoader) {
+    CompositionLocalProvider(LocalMediaSettings provides mediaSettings, LocalQuoteLoader provides quoteLoader, LocalLinkPreviewLoader provides linkPreviewLoader, LocalPreviewImageLoader provides media.previewImages.loader) {
         NavHost(navController = nav, startDestination = Routes.FEED) {
             composable(Routes.FEED) {
                 FeedScreen(

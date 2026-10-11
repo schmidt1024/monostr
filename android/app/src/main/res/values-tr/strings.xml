@@ -250,6 +250,9 @@
     <string name="settings_media_blur_hint">Hassas işaretli notlar (content warning veya #nsfw) dokunana kadar bulanık görsel gösterir.</string>
     <string name="settings_media_on_tap">Görselleri yalnızca dokununca yükle</string>
     <string name="settings_media_on_tap_hint">Veri tasarrufu sağlar; videolar hiçbir zaman kendiliğinden yüklenmez.</string>
+    <string name="settings_link_previews">Bağlantı önizlemeleri</string>
+    <string name="settings_link_previews_hint">Bağlantı verilen sayfaların başlığını ve görselini gösterir. Bu siteler ve görsellerinin sunucuları IP adresinizi görür.</string>
+    <string name="link_preview_cd">Bağlantı önizlemesi: %1$s, %2$s</string>
     <string name="settings_author_relays">Yazarın rölelerini geçici olarak bağla</string>
     <string name="settings_author_relays_hint">Bir profil açıldığında notlar o kişinin kendi rölelerinden de alınır. Röle IP adresinizi ve kimin profilini açtığınızı görür.</string>
     <string name="settings_pow">İş ispatı</string>

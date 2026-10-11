@@ -10,7 +10,7 @@ monostr, Monero ile bahşiş verilebilen bir Android Nostr istemcisidir.
 • Amber (NIP-55) veya anahtarla giriş; açık ve koyu tema, 8 dil
 
 <b>Monero ile bahşiş</b>
-• Bir nota veya profile kendi cüzdan uygulamandan (Monerujo, Cake, Feather …) monero: bağlantısıyla bahşiş ver
+• Bir nota veya profile kendi cüzdan uygulamandan (monfluo, Monerujo, Cake …) monero: bağlantısıyla bahşiş ver
 • monostr'da cüzdan ve harcama anahtarı yoktur
 • Bahşiş almak için adresini ve özel görüntüleme anahtarını bir watcher'a kaydedersin (varsayılan watcher.monostr.com ya da kendi watcher'ın). Watcher gelen ödemelerini görür ve imzalı bahşiş makbuzlarını Nostr'da yayımlar; böylece herkes bahşişi notta görür
 • Anonim bahşiş mümkündür

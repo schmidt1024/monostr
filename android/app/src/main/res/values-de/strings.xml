@@ -250,6 +250,9 @@
     <string name="settings_media_blur_hint">Notes mit Warnhinweis (content warning oder #nsfw) zeigen Bilder verschwommen, bis du tippst.</string>
     <string name="settings_media_on_tap">Bilder nur auf Tippen laden</string>
     <string name="settings_media_on_tap_hint">Spart Daten; Videos werden nie automatisch geladen.</string>
+    <string name="settings_link_previews">Linkvorschauen</string>
+    <string name="settings_link_previews_hint">Zeigt Titel und Bild verlinkter Seiten. Diese Seiten und die Server ihrer Bilder sehen dann deine IP-Adresse.</string>
+    <string name="link_preview_cd">Linkvorschau: %1$s, %2$s</string>
     <string name="settings_author_relays">Relays des Autors temporär verbinden</string>
     <string name="settings_author_relays_hint">Beim Öffnen eines Profils werden Notes auch von den eigenen Relays dieser Person geholt. Das Relay sieht deine IP-Adresse und wessen Profil du öffnest.</string>
     <string name="settings_pow">Proof of Work</string>

@@ -165,5 +165,5 @@ class NostrPublishRepository(
 /** The content of a plain like (NIP-25). */
 const val LIKE = "+"
 
-/** The highest proof of work the app asks for (Settings offer 16, 20, 24 bits). */
+/** The highest proof of work the app asks for (Settings offer 8, 16, 20 bits; older installs may have stored 24). */
 const val MAX_POW = 24

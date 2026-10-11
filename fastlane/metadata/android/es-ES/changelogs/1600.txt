@@ -1,0 +1,2 @@
+• Vista previa de enlaces web en las notas (desactivada por defecto; Ajustes → Vista previa de enlaces)
+• Prueba de trabajo activada por defecto con 8 bits; opciones No, 8, 16, 20 (Ajustes → Prueba de trabajo)

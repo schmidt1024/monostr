@@ -1,0 +1,2 @@
+• Aperçus des liens web dans les notes (désactivés par défaut ; Paramètres → Aperçus des liens)
+• Preuve de travail activée par défaut à 8 bits ; choix Non, 8, 16, 20 (Paramètres → Preuve de travail)

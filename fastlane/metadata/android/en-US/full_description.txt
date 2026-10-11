@@ -10,7 +10,7 @@ monostr is a Nostr client for Android with tips in Monero.
 • Sign in with Amber (NIP-55) or a key; light and dark theme, 8 languages
 
 <b>Tips in Monero</b>
-• Tip a note or a profile from your own wallet app (Monerujo, Cake, Feather …) through a monero: link
+• Tip a note or a profile from your own wallet app (monfluo, Monerujo, Cake …) through a monero: link
 • monostr holds no wallet and no spend key
 • To receive tips you register your address and private view key with a watcher (watcher.monostr.com by default, or your own). The watcher sees your incoming payments and publishes signed tip receipts on Nostr, so everybody sees the tip on the note
 • Anonymous tips are possible

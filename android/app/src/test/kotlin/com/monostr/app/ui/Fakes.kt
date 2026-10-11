@@ -459,6 +459,9 @@ class FakeUiSettings : UiSettingsStore {
     override suspend fun setCustomHue(hue: Float) { customHueState.value = hue }
     override suspend fun setBlurSensitive(on: Boolean) { blurSensitiveState.value = on }
     override suspend fun setMediaOnTap(on: Boolean) { mediaOnTapState.value = on }
+    val linkPreviewsState = MutableStateFlow(false)
+    override val linkPreviews: Flow<Boolean> = linkPreviewsState
+    override suspend fun setLinkPreviews(on: Boolean) { linkPreviewsState.value = on }
     override suspend fun setAuthorRelays(on: Boolean) { authorRelaysState.value = on }
     val clientTagState = MutableStateFlow(true)
     override val clientTag: Flow<Boolean> = clientTagState

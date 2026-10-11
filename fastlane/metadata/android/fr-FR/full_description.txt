@@ -10,7 +10,7 @@ monostr est un client Nostr pour Android avec des pourboires en Monero.
 • Connexion avec Amber (NIP-55) ou une clé ; thème clair et sombre, 8 langues
 
 <b>Pourboires en Monero</b>
-• Donnez un pourboire à une note ou à un profil depuis votre propre portefeuille (Monerujo, Cake, Feather …) via un lien monero:
+• Donnez un pourboire à une note ou à un profil depuis votre propre portefeuille (monfluo, Monerujo, Cake …) via un lien monero:
 • monostr ne contient ni portefeuille ni clé de dépense
 • Pour recevoir des pourboires, vous enregistrez votre adresse et votre clé d'audit privée auprès d'un watcher (watcher.monostr.com par défaut, ou le vôtre). Le watcher voit vos paiements entrants et publie des reçus signés sur Nostr, pour que chacun voie le pourboire sous la note
 • Les pourboires anonymes sont possibles

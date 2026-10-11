@@ -10,7 +10,7 @@ monostr é um cliente Nostr para Android com gorjetas em Monero.
 • Login com Amber (NIP-55) ou com uma chave; tema claro e escuro, 8 idiomas
 
 <b>Gorjetas em Monero</b>
-• Dê gorjeta a uma nota ou a um perfil pelo seu próprio app de carteira (Monerujo, Cake, Feather …) via link monero:
+• Dê gorjeta a uma nota ou a um perfil pelo seu próprio app de carteira (monfluo, Monerujo, Cake …) via link monero:
 • O monostr não tem carteira nem chave de gasto
 • Para receber gorjetas, você registra seu endereço e sua chave de visualização privada em um watcher (watcher.monostr.com por padrão, ou o seu). O watcher vê seus pagamentos recebidos e publica recibos assinados no Nostr, para que todos vejam a gorjeta na nota
 • Gorjetas anônimas são possíveis

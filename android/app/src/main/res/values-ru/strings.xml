@@ -254,6 +254,9 @@
     <string name="settings_media_blur_hint">Заметки с пометкой (content warning или #nsfw) показывают размытые изображения до нажатия.</string>
     <string name="settings_media_on_tap">Загружать изображения только по нажатию</string>
     <string name="settings_media_on_tap_hint">Экономит трафик; видео никогда не загружается само.</string>
+    <string name="settings_link_previews">Превью ссылок</string>
+    <string name="settings_link_previews_hint">Показывает заголовок и картинку страниц по ссылкам. Эти сайты и серверы их картинок увидят ваш IP-адрес.</string>
+    <string name="link_preview_cd">Превью ссылки: %1$s, %2$s</string>
     <string name="settings_author_relays">Временно подключать релеи автора</string>
     <string name="settings_author_relays_hint">При открытии профиля заметки берутся и с собственных релеев этого человека. Релей видит ваш IP-адрес и чей профиль вы открываете.</string>
     <string name="settings_pow">Доказательство работы</string>

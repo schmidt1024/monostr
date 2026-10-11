@@ -254,6 +254,9 @@
     <string name="settings_media_blur_hint">Notes marked as sensitive (content warning or #nsfw) show blurred pictures until tapped.</string>
     <string name="settings_media_on_tap">Load pictures only on tap</string>
     <string name="settings_media_on_tap_hint">Saves data; videos never load automatically.</string>
+    <string name="settings_link_previews">Link previews</string>
+    <string name="settings_link_previews_hint">Shows title and picture of linked pages. Those sites, and the servers of their pictures, then see your IP address.</string>
+    <string name="link_preview_cd">Link preview: %1$s, %2$s</string>
     <string name="settings_author_relays">Connect the author\'s relays temporarily</string>
     <string name="settings_author_relays_hint">When you open a profile, notes are also fetched from that person\'s own relays. The relay sees your IP address and whose profile you open.</string>
     <string name="settings_pow">Proof of work</string>

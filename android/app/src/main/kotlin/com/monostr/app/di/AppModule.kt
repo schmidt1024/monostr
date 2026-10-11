@@ -1,5 +1,10 @@
 package com.monostr.app.di
 
+import com.monostr.app.data.linkpreview.PreviewImages
+import com.monostr.app.BuildConfig
+import com.monostr.app.data.linkpreview.LinkPreviewFetcher
+import com.monostr.app.data.linkpreview.LinkPreviews
+import java.io.File
 import android.content.Context
 import com.monostr.app.data.*
 import com.monostr.nostr.nip55.SignerBridge
@@ -28,4 +33,8 @@ object AppModule {
     @Provides @Singleton fun hints(@ApplicationContext ctx: Context): HintStore = PrefsHintStore(ctx.monostrPrefs)
     /** One client for all watchers; no logging interceptor (the register body carries the view key). */
     @Provides @Singleton fun okHttp(): OkHttpClient = OkHttpClient.Builder().connectTimeout(10, TimeUnit.SECONDS).readTimeout(15, TimeUnit.SECONDS).build()
+    /** Spec link previews 3.4: one cache for the app; the fetcher shares the app's OkHttp pool but has its own limits. */
+    @Provides @Singleton fun linkPreviews(@ApplicationContext ctx: Context, http: OkHttpClient): LinkPreviews =
+        LinkPreviews(LinkPreviewFetcher(http, "monostr/${BuildConfig.VERSION_NAME} (+https://monostr.com)")::fetch, File(ctx.cacheDir, "link-previews"))
+    @Provides @Singleton fun previewImages(@ApplicationContext ctx: Context, http: OkHttpClient): PreviewImages = PreviewImages.create(ctx, http)
 }

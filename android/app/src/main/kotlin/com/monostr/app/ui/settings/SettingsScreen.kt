@@ -1,6 +1,7 @@
 package com.monostr.app.ui.settings
 
 import com.monostr.app.data.POW_CHOICES
+import com.monostr.app.data.POW_DEFAULT
 import androidx.compose.ui.platform.LocalUriHandler
 import com.monostr.app.data.AmountUnit
 import androidx.compose.material3.SegmentedButton
@@ -230,6 +231,8 @@ class SettingsViewModel @Inject constructor(
     val customHue: StateFlow<Float> = uiSettings.customHue.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AccentSeed.DEFAULT_HUE)
     val blurSensitive: StateFlow<Boolean> = uiSettings.blurSensitive.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
     val mediaOnTap: StateFlow<Boolean> = uiSettings.mediaOnTap.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+    val linkPreviews: StateFlow<Boolean> = uiSettings.linkPreviews.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+    fun setLinkPreviews(on: Boolean) = viewModelScope.launch { uiSettings.setLinkPreviews(on) }
     val authorRelays: StateFlow<Boolean> = uiSettings.authorRelays.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
     fun setThemeMode(mode: ThemeMode) = viewModelScope.launch { uiSettings.setThemeMode(mode) }
     fun setAccent(accent: Accent) = viewModelScope.launch { uiSettings.setAccent(accent) }
@@ -241,7 +244,7 @@ class SettingsViewModel @Inject constructor(
     fun setClientTag(on: Boolean) = viewModelScope.launch { uiSettings.setClientTag(on) }
     val primalStats: StateFlow<Boolean> = uiSettings.primalStats.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
     fun setPrimalStats(on: Boolean) = viewModelScope.launch { uiSettings.setPrimalStats(on) }
-    val powBits: StateFlow<Int> = uiSettings.powBits.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+    val powBits: StateFlow<Int> = uiSettings.powBits.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), POW_DEFAULT)
     fun setPowBits(bits: Int) = viewModelScope.launch { uiSettings.setPowBits(bits) }
     val quickReactions: StateFlow<List<String>> = uiSettings.quickReactions.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), Reactions.QUICK)
     fun setQuickReactions(list: List<String>) = viewModelScope.launch { uiSettings.setQuickReactions(list) }
@@ -346,6 +349,8 @@ fun SettingsScreen(onBack: () -> Unit, onMoneroSetup: () -> Unit, onSupport: () 
             val onTap by vm.mediaOnTap.collectAsStateWithLifecycle()
             SettingSwitch(stringResource(R.string.settings_media_blur), stringResource(R.string.settings_media_blur_hint), blur, vm::setBlurSensitive, "settings-media-blur")
             SettingSwitch(stringResource(R.string.settings_media_on_tap), stringResource(R.string.settings_media_on_tap_hint), onTap, vm::setMediaOnTap, "settings-media-on-tap")
+            val previews by vm.linkPreviews.collectAsStateWithLifecycle()
+            SettingSwitch(stringResource(R.string.settings_link_previews), stringResource(R.string.settings_link_previews_hint), previews, vm::setLinkPreviews, "settings-link-previews")
             val mediaServer by vm.mediaServer.collectAsStateWithLifecycle()
             Spacer(Modifier.height(8.dp))
             MediaServerSetting(mediaServer, onSave = vm::setMediaServer, onReset = { vm.resetMediaServer() })

@@ -43,6 +43,8 @@ interface UiSettingsStore {
     val blurSensitive: Flow<Boolean>
     /** Spec 3.2: never load pictures until tapped. */
     val mediaOnTap: Flow<Boolean>
+    /** Spec link previews 3.5: cards for web links in notes; off by default, the linked site sees the IP. */
+    val linkPreviews: Flow<Boolean>
     /** Spec 5.2: attach an author's write relays while their profile is open. */
     val authorRelays: Flow<Boolean>
     /** Spec 5.4 (Plan 10e): the Blossom server pictures are uploaded to; never empty. */
@@ -64,6 +66,7 @@ interface UiSettingsStore {
     suspend fun setAccent(accent: Accent)
     suspend fun setBlurSensitive(on: Boolean)
     suspend fun setMediaOnTap(on: Boolean)
+    suspend fun setLinkPreviews(on: Boolean)
     suspend fun setAuthorRelays(on: Boolean)
     suspend fun setMediaServer(url: String)
     suspend fun setCustomHue(hue: Float)
@@ -81,14 +84,15 @@ class PrefsUiSettingsStore(private val store: DataStore<Preferences>) : UiSettin
     override val accent: Flow<Accent> = data.map { p -> p[ACCENT]?.let { v -> Accent.entries.firstOrNull { it.name == v } ?: if (v in Accent.LEGACY_HUES) Accent.CUSTOM else null } ?: Accent.DEFAULT }
     override val blurSensitive: Flow<Boolean> = data.map { it[BLUR_SENSITIVE] ?: true }
     override val mediaOnTap: Flow<Boolean> = data.map { it[MEDIA_ON_TAP] ?: false }
+    override val linkPreviews: Flow<Boolean> = data.map { it[LINK_PREVIEWS] ?: false }
     override val authorRelays: Flow<Boolean> = data.map { it[AUTHOR_RELAYS] ?: true }
     override val mediaServer: Flow<String> = data.map { it[MEDIA_SERVER]?.takeIf { v -> v.isNotBlank() } ?: MediaServer.DEFAULT }
     override val clientTag: Flow<Boolean> = data.map { it[CLIENT_TAG] ?: true }
     override val primalStats: Flow<Boolean> = data.map { it[PRIMAL_STATS] ?: true }
     override val feedWithReplies: Flow<Boolean> = data.map { it[FEED_WITH_REPLIES] ?: false }
     override val quickReactions: Flow<List<String>> = data.map { Reactions.decode(it[QUICK_REACTIONS]) }
-    override val powBits: Flow<Int> = data.map { p -> p[POW_BITS]?.takeIf { it in POW_CHOICES } ?: 0 }
-    override suspend fun setPowBits(bits: Int) { store.edit { it[POW_BITS] = if (bits in POW_CHOICES) bits else 0 } }
+    override val powBits: Flow<Int> = data.map { p -> p[POW_BITS]?.let { powChoice(it) } ?: POW_DEFAULT }
+    override suspend fun setPowBits(bits: Int) { store.edit { it[POW_BITS] = powChoice(bits) } }
     override val customHue: Flow<Float> = data.map { p -> p[CUSTOM_HUE]?.takeIf { h -> h >= 0f && h < 360f } ?: Accent.LEGACY_HUES[p[ACCENT]] ?: AccentSeed.DEFAULT_HUE }
 
     override suspend fun setThemeMode(mode: ThemeMode) { store.edit { it[THEME_MODE] = mode.name } }
@@ -96,6 +100,7 @@ class PrefsUiSettingsStore(private val store: DataStore<Preferences>) : UiSettin
     override suspend fun setCustomHue(hue: Float) { store.edit { it[CUSTOM_HUE] = if (hue >= 0f && hue < 360f) hue else AccentSeed.DEFAULT_HUE } }
     override suspend fun setBlurSensitive(on: Boolean) { store.edit { it[BLUR_SENSITIVE] = on } }
     override suspend fun setMediaOnTap(on: Boolean) { store.edit { it[MEDIA_ON_TAP] = on } }
+    override suspend fun setLinkPreviews(on: Boolean) { store.edit { it[LINK_PREVIEWS] = on } }
     override suspend fun setAuthorRelays(on: Boolean) { store.edit { it[AUTHOR_RELAYS] = on } }
     override suspend fun setMediaServer(url: String) { store.edit { it[MEDIA_SERVER] = url } }
     override suspend fun setClientTag(on: Boolean) { store.edit { it[CLIENT_TAG] = on } }
@@ -116,10 +121,17 @@ class PrefsUiSettingsStore(private val store: DataStore<Preferences>) : UiSettin
         val POW_BITS = intPreferencesKey("ui.pow_bits")
         val BLUR_SENSITIVE = booleanPreferencesKey("ui.blur_sensitive")
         val MEDIA_ON_TAP = booleanPreferencesKey("ui.media_on_tap")
+        val LINK_PREVIEWS = booleanPreferencesKey("ui.link_previews")
         val AUTHOR_RELAYS = booleanPreferencesKey("ui.author_relays")
         val MEDIA_SERVER = stringPreferencesKey("ui.media_server")
     }
 }
 
 /** The proof-of-work choices of the settings: off and three difficulties (NIP-13). */
-val POW_CHOICES = listOf(0, 16, 20, 24)
+val POW_CHOICES = listOf(0, 8, 16, 20)
+
+/** User 2026-10-11: every note carries a little PoW unless switched off; 8 bits cost milliseconds. */
+const val POW_DEFAULT = 8
+
+/** The highest choice not above [bits] (an old 24 becomes 20, anything below 8 is off). */
+fun powChoice(bits: Int): Int = POW_CHOICES.last { it <= bits.coerceAtLeast(0) }
