@@ -1,0 +1,5 @@
+• Appearance: Dark is now the monostr grey, new Black for OLED screens
+• Proof of work for notes (NIP-13), off by default
+• "Unlock" links for the paid Monero relays
+• Website field in the profile
+• Older own likes and reposts show filled too

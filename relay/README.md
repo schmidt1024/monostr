@@ -1,5 +1,8 @@
 # relay.monostr.com
 
+> Öffentliches Repository: `deploy.sh` und `ops/` (Hosts, Cron, Backups) bleiben im privaten Repository. Ein eigenes Deployment braucht nur die `compose.yml` hier, eine `.env` und `docker compose up -d` auf dem Host.
+
+
 Öffentliches Nostr-Relay (strfry) hinter Caddy auf einem eigenen Hetzner-VPS
 (relay.monostr.com). Design: `docs/superpowers/specs/2026-09-28-plan-8b-relay-move-design.md`;
 Relay-Policy (offen, Größen-/Filter-Limits, Retention) aus

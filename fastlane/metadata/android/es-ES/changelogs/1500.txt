@@ -1,0 +1,5 @@
+• Apariencia: Oscuro ahora es el gris de monostr, nuevo Negro para pantallas OLED
+• Prueba de trabajo para notas (NIP-13), desactivada por defecto
+• Enlaces «Activar» para los relays de Monero de pago
+• Campo de sitio web en el perfil
+• También los me gusta y republicaciones antiguos aparecen rellenos

@@ -40,7 +40,8 @@ android {
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             // phones only: the JNA/rust-nostr AARs also ship x86/x86_64/mips/armeabi, ~12 MB nobody installs on a phone
             ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
-            if (releaseStoreFile != null) signingConfig = signingConfigs.getByName("release")
+            // findByName: F-Droid strips the signingConfigs block; with stray MONOSTR_* properties the build stays unsigned instead of failing
+            if (releaseStoreFile != null) signingConfigs.findByName("release")?.let { signingConfig = it }
             // reproducible builds: no commit hash of the (private) checkout in META-INF
             vcsInfo.include = false
         }

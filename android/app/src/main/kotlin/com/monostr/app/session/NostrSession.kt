@@ -369,7 +369,7 @@ class NostrSession @Inject constructor(
             val authorRelays = NostrAuthorRelaysRepository(engine)
             // NIP-89 "via Monostr": read from the store at publish time (not a stateIn with a seed), so a
             // note published before the first emission cannot carry the tag against the user's choice
-            val publish = NostrPublishRepository(engine, indexRelays = NostrAuthorRelaysRepository.INDEXERS, clientTag = { uiSettings.clientTag.first() })
+            val publish = NostrPublishRepository(engine, indexRelays = NostrAuthorRelaysRepository.INDEXERS, clientTag = { uiSettings.clientTag.first() }, powBits = { uiSettings.powBits.first() })
             val dmRelays = NostrDmRelaysRepository(engine, authorRelays)
             val dms = DmSync(
                 NostrDmRepository(engine), dmRelays, dmStore, dmSettings, publish,
@@ -390,7 +390,7 @@ class NostrSession @Inject constructor(
             // Primal's cache has every contact list ever indexed: the number other clients show; the relays' COUNTs stay as a floor
             // read per lookup (privacy setting: never a seeded default); a switch counts every profile afresh
             // the database at once, the relays' latest behind it (a new install, another client)
-            val ownReactions = NostrOwnReactions(engine)
+            val ownReactions = NostrOwnReactions(engine, scope = engine.backgroundScope)
             engine.backgroundScope.launch { bestEffort { ownReactions.load() } }
             val followCounts = NostrFollowCountsRepository(engine, indexers = listOf(PrimalStats(http, enabled = { uiSettings.primalStats.first() })))
             engine.backgroundScope.launch { uiSettings.primalStats.drop(1).collect { followCounts.invalidateAll() } }

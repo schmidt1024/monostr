@@ -248,6 +248,7 @@
     <string name="settings_suggested_relays">Рекомендуемые релеи</string>
     <string name="settings_suggested_relays_hint">Платные Monero-релеи: чтение бесплатно, публикация после разового платежа в XMR на сайте релея. Источник: pmnr.xmr.rocks</string>
     <string name="settings_suggested_relay_fee">Платный Monero-релей · %1$s XMR за публикацию</string>
+    <string name="settings_relay_signup">Активировать</string>
     <string name="settings_media">Медиа</string>
     <string name="settings_media_blur">Скрывать чувствительные медиа</string>
     <string name="settings_media_blur_hint">Заметки с пометкой (content warning или #nsfw) показывают размытые изображения до нажатия.</string>
@@ -255,6 +256,10 @@
     <string name="settings_media_on_tap_hint">Экономит трафик; видео никогда не загружается само.</string>
     <string name="settings_author_relays">Временно подключать релеи автора</string>
     <string name="settings_author_relays_hint">При открытии профиля заметки берутся и с собственных релеев этого человека. Релей видит ваш IP-адрес и чей профиль вы открываете.</string>
+    <string name="settings_pow">Доказательство работы</string>
+    <string name="settings_pow_hint">Некоторые релеи принимают заметки только с доказательством работы (NIP-13). Больше бит — шире приём, но отправка дольше.</string>
+    <string name="settings_pow_off">Выкл.</string>
+    <string name="settings_pow_bits">%1$d бит</string>
     <string name="settings_client_tag">Показывать «via monostr»</string>
     <string name="settings_client_tag_hint">Заметки, лайки и репосты содержат тег клиента, который другие приложения показывают как «via monostr».</string>
     <string name="settings_primal_stats">Подписчики через Primal</string>
@@ -297,6 +302,7 @@
     <string name="settings_theme_system">Системная</string>
     <string name="settings_theme_light">Светлая</string>
     <string name="settings_theme_dark">Тёмная</string>
+    <string name="settings_theme_black">Чёрная</string>
     <string name="settings_accent">Акцентный цвет</string>
     <string name="settings_accent_mono">Моно</string>
     <string name="settings_accent_orange">Оранжевый</string>
@@ -414,6 +420,8 @@
     <string name="profile_edit_name">Имя</string>
     <string name="profile_edit_about">О себе</string>
     <string name="profile_edit_nip05">Адрес NIP-05</string>
+    <string name="profile_edit_website">Сайт</string>
+    <string name="profile_website_invalid">Это не веб-адрес</string>
     <string name="profile_edit_save">Сохранить</string>
     <string name="profile_edit_no_profile">На ваших релеях не найден существующий профиль. При сохранении будет создан новый.</string>
     <string name="profile_save_failed">Не удалось сохранить профиль</string>

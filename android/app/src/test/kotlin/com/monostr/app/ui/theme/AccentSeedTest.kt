@@ -20,12 +20,12 @@ class AccentSeedTest {
     fun `every hue reads in both modes`() {
         for (h in 0 until 360 step 15) {
             val seed = AccentSeed.fromHue(h.toFloat())
-            for (dark in listOf(false, true)) {
-                val t = AccentPalette.tokens(Accent.CUSTOM, dark, customSeed = seed)
-                val surface = if (dark) MonoColors.DarkSurface else MonoColors.LightSurface
-                assertTrue(Contrast.ratio(t.primary, surface) >= AccentPalette.primaryMin(dark), "hue $h dark=$dark primary")
-                assertTrue(Contrast.ratio(t.primary, t.onPrimary) >= AccentPalette.ON_PRIMARY_MIN, "hue $h dark=$dark label")
-                assertTrue(Contrast.ratio(t.primaryContainer, t.onPrimaryContainer) >= AccentPalette.CONTAINER_MIN, "hue $h dark=$dark container")
+            for ((dark, black) in listOf(false to false, true to false, true to true)) {
+                val t = AccentPalette.tokens(Accent.CUSTOM, dark, customSeed = seed, black = black)
+                val surface = if (dark) MonoColors.darkSurface(black) else MonoColors.LightSurface
+                assertTrue(Contrast.ratio(t.primary, surface) >= AccentPalette.primaryMin(dark, black), "hue $h dark=$dark black=$black primary")
+                assertTrue(Contrast.ratio(t.primary, t.onPrimary) >= AccentPalette.ON_PRIMARY_MIN, "hue $h dark=$dark black=$black label")
+                assertTrue(Contrast.ratio(t.primaryContainer, t.onPrimaryContainer) >= AccentPalette.CONTAINER_MIN, "hue $h dark=$dark black=$black container")
             }
         }
     }

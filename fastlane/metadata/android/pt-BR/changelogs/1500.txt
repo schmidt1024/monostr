@@ -1,0 +1,5 @@
+• Aparência: Escuro agora é o cinza do monostr, novo Preto para telas OLED
+• Prova de trabalho para notas (NIP-13), desligada por padrão
+• Links “Liberar” para os relays Monero pagos
+• Campo de site no perfil
+• Curtidas e reposts antigos também aparecem preenchidos

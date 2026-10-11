@@ -471,6 +471,9 @@ class FakeUiSettings : UiSettingsStore {
     override suspend fun setFeedWithReplies(on: Boolean) { feedWithRepliesState.value = on }
     val quickReactionsState = MutableStateFlow(com.monostr.app.ui.common.Reactions.QUICK)
     override val quickReactions: Flow<List<String>> = quickReactionsState
+    val powBitsState = MutableStateFlow(0)
+    override val powBits: Flow<Int> = powBitsState
+    override suspend fun setPowBits(bits: Int) { powBitsState.value = bits }
     override suspend fun setQuickReactions(list: List<String>) { quickReactionsState.value = list.ifEmpty { com.monostr.app.ui.common.Reactions.QUICK } }
 }
 

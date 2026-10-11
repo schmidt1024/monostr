@@ -257,7 +257,7 @@ class FeedController(
     fun visible(noteIds: List<String>) {
         val wanted = noteIds.toSet()
         val targets = _state.value.notes.filter { it.note.id in wanted }.map { it.target.id }
-        if (targets.isNotEmpty()) counts.request(targets)
+        if (targets.isNotEmpty()) { counts.request(targets); actions.check(targets) }
     }
 
     private fun onActionResult(message: UiText) {

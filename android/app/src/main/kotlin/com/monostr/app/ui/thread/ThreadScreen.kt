@@ -191,7 +191,7 @@ class ThreadController(
     fun visible(noteIds: List<String>) {
         val wanted = noteIds.toSet()
         val targets = _state.value.items.filter { it.note.id in wanted }.map { it.target.id }
-        if (targets.isNotEmpty()) counts.request(targets)
+        if (targets.isNotEmpty()) { counts.request(targets); actions.check(targets) }
     }
 
     private fun onActionResult(message: UiText) {

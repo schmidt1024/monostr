@@ -1,5 +1,8 @@
 package com.monostr.nostr.repo
 
+import rust.nostr.sdk.EventId
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.CoroutineScope
 import com.monostr.nostr.NostrEngine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,6 +30,9 @@ interface OwnReactions {
 
     /** Takes a mark back (a publish that failed). */
     fun remove(kind: Int, noteId: String)
+
+    /** Notes on screen: their own reactions and reposts are looked up, also older ones than [NostrOwnReactions.LIMIT] covers. */
+    fun check(noteIds: Collection<String>) {}
 }
 
 /** In memory only: tests, and screens built without a session. */
@@ -68,7 +74,29 @@ open class MemoryOwnReactions : OwnReactions {
 class NostrOwnReactions(
     private val engine: NostrEngine,
     private val limit: Int = LIMIT,
+    /** Where [check] runs its lookups; null (tests of [load] alone) skips them. */
+    private val scope: CoroutineScope? = null,
 ) : MemoryOwnReactions() {
+    private val checked: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
+    /**
+     * The newest [limit] own reactions come with [load]; a note on screen whose reaction is older is looked up
+     * here: once per note and session, in the database and then on the relays.
+     */
+    override fun check(noteIds: Collection<String>) {
+        val fresh = noteIds.filter { it !in _liked.value && it !in _reposted.value && checked.add(it) }
+        if (fresh.isEmpty()) return
+        if (checked.size > CHECKED_CAP) checked.clear()
+        val s = scope ?: return
+        s.launch {
+            for (chunk in fresh.chunked(CHUNK)) {
+                val filter = Filter().kinds(listOf(Kind(7u), Kind(6u))).author(PublicKey.parse(pubkey)).events(chunk.map { EventId.parse(it) })
+                merge(read(filter))
+                quietly { engine.fetch(filter) }
+                merge(read(filter))
+            }
+        }
+    }
     private val pubkey = requireNotNull(engine.pubkey) { "own reactions need a logged-in user" }
 
     suspend fun load(fetch: Boolean = true) {
@@ -105,7 +133,9 @@ class NostrOwnReactions(
         ev.tags().toVec().map { it.asVec() }.lastOrNull { it.size >= 2 && it[0] == "e" }?.get(1)
 
     companion object {
-        /** Own reactions read and fetched; older ones show empty until the note's own fetch brings them. */
+        /** Own reactions read and fetched at the start; older ones come with [check] when their note is on screen. */
         const val LIMIT = 2000
+        private const val CHUNK = 100
+        private const val CHECKED_CAP = 20_000
     }
 }

@@ -62,13 +62,17 @@ class NostrPublishRepository(
     private val indexRelays: List<String> = emptyList(),
     /** Whether a note, reply, quote, like or repost carries the NIP-89 [ClientTag] ("via Monostr"); the user's setting, off in tests. */
     private val clientTag: suspend () -> Boolean = { false },
+    /** NIP-13 proof of work for notes, replies and quotes, in leading zero bits; 0 = off (the default, and the user's setting). */
+    private val powBits: suspend () -> Int = { 0 },
 ) : PublishRepository {
+    /** [b] with the user's proof of work: rust-nostr mines the nonce when the event is built, before any signer sees it. */
+    private suspend fun withPow(b: EventBuilder): EventBuilder = powBits().takeIf { it > 0 }?.let { b.pow(it.coerceAtMost(MAX_POW).toUByte()) } ?: b
     /** The [ClientTag] for the kinds other clients attribute (1, 6, 7), when the user allows it; never on lists, the profile or deletions. */
     private suspend fun viaTag(): List<Tag> = if (clientTag()) listOf(ClientTag.tag()) else emptyList()
 
     // raw kind 1 builder: the tags are exactly the mentions, the hashtags and the attachments, nothing else is extracted from the content
     override suspend fun post(text: String, attachments: List<NoteAttachment>, sensitive: Boolean): PublishResult =
-        engine.signAndSend(EventBuilder(Kind(1u), NoteAttachment.content(text, attachments)).tags(MentionTags.from(text) + HashtagTags.from(text) + attachmentTags(attachments, sensitive) + viaTag()))
+        engine.signAndSend(withPow(EventBuilder(Kind(1u), NoteAttachment.content(text, attachments)).tags(MentionTags.from(text) + HashtagTags.from(text) + attachmentTags(attachments, sensitive) + viaTag())))
 
     override suspend fun reply(text: String, to: Note, attachments: List<NoteAttachment>, sensitive: Boolean): PublishResult {
         val parent = requireNotNull(engine.eventById(to.id)) { NOTE_NOT_IN_DATABASE }
@@ -77,7 +81,7 @@ class NostrPublishRepository(
         // the reply builder tags only the parent's author (not the parent's other p tags); every mention is added and dedupTags collapses repeats
         val mentions = MentionTags.pubkeys(text).map { Tag.parse(listOf("p", it)) }
         return engine.signAndSend(
-            EventBuilder.textNoteReply(NoteAttachment.content(text, attachments), parent, root, null).tags(mentions + HashtagTags.from(text) + attachmentTags(attachments, sensitive) + viaTag()).dedupTags(),
+            withPow(EventBuilder.textNoteReply(NoteAttachment.content(text, attachments), parent, root, null).tags(mentions + HashtagTags.from(text) + attachmentTags(attachments, sensitive) + viaTag()).dedupTags()),
         )
     }
 
@@ -88,7 +92,7 @@ class NostrPublishRepository(
         val content = if (body.isEmpty()) uri else "$body\n\n$uri"
         val tags = (listOf(listOf("q", of.id, hint ?: "", of.author), listOf("p", of.author)) + MentionTags.pubkeys(text).map { listOf("p", it) }).distinct()
         // raw kind 1 builder: exactly these tags and the hashtags, nothing else extracted from the content
-        return engine.signAndSend(EventBuilder(Kind(1u), content).tags(tags.map { Tag.parse(it) } + HashtagTags.from(text) + attachmentTags(attachments, sensitive) + viaTag()))
+        return engine.signAndSend(withPow(EventBuilder(Kind(1u), content).tags(tags.map { Tag.parse(it) } + HashtagTags.from(text) + attachmentTags(attachments, sensitive) + viaTag())))
     }
 
     private fun attachmentTags(attachments: List<NoteAttachment>, sensitive: Boolean): List<Tag> =
@@ -160,3 +164,6 @@ class NostrPublishRepository(
 
 /** The content of a plain like (NIP-25). */
 const val LIKE = "+"
+
+/** The highest proof of work the app asks for (Settings offer 16, 20, 24 bits). */
+const val MAX_POW = 24

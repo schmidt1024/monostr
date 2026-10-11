@@ -1,0 +1,5 @@
+• Apparence : Sombre devient le gris monostr, nouveau Noir pour les écrans OLED
+• Preuve de travail pour les notes (NIP-13), désactivée par défaut
+• Liens « Débloquer » pour les relais Monero payants
+• Champ site web dans le profil
+• Les anciens j’aime et republications apparaissent pleins aussi

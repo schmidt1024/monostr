@@ -11,4 +11,14 @@ object RelaySuggestions {
         RelaySuggestion("wss://nerostr.xmr.rocks", "0.01"),
         RelaySuggestion("wss://xmr.ithurtswhenip.ee", "0.007"),
     )
+
+    /**
+     * The page where a paid Monero relay takes the payment that adds an npub to its write list (all four run
+     * Nerostr, the page is the relay's host over https); null for any other relay. Launch feedback 2026-10-09.
+     */
+    fun signupUrl(relayUrl: String): String? {
+        val u = relayUrl.trim().trimEnd('/')
+        if (PAID_MONERO.none { it.url == u }) return null
+        return "https://" + u.removePrefix("wss://")
+    }
 }

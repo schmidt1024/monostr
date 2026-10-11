@@ -1,5 +1,6 @@
 package com.monostr.app.data
 
+import androidx.datastore.preferences.core.intPreferencesKey
 import com.monostr.app.ui.common.Reactions
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
@@ -14,7 +15,8 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 import java.io.IOException
 
-enum class ThemeMode { SYSTEM, LIGHT, DARK }
+/** DARK is the dark grey of the brand (banner, icon); BLACK is pure black for OLED screens (user 2026-10-11). */
+enum class ThemeMode { SYSTEM, LIGHT, DARK, BLACK }
 
 /** Spec 4.3: the accent only colours the primary tokens; MONO keeps the interface black and white. */
 enum class Accent(val seedArgb: Long) {
@@ -55,6 +57,9 @@ interface UiSettingsStore {
     val feedWithReplies: Flow<Boolean>
     /** The quick reactions of the long press on the heart, in the user's order; the default until edited. */
     val quickReactions: Flow<List<String>>
+    /** NIP-13 proof of work for own notes, in bits: 0 (off, the default), 16, 20 or 24. */
+    val powBits: Flow<Int>
+    suspend fun setPowBits(bits: Int)
     suspend fun setThemeMode(mode: ThemeMode)
     suspend fun setAccent(accent: Accent)
     suspend fun setBlurSensitive(on: Boolean)
@@ -82,6 +87,8 @@ class PrefsUiSettingsStore(private val store: DataStore<Preferences>) : UiSettin
     override val primalStats: Flow<Boolean> = data.map { it[PRIMAL_STATS] ?: true }
     override val feedWithReplies: Flow<Boolean> = data.map { it[FEED_WITH_REPLIES] ?: false }
     override val quickReactions: Flow<List<String>> = data.map { Reactions.decode(it[QUICK_REACTIONS]) }
+    override val powBits: Flow<Int> = data.map { p -> p[POW_BITS]?.takeIf { it in POW_CHOICES } ?: 0 }
+    override suspend fun setPowBits(bits: Int) { store.edit { it[POW_BITS] = if (bits in POW_CHOICES) bits else 0 } }
     override val customHue: Flow<Float> = data.map { p -> p[CUSTOM_HUE]?.takeIf { h -> h >= 0f && h < 360f } ?: Accent.LEGACY_HUES[p[ACCENT]] ?: AccentSeed.DEFAULT_HUE }
 
     override suspend fun setThemeMode(mode: ThemeMode) { store.edit { it[THEME_MODE] = mode.name } }
@@ -106,9 +113,13 @@ class PrefsUiSettingsStore(private val store: DataStore<Preferences>) : UiSettin
         val PRIMAL_STATS = booleanPreferencesKey("ui.primal_stats")
         val FEED_WITH_REPLIES = booleanPreferencesKey("ui.feed_with_replies")
         val QUICK_REACTIONS = stringPreferencesKey("ui.quick_reactions")
+        val POW_BITS = intPreferencesKey("ui.pow_bits")
         val BLUR_SENSITIVE = booleanPreferencesKey("ui.blur_sensitive")
         val MEDIA_ON_TAP = booleanPreferencesKey("ui.media_on_tap")
         val AUTHOR_RELAYS = booleanPreferencesKey("ui.author_relays")
         val MEDIA_SERVER = stringPreferencesKey("ui.media_server")
     }
 }
+
+/** The proof-of-work choices of the settings: off and three difficulties (NIP-13). */
+val POW_CHOICES = listOf(0, 16, 20, 24)

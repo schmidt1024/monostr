@@ -1,5 +1,7 @@
 package com.monostr.app.ui.settings
 
+import com.monostr.app.data.POW_CHOICES
+import androidx.compose.ui.platform.LocalUriHandler
 import com.monostr.app.data.AmountUnit
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -239,6 +241,8 @@ class SettingsViewModel @Inject constructor(
     fun setClientTag(on: Boolean) = viewModelScope.launch { uiSettings.setClientTag(on) }
     val primalStats: StateFlow<Boolean> = uiSettings.primalStats.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
     fun setPrimalStats(on: Boolean) = viewModelScope.launch { uiSettings.setPrimalStats(on) }
+    val powBits: StateFlow<Int> = uiSettings.powBits.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+    fun setPowBits(bits: Int) = viewModelScope.launch { uiSettings.setPowBits(bits) }
     val quickReactions: StateFlow<List<String>> = uiSettings.quickReactions.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), Reactions.QUICK)
     fun setQuickReactions(list: List<String>) = viewModelScope.launch { uiSettings.setQuickReactions(list) }
 
@@ -360,6 +364,18 @@ fun SettingsScreen(onBack: () -> Unit, onMoneroSetup: () -> Unit, onSupport: () 
             SettingSwitch(stringResource(R.string.settings_author_relays), stringResource(R.string.settings_author_relays_hint), authorRelays, vm::setAuthorRelays, "settings-author-relays")
             val clientTag by vm.clientTag.collectAsStateWithLifecycle()
             SettingSwitch(stringResource(R.string.settings_client_tag), stringResource(R.string.settings_client_tag_hint), clientTag, vm::setClientTag, "settings-client-tag")
+            val pow by vm.powBits.collectAsStateWithLifecycle()
+            Spacer(Modifier.height(8.dp))
+            Text(stringResource(R.string.settings_pow), style = MaterialTheme.typography.bodyLarge)
+            Text(stringResource(R.string.settings_pow_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().testTag("settings-pow")) {
+                POW_CHOICES.forEachIndexed { i, bits ->
+                    SegmentedButton(
+                        selected = pow == bits, onClick = { vm.setPowBits(bits) },
+                        shape = SegmentedButtonDefaults.itemShape(i, POW_CHOICES.size), modifier = Modifier.testTag("settings-pow-$bits"),
+                    ) { Text(if (bits == 0) stringResource(R.string.settings_pow_off) else stringResource(R.string.settings_pow_bits, bits)) }
+                }
+            }
             val primalStats by vm.primalStats.collectAsStateWithLifecycle()
             SettingSwitch(stringResource(R.string.settings_primal_stats), stringResource(R.string.settings_primal_stats_hint), primalStats, vm::setPrimalStats, "settings-primal-stats")
             Spacer(Modifier.height(24.dp))
@@ -473,6 +489,7 @@ private fun RelayListEditor(
                     Text(state?.label()?.asString() ?: notConnected, style = MaterialTheme.typography.labelSmall, color = (state ?: RelayState.DISCONNECTED).statusColor())
                 }
             }
+            RelaySignupButton(url)
             IconButton(onClick = { onRemove(url) }, modifier = Modifier.testTag("$tagPrefix-remove-${url.hashCode().toUInt()}")) { Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.action_remove)) }
         }
         HorizontalDivider()
@@ -563,6 +580,16 @@ private fun SettingSwitch(title: String, hint: String, checked: Boolean, onChang
     }
 }
 
+/** "Unlock" for a paid Monero relay: opens its page, where a one-time payment adds the npub to its write list. */
+@Composable
+private fun RelaySignupButton(url: String) {
+    val page = RelaySuggestions.signupUrl(url) ?: return
+    val uriHandler = LocalUriHandler.current
+    TextButton(onClick = { runCatching { uriHandler.openUri(page) } }, modifier = Modifier.testTag("relay-signup-${url.hashCode().toUInt()}")) {
+        Text(stringResource(R.string.settings_relay_signup))
+    }
+}
+
 /** Optional relays with a one-tap add; hidden once every suggestion is in the list. */
 @Composable
 private fun SuggestedRelays(suggestions: List<RelaySuggestion>, onAdd: (String) -> Unit) {
@@ -576,6 +603,7 @@ private fun SuggestedRelays(suggestions: List<RelaySuggestion>, onAdd: (String) 
                 Text(s.url, style = MaterialTheme.typography.bodyMedium)
                 Text(stringResource(R.string.settings_suggested_relay_fee, s.feeXmr), style = MaterialTheme.typography.labelSmall)
             }
+            RelaySignupButton(s.url)
             IconButton(onClick = { onAdd(s.url) }, modifier = Modifier.testTag("settings-suggested-add-${s.url.hashCode().toUInt()}")) { Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.action_add)) }
         }
         HorizontalDivider()

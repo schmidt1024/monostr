@@ -1,5 +1,8 @@
 # search.monostr.com
 
+> Öffentliches Repository: `deploy.sh` und `ops/` (Hosts, Cron, Backups) bleiben im privaten Repository. Ein eigenes Deployment braucht nur die `compose.yml` hier, eine `.env` und `docker compose up -d` auf dem Host.
+
+
 NIP-50-Such-Relay (searchnos) hinter Caddy auf einem eigenen Hetzner-VPS
 (search.monostr.com). Design:
 `docs/superpowers/specs/2026-09-28-search-relay-design.md`.

@@ -1,5 +1,8 @@
 # media.monostr.com
 
+> Öffentliches Repository: `deploy.sh` und `ops/` (Hosts, Cron, Backups) bleiben im privaten Repository. Ein eigenes Deployment braucht nur die `compose.yml` hier, eine `.env` und `docker compose up -d` auf dem Host.
+
+
 Bild-Hoster für Monostr: ein Blossom-Server (Go) mit NSFW-Prüfung (Python-Container `nsfw`)
 hinter Caddy auf einem eigenen Hetzner-VPS (media.monostr.com). Die Bilder
 liegen im Bucket `monostr-media` (Hetzner Object Storage, hel1, privat), der Server reicht sie

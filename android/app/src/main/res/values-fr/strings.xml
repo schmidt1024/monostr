@@ -245,6 +245,7 @@
     <string name="settings_suggested_relays">Relais suggérés</string>
     <string name="settings_suggested_relays_hint">Relais Monero payants : la lecture est gratuite, la publication après un paiement unique en XMR sur le site du relais. Source : pmnr.xmr.rocks</string>
     <string name="settings_suggested_relay_fee">Relais Monero payant · %1$s XMR pour publier</string>
+    <string name="settings_relay_signup">Débloquer</string>
     <string name="settings_media">Médias</string>
     <string name="settings_media_blur">Masquer les médias sensibles</string>
     <string name="settings_media_blur_hint">Les notes marquées sensibles (content warning ou #nsfw) affichent les images floutées jusqu\'à ce que vous touchiez.</string>
@@ -252,6 +253,10 @@
     <string name="settings_media_on_tap_hint">Économise des données ; les vidéos ne se chargent jamais seules.</string>
     <string name="settings_author_relays">Connecter temporairement les relais de l\'auteur</string>
     <string name="settings_author_relays_hint">À l\'ouverture d\'un profil, les notes sont aussi récupérées depuis les relais de cette personne. Le relais voit votre adresse IP et quel profil vous ouvrez.</string>
+    <string name="settings_pow">Preuve de travail</string>
+    <string name="settings_pow_hint">Certains relais n’acceptent que des notes avec preuve de travail (NIP-13). Plus de bits sont mieux acceptés mais l’envoi est plus long.</string>
+    <string name="settings_pow_off">Non</string>
+    <string name="settings_pow_bits">%1$d bits</string>
     <string name="settings_client_tag">Afficher « via monostr »</string>
     <string name="settings_client_tag_hint">Les notes, j’aime et reposts portent une étiquette client que les autres applis affichent comme « via monostr ».</string>
     <string name="settings_primal_stats">Abonnés via Primal</string>
@@ -294,6 +299,7 @@
     <string name="settings_theme_system">Système</string>
     <string name="settings_theme_light">Clair</string>
     <string name="settings_theme_dark">Sombre</string>
+    <string name="settings_theme_black">Noir</string>
     <string name="settings_accent">Couleur d\'accent</string>
     <string name="settings_accent_mono">Mono</string>
     <string name="settings_accent_orange">Orange</string>
@@ -403,6 +409,8 @@
     <string name="profile_edit_name">Nom</string>
     <string name="profile_edit_about">Bio</string>
     <string name="profile_edit_nip05">Adresse NIP-05</string>
+    <string name="profile_edit_website">Site web</string>
+    <string name="profile_website_invalid">Pas une adresse web</string>
     <string name="profile_edit_save">Enregistrer</string>
     <string name="profile_edit_no_profile">Aucun profil existant n\'a été trouvé sur vos relais. L\'enregistrement en crée un nouveau.</string>
     <string name="profile_save_failed">Impossible d\'enregistrer le profil</string>

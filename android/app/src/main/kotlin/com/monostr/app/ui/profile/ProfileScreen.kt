@@ -445,7 +445,7 @@ class ProfileController(
     fun visible(noteIds: List<String>) {
         val wanted = noteIds.toSet()
         val targets = _state.value.shown.filter { it.note.id in wanted }.map { it.target.id }
-        if (targets.isNotEmpty()) counts.request(targets)
+        if (targets.isNotEmpty()) { counts.request(targets); actions.check(targets) }
     }
 
     private fun onActionResult(message: UiText) {
@@ -564,6 +564,11 @@ fun ProfileScreen(
                     state.profile.about?.takeIf { it.isNotBlank() }?.let {
                         Spacer(Modifier.height(8.dp))
                         NoteText(it, onOpen = {}, onHashtag = onHashtag, onOpenProfile = onOpenProfile, onOpenNote = onOpenThread, names = names, modifier = Modifier.testTag("profile-about"))
+                    }
+                    // kind 0 website: a link that reads without the scheme, like links in notes
+                    state.profile.website?.trim()?.takeIf { ProfileEditController.websiteOk(it) && it.isNotEmpty() }?.let { site ->
+                        Spacer(Modifier.height(4.dp))
+                        NoteText(ProfileEditController.website(site), onOpen = {}, onHashtag = {}, onOpenProfile = {}, onOpenNote = {}, modifier = Modifier.testTag("profile-website"))
                     }
                     state.followCounts?.let { Spacer(Modifier.height(8.dp)); FollowCountsLine(it) }
                     Spacer(Modifier.height(8.dp))

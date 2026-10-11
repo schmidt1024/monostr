@@ -4,6 +4,7 @@ import com.monostr.nostr.LocalSigner
 import com.monostr.nostr.NostrEngine
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import rust.nostr.sdk.EventBuilder
@@ -66,5 +67,21 @@ class OwnReactionsTest {
         assertEquals(true, own.add(7, id, "🔥"))
         assertEquals(false, own.add(7, id, "🤙"))
         assertEquals(mapOf(id to "🔥"), own.reactions.value)
+    }
+
+    @Test
+    fun `a reaction older than the start covered is found once its note is on screen`() = runTest {
+        val e = engine()
+        val old = EventBuilder.textNote("old").signWithKeys(alice).also { e.save(it) }
+        val new = EventBuilder.textNote("new").signWithKeys(alice).also { e.save(it) }
+        e.save(EventBuilder.reaction(old, "🔥").customCreatedAt(rust.nostr.sdk.Timestamp.fromSecs(1000u)).signWithKeys(me))
+        e.save(EventBuilder.reaction(new, "+").customCreatedAt(rust.nostr.sdk.Timestamp.fromSecs(2000u)).signWithKeys(me))
+        val own = NostrOwnReactions(e, limit = 1, scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO))
+        own.load(fetch = false)
+        assertEquals(setOf(new.id().toHex()), own.liked.value) // only the newest one fits the start
+        own.check(listOf(old.id().toHex(), new.id().toHex()))
+        assertTrue(com.monostr.nostr.awaitTrue { old.id().toHex() in own.liked.value })
+        assertEquals("🔥", own.reactions.value[old.id().toHex()])
+        e.close()
     }
 }

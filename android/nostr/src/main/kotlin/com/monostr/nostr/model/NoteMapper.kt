@@ -61,6 +61,6 @@ object NoteMapper {
 
     fun profile(pubkey: String, metadata: Metadata?): Profile {
         val r = metadata?.asRecord() ?: return Profile.empty(pubkey)
-        return Profile(pubkey, r.name, r.displayName, r.picture, r.about, r.nip05, banner = r.banner)
+        return Profile(pubkey, r.name, r.displayName, r.picture, r.about, r.nip05, banner = r.banner, website = r.website)
     }
 }

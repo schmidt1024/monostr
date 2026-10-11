@@ -37,6 +37,7 @@ class ProfileEditControllerTest {
         c.start()
         advanceUntilIdle()
         assertEquals("alice", c.state.value.form.name)
+        assertEquals("https://w.example", c.state.value.form.website)
         assertFalse(c.state.value.canSave) // nothing changed yet
         c.update { it.copy(name = "Alice 2", about = "") }
         assertTrue(c.state.value.canSave)
@@ -284,5 +285,24 @@ class ProfileEditControllerTest {
             assertFalse(c.state.value.done)
         }
         assertTrue(removed.isEmpty())
+    }
+
+    @Test
+    fun `a website is typed with or without scheme, stored with https, and checked`() = runTest {
+        val publish = FakePublish()
+        val c = ProfileEditController(me, FakeProfiles(), publish, eager())
+        c.start()
+        advanceUntilIdle()
+        c.update { it.copy(website = "not a site") }
+        assertTrue(c.state.value.websiteInvalid)
+        assertFalse(c.state.value.canSave)
+        c.update { it.copy(website = "monostr.com") }
+        assertFalse(c.state.value.websiteInvalid)
+        c.save()
+        advanceUntilIdle()
+        assertEquals("https://monostr.com", obj(publish.profileJson.single())["website"]!!.jsonPrimitive.content)
+        assertTrue(ProfileEditController.websiteOk("http://x.example/a"))
+        assertFalse(ProfileEditController.websiteOk("localhost"))
+        assertFalse(ProfileEditController.websiteOk(".com"))
     }
 }

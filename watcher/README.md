@@ -1,5 +1,8 @@
 # monostr-watcher
 
+> Öffentliches Repository: `deploy.sh` und `ops/` (Hosts, Cron, Backups) bleiben im privaten Repository. Ein eigenes Deployment braucht nur die `compose.yml` hier, eine `.env` und `docker compose up -d` auf dem Host.
+
+
 Go-Dienst, der Tip-Intents (kind 9738) beobachtet, über monero-lws auf die
 Zahlung wartet und Tip-Receipts (kind 9739) veröffentlicht. Protokoll:
 `docs/protocol/monostr-tips.md`.

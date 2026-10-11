@@ -81,6 +81,9 @@ class NoteActions(
         if (own.add(kind, target.id, content)) counts?.bump(target.id, kind, +1)
     }
 
+    /** Notes on screen: the user's own reactions to them are looked up, also ones older than the start read. */
+    fun check(targets: Collection<String>) = own.check(targets)
+
     /** [note] with the user's own like and repost of its target, and whether its deletion is on its way. */
     fun flags(note: NoteUi): NoteUi =
         note.copy(liked = note.target.id in own.liked.value, reaction = own.reactions.value[note.target.id], reposted = note.target.id in own.reposted.value, deleting = note.target.id in deletions.pending.value)

@@ -7,7 +7,7 @@ import kotlinx.serialization.json.JsonPrimitive
 
 /** Spec 5: the six kind 0 keys the app edits; every other key of the stored JSON is kept verbatim (spec 7: invalid JSON counts as `{}`). */
 object ProfileJson {
-    val EDITABLE = listOf("banner", "picture", "display_name", "name", "about", "nip05")
+    val EDITABLE = listOf("banner", "picture", "display_name", "name", "about", "nip05", "website")
 
     fun fields(raw: String?): Map<String, String> {
         val o = obj(raw)

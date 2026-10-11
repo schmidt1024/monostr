@@ -1,0 +1,5 @@
+• Görünüm: Koyu artık monostr grisi, OLED ekranlar için yeni Siyah
+• Notlar için iş ispatı (NIP-13), varsayılan kapalı
+• Ücretli Monero relay’leri için “Kilidi aç” bağlantıları
+• Profilde web sitesi alanı
+• Eski beğeni ve paylaşımlar da dolu görünür

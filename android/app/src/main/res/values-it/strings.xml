@@ -245,6 +245,7 @@
     <string name="settings_suggested_relays">Relay suggeriti</string>
     <string name="settings_suggested_relays_hint">Relay Monero a pagamento: leggere è gratis, pubblicare dopo un pagamento unico in XMR sul sito del relay. Fonte: pmnr.xmr.rocks</string>
     <string name="settings_suggested_relay_fee">Relay Monero a pagamento · %1$s XMR per pubblicare</string>
+    <string name="settings_relay_signup">Sblocca</string>
     <string name="settings_media">Media</string>
     <string name="settings_media_blur">Nascondi media sensibili</string>
     <string name="settings_media_blur_hint">Le note segnate come sensibili (content warning o #nsfw) mostrano le immagini sfocate finché non tocchi.</string>
@@ -252,6 +253,10 @@
     <string name="settings_media_on_tap_hint">Risparmia dati; i video non si caricano mai da soli.</string>
     <string name="settings_author_relays">Collega temporaneamente i relay dell\'autore</string>
     <string name="settings_author_relays_hint">Aprendo un profilo, le note vengono prese anche dai relay di quella persona. Il relay vede il tuo indirizzo IP e quale profilo apri.</string>
+    <string name="settings_pow">Proof of work</string>
+    <string name="settings_pow_hint">Alcuni relay accettano solo note con proof of work (NIP-13). Più bit sono accettati più spesso, ma l’invio richiede più tempo.</string>
+    <string name="settings_pow_off">No</string>
+    <string name="settings_pow_bits">%1$d bit</string>
     <string name="settings_client_tag">Mostra «via monostr»</string>
     <string name="settings_client_tag_hint">Note, mi piace e repost portano un tag client che le altre app mostrano come «via monostr».</string>
     <string name="settings_primal_stats">Follower tramite Primal</string>
@@ -294,6 +299,7 @@
     <string name="settings_theme_system">Sistema</string>
     <string name="settings_theme_light">Chiaro</string>
     <string name="settings_theme_dark">Scuro</string>
+    <string name="settings_theme_black">Nero</string>
     <string name="settings_accent">Colore di accento</string>
     <string name="settings_accent_mono">Mono</string>
     <string name="settings_accent_orange">Arancione</string>
@@ -403,6 +409,8 @@
     <string name="profile_edit_name">Nome</string>
     <string name="profile_edit_about">Bio</string>
     <string name="profile_edit_nip05">Indirizzo NIP-05</string>
+    <string name="profile_edit_website">Sito web</string>
+    <string name="profile_website_invalid">Non è un indirizzo web</string>
     <string name="profile_edit_save">Salva</string>
     <string name="profile_edit_no_profile">Nessun profilo esistente trovato sui tuoi relay. Salvando ne verrà creato uno nuovo.</string>
     <string name="profile_save_failed">Impossibile salvare il profilo</string>

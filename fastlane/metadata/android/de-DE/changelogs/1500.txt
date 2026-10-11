@@ -1,0 +1,5 @@
+• Darstellung: Dunkel ist jetzt das monostr-Grau, neu Schwarz für OLED-Displays
+• Proof of Work für Notes (NIP-13), standardmäßig aus
+• „Freischalten“-Links für die bezahlten Monero-Relays
+• Website-Feld im Profil
+• Auch ältere eigene Likes und Reposts erscheinen gefüllt

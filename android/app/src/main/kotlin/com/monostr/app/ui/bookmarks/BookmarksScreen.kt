@@ -202,7 +202,7 @@ class BookmarksController(
     fun visible(noteIds: List<String>) {
         val wanted = noteIds.toSet()
         val targets = _state.value.entries.filter { it.id in wanted }.mapNotNull { it.note?.target?.id }
-        if (targets.isNotEmpty()) counts.request(targets)
+        if (targets.isNotEmpty()) { counts.request(targets); noteActions.check(targets) }
     }
 
     /** [ui] with its current count, so a list rebuild never drops a count the collector already had (spec 4.2). */

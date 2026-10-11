@@ -21,6 +21,7 @@ fun isDark(mode: ThemeMode): Boolean = when (mode) {
     ThemeMode.SYSTEM -> isSystemInDarkTheme()
     ThemeMode.LIGHT -> false
     ThemeMode.DARK -> true
+    ThemeMode.BLACK -> true
 }
 
 private fun c(argb: Long) = Color(argb)
@@ -38,28 +39,32 @@ fun MonostrTheme(mode: ThemeMode, accent: Accent, customHue: Float = AccentSeed.
             isAppearanceLightNavigationBars = !dark
         }
     }
-    val a = AccentPalette.tokens(accent, dark, AccentSeed.fromHue(customHue))
+    val black = mode == ThemeMode.BLACK
+    val a = AccentPalette.tokens(accent, dark, AccentSeed.fromHue(customHue), black)
+    // the dark scheme paints on the brand grey, or on pure black for OLED
+    val ds = MonoColors.darkSurface(black)
+    val dc = MonoColors.darkSurfaceContainer(black)
     val scheme = if (dark) {
         darkColorScheme(
-            background = c(MonoColors.DarkSurface), surface = c(MonoColors.DarkSurface),
-            surfaceContainer = c(MonoColors.DarkSurfaceContainer), surfaceContainerLow = c(MonoColors.DarkSurfaceContainer),
-            surfaceContainerHigh = c(MonoColors.DarkSurfaceContainer), surfaceContainerHighest = c(MonoColors.DarkSurfaceContainer),
-            surfaceVariant = c(MonoColors.DarkSurfaceContainer),
+            background = c(ds), surface = c(ds),
+            surfaceContainer = c(dc), surfaceContainerLow = c(dc),
+            surfaceContainerHigh = c(dc), surfaceContainerHighest = c(dc),
+            surfaceVariant = c(dc),
             onBackground = c(MonoColors.DarkOnSurface), onSurface = c(MonoColors.DarkOnSurface), onSurfaceVariant = c(MonoColors.DarkOnSurfaceVariant),
-            outline = c(MonoColors.DarkOnSurfaceVariant), outlineVariant = c(MonoColors.DarkOutlineVariant),
+            outline = c(MonoColors.DarkOnSurfaceVariant), outlineVariant = c(MonoColors.darkOutlineVariant(black)),
             primary = c(a.primary), onPrimary = c(a.onPrimary), primaryContainer = c(a.primaryContainer), onPrimaryContainer = c(a.onPrimaryContainer),
-            secondary = c(MonoColors.DarkOnSurfaceVariant), onSecondary = c(MonoColors.DarkSurface),
-            secondaryContainer = c(MonoColors.DarkSurfaceContainer), onSecondaryContainer = c(MonoColors.DarkOnSurface),
-            tertiary = c(MonoColors.DarkOnSurfaceVariant), onTertiary = c(MonoColors.DarkSurface),
-            tertiaryContainer = c(MonoColors.DarkSurfaceContainer), onTertiaryContainer = c(MonoColors.DarkOnSurface),
-            inverseSurface = c(MonoColors.DarkOnSurface), inverseOnSurface = c(MonoColors.DarkSurface),
-            inversePrimary = c(if (accent == Accent.MONO) MonoColors.DarkSurface else a.primary),
-            surfaceBright = c(MonoColors.DarkSurfaceContainer), surfaceDim = c(MonoColors.DarkSurface), surfaceContainerLowest = c(MonoColors.DarkSurface),
+            secondary = c(MonoColors.DarkOnSurfaceVariant), onSecondary = c(ds),
+            secondaryContainer = c(dc), onSecondaryContainer = c(MonoColors.DarkOnSurface),
+            tertiary = c(MonoColors.DarkOnSurfaceVariant), onTertiary = c(ds),
+            tertiaryContainer = c(dc), onTertiaryContainer = c(MonoColors.DarkOnSurface),
+            inverseSurface = c(MonoColors.DarkOnSurface), inverseOnSurface = c(ds),
+            inversePrimary = c(if (accent == Accent.MONO) ds else a.primary),
+            surfaceBright = c(dc), surfaceDim = c(ds), surfaceContainerLowest = c(ds),
             scrim = Color.Black,
-            surfaceTint = c(MonoColors.DarkSurface),
+            surfaceTint = c(ds),
             primaryFixed = c(a.primaryContainer), primaryFixedDim = c(a.primary), onPrimaryFixed = c(a.onPrimaryContainer), onPrimaryFixedVariant = c(a.onPrimaryContainer),
-            secondaryFixed = c(MonoColors.DarkSurfaceContainer), secondaryFixedDim = c(MonoColors.DarkSurfaceContainer), onSecondaryFixed = c(MonoColors.DarkOnSurface), onSecondaryFixedVariant = c(MonoColors.DarkOnSurface),
-            tertiaryFixed = c(MonoColors.DarkSurfaceContainer), tertiaryFixedDim = c(MonoColors.DarkSurfaceContainer), onTertiaryFixed = c(MonoColors.DarkOnSurface), onTertiaryFixedVariant = c(MonoColors.DarkOnSurface),
+            secondaryFixed = c(dc), secondaryFixedDim = c(dc), onSecondaryFixed = c(MonoColors.DarkOnSurface), onSecondaryFixedVariant = c(MonoColors.DarkOnSurface),
+            tertiaryFixed = c(dc), tertiaryFixedDim = c(dc), onTertiaryFixed = c(MonoColors.DarkOnSurface), onTertiaryFixedVariant = c(MonoColors.DarkOnSurface),
         )
     } else {
         lightColorScheme(

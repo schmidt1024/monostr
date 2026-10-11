@@ -17,7 +17,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-/** The six editable kind 0 fields as the form shows them. */
+/** The editable kind 0 fields as the form shows them. */
 data class ProfileForm(
     val banner: String = "",
     val picture: String = "",
@@ -25,16 +25,18 @@ data class ProfileForm(
     val name: String = "",
     val about: String = "",
     val nip05: String = "",
+    val website: String = "",
 ) {
     fun toFields(): Map<String, String> = mapOf(
         "banner" to banner, "picture" to picture, "display_name" to displayName,
-        "name" to name, "about" to about, "nip05" to nip05,
+        "name" to name, "about" to about, "nip05" to nip05, "website" to ProfileEditController.website(website),
     )
 
     companion object {
         fun from(fields: Map<String, String>) = ProfileForm(
             banner = fields["banner"].orEmpty(), picture = fields["picture"].orEmpty(), displayName = fields["display_name"].orEmpty(),
             name = fields["name"].orEmpty(), about = fields["about"].orEmpty(), nip05 = fields["nip05"].orEmpty(),
+            website = fields["website"].orEmpty(),
         )
     }
 }
@@ -59,8 +61,9 @@ data class ProfileEditUiState(
     /** Spec 8 (10c backlog): only a field the user changed is validated; an old value another client wrote stays as it is. */
     val bannerInvalid: Boolean get() = form.banner.trim() != original.banner.trim() && !ProfileEditController.urlOk(form.banner)
     val pictureInvalid: Boolean get() = form.picture.trim() != original.picture.trim() && !ProfileEditController.urlOk(form.picture)
+    val websiteInvalid: Boolean get() = form.website.trim() != original.website.trim() && !ProfileEditController.websiteOk(form.website)
     /** Spec 5: something changed, nothing is invalid, and no picture is on its way. */
-    val canSave: Boolean get() = !loading && !saving && uploading == null && form != original && !bannerInvalid && !pictureInvalid
+    val canSave: Boolean get() = !loading && !saving && uploading == null && form != original && !bannerInvalid && !pictureInvalid && !websiteInvalid
 }
 
 /**
@@ -171,6 +174,20 @@ class ProfileEditController(
         private const val HTTPS = "https://"
 
         /** Spec 5: empty, or an https URL without whitespace. */
+        /** A web address: empty, or a host with a dot (a scheme may be typed or not), no whitespace. */
+        fun websiteOk(value: String): Boolean {
+            val v = value.trim()
+            if (v.isEmpty()) return true
+            val bare = v.replaceFirst(Regex("^https?://", RegexOption.IGNORE_CASE), "") // regex
+            return v.none { it.isWhitespace() } && bare.substringBefore('/').let { h -> '.' in h && !h.startsWith('.') && !h.endsWith('.') }
+        }
+
+        /** What is stored: as typed with a scheme, else https:// in front ("monostr.com" → "https://monostr.com"). */
+        fun website(value: String): String {
+            val v = value.trim()
+            return if (v.isEmpty() || Regex("^https?://", RegexOption.IGNORE_CASE).containsMatchIn(v)) v else "https://$v" // regex
+        }
+
         fun urlOk(value: String): Boolean {
             val v = value.trim()
             return v.isEmpty() || (v.startsWith(HTTPS) && v.length > HTTPS.length && v.none { it.isWhitespace() })

@@ -1,0 +1,5 @@
+• Aspetto: Scuro ora è il grigio di monostr, nuovo Nero per schermi OLED
+• Proof of work per le note (NIP-13), disattivata di default
+• Link «Sblocca» per i relay Monero a pagamento
+• Campo sito web nel profilo
+• Anche i vecchi mi piace e ripubblicazioni appaiono pieni

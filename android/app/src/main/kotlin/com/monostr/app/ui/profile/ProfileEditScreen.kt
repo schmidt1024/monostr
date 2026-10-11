@@ -120,6 +120,7 @@ fun ProfileEditScreen(onDone: () -> Unit, vm: ProfileEditViewModel = hiltViewMod
                 EditField(f.name, R.string.profile_edit_name, "edit-name") { v -> vm.controller.update { it.copy(name = v) } }
                 EditField(f.about, R.string.profile_edit_about, "edit-about", singleLine = false) { v -> vm.controller.update { it.copy(about = v) } }
                 EditField(f.nip05, R.string.profile_edit_nip05, "edit-nip05") { v -> vm.controller.update { it.copy(nip05 = v) } }
+                EditField(f.website, R.string.profile_edit_website, "edit-website", invalid = state.websiteInvalid, errorText = R.string.profile_website_invalid) { v -> vm.controller.update { it.copy(website = v) } }
                 Button(onClick = vm.controller::save, enabled = state.canSave, modifier = Modifier.fillMaxWidth().testTag("edit-save")) {
                     Text(stringResource(if (state.saving) R.string.state_sending else R.string.profile_edit_save))
                 }
@@ -129,7 +130,7 @@ fun ProfileEditScreen(onDone: () -> Unit, vm: ProfileEditViewModel = hiltViewMod
 }
 
 @Composable
-private fun EditField(value: String, @StringRes label: Int, tag: String, invalid: Boolean = false, singleLine: Boolean = true, onChange: (String) -> Unit) {
+private fun EditField(value: String, @StringRes label: Int, tag: String, invalid: Boolean = false, singleLine: Boolean = true, @StringRes errorText: Int = R.string.profile_url_invalid, onChange: (String) -> Unit) {
     OutlinedTextField(
         value = value,
         onValueChange = onChange,
@@ -137,7 +138,7 @@ private fun EditField(value: String, @StringRes label: Int, tag: String, invalid
         singleLine = singleLine,
         minLines = if (singleLine) 1 else 3,
         isError = invalid,
-        supportingText = if (invalid) { { Text(stringResource(R.string.profile_url_invalid)) } } else null,
+        supportingText = if (invalid) { { Text(stringResource(errorText)) } } else null,
         modifier = Modifier.fillMaxWidth().testTag(tag),
     )
 }

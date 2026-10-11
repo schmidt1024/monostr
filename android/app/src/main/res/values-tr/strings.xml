@@ -244,6 +244,7 @@
     <string name="settings_suggested_relays">Önerilen röleler</string>
     <string name="settings_suggested_relays_hint">Ücretli Monero röleleri: okuma ücretsiz, yazma rölenin sitesinde tek seferlik XMR ödemesinden sonra. Kaynak: pmnr.xmr.rocks</string>
     <string name="settings_suggested_relay_fee">Ücretli Monero rölesi · yazmak için %1$s XMR</string>
+    <string name="settings_relay_signup">Kilidi aç</string>
     <string name="settings_media">Medya</string>
     <string name="settings_media_blur">Hassas medyayı gizle</string>
     <string name="settings_media_blur_hint">Hassas işaretli notlar (content warning veya #nsfw) dokunana kadar bulanık görsel gösterir.</string>
@@ -251,6 +252,10 @@
     <string name="settings_media_on_tap_hint">Veri tasarrufu sağlar; videolar hiçbir zaman kendiliğinden yüklenmez.</string>
     <string name="settings_author_relays">Yazarın rölelerini geçici olarak bağla</string>
     <string name="settings_author_relays_hint">Bir profil açıldığında notlar o kişinin kendi rölelerinden de alınır. Röle IP adresinizi ve kimin profilini açtığınızı görür.</string>
+    <string name="settings_pow">İş ispatı</string>
+    <string name="settings_pow_hint">Bazı relay’ler yalnızca iş ispatlı notları kabul eder (NIP-13). Daha çok bit daha yaygın kabul edilir ama gönderim daha uzun sürer.</string>
+    <string name="settings_pow_off">Kapalı</string>
+    <string name="settings_pow_bits">%1$d bit</string>
     <string name="settings_client_tag">“via monostr” göster</string>
     <string name="settings_client_tag_hint">Notlar, beğeniler ve yeniden paylaşımlar, diğer uygulamaların “via monostr” olarak gösterdiği bir istemci etiketi taşır.</string>
     <string name="settings_primal_stats">Primal üzerinden takipçi sayısı</string>
@@ -293,6 +298,7 @@
     <string name="settings_theme_system">Sistem</string>
     <string name="settings_theme_light">Açık</string>
     <string name="settings_theme_dark">Koyu</string>
+    <string name="settings_theme_black">Siyah</string>
     <string name="settings_accent">Vurgu rengi</string>
     <string name="settings_accent_mono">Mono</string>
     <string name="settings_accent_orange">Turuncu</string>
@@ -398,6 +404,8 @@
     <string name="profile_edit_name">Ad</string>
     <string name="profile_edit_about">Hakkında</string>
     <string name="profile_edit_nip05">NIP-05 adresi</string>
+    <string name="profile_edit_website">Web sitesi</string>
+    <string name="profile_website_invalid">Web adresi değil</string>
     <string name="profile_edit_save">Kaydet</string>
     <string name="profile_edit_no_profile">Röle sunucularınızda mevcut bir profil bulunamadı. Kaydetmek yeni bir profil oluşturur.</string>
     <string name="profile_save_failed">Profil kaydedilemedi</string>

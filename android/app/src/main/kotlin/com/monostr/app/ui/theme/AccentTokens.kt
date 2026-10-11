@@ -14,20 +14,23 @@ object AccentPalette {
      */
     const val PRIMARY_MIN_LIGHT = 5.5
     const val PRIMARY_MIN_DARK = 7.0
+    /** On the brand grey 6:1 keeps Monero orange as itself (6.4:1 raw); on black it reaches 7:1 raw anyway. */
+    const val PRIMARY_MIN_GREY = 6.0
     const val ON_PRIMARY_MIN = 4.5
 
     /** The surface threshold the accent must reach in this mode. */
-    fun primaryMin(dark: Boolean): Double = if (dark) PRIMARY_MIN_DARK else PRIMARY_MIN_LIGHT
+    fun primaryMin(dark: Boolean, black: Boolean = true): Double = if (!dark) PRIMARY_MIN_LIGHT else if (black) PRIMARY_MIN_DARK else PRIMARY_MIN_GREY
     /** Chips and hint surfaces carry text, so the accent on its tinted container needs AA too. */
     const val CONTAINER_MIN = 4.5
 
     /** [customSeed] is used for [Accent.CUSTOM] only (spec 11.4 §3: computed from the stored hue). */
-    fun tokens(accent: Accent, dark: Boolean, customSeed: Long = Accent.CUSTOM.seedArgb): AccentTokens {
+    /** [black]: the dark mode paints on pure black (OLED), else on the brand grey; ignored in light mode. */
+    fun tokens(accent: Accent, dark: Boolean, customSeed: Long = Accent.CUSTOM.seedArgb, black: Boolean = false): AccentTokens {
         if (accent == Accent.MONO) {
-            return if (dark) AccentTokens(MonoColors.DarkPrimary, MonoColors.DarkOnPrimary, MonoColors.DarkSurfaceContainer, MonoColors.DarkOnSurface)
+            return if (dark) AccentTokens(MonoColors.DarkPrimary, MonoColors.DarkOnPrimary, MonoColors.darkSurfaceContainer(black), MonoColors.DarkOnSurface)
             else AccentTokens(MonoColors.LightPrimary, MonoColors.LightOnPrimary, MonoColors.LightSurfaceContainer, MonoColors.LightOnSurface)
         }
-        val surface = if (dark) MonoColors.DarkSurface else MonoColors.LightSurface
+        val surface = if (dark) MonoColors.darkSurface(black) else MonoColors.LightSurface
         val seed = if (accent == Accent.CUSTOM) customSeed else accent.seedArgb
         // primary colours every TextButton label, icon tint and link, so it must read on the surface: a seed
         // that already does stays raw (neon green on black), otherwise it is mixed towards black on the light
@@ -37,7 +40,7 @@ object AccentPalette {
         var mixed = 0.0
         // ...and its own label (white or black, whichever is better) must read on it too: a mid-tone lifted
         // purple satisfies neither until it is lifted a little further
-        val primaryMin = primaryMin(dark)
+        val primaryMin = primaryMin(dark, black)
         while ((Contrast.ratio(primary, surface) < primaryMin || Contrast.ratio(primary, Contrast.onColorFor(primary)) < ON_PRIMARY_MIN) && mixed < 1.0) {
             mixed += 0.05
             primary = blend(towards, seed, mixed)

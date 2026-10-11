@@ -48,6 +48,8 @@ data class Profile(
     val nip05: String?,
     /** kind 0 `banner` URL (spec 5), shown 16:9 above the avatar. */
     val banner: String? = null,
+    /** kind 0 `website`, shown as a link under the bio. */
+    val website: String? = null,
 ) {
     /** Display name, then name, then a shortened npub-like fallback. */
     val shownName: String get() = displayName?.takeIf { it.isNotBlank() } ?: name?.takeIf { it.isNotBlank() } ?: shortPubkey(pubkey)

@@ -65,7 +65,7 @@ fun AppearanceSection(mode: ThemeMode, accent: Accent, customHue: Float, onMode:
         Text(stringResource(R.string.settings_appearance), style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(8.dp))
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-            val modes = listOf(ThemeMode.SYSTEM to R.string.settings_theme_system, ThemeMode.LIGHT to R.string.settings_theme_light, ThemeMode.DARK to R.string.settings_theme_dark)
+            val modes = listOf(ThemeMode.SYSTEM to R.string.settings_theme_system, ThemeMode.LIGHT to R.string.settings_theme_light, ThemeMode.DARK to R.string.settings_theme_dark, ThemeMode.BLACK to R.string.settings_theme_black)
             modes.forEachIndexed { i, (m, label) ->
                 SegmentedButton(
                     selected = mode == m, onClick = { onMode(m) },
@@ -83,7 +83,7 @@ fun AppearanceSection(mode: ThemeMode, accent: Accent, customHue: Float, onMode:
         // five choices (v0.12.7: black & white, Monero orange, blue, purple, own hue), each a 48-dp target with its name beneath
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Accent.entries.forEach { a ->
-                val tokens = AccentPalette.tokens(a, dark, customSeed)
+                val tokens = AccentPalette.tokens(a, dark, customSeed, black = mode == ThemeMode.BLACK)
                 val name = stringResource(accentName(a))
                 val selected = a == accent
                 val description = if (selected) stringResource(R.string.settings_accent_selected, name) else name
