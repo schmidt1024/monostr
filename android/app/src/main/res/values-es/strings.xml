@@ -162,7 +162,7 @@
     <string name="tip_custom_amount">Otro importe en %1$s</string>
     <string name="tip_pay">Pagar con la wallet</string>
     <string name="tip_no_wallet_title">No se encontró ninguna app de wallet</string>
-    <string name="tip_no_wallet_text">Instala Monerujo o Cake Wallet, o paga el importe manualmente a esta dirección:</string>
+    <string name="tip_no_wallet_text">Instala Unstoppable o Cake Wallet, o paga el importe manualmente a esta dirección:</string>
     <string name="tip_open_wallet_again">Abrir la wallet de nuevo</string>
     <string name="tip_sent">Wallet abierta. La propina espera la confirmación del watcher.</string>
     <string name="tip_error_amount">Importe no válido (p. ej. 0.005)</string>

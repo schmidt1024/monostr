@@ -1,0 +1,1 @@
+• Trinkgeld-Fallback verlinkt jetzt Unstoppable (auf F-Droid) für Wallets, die keine monero:-Links öffnen

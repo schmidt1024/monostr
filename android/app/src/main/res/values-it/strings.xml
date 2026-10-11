@@ -162,7 +162,7 @@
     <string name="tip_custom_amount">Importo libero in %1$s</string>
     <string name="tip_pay">Paga con il portafoglio</string>
     <string name="tip_no_wallet_title">Nessuna app portafoglio trovata</string>
-    <string name="tip_no_wallet_text">Installa Monerujo o Cake Wallet, oppure paga l\'importo manualmente a questo indirizzo:</string>
+    <string name="tip_no_wallet_text">Installa Unstoppable o Cake Wallet, oppure paga l\'importo manualmente a questo indirizzo:</string>
     <string name="tip_open_wallet_again">Riapri il portafoglio</string>
     <string name="tip_sent">Portafoglio aperto. La mancia attende la conferma del watcher.</string>
     <string name="tip_error_amount">Importo non valido (ad es. 0.005)</string>

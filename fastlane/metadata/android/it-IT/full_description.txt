@@ -10,7 +10,7 @@ monostr è un client Nostr per Android con mance in Monero.
 • Accesso con Amber (NIP-55) o con una chiave; tema chiaro e scuro, 8 lingue
 
 <b>Mance in Monero</b>
-• Lascia una mancia a una nota o a un profilo dalla tua app wallet (monfluo, Monerujo, Cake …) tramite un link monero:
+• Lascia una mancia a una nota o a un profilo dalla tua app wallet (Unstoppable, monfluo, Cake …) tramite un link monero:
 • monostr non contiene un wallet né una chiave di spesa
 • Per ricevere mance registri indirizzo e chiave di visualizzazione privata presso un watcher (watcher.monostr.com di default, o il tuo). Il watcher vede i pagamenti in entrata e pubblica ricevute firmate su Nostr, così tutti vedono la mancia sotto la nota
 • Sono possibili mance anonime

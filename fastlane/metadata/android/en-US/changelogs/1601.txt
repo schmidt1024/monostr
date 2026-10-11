@@ -1,0 +1,1 @@
+• Tip fallback now links Unstoppable (on F-Droid) for wallets that can't open monero: links

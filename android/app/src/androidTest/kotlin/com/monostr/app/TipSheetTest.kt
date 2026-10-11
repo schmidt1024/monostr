@@ -90,6 +90,9 @@ class TipSheetTest {
         rule.onNodeWithTag("tip-fallback-amount").assertIsDisplayed()
         rule.onNodeWithText(str(R.string.tip_xmr_amount, "0.005", "XMR")).assertIsDisplayed()
         rule.onNodeWithTag("tip-fallback-address").assertIsDisplayed()
+        // F-Droid review 2026-10-11: the fallback names a wallet that is on F-Droid and opens monero: links
+        rule.onNodeWithText("Unstoppable").assertIsDisplayed()
+        rule.onNodeWithText("Monerujo").assertDoesNotExist()
         rule.onNodeWithTag("tip-copy-address").assertIsDisplayed()
         rule.onNodeWithTag("tip-open-wallet").assertIsDisplayed()
         rule.onAllNodesWithTag("tip-sent").assertCountEquals(0)

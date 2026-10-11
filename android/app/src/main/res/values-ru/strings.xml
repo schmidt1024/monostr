@@ -165,7 +165,7 @@
     <string name="tip_custom_amount">Своя сумма в %1$s</string>
     <string name="tip_pay">Оплатить в кошельке</string>
     <string name="tip_no_wallet_title">Приложение-кошелёк не найдено</string>
-    <string name="tip_no_wallet_text">Установите Monerujo или Cake Wallet либо переведите сумму вручную на этот адрес:</string>
+    <string name="tip_no_wallet_text">Установите Unstoppable или Cake Wallet либо переведите сумму вручную на этот адрес:</string>
     <string name="tip_open_wallet_again">Открыть кошелёк снова</string>
     <string name="tip_sent">Кошелёк открыт. Чаевые ожидают подтверждения от watcher.</string>
     <string name="tip_error_amount">Неверная сумма (например, 0.005)</string>

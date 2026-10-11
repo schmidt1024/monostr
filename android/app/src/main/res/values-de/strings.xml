@@ -161,7 +161,7 @@
     <string name="tip_custom_amount">Eigener Betrag in %1$s</string>
     <string name="tip_pay">Mit Wallet bezahlen</string>
     <string name="tip_no_wallet_title">Keine Wallet-App gefunden</string>
-    <string name="tip_no_wallet_text">Installiere Monerujo oder Cake Wallet, oder zahle den Betrag manuell an diese Adresse:</string>
+    <string name="tip_no_wallet_text">Installiere Unstoppable oder Cake Wallet, oder zahle den Betrag manuell an diese Adresse:</string>
     <string name="tip_open_wallet_again">Wallet erneut öffnen</string>
     <string name="tip_sent">Wallet geöffnet. Der Tip wartet auf die Bestätigung durch den Watcher.</string>
     <string name="tip_error_amount">Betrag ungültig (z. B. 0.005)</string>

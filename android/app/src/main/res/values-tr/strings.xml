@@ -161,7 +161,7 @@
     <string name="tip_custom_amount">%1$s cinsinden özel tutar</string>
     <string name="tip_pay">Cüzdanla öde</string>
     <string name="tip_no_wallet_title">Cüzdan uygulaması bulunamadı</string>
-    <string name="tip_no_wallet_text">Monerujo veya Cake Wallet yükle ya da tutarı bu adrese elle öde:</string>
+    <string name="tip_no_wallet_text">Unstoppable veya Cake Wallet yükle ya da tutarı bu adrese elle öde:</string>
     <string name="tip_open_wallet_again">Cüzdanı tekrar aç</string>
     <string name="tip_sent">Cüzdan açıldı. Bahşiş, watcher onayını bekliyor.</string>
     <string name="tip_error_amount">Geçersiz tutar (ör. 0.005)</string>

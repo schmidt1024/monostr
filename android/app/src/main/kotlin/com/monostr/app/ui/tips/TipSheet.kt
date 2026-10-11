@@ -176,7 +176,7 @@ fun TipSheetContent(
                         Text(stringResource(R.string.tip_no_wallet_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("tip-fallback"))
                         Text(stringResource(R.string.tip_no_wallet_text), style = MaterialTheme.typography.bodySmall)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            TextButton(onClick = { uriHandler.openUri("https://www.monerujo.io") }) { Text("Monerujo") }
+                            TextButton(onClick = { uriHandler.openUri("https://f-droid.org/packages/io.horizontalsystems.bankwallet/") }) { Text("Unstoppable") }
                             TextButton(onClick = { uriHandler.openUri("https://cakewallet.com") }) { Text("Cake Wallet") }
                         }
                         QrCode(phase.uri, Modifier.size(200.dp).align(Alignment.CenterHorizontally))

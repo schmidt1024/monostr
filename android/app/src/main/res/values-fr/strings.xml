@@ -162,7 +162,7 @@
     <string name="tip_custom_amount">Montant libre en %1$s</string>
     <string name="tip_pay">Payer avec le portefeuille</string>
     <string name="tip_no_wallet_title">Aucune app de portefeuille trouvée</string>
-    <string name="tip_no_wallet_text">Installez Monerujo ou Cake Wallet, ou payez le montant manuellement à cette adresse :</string>
+    <string name="tip_no_wallet_text">Installez Unstoppable ou Cake Wallet, ou payez le montant manuellement à cette adresse :</string>
     <string name="tip_open_wallet_again">Rouvrir le portefeuille</string>
     <string name="tip_sent">Portefeuille ouvert. Le pourboire attend la confirmation du watcher.</string>
     <string name="tip_error_amount">Montant invalide (p. ex. 0.005)</string>

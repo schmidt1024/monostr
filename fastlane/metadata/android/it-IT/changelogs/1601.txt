@@ -1,0 +1,1 @@
+• Il fallback delle mance ora rimanda a Unstoppable (su F-Droid) per i wallet che non aprono i link monero:
