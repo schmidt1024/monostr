@@ -246,8 +246,8 @@ val LocalQuickReactions = staticCompositionLocalOf { Reactions.QUICK }
 
 /** NIP-25 contents: which one is a plain like, and the quick choices of the reaction sheet. */
 object Reactions {
-    /** The default quick choices; the user can replace and reorder them in Settings. */
-    val QUICK = listOf("🤙", "❤️", "🔥", "😂", "👀", "🙏", "💯", "🚀", "🫡", "😢")
+    /** The default quick choices, five (user 2026-10-11); the user adds, removes and reorders them in Settings. */
+    val QUICK = listOf("❤️", "🔥", "😂", "💯", "🙏")
 
     /** At most this many quick choices: two rows of the sheet. */
     const val MAX_QUICK = 12
