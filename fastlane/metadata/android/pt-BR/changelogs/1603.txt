@@ -1,0 +1,2 @@
+• Perfis têm as abas Posts, Respostas e Reposts, como no X
+• O cabeçalho e as abas somem ao rolar para baixo e voltam ao rolar para cima

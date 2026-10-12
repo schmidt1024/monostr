@@ -133,8 +133,10 @@
     </plurals>
     <string name="profile_tab_posts">Publications</string>
     <string name="profile_tab_replies">Réponses</string>
+    <string name="profile_tab_reposts">Reposts</string>
     <string name="profile_empty_posts">Pas encore de publications</string>
     <string name="profile_empty_replies">Pas encore de réponses</string>
+    <string name="profile_empty_reposts">Pas encore de reposts</string>
 
     <!-- compose -->
     <string name="compose_title_reply">Répondre</string>

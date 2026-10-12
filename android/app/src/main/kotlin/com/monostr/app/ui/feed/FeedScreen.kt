@@ -6,6 +6,10 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import com.monostr.app.ui.common.HideOnScrollHeader
+import com.monostr.app.ui.common.rememberHideOnScroll
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Card
@@ -108,7 +112,9 @@ fun FeedScreen(
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     // spec 7: up to 30 entries away the list scrolls, beyond that it jumps (a long animation over hundreds of cards stutters and loads pictures for nothing)
+    val hide = rememberHideOnScroll()
     val toTop: () -> Unit = {
+        hide.show()
         scope.launch {
             if (listState.firstVisibleItemIndex > 30) listState.scrollToItem(0) else listState.animateScrollToItem(0)
         }
@@ -118,8 +124,10 @@ fun FeedScreen(
     MessageSnackbar(state.message, snackbar, onUnmute = vm.controller::unmute, onShown = vm.controller::clearMessage)
     DeletionMessages(vm.deletions, snackbar)
     Scaffold(
-        topBar = {
+        modifier = Modifier.nestedScroll(hide.connection),
+        topBar = { HideOnScrollHeader(hide) { Column {
             TopAppBar(
+                windowInsets = WindowInsets(0),
                 title = {
                     val toTopLabel = stringResource(R.string.feed_to_top)
                     // the ripple covers the mark only, not the whole bar; the target is 48 dp high
@@ -157,7 +165,14 @@ fun FeedScreen(
                     }
                 },
             )
-        },
+            // launch feedback: posts and replies apart, as tabs like the profile; they hide with the bar (X)
+            PrimaryTabRow(selectedTabIndex = if (state.withReplies) 1 else 0, modifier = Modifier.testTag("feed-tabs")) {
+                Tab(selected = !state.withReplies, onClick = { hide.show(); vm.setWithReplies(false) }, text = { Text(stringResource(R.string.feed_tab_posts)) },
+                    unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("feed-tab-posts"))
+                Tab(selected = state.withReplies, onClick = { hide.show(); vm.setWithReplies(true) }, text = { Text(stringResource(R.string.feed_tab_replies)) },
+                    unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("feed-tab-replies"))
+            }
+        } } },
         floatingActionButton = {
             FloatingActionButton(
                 onClick = onCompose,
@@ -172,13 +187,6 @@ fun FeedScreen(
         snackbarHost = { SnackbarHost(snackbar, Modifier.muteUndoTag(state.message)) },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
-        // launch feedback: posts and replies apart, as tabs like the profile
-        PrimaryTabRow(selectedTabIndex = if (state.withReplies) 1 else 0, modifier = Modifier.testTag("feed-tabs")) {
-            Tab(selected = !state.withReplies, onClick = { vm.setWithReplies(false) }, text = { Text(stringResource(R.string.feed_tab_posts)) },
-                unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("feed-tab-posts"))
-            Tab(selected = state.withReplies, onClick = { vm.setWithReplies(true) }, text = { Text(stringResource(R.string.feed_tab_replies)) },
-                unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("feed-tab-replies"))
-        }
         PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = vm.controller::refresh, modifier = Modifier.fillMaxSize().testTag("feed-refresh")) {
             if (state.loading) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }

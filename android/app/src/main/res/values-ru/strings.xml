@@ -136,8 +136,10 @@
     </plurals>
     <string name="profile_tab_posts">Посты</string>
     <string name="profile_tab_replies">Ответы</string>
+    <string name="profile_tab_reposts">Репосты</string>
     <string name="profile_empty_posts">Постов пока нет</string>
     <string name="profile_empty_replies">Ответов пока нет</string>
+    <string name="profile_empty_reposts">Репостов пока нет</string>
 
     <!-- compose -->
     <string name="compose_title_reply">Ответ</string>

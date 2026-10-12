@@ -43,16 +43,21 @@ interface FeedRepository {
     suspend fun moreProfileNotes(author: String, section: ProfileSection, before: Long, limit: Int = 50): List<Note>
 }
 
-/** The tabs of a profile: "Posts" shows what the home feed would show of the author, "Replies" their replies. */
-enum class ProfileSection {
-    POSTS,
-    REPLIES;
+/** The tabs of a profile, like X: "Posts" the author's own root notes, "Replies" their replies, "Reposts" what they reposted. */
+enum class ProfileSection(internal val kinds: List<Int>) {
+    POSTS(listOf(1)),
+    REPLIES(listOf(1)),
+    REPOSTS(listOf(6));
 
     fun keeps(note: Note): Boolean = when (this) {
-        POSTS -> isRoot(note)
+        POSTS -> note.repostOf == null && isRoot(note)
         REPLIES -> note.isReply
+        REPOSTS -> note.repostOf != null
     }
 }
+
+/** The home feed's kinds: notes and reposts. */
+private val FEED_KINDS = listOf(1, 6)
 
 /** Spec "feed without replies": a reply, or a repost of one, belongs to its thread and not to the feed. */
 internal fun isRoot(note: Note): Boolean = !(note.isReply || note.repostOf?.isReply == true)
@@ -111,8 +116,8 @@ class NostrFeedRepository(
     private fun followed(contacts: rust.nostr.sdk.Event?): List<String> =
         ((contacts?.tags()?.publicKeys()?.map { it.toHex() } ?: emptyList()) + pubkey).distinct()
 
-    private fun feedFilter(authors: List<String>) =
-        Filter().kinds(listOf(Kind(1u), Kind(6u))).authors(authors.map { PublicKey.parse(it) })
+    private fun feedFilter(authors: List<String>, kinds: List<Int> = FEED_KINDS) =
+        Filter().kinds(kinds.map { Kind(it.toUShort()) }).authors(authors.map { PublicKey.parse(it) })
 
     /**
      * What the live subscription asks for: the notes and their authors' deletion requests (NIP-09, kind 5),
@@ -127,9 +132,9 @@ class NostrFeedRepository(
      * not one filter: under one limit an account that withdrew many notes would fill the page with
      * requests, and paging would stop there for good.
      */
-    private suspend fun fetchPage(authors: List<String>, limit: Int, until: Long? = null) {
+    private suspend fun fetchPage(authors: List<String>, limit: Int, until: Long? = null, kinds: List<Int> = FEED_KINDS) {
         val untilTs = until?.let { Timestamp.fromSecs(it.toULong()) }
-        var notes = feedFilter(authors).limit(limit.toULong())
+        var notes = feedFilter(authors, kinds).limit(limit.toULong())
         var requests = Filter().kind(Kind(5u)).authors(authors.map { PublicKey.parse(it) }).limit(DELETION_LIMIT)
         if (untilTs != null) {
             notes = notes.until(untilTs)
@@ -153,11 +158,11 @@ class NostrFeedRepository(
     private fun keep(replies: Boolean): (Note) -> Boolean = if (replies) ProfileSection.REPLIES::keeps else ::isRoot
 
     /** The local read behind [notes] and [profileNotes]: pages of [authors]' notes, [keep] applied, until [limit] are together. */
-    private suspend fun localPage(authors: List<String>, keep: (Note) -> Boolean, limit: Int, until: Long?): List<Note> = withContext(Dispatchers.IO) {
+    private suspend fun localPage(authors: List<String>, keep: (Note) -> Boolean, limit: Int, until: Long?, kinds: List<Int> = FEED_KINDS): List<Note> = withContext(Dispatchers.IO) {
         val kept = ArrayList<Note>()
         var before = until
         repeat(LOCAL_ROUNDS) {
-            val raw = engine.query(pageFilter(authors, limit, before))
+            val raw = engine.query(pageFilter(authors, limit, before, kinds))
             kept += NoteLoader.notes(engine, raw).filter(keep)
             if (kept.size >= limit || raw.size < limit) return@withContext kept.take(limit).sortedByDescending { it.createdAt }
             before = raw.minOf { it.createdAt().asSecs().toLong() } - 1
@@ -165,8 +170,8 @@ class NostrFeedRepository(
         kept.sortedByDescending { it.createdAt }
     }
 
-    private fun pageFilter(authors: List<String>, limit: Int, until: Long?): Filter {
-        var filter = feedFilter(authors).limit(limit.toULong())
+    private fun pageFilter(authors: List<String>, limit: Int, until: Long?, kinds: List<Int> = FEED_KINDS): Filter {
+        var filter = feedFilter(authors, kinds).limit(limit.toULong())
         if (until != null) filter = filter.until(Timestamp.fromSecs(until.toULong()))
         return filter
     }
@@ -184,13 +189,13 @@ class NostrFeedRepository(
     override suspend fun loadMore(before: Long, limit: Int, replies: Boolean): List<Note> = relayPage(feedAuthors(), keep(replies), before, limit)
 
     /** The relay paging behind [loadMore] and [moreProfileNotes]. */
-    private suspend fun relayPage(authors: List<String>, keep: (Note) -> Boolean, before: Long, limit: Int): List<Note> {
+    private suspend fun relayPage(authors: List<String>, keep: (Note) -> Boolean, before: Long, limit: Int, kinds: List<Int> = FEED_KINDS): List<Note> {
         var until = before
         repeat(RELAY_ROUNDS) {
-            fetchPage(authors, limit, until = until)
-            val page = localPage(authors, keep, limit, until)
+            fetchPage(authors, limit, until = until, kinds = kinds)
+            val page = localPage(authors, keep, limit, until, kinds)
             if (page.isNotEmpty()) return page
-            val raw = withContext(Dispatchers.IO) { engine.query(pageFilter(authors, limit, until)) }
+            val raw = withContext(Dispatchers.IO) { engine.query(pageFilter(authors, limit, until, kinds)) }
             if (raw.isEmpty()) return page
             until = raw.minOf { it.createdAt().asSecs().toLong() } - 1
         }
@@ -233,12 +238,12 @@ class NostrFeedRepository(
     }
 
     override suspend fun profileNotes(author: String, section: ProfileSection, limit: Int, fetch: Boolean): List<Note> {
-        if (fetch) fetchPage(listOf(author), limit)
-        return localPage(listOf(author), section::keeps, limit, null)
+        if (fetch) fetchPage(listOf(author), limit, kinds = section.kinds)
+        return localPage(listOf(author), section::keeps, limit, null, section.kinds)
     }
 
     override suspend fun moreProfileNotes(author: String, section: ProfileSection, before: Long, limit: Int): List<Note> =
-        relayPage(listOf(author), section::keeps, before, limit)
+        relayPage(listOf(author), section::keeps, before, limit, section.kinds)
 }
 
 /**

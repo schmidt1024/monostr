@@ -16,7 +16,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
-/** Profile tabs "Posts" and "Replies" (2026-10-09). */
+/** Profile tabs "Posts", "Replies" and "Reposts" (2026-10-09, Reposts 2026-10-12). */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ProfileTabsTest {
     private val bob = "b".repeat(64)
@@ -47,6 +47,20 @@ class ProfileTabsTest {
         // back and forth again: nothing is loaded twice
         c.selectTab(ProfileSection.POSTS); c.selectTab(ProfileSection.REPLIES); runCurrent()
         assertEquals(2, feed.profileCalls.size)
+        c.close()
+    }
+
+    @Test
+    fun `reposts get their own tab and leave the posts tab`() = runTest {
+        val shared = repostOf(note('s', author = "c".repeat(64)), by = bob, createdAt = 1005)
+        val feed = FakeFeed().apply { byAuthor = mapOf(bob to listOf(shared, post, answer)) }
+        val c = controller(feed)
+        c.start(); runCurrent()
+        assertEquals(listOf(post.id), c.state.value.shown.map { it.note.id })
+        assertNull(c.state.value.reposts)
+        c.selectTab(ProfileSection.REPOSTS); runCurrent()
+        assertEquals(listOf(shared.id), c.state.value.shown.map { it.note.id })
+        assertEquals(ProfileSection.REPOSTS to true, feed.profileCalls.last())
         c.close()
     }
 

@@ -1,0 +1,2 @@
+• Profillerde X'teki gibi Gönderiler, Yanıtlar ve Paylaşımlar sekmeleri var
+• Başlık ve sekmeler aşağı kaydırırken gizlenir, yukarı kaydırınca geri gelir

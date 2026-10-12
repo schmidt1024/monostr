@@ -132,8 +132,10 @@
     </plurals>
     <string name="profile_tab_posts">Gönderiler</string>
     <string name="profile_tab_replies">Yanıtlar</string>
+    <string name="profile_tab_reposts">Paylaşımlar</string>
     <string name="profile_empty_posts">Henüz gönderi yok</string>
     <string name="profile_empty_replies">Henüz yanıt yok</string>
+    <string name="profile_empty_reposts">Henüz yeniden paylaşım yok</string>
 
     <!-- compose -->
     <string name="compose_title_reply">Yanıtla</string>

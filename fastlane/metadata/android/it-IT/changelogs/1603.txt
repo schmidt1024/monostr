@@ -1,0 +1,2 @@
+• I profili hanno le schede Post, Risposte e Ripubblicati, come su X
+• L'intestazione e le schede scompaiono scorrendo verso il basso e tornano scorrendo verso l'alto

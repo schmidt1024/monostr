@@ -1,0 +1,2 @@
+• Profiles have Posts, Replies and Reposts tabs, like X
+• The header and tabs slide away while you scroll down and come back when you scroll up

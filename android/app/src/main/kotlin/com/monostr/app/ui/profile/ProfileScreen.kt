@@ -46,7 +46,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.material3.Scaffold
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import com.monostr.app.ui.common.HideOnScrollHeader
+import com.monostr.app.ui.common.rememberHideOnScroll
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -155,24 +159,36 @@ data class ProfileUiState(
     val tab: ProfileSection = ProfileSection.POSTS,
     /** The "Replies" tab's notes; null until the tab was opened once. */
     val replies: List<NoteUi>? = null,
+    /** The "Reposts" tab's notes; null until the tab was opened once. */
+    val reposts: List<NoteUi>? = null,
     /** An older page is being fetched for the open tab. */
     val loadingMore: Boolean = false,
     /** Tabs whose paging found nothing older: the list end no longer asks. */
     val ended: Set<ProfileSection> = emptySet(),
 ) {
     /** The open tab's notes. */
-    val shown: List<NoteUi> get() = if (tab == ProfileSection.POSTS) notes else replies.orEmpty()
+    val shown: List<NoteUi> get() = list(tab).orEmpty()
 
     /** The open tab has not loaded yet. */
-    val shownLoading: Boolean get() = if (tab == ProfileSection.POSTS) loading else replies == null
+    val shownLoading: Boolean get() = if (tab == ProfileSection.POSTS) loading else list(tab) == null
 
-    /** Applies [f] to the lists of both tabs. */
-    fun mapNotes(f: (List<NoteUi>) -> List<NoteUi>): ProfileUiState = copy(notes = f(notes), replies = replies?.let(f))
+    /** Applies [f] to the lists of all tabs. */
+    fun mapNotes(f: (List<NoteUi>) -> List<NoteUi>): ProfileUiState = copy(notes = f(notes), replies = replies?.let(f), reposts = reposts?.let(f))
 
-    fun list(section: ProfileSection): List<NoteUi>? = if (section == ProfileSection.POSTS) notes else replies
+    fun list(section: ProfileSection): List<NoteUi>? = when (section) {
+        ProfileSection.POSTS -> notes
+        ProfileSection.REPLIES -> replies
+        ProfileSection.REPOSTS -> reposts
+    }
 
-    fun withList(section: ProfileSection, list: List<NoteUi>): ProfileUiState =
-        if (section == ProfileSection.POSTS) copy(notes = list, loading = false) else copy(replies = list)
+    fun withList(section: ProfileSection, list: List<NoteUi>): ProfileUiState = when (section) {
+        ProfileSection.POSTS -> copy(notes = list, loading = false)
+        ProfileSection.REPLIES -> copy(replies = list)
+        ProfileSection.REPOSTS -> copy(reposts = list)
+    }
+
+    /** The notes of every tab loaded so far. */
+    val allNotes: List<NoteUi> get() = notes + replies.orEmpty() + reposts.orEmpty()
 }
 
 class ProfileController(
@@ -219,7 +235,7 @@ class ProfileController(
     fun setVisible(visible: Boolean) { this.visible.value = visible }
 
     fun start() {
-        mentions.follow(_state.map { s -> (s.notes + s.replies.orEmpty()).map { it.note } })
+        mentions.follow(_state.map { s -> s.allNotes.map { it.note } })
         scope.launch { deletions.deleted.collect { _state.update { s -> s.mapNotes(deletions::visible) } } }
         // a request started on another screen greys the entry here too, and frees it again when it failed
         scope.launch { deletions.pending.collect { _state.update { s -> s.mapNotes { l -> l.map(actions::flags) } } } }
@@ -319,40 +335,40 @@ class ProfileController(
         return notes.map { n -> withCounts(actions.flags(bookmarks.flags(decorations.decorate(NoteUi(n, profile, n.repostOf?.let { r -> profiles.get(r.author) } ?: profile))))) }
     }
 
-    /** Tips are watched for the notes of both tabs. */
+    /** Tips are watched for the notes of all tabs. */
     private fun track() {
-        val s = _state.value
-        decorations.track((s.notes + s.replies.orEmpty()).map { it.note })
+        decorations.track(_state.value.allNotes.map { it.note })
     }
 
     /** A refresh-loop [reload] of every tab loaded so far; a per-iteration failure must not stop the loop or replace an already-loaded profile with an error message. */
     private suspend fun reloadQuietly() {
         // the CURRENT profile, not the one captured at start: the observer above may have replaced it after an edit
         runCatching { reload(_state.value.profile, fetch = false) }.onFailure { if (it is CancellationException) throw it }
-        if (_state.value.replies == null) return
-        runCatching { reload(ProfileSection.REPLIES, _state.value.profile, fetch = false) }.onFailure { if (it is CancellationException) throw it }
+        for (section in listOf(ProfileSection.REPLIES, ProfileSection.REPOSTS)) {
+            if (_state.value.list(section) == null) continue
+            runCatching { reload(section, _state.value.profile, fetch = false) }.onFailure { if (it is CancellationException) throw it }
+        }
     }
 
-    /** Opens a tab; "Replies" loads (with a relay fetch) the first time it opens. */
+    /** Opens a tab; "Replies" and "Reposts" load (with a relay fetch) the first time they open. */
     fun selectTab(section: ProfileSection) {
         val before = _state.value
         _state.update { it.copy(tab = section) }
-        if (section != ProfileSection.REPLIES || before.replies != null || repliesLoading) return
-        repliesLoading = true
+        if (section == ProfileSection.POSTS || before.list(section) != null || !tabsLoading.add(section)) return
         scope.launch {
             try {
-                reload(ProfileSection.REPLIES, _state.value.profile, fetch = true)
+                reload(section, _state.value.profile, fetch = true)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _state.update { it.copy(replies = emptyList(), message = uiText(R.string.profile_error_load).asMessage()) }
+                _state.update { it.withList(section, emptyList()).copy(message = uiText(R.string.profile_error_load).asMessage()) }
             } finally {
-                repliesLoading = false
+                tabsLoading.remove(section)
             }
         }
     }
 
-    private var repliesLoading = false
+    private val tabsLoading = HashSet<ProfileSection>()
 
     /** Fetches the open tab's page before its oldest note; ignored while a call runs, before the tab loaded, and once its paging ended. */
     fun loadMore() {
@@ -520,8 +536,9 @@ fun ProfileScreen(
             vm.tipWatch.setVisible(false)
         }
     }
-    Scaffold(topBar = {
-        TopAppBar(title = { Text(if (state.isSelf) stringResource(R.string.profile_title_self) else state.profile.shownName) }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back)) } }, actions = {
+    val hide = rememberHideOnScroll()
+    Scaffold(modifier = Modifier.nestedScroll(hide.connection), topBar = { HideOnScrollHeader(hide) {
+        TopAppBar(windowInsets = WindowInsets(0), title = { Text(if (state.isSelf) stringResource(R.string.profile_title_self) else state.profile.shownName) }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back)) } }, actions = {
             if (!state.isSelf && (state.isMuted || state.canMute)) {
                 var open by remember { mutableStateOf(false) }
                 Box {
@@ -538,7 +555,7 @@ fun ProfileScreen(
                 }
             }
         })
-    }, snackbarHost = { SnackbarHost(snackbar, Modifier.muteUndoTag(state.message)) }) { padding ->
+    } }, snackbarHost = { SnackbarHost(snackbar, Modifier.muteUndoTag(state.message)) }) { padding ->
         val listState = rememberLazyListState()
         LazyColumn(state = listState, modifier = Modifier.padding(padding).fillMaxSize()) {
             item {
@@ -602,7 +619,7 @@ fun ProfileScreen(
                             onClick = { vm.controller.selectTab(section) },
                             // M3 colours an unselected tab like the selected one unless told otherwise; X greys it
                             unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            text = { Text(stringResource(if (section == ProfileSection.POSTS) R.string.profile_tab_posts else R.string.profile_tab_replies)) },
+                            text = { Text(stringResource(section.label)) },
                             modifier = Modifier.testTag("profile-tab-${section.name.lowercase()}"),
                         )
                     }
@@ -634,7 +651,7 @@ fun ProfileScreen(
                 state.shownLoading -> item(key = "profile-loading") { ListSpinner() }
                 state.shown.isEmpty() -> item(key = "profile-empty") {
                     Text(
-                        stringResource(if (state.tab == ProfileSection.POSTS) R.string.profile_empty_posts else R.string.profile_empty_replies),
+                        stringResource(state.tab.empty),
                         style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.fillMaxWidth().padding(24.dp).testTag("profile-empty"),
                     )
@@ -706,4 +723,16 @@ private fun ProfileTipButton(pending: Boolean, onClick: () -> Unit) {
             tint = if (pending) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
+}
+
+private val ProfileSection.label: Int get() = when (this) {
+    ProfileSection.POSTS -> R.string.profile_tab_posts
+    ProfileSection.REPLIES -> R.string.profile_tab_replies
+    ProfileSection.REPOSTS -> R.string.profile_tab_reposts
+}
+
+private val ProfileSection.empty: Int get() = when (this) {
+    ProfileSection.POSTS -> R.string.profile_empty_posts
+    ProfileSection.REPLIES -> R.string.profile_empty_replies
+    ProfileSection.REPOSTS -> R.string.profile_empty_reposts
 }

@@ -1,0 +1,2 @@
+• Los perfiles tienen pestañas de publicaciones, respuestas y reposts, como en X
+• La cabecera y las pestañas se ocultan al desplazarte hacia abajo y vuelven al subir

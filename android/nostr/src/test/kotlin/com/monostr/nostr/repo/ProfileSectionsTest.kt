@@ -15,7 +15,7 @@ import rust.nostr.sdk.Keys
 import rust.nostr.sdk.Timestamp
 import java.nio.file.Path
 
-/** Profile tabs (2026-10-09): "Posts" shows what the home feed would show of the author, "Replies" their replies only. */
+/** Profile tabs like X (2026-10-12): "Posts" the author's own root notes, "Replies" their replies, "Reposts" what they reposted. */
 class ProfileSectionsTest {
     @TempDir lateinit var dir: Path
     private val me = Keys.generate()
@@ -39,7 +39,7 @@ class ProfileSectionsTest {
     }
 
     @Test
-    fun `posts leave replies and reposts of replies out, replies hold only replies`() = runTest {
+    fun `posts hold only own root notes, replies only replies, reposts every repost`() = runTest {
         SilentWsRelay(answerEose = true).use { relay ->
             val e = engine(relay)
             val root = note(alice, "root", 1000).also { e.save(it) }
@@ -50,10 +50,11 @@ class ProfileSectionsTest {
             e.save(repost(alice, bobs, 1005))
             val repo = NostrFeedRepository(e)
             val hex = alice.publicKey().toHex()
-            val posts = repo.profileNotes(hex, ProfileSection.POSTS, fetch = false)
-            assertEquals(listOf("bob root", "root"), posts.map { it.repostOf?.content ?: it.content })
-            assertTrue(posts.first().isRepost)
+            assertEquals(listOf("root"), repo.profileNotes(hex, ProfileSection.POSTS, fetch = false).map { it.content })
             assertEquals(listOf(answer.id().toHex()), repo.profileNotes(hex, ProfileSection.REPLIES, fetch = false).map { it.id })
+            val reposts = repo.profileNotes(hex, ProfileSection.REPOSTS, fetch = false)
+            assertEquals(listOf("bob root", "bob answer"), reposts.map { it.repostOf?.content })
+            assertTrue(reposts.all { it.isRepost })
             e.close()
         }
     }
@@ -82,8 +83,23 @@ class ProfileSectionsTest {
             val e = engine(relay)
             val hex = alice.publicKey().toHex()
             NostrFeedRepository(e).moreProfileNotes(hex, ProfileSection.POSTS, before = 5000)
-            val pages = relay.requests.filter { "\"kinds\":[1,6]" in it }
+            val pages = relay.requests.filter { "\"kinds\":[1]" in it }
             assertTrue(pages.any { "\"until\":5000" in it && hex in it }, "no author page below 5000: $pages")
+            e.close()
+        }
+    }
+
+    @Test
+    fun `the reposts tab asks the relays for kind 6 alone, so many notes cannot crowd it out`() = runTest {
+        SilentWsRelay(answerEose = true).use { relay ->
+            val e = engine(relay)
+            val bobs = note(bob, "bob root", 1000).also { e.save(it) }
+            e.save(repost(alice, bobs, 1001))
+            (0 until 60).forEach { e.save(note(alice, "late $it", 2000L + it)) }
+            val repo = NostrFeedRepository(e)
+            val hex = alice.publicKey().toHex()
+            assertEquals(listOf("bob root"), repo.profileNotes(hex, ProfileSection.REPOSTS).map { it.repostOf?.content })
+            assertTrue(relay.requests.any { "\"kinds\":[6]" in it && hex in it }, "no kind 6 page: ${relay.requests}")
             e.close()
         }
     }

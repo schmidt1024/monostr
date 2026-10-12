@@ -1,0 +1,2 @@
+• Profile haben die Tabs Posts, Antworten und Reposts, wie bei X
+• Header und Tabs verschwinden beim Runterscrollen und kommen beim Hochscrollen zurück

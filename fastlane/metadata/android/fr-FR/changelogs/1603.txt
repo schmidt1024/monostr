@@ -1,0 +1,2 @@
+• Les profils ont des onglets Publications, Réponses et Reposts, comme sur X
+• L'en-tête et les onglets se masquent quand tu fais défiler vers le bas et reviennent vers le haut
