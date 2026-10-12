@@ -1,0 +1,1 @@
+• Al cambiar de pestaña en un perfil, las pestañas se quedan arriba en lugar de volver a la cabecera, como en X

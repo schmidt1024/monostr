@@ -1,0 +1,1 @@
+• Switching profile tabs keeps the tabs at the top instead of jumping back to the profile header, like X

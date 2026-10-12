@@ -1,0 +1,1 @@
+• Changer d'onglet dans un profil garde les onglets en haut au lieu de revenir à l'en-tête, comme sur X

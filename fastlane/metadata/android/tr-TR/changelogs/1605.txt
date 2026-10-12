@@ -1,0 +1,1 @@
+• Profil sekmeleri arasında geçiş yaparken sekmeler X'teki gibi üstte kalır, profil başlığına geri dönmez

@@ -1,6 +1,9 @@
 package com.monostr.app
 
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -72,5 +75,32 @@ class ProfileTabsTest {
         assertTrue("clipboard: $clip", clip == rust.nostr.sdk.PublicKey.parse(me.publicKey().toHex()).toBech32())
         // v0.13.1: the row names whom it answers
         rule.waitUntil(15_000) { nodes("note-reply-to-${reply.id().toHex().take(8)}").isNotEmpty() }
+    }
+
+    @Test
+    fun aTabSwitchWithTheTabsStuckAtTheTopKeepsThemThere() {
+        reachFeed()
+        val ready = entry.session().requireReady()
+        val other = Keys.generate()
+        val root = EventBuilder.textNote("pin root of another account").signWithKeys(other)
+        val now = System.currentTimeMillis() / 1000
+        runBlocking {
+            ready.engine.save(root)
+            (1..30).forEach { i ->
+                ready.engine.save(EventBuilder.textNote("pin post $i").customCreatedAt(rust.nostr.sdk.Timestamp.fromSecs((now - 100 + i).toULong())).signWithKeys(me))
+            }
+            ready.engine.save(EventBuilder.textNoteReply("pin own reply", root, null, null).signWithKeys(me))
+        }
+        rule.onNodeWithTag("feed-profile").performClick()
+        rule.waitUntil(15_000) { texts("pin post 30").isNotEmpty() }
+        rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("pin post 5"))
+        rule.waitForIdle()
+        assertTrue("the profile header is still on screen", nodes("profile-edit").isEmpty())
+        rule.onNodeWithTag("profile-tab-replies").performClick()
+        rule.waitUntil(15_000) { texts("pin own reply").isNotEmpty() }
+        rule.waitForIdle()
+        // the tabs stayed at the top: the profile header did not come back
+        assertTrue("the list jumped to the profile's top", nodes("profile-edit").isEmpty())
+        rule.onNodeWithTag("profile-tab-replies").assertIsDisplayed()
     }
 }

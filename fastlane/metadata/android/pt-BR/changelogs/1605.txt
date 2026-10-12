@@ -1,0 +1,1 @@
+• Ao trocar de aba no perfil, as abas ficam no topo em vez de voltar ao cabeçalho, como no X

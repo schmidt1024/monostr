@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
@@ -557,6 +558,7 @@ fun ProfileScreen(
         })
     } }, snackbarHost = { SnackbarHost(snackbar, Modifier.muteUndoTag(state.message)) }) { padding ->
         val listState = rememberLazyListState()
+        val scope = rememberCoroutineScope()
         LazyColumn(state = listState, modifier = Modifier.padding(padding).fillMaxSize()) {
             item {
                 Column(Modifier.padding(16.dp)) {
@@ -616,7 +618,13 @@ fun ProfileScreen(
                     ProfileSection.entries.forEach { section ->
                         Tab(
                             selected = state.tab == section,
-                            onClick = { vm.controller.selectTab(section) },
+                            onClick = {
+                                // X: tabs stuck at the top stay there and the new tab starts right below them;
+                                // otherwise the swap of the list's items would send the list back to the profile's top
+                                val tabs = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == "profile-tabs" }
+                                vm.controller.selectTab(section)
+                                if (tabs != null && tabs.offset <= 0) scope.launch { listState.scrollToItem(tabs.index) }
+                            },
                             // M3 colours an unselected tab like the selected one unless told otherwise; X greys it
                             unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                             text = { Text(stringResource(section.label)) },
@@ -661,6 +669,8 @@ fun ProfileScreen(
                     if (state.loadingMore) ListSpinner()
                 }
             }
+            // X: a short tab leaves room below, so the tabs can stay stuck at the top when it opens there
+            if (state.shown.size < SHORT_TAB) item(key = "profile-tab-room") { Spacer(Modifier.fillParentMaxHeight()) }
         }
         VisibleNotes(listState, vm.controller::visible)
     }
@@ -736,3 +746,6 @@ private val ProfileSection.empty: Int get() = when (this) {
     ProfileSection.REPLIES -> R.string.profile_empty_replies
     ProfileSection.REPOSTS -> R.string.profile_empty_reposts
 }
+
+/** Below this many notes a tab may be shorter than the screen and gets room below (see the tab row). */
+private const val SHORT_TAB = 10

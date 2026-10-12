@@ -1,0 +1,1 @@
+• Cambiando scheda nel profilo le schede restano in alto invece di tornare all'intestazione, come su X
