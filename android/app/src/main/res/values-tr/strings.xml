@@ -269,6 +269,7 @@
     <string name="note_via">%1$s ile</string>
     <string name="settings_monero">Monero bahşişleri</string>
     <string name="settings_monero_not_set_up">Kurulmadı. Bahşiş göndermek için gerekmez.</string>
+    <string name="settings_monero_announced">Bahşişler %1$s…%2$s adresine geliyor, başka bir cihazda kuruldu. Burada kurmak bu adresi değiştirir.</string>
     <string name="settings_monero_set_up">Monero bahşişi almayı kur</string>
     <string name="settings_monero_address">Bahşişler bu cüzdana gelir: %1$s…%2$s · %3$s</string>
     <string name="settings_monero_wallet_hint">Profil açıklamandaki veya diğer profil alanlarındaki bir Monero adresine değil. Makbuzlar sana watcher ve kendi relay’lerin üzerinden ulaşır; ücretli relay’ler gerekmez.</string>
@@ -456,6 +457,7 @@
     <string name="upload_error_failed">Yükleme başarısız</string>
     <string name="compose_error_uploads">Resimlerin yüklenmesini bekle veya yüklenemeyenleri kaldır</string>
     <string name="compose_attach">Resim ekle</string>
+    <string name="compose_paste_image">Panodaki görseli yapıştır</string>
     <string name="compose_attachment_remove">Resmi kaldır</string>
     <string name="upload_retry">Yeniden dene</string>
     <string name="compose_sensitive">Hassas içerik</string>

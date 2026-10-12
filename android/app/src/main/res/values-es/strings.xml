@@ -270,6 +270,7 @@
     <string name="note_via">vía %1$s</string>
     <string name="settings_monero">Propinas en Monero</string>
     <string name="settings_monero_not_set_up">No configurado. No hace falta para enviar propinas.</string>
+    <string name="settings_monero_announced">Las propinas llegan a %1$s…%2$s, configurada en otro dispositivo. Configurar aquí reemplaza esa dirección.</string>
     <string name="settings_monero_set_up">Configurar recepción de propinas</string>
     <string name="settings_monero_address">Las propinas llegan a esta cartera: %1$s…%2$s · %3$s</string>
     <string name="settings_monero_wallet_hint">No a una dirección de Monero en tu biografía u otros campos del perfil. Los recibos te llegan a través del watcher y tus propios relays; no hacen falta relays de pago.</string>
@@ -461,6 +462,7 @@
     <string name="upload_error_failed">La subida falló</string>
     <string name="compose_error_uploads">Espera a que se suban las imágenes o quita las que fallaron</string>
     <string name="compose_attach">Añadir imágenes</string>
+    <string name="compose_paste_image">Pegar imagen del portapapeles</string>
     <string name="compose_attachment_remove">Quitar imagen</string>
     <string name="upload_retry">Reintentar</string>
     <string name="compose_sensitive">Contenido sensible</string>

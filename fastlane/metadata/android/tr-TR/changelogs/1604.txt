@@ -1,0 +1,2 @@
+• Kopyalanan bir görseli yeni pano düğmesiyle nota yapıştır
+• Monero ayarları, başka bir cihazda kurulduysa bahşiş adresini gösterir

@@ -2,6 +2,9 @@ package com.monostr.app
 
 import android.app.Activity
 import android.app.Instrumentation
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.ContentValues
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -188,6 +191,35 @@ class MediaUploadTest {
         rule.onNodeWithTag("compose-attach").performScrollTo().performClick()
         rule.waitUntil(15_000) { nodes("compose-attachment-0").isNotEmpty() }
         rule.waitUntil(30_000) { nodes("compose-attachment-progress-0").isEmpty() }
+    }
+
+    @Test
+    fun aCopiedPictureIsPastedThroughTheButtonAndUploaded() {
+        reachComposer()
+        // nothing on the clipboard that is a picture: no button
+        val clipboard = ctx.getSystemService(ClipboardManager::class.java)
+        rule.runOnUiThread { clipboard.setPrimaryClip(ClipData.newPlainText("t", "just text")) }
+        rule.waitForIdle()
+        assertTrue(nodes("compose-paste-image").isEmpty())
+        // the clipboard takes content:// only (a file:// URI may not leave the process): a MediaStore copy, removed below
+        val values = ContentValues().apply {
+            put(MediaStore.Images.Media.DISPLAY_NAME, "monostr-paste-test-${System.nanoTime()}.jpg")
+            put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+        }
+        val shared = ctx.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)!!
+        try {
+            ctx.contentResolver.openOutputStream(shared)!!.use { out -> picture.inputStream().use { it.copyTo(out) } }
+            rule.runOnUiThread { clipboard.setPrimaryClip(ClipData.newUri(ctx.contentResolver, "picture", shared)) }
+            rule.waitUntil(5_000) { nodes("compose-paste-image").isNotEmpty() }
+            rule.onNodeWithTag("compose-paste-image").performScrollTo().performClick()
+            rule.waitUntil(15_000) { nodes("compose-attachment-0").isNotEmpty() }
+            rule.waitUntil(30_000) { nodes("compose-attachment-progress-0").isEmpty() }
+            assertTrue(nodes("compose-attachment-error-0").isEmpty())
+            assertEquals(1, stored.size)
+        } finally {
+            rule.runOnUiThread { clipboard.clearPrimaryClip() }
+            ctx.contentResolver.delete(shared, null, null)
+        }
     }
 
     @Test

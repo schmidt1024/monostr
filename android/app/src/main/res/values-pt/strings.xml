@@ -270,6 +270,7 @@
     <string name="note_via">via %1$s</string>
     <string name="settings_monero">Gorjetas em Monero</string>
     <string name="settings_monero_not_set_up">Não configurado. Não é necessário para enviar gorjetas.</string>
+    <string name="settings_monero_announced">As gorjetas chegam a %1$s…%2$s, configurada em outro dispositivo. Configurar aqui substitui esse endereço.</string>
     <string name="settings_monero_set_up">Configurar recebimento de gorjetas</string>
     <string name="settings_monero_address">As gorjetas chegam nesta carteira: %1$s…%2$s · %3$s</string>
     <string name="settings_monero_wallet_hint">Não em um endereço Monero da sua bio ou de outros campos do perfil. Os recibos chegam a você pelo watcher e pelos seus relays; relays pagos não são necessários.</string>
@@ -461,6 +462,7 @@
     <string name="upload_error_failed">Falha no envio</string>
     <string name="compose_error_uploads">Aguarde o envio das imagens ou remova as que falharam</string>
     <string name="compose_attach">Adicionar imagens</string>
+    <string name="compose_paste_image">Colar imagem da área de transferência</string>
     <string name="compose_attachment_remove">Remover imagem</string>
     <string name="upload_retry">Tentar de novo</string>
     <string name="compose_sensitive">Conteúdo sensível</string>

@@ -270,6 +270,7 @@
     <string name="note_via">via %1$s</string>
     <string name="settings_monero">Mance in Monero</string>
     <string name="settings_monero_not_set_up">Non configurato. Non serve per inviare mance.</string>
+    <string name="settings_monero_announced">Le mance arrivano a %1$s…%2$s, configurato su un altro dispositivo. Configurare qui sostituisce quell\'indirizzo.</string>
     <string name="settings_monero_set_up">Configura la ricezione di mance</string>
     <string name="settings_monero_address">Le mance arrivano in questo wallet: %1$s…%2$s · %3$s</string>
     <string name="settings_monero_wallet_hint">Non a un indirizzo Monero nella tua bio o in altri campi del profilo. Le ricevute ti arrivano tramite il watcher e i tuoi relay; i relay a pagamento non servono.</string>
@@ -461,6 +462,7 @@
     <string name="upload_error_failed">Caricamento non riuscito</string>
     <string name="compose_error_uploads">Attendi il caricamento delle immagini o rimuovi quelle non riuscite</string>
     <string name="compose_attach">Aggiungi immagini</string>
+    <string name="compose_paste_image">Incolla immagine dagli appunti</string>
     <string name="compose_attachment_remove">Rimuovi immagine</string>
     <string name="upload_retry">Riprova</string>
     <string name="compose_sensitive">Contenuto sensibile</string>

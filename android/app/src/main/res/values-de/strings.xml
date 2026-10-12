@@ -269,6 +269,7 @@
     <string name="note_via">via %1$s</string>
     <string name="settings_monero">Monero-Tips</string>
     <string name="settings_monero_not_set_up">Nicht eingerichtet. Zum Senden von Tips nicht nötig.</string>
+    <string name="settings_monero_announced">Tips kommen an %1$s…%2$s an, eingerichtet auf einem anderen Gerät. Eine Einrichtung hier ersetzt diese Adresse.</string>
     <string name="settings_monero_set_up">Monero-Tips empfangen einrichten</string>
     <string name="settings_monero_address">Tips kommen in dieser Wallet an: %1$s…%2$s · %3$s</string>
     <string name="settings_monero_wallet_hint">Nicht an einer Monero-Adresse in deiner Bio oder anderen Profilfeldern. Tip-Belege erreichen dich über den Watcher und deine eigenen Relays; bezahlte Relays sind nicht nötig.</string>
@@ -456,6 +457,7 @@
     <string name="upload_error_failed">Upload fehlgeschlagen</string>
     <string name="compose_error_uploads">Warte, bis die Bilder hochgeladen sind, oder entferne die fehlgeschlagenen</string>
     <string name="compose_attach">Bilder hinzufügen</string>
+    <string name="compose_paste_image">Bild aus der Zwischenablage einfügen</string>
     <string name="compose_attachment_remove">Bild entfernen</string>
     <string name="upload_retry">Erneut</string>
     <string name="compose_sensitive">Sensibler Inhalt</string>

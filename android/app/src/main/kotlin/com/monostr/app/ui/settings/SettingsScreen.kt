@@ -218,7 +218,7 @@ class SettingsViewModel @Inject constructor(
     val dmPreviewText: StateFlow<Boolean> = dmSettings.previewText.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
     fun setDmPreviewName(on: Boolean) = viewModelScope.launch { dmSettings.setPreviewName(on) }
     fun setDmPreviewText(on: Boolean) = viewModelScope.launch { dmSettings.setPreviewText(on) }
-    val monero = MoneroSettingsController(settings, secrets, session.requireReady().tips, session.requireReady().watchers, { session.adoptRelayList() }, viewModelScope)
+    val monero = MoneroSettingsController(settings, secrets, session.requireReady().tips, session.requireReady().watchers, { session.adoptRelayList() }, viewModelScope, session.requireReady().pubkey)
     val pubkey: String = session.requireReady().pubkey
     val isAmber: Boolean = session.requireReady().signer is AmberSigner
     private val _notice = MutableStateFlow<UiText?>(null)
@@ -409,7 +409,9 @@ fun SettingsScreen(onBack: () -> Unit, onMoneroSetup: () -> Unit, onSupport: () 
             Text(stringResource(R.string.settings_monero), style = MaterialTheme.typography.titleMedium)
             val setup = monero.setup
             if (setup == null) {
-                Text(stringResource(R.string.settings_monero_not_set_up), style = MaterialTheme.typography.bodySmall)
+                val announced = monero.announced
+                if (announced != null) Text(stringResource(R.string.settings_monero_announced, announced.take(8), announced.takeLast(6)), style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("settings-monero-announced"))
+                else Text(stringResource(R.string.settings_monero_not_set_up), style = MaterialTheme.typography.bodySmall)
                 Button(onClick = onMoneroSetup, modifier = Modifier.fillMaxWidth().testTag("settings-monero-setup")) { Text(stringResource(R.string.settings_monero_set_up)) }
             } else {
                 // launch feedback: people expected tips at a Monero address in their bio; say plainly where they go

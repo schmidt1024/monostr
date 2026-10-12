@@ -273,6 +273,7 @@
     <string name="note_via">через %1$s</string>
     <string name="settings_monero">Чаевые в Monero</string>
     <string name="settings_monero_not_set_up">Не настроено. Для отправки чаевых не требуется.</string>
+    <string name="settings_monero_announced">Чаевые приходят на адрес %1$s…%2$s, настроенный на другом устройстве. Настройка здесь заменит этот адрес.</string>
     <string name="settings_monero_set_up">Настроить приём чаевых</string>
     <string name="settings_monero_address">Чаевые приходят в этот кошелёк: %1$s…%2$s · %3$s</string>
     <string name="settings_monero_wallet_hint">Не на адрес Monero из описания или других полей профиля. Квитанции приходят через watcher и ваши релеи; платные релеи не нужны.</string>
@@ -472,6 +473,7 @@
     <string name="upload_error_failed">Не удалось загрузить</string>
     <string name="compose_error_uploads">Дождитесь загрузки изображений или уберите те, что не загрузились</string>
     <string name="compose_attach">Добавить изображения</string>
+    <string name="compose_paste_image">Вставить изображение из буфера обмена</string>
     <string name="compose_attachment_remove">Убрать изображение</string>
     <string name="upload_retry">Повторить</string>
     <string name="compose_sensitive">Деликатный контент</string>

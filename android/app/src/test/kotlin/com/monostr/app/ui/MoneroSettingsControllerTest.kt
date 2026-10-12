@@ -5,6 +5,9 @@ import com.monostr.app.R
 import com.monostr.app.data.KeystoreSecretStore
 import com.monostr.app.data.MoneroSetup
 import com.monostr.app.ui.settings.MoneroSettingsController
+import com.monostr.monero.MoneroKeys
+import com.monostr.monero.Network
+import com.monostr.tips.PaymentInfo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
@@ -81,6 +84,31 @@ class MoneroSettingsControllerTest {
         assertEquals(MoneroSettingsController.ERR_NOT_PUBLISHED, c.state.value.error)
         assertFalse(c.state.value.busy)
         assertNull(c.state.value.message)
+    }
+
+    @Test
+    fun `without a setup here the address announced from another device is shown`() = runTest {
+        val self = "5".repeat(64)
+        val announced = MoneroKeys.generate().address(Network.MAINNET)
+        val tips = FakeTips(infos = mapOf(self to PaymentInfo.Enabled(announced, "https://w.example", "c".repeat(64))))
+        val c = MoneroSettingsController(FakeTipSettings(), FakeSecrets(), tips, FakeWatcherGateway(), { true }, eager(), selfPubkey = self)
+        c.start()
+        advanceUntilIdle()
+        assertNull(c.state.value.setup)
+        assertEquals(announced.encode(), c.state.value.announced)
+    }
+
+    @Test
+    fun `a setup on this device shows itself, not the announced address`() = runTest {
+        val self = "5".repeat(64)
+        val own = MoneroKeys.generate().address(Network.MAINNET)
+        val setup = MoneroSetup(own.encode(), "https://w.example", "c".repeat(64), "mainnet", 1)
+        val tips = FakeTips(infos = mapOf(self to PaymentInfo.Enabled(own, "https://w.example", "c".repeat(64))))
+        val c = MoneroSettingsController(FakeTipSettings(setup = setup), FakeSecrets(), tips, FakeWatcherGateway(), { true }, eager(), selfPubkey = self)
+        c.start()
+        advanceUntilIdle()
+        assertEquals(setup, c.state.value.setup)
+        assertNull(c.state.value.announced)
     }
 
     @Test

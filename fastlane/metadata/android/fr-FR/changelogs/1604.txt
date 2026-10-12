@@ -1,0 +1,2 @@
+• Colle une image copiée dans une note avec le nouveau bouton presse-papiers
+• Les réglages Monero affichent ton adresse de pourboires si elle a été configurée sur un autre appareil

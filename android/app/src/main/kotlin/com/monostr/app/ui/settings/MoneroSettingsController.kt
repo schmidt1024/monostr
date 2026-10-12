@@ -14,6 +14,7 @@ import com.monostr.app.ui.common.uiText
 import com.monostr.app.ui.common.userMessage
 import com.monostr.nostr.repo.TipsRepository
 import kotlinx.coroutines.CancellationException
+import com.monostr.tips.PaymentInfo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -28,6 +29,8 @@ data class MoneroSettingsState(
     val presets: List<String> = Presets.DEFAULT.map { Presets.format(it) },
     val unit: AmountUnit = AmountUnit.XMR,
     val busy: Boolean = false,
+    /** Without a setup on this device: the tip address the account announces (kind 10037), set up elsewhere. */
+    val announced: String? = null,
     val error: UiText? = null,
     val message: UiText? = null,
 ) {
@@ -42,17 +45,35 @@ class MoneroSettingsController(
     private val gateway: WatcherGateway,
     private val adoptRelays: suspend () -> Boolean,
     private val scope: CoroutineScope,
+    /** The logged-in account; null in tests that do not look at announced payment info. */
+    private val selfPubkey: String? = null,
 ) {
     private val _state = MutableStateFlow(MoneroSettingsState())
     val state: StateFlow<MoneroSettingsState> = _state.asStateFlow()
 
     fun start() {
-        scope.launch { settings.setup.collect { s -> _state.update { it.copy(setup = s, hasViewKey = secrets.get(KeystoreSecretStore.SECRET_VIEW_KEY) != null) } } }
+        scope.launch {
+            settings.setup.collect { s ->
+                _state.update { it.copy(setup = s, hasViewKey = secrets.get(KeystoreSecretStore.SECRET_VIEW_KEY) != null) }
+                // after a reinstall or on a second device "not set up" would be wrong: tips still arrive at the announced address
+                val announced = if (s == null && selfPubkey != null) announcedAddress(selfPubkey) else null
+                _state.update { it.copy(announced = announced.takeIf { _ -> it.setup == null }) }
+            }
+        }
         scope.launch {
             combine(settings.presets, settings.amountUnit) { p, u -> p to u }.collect { (p, u) ->
                 _state.update { it.copy(presets = p.map { v -> Presets.format(v, u) }, unit = u) }
             }
         }
+    }
+
+    /** Unreachable relays count as nothing announced: the row then says "not set up", as before. */
+    private suspend fun announcedAddress(pubkey: String): String? = try {
+        (tips.paymentInfo(pubkey) as? PaymentInfo.Enabled)?.address?.encode()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        null
     }
 
     fun editPreset(index: Int, value: String) = _state.update { st ->

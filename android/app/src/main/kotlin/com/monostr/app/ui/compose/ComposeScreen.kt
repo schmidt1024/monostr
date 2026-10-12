@@ -21,8 +21,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.outlined.ContentPaste
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -368,6 +370,8 @@ fun ComposeScreen(onDone: () -> Unit, vm: ComposeViewModel = hiltViewModel()) {
     }
     val pickOne = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> onPicked(listOfNotNull(uri)) }
     val imagesOnly = remember { PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly) }
+    val context = LocalContext.current
+    val clipboardHasImage = rememberClipboardHasImage()
     Scaffold(topBar = {
         TopAppBar(
             title = { Text(stringResource(if (state.replyTo != null) R.string.compose_title_reply else R.string.compose_title_new)) },
@@ -439,16 +443,28 @@ fun ComposeScreen(onDone: () -> Unit, vm: ComposeViewModel = hiltViewModel()) {
                     )
                 }
             }
-            IconButton(
-                onClick = {
-                    val free = NoteMedia.MAX - state.attachments.size
-                    val many = pickMany[free]
-                    if (many != null) many.launch(imagesOnly) else pickOne.launch(imagesOnly)
-                },
-                enabled = state.canAttach,
-                modifier = Modifier.testTag("compose-attach"),
-            ) {
-                Icon(Icons.Outlined.Image, contentDescription = stringResource(R.string.compose_attach))
+            Row {
+                IconButton(
+                    onClick = {
+                        val free = NoteMedia.MAX - state.attachments.size
+                        val many = pickMany[free]
+                        if (many != null) many.launch(imagesOnly) else pickOne.launch(imagesOnly)
+                    },
+                    enabled = state.canAttach,
+                    modifier = Modifier.testTag("compose-attach"),
+                ) {
+                    Icon(Icons.Outlined.Image, contentDescription = stringResource(R.string.compose_attach))
+                }
+                // the text field takes text only on paste; a copied picture joins the note through this button
+                if (clipboardHasImage) {
+                    IconButton(
+                        onClick = { onPicked(clipboardImages(context)) },
+                        enabled = state.canAttach,
+                        modifier = Modifier.testTag("compose-paste-image"),
+                    ) {
+                        Icon(Icons.Outlined.ContentPaste, contentDescription = stringResource(R.string.compose_paste_image))
+                    }
+                }
             }
             Spacer(Modifier.height(12.dp))
             Button(

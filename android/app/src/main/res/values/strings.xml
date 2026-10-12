@@ -273,6 +273,7 @@
     <string name="note_via">via %1$s</string>
     <string name="settings_monero">Monero tips</string>
     <string name="settings_monero_not_set_up">Not set up. Not needed for sending tips.</string>
+    <string name="settings_monero_announced">Tips arrive at %1$s…%2$s, set up on another device. Setting up here replaces that address.</string>
     <string name="settings_monero_set_up">Set up receiving Monero tips</string>
     <string name="settings_monero_address">Tips arrive in this wallet: %1$s…%2$s · %3$s</string>
     <string name="settings_monero_wallet_hint">Not at a Monero address in your bio or other profile fields. Tip receipts reach you through the watcher and your own relays; paid relays are not needed.</string>
@@ -461,6 +462,7 @@
     <string name="upload_error_failed">Upload failed</string>
     <string name="compose_error_uploads">Wait until the pictures are uploaded, or remove the failed ones</string>
     <string name="compose_attach">Add pictures</string>
+    <string name="compose_paste_image">Paste picture from clipboard</string>
     <string name="compose_attachment_remove">Remove picture</string>
     <string name="upload_retry">Try again</string>
     <string name="compose_sensitive">Sensitive content</string>

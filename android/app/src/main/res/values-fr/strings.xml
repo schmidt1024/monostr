@@ -270,6 +270,7 @@
     <string name="note_via">via %1$s</string>
     <string name="settings_monero">Pourboires Monero</string>
     <string name="settings_monero_not_set_up">Non configuré. Pas nécessaire pour envoyer des pourboires.</string>
+    <string name="settings_monero_announced">Les pourboires arrivent à %1$s…%2$s, configurée sur un autre appareil. Une configuration ici remplace cette adresse.</string>
     <string name="settings_monero_set_up">Configurer la réception de pourboires</string>
     <string name="settings_monero_address">Les pourboires arrivent dans ce portefeuille : %1$s…%2$s · %3$s</string>
     <string name="settings_monero_wallet_hint">Pas à une adresse Monero de votre bio ou d’autres champs du profil. Les reçus vous parviennent par le watcher et vos propres relais ; les relais payants ne sont pas nécessaires.</string>
@@ -461,6 +462,7 @@
     <string name="upload_error_failed">Échec de l\'envoi</string>
     <string name="compose_error_uploads">Attendez la fin de l\'envoi des images ou retirez celles qui ont échoué</string>
     <string name="compose_attach">Ajouter des images</string>
+    <string name="compose_paste_image">Coller l\'image du presse-papiers</string>
     <string name="compose_attachment_remove">Retirer l\'image</string>
     <string name="upload_retry">Réessayer</string>
     <string name="compose_sensitive">Contenu sensible</string>

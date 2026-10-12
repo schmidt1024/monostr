@@ -1,0 +1,2 @@
+• Paste a copied picture into a note with the new clipboard button
+• Monero settings show your tip address when it was set up on another device
