@@ -1,7 +1,7 @@
 # Monostr Tips – Monero-Zahlungen für Nostr-Notes und -Profile
 
 Status: Draft
-Version: 0.2
+Version: 0.3
 
 ## Zusammenfassung
 
@@ -69,11 +69,21 @@ Autor: Sender.
 - `e` ist optional. Mit `e` gilt der Tip einer Note, ohne `e` dem Profil des
   Empfängers aus `p`. Ein vorhandenes, aber ungültiges `e` (nicht 64
   Hex-Zeichen klein) macht den Intent ungültig; er gilt nicht als Profil-Tip.
-- `pid`: 8 Byte kryptografisch zufällig, 16 Hex-Zeichen. Wird zur Payment-ID
-  der Integrated Address.
+- `pid`: 8 Byte, 16 Hex-Zeichen. Wird zur Payment-ID der Integrated Address.
+  Der Sender MUSS `pid` aus einem kryptografisch sicheren Zufallsgenerator
+  (CSPRNG) erzeugen und für jeden Intent neu ziehen. Der Watcher ordnet eine
+  Zahlung allein über `pid` einem Intent zu und akzeptiert pro Empfänger und
+  `pid` nur den ersten Intent. Wer eine `pid` vorhersagen kann, kann deshalb
+  vor dem echten Sender einen eigenen Intent veröffentlichen und dessen
+  Zahlung für sich quittieren lassen.
 - `type`: `tip` (eigenständiger Tip, Standard in Monostr), `like` oder
-  `boost` (Tip, den der Client an einen Like bzw. Repost koppelt). Watcher
-  kopieren den Wert unverändert in das Receipt.
+  `boost` (Tip, den der Client an einen Like bzw. Repost koppelt). Der Wert
+  dient nur der Anzeige: Clients können gekoppelte Tips am Like- bzw.
+  Repost-Button zählen statt als eigenständigen Tip. Fehlt `type`, gilt `tip`;
+  ein vorhandener, aber unbekannter Wert macht den Intent ungültig. Watcher
+  kopieren den Wert unverändert in das Receipt. Sender und Watcher schreiben
+  `type` weiterhin immer, weil Implementierungen vor Version 0.3 das Tag
+  verlangen.
 - `expiration` (NIP-40): empfohlen `created_at + 86400`.
 - `["anon"]` (optional): der Sender will nicht genannt werden. Ein solcher
   Intent ist mit einem Einmal-Schlüssel signiert, der nur für diesen Intent
@@ -122,6 +132,7 @@ Autor: Watcher.
 - `P` steht genau dann im Receipt, wenn der Intent kein `anon`-Tag hatte. Ein
   Receipt ohne `P` ist ein anonymer Tip.
 - `amount`: tatsächlich empfangener Betrag.
+- `type`: wie im Intent. Fehlt `type`, gilt `tip`.
 - Kein txid.
 - Mehrere Zahlungen mit derselben `pid` erzeugen je ein Receipt mit
   derselben `intent`-Referenz.

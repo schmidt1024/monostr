@@ -71,6 +71,12 @@ class TipIntentTest {
     }
 
     @Test
+    fun `a missing type means tip`() = runTest {
+        val good = signer.sign(intent().toUnsignedEvent())
+        assertEquals(TipType.TIP, TipIntent.parse(good.copy(tags = good.tags.filter { it[0] != "type" }))?.type)
+    }
+
+    @Test
     fun `a profile tip has no e tag and round trips`() = runTest {
         val i = TipIntent.create(null, recipient, 1_000, TipType.TIP, "", pid, createdAt = 1700000000)
         val unsigned = i.toUnsignedEvent()

@@ -53,13 +53,19 @@ class TipReceiptTest {
     }
 
     @Test
+    fun `a missing type means tip`() = runTest {
+        val good = watcher.sign(unsigned())
+        assertEquals(TipType.TIP, TipReceipt.parse(good.copy(tags = good.tags.filter { it[0] != "type" }))?.type)
+    }
+
+    @Test
     fun `parse rejects malformed`() = runTest {
         val good = watcher.sign(unsigned())
         fun drop(tag: String) = good.copy(tags = good.tags.filter { it[0] != tag })
         fun set(tag: String, value: String) = good.copy(tags = good.tags.map { if (it[0] == tag) listOf(tag, value) else it })
 
         assertNull(TipReceipt.parse(good.copy(kind = Kinds.TIP_INTENT)))
-        for (t in listOf("p", "amount", "intent", "type")) assertNull(TipReceipt.parse(drop(t)), t)
+        for (t in listOf("p", "amount", "intent")) assertNull(TipReceipt.parse(drop(t)), t)
         assertNull(TipReceipt.parse(set("e", "short")))
         assertNull(TipReceipt.parse(set("amount", "0")))
         assertNull(TipReceipt.parse(set("amount", "-1")))

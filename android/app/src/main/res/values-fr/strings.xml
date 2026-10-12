@@ -192,6 +192,7 @@
     <string name="setup_watcher_privacy">Le watcher ne conserve que le nécessaire : votre clé publique Nostr, l\'adresse du portefeuille avec sa clé de visualisation, ainsi que les intents et reçus de pourboire en cours (de toute façon publics sur Nostr). Aucune adresse IP n\'est journalisée ni conservée. Désactiver les pourboires supprime votre compte chez le watcher ; son scanner conserve l\'adresse et la clé de visualisation comme inactives jusqu\'à ce que l\'opérateur les purge.</string>
     <string name="setup_path_new_hint">Crée une nouvelle phrase seed de 25 mots sur ce téléphone. monostr ne fait qu\'observer les pourboires reçus ; pour les dépenser, importez la phrase seed dans Cake Wallet, Monerujo ou Feather.</string>
     <string name="setup_path_existing_hint">Collez l\'adresse principale et la clé de visualisation privée depuis Cake Wallet, Monerujo ou Feather.</string>
+    <string name="setup_announced_warning">Ce compte reçoit déjà des pourboires à %1$s…%2$s, configuré sur un autre appareil. Une configuration ici remplace cette adresse.</string>
     <string name="setup_new_wallet">Créer un portefeuille de pourboires (recommandé)</string>
     <string name="setup_existing_wallet">Utiliser un portefeuille existant</string>
     <string name="setup_reuse_wallet">Transférer le portefeuille enregistré vers ce watcher</string>

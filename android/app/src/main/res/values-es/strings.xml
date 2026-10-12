@@ -192,6 +192,7 @@
     <string name="setup_watcher_privacy">El watcher guarda solo lo necesario: tu clave pública de Nostr, la dirección de la wallet con su clave de visualización y los intents y recibos de propinas abiertos (que de todos modos son públicos en Nostr). No se registran ni guardan direcciones IP. Desactivar las propinas elimina tu cuenta en el watcher; su escáner conserva la dirección y la clave de visualización como inactivas hasta que el operador las borre.</string>
     <string name="setup_path_new_hint">Crea una semilla nueva de 25 palabras en este teléfono. monostr solo observa las propinas entrantes; para gastarlas, importa la semilla en Cake Wallet, Monerujo o Feather.</string>
     <string name="setup_path_existing_hint">Pega la dirección principal y la clave de visualización privada de Cake Wallet, Monerujo o Feather.</string>
+    <string name="setup_announced_warning">Esta cuenta ya recibe propinas en %1$s…%2$s, configurada en otro dispositivo. Configurar aquí reemplaza esa dirección.</string>
     <string name="setup_new_wallet">Crear una wallet nueva para propinas (recomendado)</string>
     <string name="setup_existing_wallet">Usar una wallet existente</string>
     <string name="setup_reuse_wallet">Pasar la wallet guardada a este watcher</string>

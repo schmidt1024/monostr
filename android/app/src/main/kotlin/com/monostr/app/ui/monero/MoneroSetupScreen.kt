@@ -112,7 +112,7 @@ fun MoneroSetupScreen(onDone: () -> Unit, vm: MoneroSetupViewModel = hiltViewMod
             if (state.intro) BackHandler { c.skip() }
             when (val step = state.step) {
                 is SetupStep.Watcher -> WatcherStep(step, state.intro, state.error?.asString(), c)
-                is SetupStep.Choose -> ChooseStep(step, c)
+                is SetupStep.Choose -> ChooseStep(step, state.announced, c)
                 is SetupStep.Seed -> SeedStep(step, c)
                 is SetupStep.Verify -> VerifyStep(step, c)
                 is SetupStep.Existing -> ExistingStep(step, state.error?.asString(), c)
@@ -144,9 +144,13 @@ private fun ColumnScope.WatcherStep(step: SetupStep.Watcher, intro: Boolean, err
 }
 
 @Composable
-private fun ChooseStep(step: SetupStep.Choose, c: MoneroSetupController) {
+private fun ChooseStep(step: SetupStep.Choose, announced: String?, c: MoneroSetupController) {
     Text(stringResource(R.string.setup_watcher_info, Npub.short(step.info.pubkey), step.info.network, step.info.height), style = MaterialTheme.typography.bodySmall)
     Spacer(Modifier.height(16.dp))
+    if (announced != null) {
+        Text(stringResource(R.string.setup_announced_warning, announced.take(8), announced.takeLast(6)), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("setup-announced"))
+        Spacer(Modifier.height(16.dp))
+    }
     Text(stringResource(R.string.setup_privacy), style = MaterialTheme.typography.bodyMedium)
     Spacer(Modifier.height(8.dp))
     Text(stringResource(R.string.setup_watcher_privacy), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

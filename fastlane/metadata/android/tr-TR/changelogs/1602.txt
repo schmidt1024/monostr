@@ -1,0 +1,2 @@
+• Bildirimler X'teki gibi hizalı: tepki simgeleri daha büyük ve avatar sütununda
+• Yeniden kurulumdan sonra veya ikinci bir cihazda bahşiş kurulumu artık mevcut bahşiş adresini değiştirmeyi önermiyor

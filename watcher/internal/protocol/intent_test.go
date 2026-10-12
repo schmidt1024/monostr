@@ -119,7 +119,7 @@ func TestParseIntentRejectsMalformed(t *testing.T) {
 		"p missing":             drop("p"),
 		"amount missing":        drop("amount"),
 		"pid missing":           drop("pid"),
-		"type missing":          drop("type"),
+		"type without value":    set("type", ""),
 		"created_at far future": func(ev *nostr.Event) { ev.CreatedAt = nostr.Timestamp(now + 10 + MaxFutureSkew + 1) },
 		"short tag":             func(ev *nostr.Event) { ev.Tags[2] = nostr.Tag{"amount"} },
 	}
@@ -144,6 +144,17 @@ func TestParseIntentAcceptsEveryType(t *testing.T) {
 		if in.Type != typ {
 			t.Errorf("%s: got type %q", typ, in.Type)
 		}
+	}
+}
+
+func TestParseIntentMissingTypeMeansTip(t *testing.T) {
+	ev := validIntentEvent(t, func(ev *nostr.Event) { ev.Tags = ev.Tags.FilterOut([]string{"type"}) })
+	in, err := ParseIntent(ev, now+10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if in.Type != "tip" {
+		t.Errorf("got type %q", in.Type)
 	}
 }
 

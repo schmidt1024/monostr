@@ -1,0 +1,2 @@
+• Notifications line up like on X: reaction icons are bigger and sit in the avatar column
+• After a reinstall or on a second device, tip setup no longer offers to replace your existing tip address

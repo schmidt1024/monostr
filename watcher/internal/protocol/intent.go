@@ -100,9 +100,12 @@ func ParseIntent(ev *nostr.Event, now int64) (Intent, error) {
 	if !ok || !IsHex16(pid) {
 		return Intent{}, invalid("bad pid")
 	}
-	typ, ok := firstTagValue(ev.Tags, "type")
-	if !ok || (typ != "like" && typ != "boost" && typ != "tip") {
-		return Intent{}, invalid("bad type")
+	typ := "tip"
+	if tag, present := firstTag(ev.Tags, "type"); present {
+		if len(tag) < 2 || (tag[1] != "like" && tag[1] != "boost" && tag[1] != "tip") {
+			return Intent{}, invalid("bad type")
+		}
+		typ = tag[1]
 	}
 	expStr, ok := firstTagValue(ev.Tags, "expiration")
 	if !ok {

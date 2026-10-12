@@ -192,6 +192,7 @@
     <string name="setup_watcher_privacy">Il watcher conserva solo il necessario: la tua chiave pubblica Nostr, l\'indirizzo del portafoglio con la chiave di visualizzazione e gli intent e le ricevute di mancia aperti (comunque pubblici su Nostr). Gli indirizzi IP non vengono né registrati né conservati. Disattivare le mance elimina il tuo account presso il watcher; il suo scanner conserva indirizzo e chiave di visualizzazione come inattivi finché l\'operatore non li rimuove.</string>
     <string name="setup_path_new_hint">Crea un nuovo seed di 25 parole su questo telefono. monostr osserva solo le mance in arrivo; per spenderle, importa il seed in Cake Wallet, Monerujo o Feather.</string>
     <string name="setup_path_existing_hint">Incolla l\'indirizzo principale e la chiave di visualizzazione privata da Cake Wallet, Monerujo o Feather.</string>
+    <string name="setup_announced_warning">Questo account riceve già mance su %1$s…%2$s, configurato su un altro dispositivo. Configurare qui sostituisce quell\'indirizzo.</string>
     <string name="setup_new_wallet">Crea un nuovo portafoglio per mance (consigliato)</string>
     <string name="setup_existing_wallet">Usa un portafoglio esistente</string>
     <string name="setup_reuse_wallet">Sposta il portafoglio salvato su questo watcher</string>

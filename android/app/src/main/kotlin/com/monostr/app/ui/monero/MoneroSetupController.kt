@@ -60,6 +60,8 @@ data class SetupState(
     /** Shown right after login as a skippable screen (spec 6). */
     val intro: Boolean = false,
     val finished: Boolean = false,
+    /** The tip address this account already announces (kind 10037) without a setup on this device: going on replaces it. */
+    val announced: String? = null,
 )
 
 /**
@@ -99,8 +101,20 @@ class MoneroSetupController(
         scope.launch {
             existing = settings.setup.first()
             url = existing?.watcherUrl ?: Presets.DEFAULT_WATCHER
-            _state.update { it.copy(step = SetupStep.Watcher(url)) }
+            // set up on another device or before a reinstall: the intro must not offer to replace a working tip address
+            val announced = if (existing != null) null else announcedAddress()
+            if (announced != null && _state.value.intro) return@launch skip()
+            _state.update { it.copy(step = SetupStep.Watcher(url), announced = announced) }
         }
+    }
+
+    /** A forced relay fetch: on a fresh install nothing is cached yet. Unreachable relays count as nothing announced. */
+    private suspend fun announcedAddress(): String? = try {
+        (tips.paymentInfo(selfPubkey, maxAgeSeconds = 0) as? PaymentInfo.Enabled)?.address?.encode()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        null
     }
 
     fun setWatcherUrl(input: String) {

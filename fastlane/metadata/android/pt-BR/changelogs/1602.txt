@@ -1,0 +1,2 @@
+• As notificações ficam alinhadas como no X: os ícones de reação são maiores e ficam na coluna do avatar
+• Após reinstalar ou em um segundo dispositivo, a configuração de gorjetas não oferece mais substituir seu endereço de gorjetas existente

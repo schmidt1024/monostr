@@ -192,6 +192,7 @@
     <string name="setup_watcher_privacy">O watcher guarda apenas o necessário: sua chave pública Nostr, o endereço da carteira com a chave de visualização e os intents e recibos de gorjeta abertos (que já são públicos no Nostr). Endereços IP não são registrados nem guardados. Desativar as gorjetas apaga sua conta no watcher; o scanner dele mantém o endereço e a chave de visualização como inativos até o operador removê-los.</string>
     <string name="setup_path_new_hint">Cria uma nova seed de 25 palavras neste telefone. O monostr só observa as gorjetas recebidas; para gastá-las, importe a seed no Cake Wallet, Monerujo ou Feather.</string>
     <string name="setup_path_existing_hint">Cole o endereço principal e a chave de visualização privada do Cake Wallet, Monerujo ou Feather.</string>
+    <string name="setup_announced_warning">Esta conta já recebe gorjetas em %1$s…%2$s, configurada em outro dispositivo. Configurar aqui substitui esse endereço.</string>
     <string name="setup_new_wallet">Criar uma nova carteira de gorjetas (recomendado)</string>
     <string name="setup_existing_wallet">Usar uma carteira existente</string>
     <string name="setup_reuse_wallet">Mover a carteira salva para este watcher</string>

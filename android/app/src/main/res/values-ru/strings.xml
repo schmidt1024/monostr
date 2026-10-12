@@ -195,6 +195,7 @@
     <string name="setup_watcher_privacy">Watcher хранит только необходимое: ваш публичный ключ Nostr, адрес кошелька с ключом просмотра, а также открытые интенты и квитанции чаевых (они и так публичны в Nostr). IP-адреса не логируются и не сохраняются. Отключение чаевых удаляет ваш аккаунт у watcher; его сканер хранит адрес и ключ просмотра как неактивные, пока оператор их не удалит.</string>
     <string name="setup_path_new_hint">Создаёт новую сид-фразу из 25 слов на этом телефоне. monostr только отслеживает входящие чаевые; чтобы их потратить, импортируйте сид-фразу в Cake Wallet, Monerujo или Feather.</string>
     <string name="setup_path_existing_hint">Вставьте основной адрес и приватный ключ просмотра из Cake Wallet, Monerujo или Feather.</string>
+    <string name="setup_announced_warning">Этот аккаунт уже получает чаевые на адрес %1$s…%2$s, настроенный на другом устройстве. Настройка здесь заменит этот адрес.</string>
     <string name="setup_new_wallet">Создать новый кошелёк для чаевых (рекомендуется)</string>
     <string name="setup_existing_wallet">Использовать существующий кошелёк</string>
     <string name="setup_reuse_wallet">Перенести сохранённый кошелёк на этот watcher</string>

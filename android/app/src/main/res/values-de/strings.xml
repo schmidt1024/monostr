@@ -191,6 +191,7 @@
     <string name="setup_watcher_privacy">Der Watcher speichert nur, was er braucht: deinen Nostr-Public-Key, die Wallet-Adresse mit View-Key sowie offene Tip-Intents und Receipts (die auf Nostr ohnehin öffentlich sind). IP-Adressen werden weder geloggt noch gespeichert. Tips abschalten löscht dein Konto beim Watcher; sein Scanner behält Adresse und View-Key als inaktiv, bis der Betreiber sie entfernt.</string>
     <string name="setup_path_new_hint">Erzeugt einen neuen 25-Wort-Seed auf diesem Gerät. monostr sieht nur Eingänge; zum Ausgeben importierst du den Seed in Cake Wallet, Monerujo oder Feather.</string>
     <string name="setup_path_existing_hint">Hauptadresse und privaten View-Key aus Cake Wallet, Monerujo oder Feather einfügen.</string>
+    <string name="setup_announced_warning">Dieser Account empfängt Tips bereits an %1$s…%2$s, eingerichtet auf einem anderen Gerät. Eine Einrichtung hier ersetzt diese Adresse.</string>
     <string name="setup_new_wallet">Neue Tip-Wallet erstellen (empfohlen)</string>
     <string name="setup_existing_wallet">Bestehende Wallet verwenden</string>
     <string name="setup_reuse_wallet">Gespeicherte Wallet auf diesen Watcher umziehen</string>

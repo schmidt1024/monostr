@@ -62,7 +62,7 @@ data class TipIntent(
             val recipient = event.firstTagValue("p")?.takeIf(::isHex64) ?: return null
             val amount = event.firstTagValue("amount")?.toLongOrNull()?.takeIf { it > 0 } ?: return null
             val paymentId = event.firstTagValue("pid")?.let(PaymentId::parse) ?: return null
-            val type = event.firstTagValue("type")?.let(TipType::fromTag) ?: return null
+            val type = if (event.firstTag("type") != null) (event.firstTagValue("type")?.let(TipType::fromTag) ?: return null) else TipType.TIP
             val expiration = event.firstTagValue("expiration")?.toLongOrNull() ?: return null
             return TipIntent(noteId, recipient, amount, paymentId, type, event.content, event.createdAt, expiration, event.firstTag("anon") != null)
         }

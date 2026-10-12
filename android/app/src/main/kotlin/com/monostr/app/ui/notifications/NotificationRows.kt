@@ -91,13 +91,13 @@ private fun GroupRow(group: NotificationRow.Group, row: NotificationRowUi, names
             .testTag("notification-${group.key}"),
         verticalAlignment = Alignment.Top,
     ) {
-        if (group.reactions.isNotEmpty()) {
-            // emoji reactions show themselves instead of the heart
-            Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
-                Text(group.reactions.first(), fontSize = 18.sp, maxLines = 1, softWrap = false, modifier = Modifier.testTag("notification-emoji-${group.key}"))
+        LeadingSlot {
+            if (group.reactions.isNotEmpty()) {
+                // emoji reactions show themselves instead of the heart
+                Text(group.reactions.first(), fontSize = 26.sp, maxLines = 1, softWrap = false, modifier = Modifier.testTag("notification-emoji-${group.key}"))
+            } else {
+                Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(LEADING_ICON))
             }
-        } else {
-            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(24.dp))
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
@@ -148,7 +148,7 @@ private fun EventCard(single: NotificationRow.Single, row: NotificationRowUi, na
             .testTag("notification-${item.id}"),
         verticalAlignment = Alignment.Top,
     ) {
-        Avatar(from?.let { row.pictures[it] }, size = 40.dp, modifier = Modifier.clickable(enabled = from != null) { from?.let(onOpenProfile) }.testTag("notification-avatar-${from.orEmpty().take(8)}"), contentDescription = from?.let { stringResource(R.string.avatar_of, row.names[it] ?: it.take(8)) })
+        Avatar(from?.let { row.pictures[it] }, size = LEADING_WIDTH, modifier = Modifier.clickable(enabled = from != null) { from?.let(onOpenProfile) }.testTag("notification-avatar-${from.orEmpty().take(8)}"), contentDescription = from?.let { stringResource(R.string.avatar_of, row.names[it] ?: it.take(8)) })
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -189,7 +189,7 @@ private fun TipRow(single: NotificationRow.Single, row: NotificationRowUi, names
             .testTag("notification-${item.id}"),
         verticalAlignment = Alignment.Top,
     ) {
-        Icon(MoneroGlyph, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+        LeadingSlot { Icon(MoneroGlyph, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(LEADING_ICON)) }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             val name = item.from?.let { row.names[it] } ?: stringResource(R.string.tip_anonymous)
@@ -199,6 +199,15 @@ private fun TipRow(single: NotificationRow.Single, row: NotificationRowUi, names
         }
         Thumbnail(row.about)
     }
+}
+
+/** X: every row starts with a column as wide as a reply's avatar, so all texts begin on one line. */
+private val LEADING_WIDTH = 40.dp
+private val LEADING_ICON = 32.dp
+
+@Composable
+private fun LeadingSlot(content: @Composable () -> Unit) {
+    Box(Modifier.width(LEADING_WIDTH), contentAlignment = Alignment.TopCenter) { content() }
 }
 
 /** X: a small picture at the right when the note the row is about has one. */

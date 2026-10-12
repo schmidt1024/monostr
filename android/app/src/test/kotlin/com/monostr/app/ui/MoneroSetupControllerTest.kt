@@ -93,6 +93,42 @@ class MoneroSetupControllerTest {
     }
 
     @Test
+    fun `the intro skips itself when the account already announces a tip address`() = runTest {
+        val announced = MoneroKeys.generate().address(Network.MAINNET)
+        val rig = Rig(tips = FakeTips().apply { liveInfos = mapOf(self to PaymentInfo.Enabled(announced, url, watcherPk)) })
+        val c = controller(rig, intro = true)
+        assertTrue(c.state.value.finished)
+        assertTrue(rig.settings.seenState.value)
+        assertTrue(rig.gateway.registered.isEmpty())
+        assertTrue(rig.tips.publishedInfos.isEmpty())
+    }
+
+    @Test
+    fun `setup from settings warns that it replaces an address announced elsewhere`() = runTest {
+        val announced = MoneroKeys.generate().address(Network.MAINNET)
+        val rig = Rig(tips = FakeTips().apply { liveInfos = mapOf(self to PaymentInfo.Enabled(announced, url, watcherPk)) })
+        val c = controller(rig)
+        assertFalse(c.state.value.finished)
+        assertEquals(announced.encode(), c.state.value.announced)
+    }
+
+    @Test
+    fun `a setup on this device is not treated as announced elsewhere`() = runTest {
+        val own = MoneroKeys.generate().address(Network.MAINNET)
+        val rig = Rig(tips = FakeTips().apply { liveInfos = mapOf(self to PaymentInfo.Enabled(own, url, watcherPk)) })
+        rig.settings.setupState.value = MoneroSetup(own.encode(), url, watcherPk, "mainnet", 1)
+        val c = controller(rig)
+        assertNull(c.state.value.announced)
+    }
+
+    @Test
+    fun `without announced payment info the intro shows as before`() = runTest {
+        val c = controller(Rig(tips = FakeTips().apply { liveInfos = emptyMap() }), intro = true)
+        assertFalse(c.state.value.finished)
+        assertNull(c.state.value.announced)
+    }
+
+    @Test
     fun `existing wallet input is validated locally before the watcher is called`() = runTest {
         val rig = Rig()
         val c = controller(rig)

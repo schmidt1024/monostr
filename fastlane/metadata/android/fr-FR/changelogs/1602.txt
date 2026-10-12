@@ -1,0 +1,2 @@
+• Les notifications s'alignent comme sur X : les icônes de réaction sont plus grandes et occupent la colonne de l'avatar
+• Après une réinstallation ou sur un second appareil, la configuration des pourboires ne propose plus de remplacer ton adresse existante

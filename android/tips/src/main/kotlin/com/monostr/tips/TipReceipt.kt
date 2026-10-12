@@ -53,7 +53,7 @@ data class TipReceipt(
             val sender = if (event.firstTag("P") != null) (event.firstTagValue("P")?.takeIf(::isHex64) ?: return null) else null
             val amount = event.firstTagValue("amount")?.toLongOrNull()?.takeIf { it > 0 } ?: return null
             val intentId = event.firstTagValue("intent")?.takeIf(::isHex64) ?: return null
-            val type = event.firstTagValue("type")?.let(TipType::fromTag) ?: return null
+            val type = if (event.firstTag("type") != null) (event.firstTagValue("type")?.let(TipType::fromTag) ?: return null) else TipType.TIP
             return TipReceipt(event.id, event.pubkey, noteId, recipient, sender, amount, intentId, type, event.createdAt)
         }
     }
