@@ -1,6 +1,6 @@
 # monostr-watcher
 
-> Öffentliches Repository: `deploy.sh` und `ops/` (Hosts, Cron, Backups) bleiben im privaten Repository. Ein eigenes Deployment braucht nur die `compose.yml` hier, eine `.env` und `docker compose up -d` auf dem Host.
+> **Run your own watcher:** [SELFHOST.md](SELFHOST.md) (English) — personal watcher (`compose.personal.yml`, no node, no domain) or own node (`compose.selfhost.yml`). `compose.yml` below is the setup of watcher.monostr.com. Öffentliches Repository: `deploy.sh` und `ops/` (Hosts, Cron, Backups) bleiben im privaten Repository.
 
 
 Go-Dienst, der Tip-Intents (kind 9738) beobachtet, über monero-lws auf die
@@ -21,7 +21,18 @@ Alle Einstellungen kommen aus Umgebungsvariablen (siehe `.env.example`).
 Pflicht: `WATCHER_SECRET_KEY`, `WATCHER_NETWORK`, `WATCHER_RELAYS`,
 `WATCHER_PUBLIC_URL`. Optional: `WATCHER_PUBLIC_RELAYS` (Relays, die `/v1/info`
 meldet, falls sie von `WATCHER_RELAYS` abweichen). `LWS_ADMIN_KEY` ist Pflicht, sobald monero-lws ohne
-`--disable-admin-auth` läuft (Standard).
+`--disable-admin-auth` läuft (Standard). `WATCHER_ALLOWED_PUBKEYS` (npubs oder Hex, durch Kommas
+getrennt) beschränkt `POST /v1/accounts` auf diese Konten (sonst 403); leer = offen für alle.
+
+Persönlicher Modus (`WATCHER_MODE=personal`, Spec 0.4): kein HTTP, kein LWS. Pflicht:
+`WATCHER_SECRET_KEY`, `WATCHER_RECIPIENT` (npub/Hex), `WATCHER_ADDRESS`, `WATCHER_VIEW_KEY`,
+`WATCHER_NETWORK`, `WATCHER_RELAYS` (1–4 `wss://`). Optional: `WATCHER_NODES` (≥ 2, Default
+mainnet: vier unabhängige öffentliche Nodes), `WATCHER_PROXY` (`socks5://…`), `WALLET_RPC_URL`
+(Scan-Wallet), `WALLET_RPC_CHECK_URL` (zweite Wallet, Default `http://wallet-rpc-check:18083/json_rpc`).
+Der Watcher pollt alle 15 s zwei monero-wallet-rpc-Instanzen mit derselben View-only-Wallet: die
+Scan-Wallet synchronisiert über die Nodes 1, 3, 5, …, die zweite über 2, 4, 6, …; eine Zahlung
+zählt erst, wenn beide sie mit gleichem Betrag melden. Alle 5 min veröffentlicht er den Status
+(kind 10038). Compose: `compose.personal.yml`.
 
 ## Deployment (node.xmr.rocks)
 

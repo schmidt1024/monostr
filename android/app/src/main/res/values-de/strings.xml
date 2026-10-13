@@ -228,6 +228,24 @@
     <string name="setup_err_view_key_format">View-Key muss 64 Hex-Zeichen haben</string>
     <string name="setup_err_view_key_mismatch">View-Key passt nicht zur Adresse</string>
     <string name="setup_err_not_published">Kein Relay erreichbar – Payment-Info nicht veröffentlicht, bitte erneut versuchen</string>
+    <string name="setup_personal_err_input">Füge das nprofile (oder npub) des Watchers ein.</string>
+    <string name="setup_personal_err_relay">Gib ein Relay des Watchers an (wss://…).</string>
+    <string name="setup_personal_err_not_found">Auf diesen Relays ist kein Watcher-Status zu finden. Läuft der Watcher?</string>
+    <string name="setup_personal_err_other_account">Dieser Watcher gehört zu einem anderen Konto. Trage dein npub als WATCHER_RECIPIENT ein.</string>
+    <string name="setup_personal_err_network">Der Watcher meldet eine Adresse aus einem anderen Netz.</string>
+    <string name="setup_personal_err_offline">Der Watcher ist seit %1$s offline.</string>
+    <string name="setup_personal_watcher">Persönlicher Watcher</string>
+    <string name="setup_personal_watcher_hint">Dein eigener Watcher zu Hause oder auf einem Server: der View-Key bleibt bei dir.</string>
+    <string name="setup_personal_title">Persönlicher Watcher</string>
+    <string name="setup_personal_text">Füge das nprofile ein, das dein Watcher beim Start ausgibt. Bei einem npub gib eines seiner Relays an.</string>
+    <string name="setup_personal_input_label">nprofile oder npub</string>
+    <string name="setup_personal_relay_label">Relay (optional)</string>
+    <string name="setup_personal_relay_hint">wss://…</string>
+    <string name="setup_personal_load">Watcher prüfen</string>
+    <string name="setup_personal_info">Persönlicher Watcher %1$s · %2$s · Höhe %3$s · Tips kommen an bei %4$s…%5$s</string>
+    <string name="setup_personal_height_unknown">unbekannt</string>
+    <string name="setup_personal_privacy">Der View-Key bleibt bei dir. Öffentliche Nodes sehen keine Adresse. Dein Profil nennt diesen Watcher, Sender schicken ihre Tips an seine Relays.</string>
+    <string name="setup_personal_confirm">Diesen Watcher nutzen</string>
 
     <!-- settings -->
     <string name="settings_title">Einstellungen</string>
@@ -274,6 +292,11 @@
     <string name="settings_monero_address">Tips kommen in dieser Wallet an: %1$s…%2$s · %3$s</string>
     <string name="settings_monero_wallet_hint">Nicht an einer Monero-Adresse in deiner Bio oder anderen Profilfeldern. Tip-Belege erreichen dich über den Watcher und deine eigenen Relays; bezahlte Relays sind nicht nötig.</string>
     <string name="settings_monero_watcher">Watcher %1$s</string>
+    <string name="settings_monero_personal">Persönlicher Watcher %1$s</string>
+    <string name="settings_monero_personal_online">Persönlicher Watcher %1$s · online</string>
+    <string name="settings_monero_personal_offline">Persönlicher Watcher %1$s · offline seit %2$s</string>
+    <string name="settings_monero_personal_unknown">Persönlicher Watcher %1$s · kein Status gefunden</string>
+    <string name="settings_monero_personal_mismatch">Persönlicher Watcher %1$s · meldet eine andere Adresse oder ein anderes Konto</string>
     <string name="settings_monero_switch_watcher">Watcher wechseln</string>
     <string name="settings_monero_disable">Tips abschalten</string>
     <string name="settings_monero_delete_view_key">View-Key lokal löschen</string>

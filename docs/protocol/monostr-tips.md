@@ -1,14 +1,15 @@
 # Monostr Tips – Monero-Zahlungen für Nostr-Notes und -Profile
 
 Status: Draft
-Version: 0.3
+Version: 0.4
 
 ## Zusammenfassung
 
-Dieses Dokument beschreibt drei Event-Kinds, mit denen ein Nutzer eine
-Nostr-Note oder ein Profil mit einer Monero-Zahlung ("Tip") bedenken kann, und einen
-HTTP-Dienst ("Watcher"), der eingehende Zahlungen für registrierte Empfänger
-erkennt und quittiert.
+Dieses Dokument beschreibt vier Event-Kinds (10037, 9738, 9739, 10038), mit
+denen ein Nutzer eine Nostr-Note oder ein Profil mit einer Monero-Zahlung ("Tip")
+bedenken kann, und einen Watcher, der eingehende Zahlungen für Empfänger erkennt
+und quittiert: entweder als HTTP-Dienst für registrierte Empfänger oder als
+persönlicher Watcher des Empfängers, der nur über Relays erreichbar ist.
 
 Beträge sind ganzzahlig in Piconero (1 XMR = 10^12 Piconero).
 
@@ -42,7 +43,14 @@ Autor: Empfänger.
 
 - `address`: Monero-Standardadresse (Mainnet `4…`, Stagenet `5…`). Keine
   Subadresse, keine Integrated Address.
-- `watcher`: URL des Watchers und dessen Nostr-Pubkey (hex).
+- `watcher`, zwei Formen, unterschieden am ersten Feld:
+  - URL-Form `["watcher", "https://watcher.example", "<watcher-hex-pubkey>"]`:
+    Watcher mit HTTP-API (unten), Relays aus `GET /v1/info`.
+  - Pubkey-Form `["watcher", "<watcher-hex-pubkey>", "wss://relay1", …]` (ab 0.4):
+    persönlicher Watcher ohne HTTP-API; 1 bis 4 Relays (`wss://`, ohne
+    Userinfo/Query/Fragment). Kein Relay, mehr als 4 oder ein Nicht-`wss`-URL
+    machen das Event ungültig (= keine Tips). Clients bis 0.3 lesen das erste Feld
+    als URL, scheitern und zeigen den Empfänger ohne Tips an.
 - `network`: `mainnet` oder `stagenet`.
 - Ein Event ohne `address`-Tag bedeutet: Empfänger nimmt keine Tips an.
 - Der private View-Key erscheint nie in einem Nostr-Event.
@@ -106,7 +114,8 @@ Netbyte Integrated: Mainnet 19 (0x13), Stagenet 25 (0x19).
 Zahlung per URI: `monero:<integrated>?tx_amount=<xmr-dezimal>&tx_description=<text>`.
 
 Der Intent wird auf die Write-Relays des Senders und auf die Relays des
-Watchers veröffentlicht (siehe `GET /v1/info`).
+Watchers veröffentlicht: URL-Form aus `GET /v1/info`, Pubkey-Form aus dem
+`watcher`-Tag.
 
 ## Tip-Receipt – kind 9739 (regular)
 
@@ -144,6 +153,32 @@ Autor: Watcher.
   einen Block aufgenommen, veröffentlicht der Watcher ein kind 5 (Deletion)
   auf das Receipt. Clients müssen kind 5 des Watcher-Pubkeys auf Receipts
   respektieren.
+
+## Watcher-Status – kind 10038 (replaceable)
+
+Autor: Watcher in Pubkey-Form. Er veröffentlicht den Status beim Start und
+danach alle 5 Minuten auf seinen Relays.
+
+```json
+{
+  "kind": 10038,
+  "content": "",
+  "tags": [
+    ["p", "<empfänger-pubkey>"],
+    ["address", "4..."],
+    ["network", "mainnet"],
+    ["height", "3512345"],
+    ["version", "0.4.0"]
+  ]
+}
+```
+
+- Ein Client wertet den Watcher als online, wenn der neueste Status höchstens
+  15 Minuten alt ist (`created_at`).
+- Clients prüfen vor dem Veröffentlichen von kind 10037: `p` ist der eigene
+  Pubkey, `network` passt, Status frisch. Die Adresse für kind 10037 kommt aus
+  dem Status.
+- Watcher in URL-Form veröffentlichen keinen Status.
 
 ## Validierung durch Clients
 
@@ -191,3 +226,12 @@ angezeigten Notes nicht auf. Was bleibt: Ein Relay sieht, wer kurz vor einem
 anonymen Tip die Payment-Info des Empfängers abgefragt hat; das ist ein
 Hinweis, kein Beleg – dieselbe Abfrage entsteht bei jedem geöffneten
 Tip-Dialog.
+
+Ein persönlicher Watcher (Pubkey-Form) hält den View-Key beim Empfänger. Er
+scannt über öffentliche Nodes: Die Node sieht, dass Blöcke geladen werden,
+nicht welche Adresse beobachtet wird. Sie kann Transaktionen verschweigen
+(fehlende Receipts) oder unbestätigte erfinden; deshalb muss eine zweite
+View-only-Wallet, die über eine andere Node synchronisiert, jede Zahlung mit
+gleichem Betrag bestätigen. Ausgeben kann keine Node etwas. Der Status zeigt,
+wann der Rechner des Watchers läuft. Relays sehen die IP des Watchers, die
+über kind 10037 dauerhaft mit dem Empfänger verbunden ist; dagegen hilft Tor.

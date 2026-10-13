@@ -71,9 +71,13 @@ const (
 	intentsPerSenderPerHour    = 60
 
 	metaLastSeenIntent = "last_seen_intent_ts"
-	metaLastHeight     = "last_height"
+	metaLastHeight     = MetaLastHeight
 	metaPendingRescan  = "pending_rescan_height"
 )
+
+// MetaLastHeight is the store meta key of the chain height the sweep last
+// recorded (decimal); the personal watcher restores new wallets from it.
+const MetaLastHeight = "last_height"
 
 type Service struct {
 	cfg    Config

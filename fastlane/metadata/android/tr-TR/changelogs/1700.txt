@@ -1,0 +1,1 @@
+• Kişisel watcher: bahşişleri kendi watcher'ınız üzerinden alın, görüntüleme anahtarı sizde kalır. Kişisel watcher kullanan kişilere bahşiş göndermek de çalışır

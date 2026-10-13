@@ -228,6 +228,24 @@
     <string name="setup_err_view_key_format">Görüntüleme anahtarı 64 hex karakter olmalı</string>
     <string name="setup_err_view_key_mismatch">Görüntüleme anahtarı adresle eşleşmiyor</string>
     <string name="setup_err_not_published">Ulaşılabilir relay yok – ödeme bilgisi yayınlanmadı, lütfen tekrar dene</string>
+    <string name="setup_personal_err_input">Watcher\'ın nprofile\'ını (veya npub\'ını) yapıştır.</string>
+    <string name="setup_personal_err_relay">Watcher\'ın bir relay\'ini gir (wss://…).</string>
+    <string name="setup_personal_err_not_found">Bu relay\'lerde watcher durumu bulunamadı. Watcher çalışıyor mu?</string>
+    <string name="setup_personal_err_other_account">Bu watcher başka bir hesaba ait. WATCHER_RECIPIENT olarak kendi npub\'ını gir.</string>
+    <string name="setup_personal_err_network">Watcher başka bir ağa ait bir adres bildiriyor.</string>
+    <string name="setup_personal_err_offline">Watcher %1$s tarihinden beri çevrimdışı.</string>
+    <string name="setup_personal_watcher">Kişisel watcher</string>
+    <string name="setup_personal_watcher_hint">Evde veya bir sunucuda kendi watcher\'ın: görüntüleme anahtarı sende kalır.</string>
+    <string name="setup_personal_title">Kişisel watcher</string>
+    <string name="setup_personal_text">Watcher\'ın başlangıçta yazdırdığı nprofile\'ı yapıştır. npub ile bir relay\'ini de ekle.</string>
+    <string name="setup_personal_input_label">nprofile veya npub</string>
+    <string name="setup_personal_relay_label">Relay (isteğe bağlı)</string>
+    <string name="setup_personal_relay_hint">wss://…</string>
+    <string name="setup_personal_load">Watcher\'ı kontrol et</string>
+    <string name="setup_personal_info">Kişisel watcher %1$s · %2$s · yükseklik %3$s · bahşişler şuraya gelir: %4$s…%5$s</string>
+    <string name="setup_personal_height_unknown">bilinmiyor</string>
+    <string name="setup_personal_privacy">Görüntüleme anahtarı sende kalır. Herkese açık düğümler hiçbir adres görmez. Profilin bu watcher\'ı gösterir, bu yüzden göndericiler bahşişlerini onun relay\'lerine yollar.</string>
+    <string name="setup_personal_confirm">Bu watcher\'ı kullan</string>
 
     <!-- settings -->
     <string name="settings_title">Ayarlar</string>
@@ -274,6 +292,11 @@
     <string name="settings_monero_address">Bahşişler bu cüzdana gelir: %1$s…%2$s · %3$s</string>
     <string name="settings_monero_wallet_hint">Profil açıklamandaki veya diğer profil alanlarındaki bir Monero adresine değil. Makbuzlar sana watcher ve kendi relay’lerin üzerinden ulaşır; ücretli relay’ler gerekmez.</string>
     <string name="settings_monero_watcher">Watcher %1$s</string>
+    <string name="settings_monero_personal">Kişisel watcher %1$s</string>
+    <string name="settings_monero_personal_online">Kişisel watcher %1$s · çevrimiçi</string>
+    <string name="settings_monero_personal_offline">Kişisel watcher %1$s · %2$s tarihinden beri çevrimdışı</string>
+    <string name="settings_monero_personal_unknown">Kişisel watcher %1$s · durum bulunamadı</string>
+    <string name="settings_monero_personal_mismatch">Kişisel watcher %1$s · başka bir adres veya hesap bildiriyor</string>
     <string name="settings_monero_switch_watcher">Watcher\'ı değiştir</string>
     <string name="settings_monero_disable">Bahşişleri kapat</string>
     <string name="settings_monero_delete_view_key">Görüntüleme anahtarını yerelden sil</string>

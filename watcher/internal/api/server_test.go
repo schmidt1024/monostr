@@ -57,12 +57,17 @@ type env struct {
 }
 
 func newEnv(t *testing.T) *env {
+	return newEnvAllowing(t, func(string) []string { return nil })
+}
+
+// newEnvAllowing builds the server with the allowlist that allowed returns for the env's own pubkey.
+func newEnvAllowing(t *testing.T, allowed func(pk string) []string) *env {
 	t.Helper()
 	e := &env{svc: &fakeService{}, log: &bytes.Buffer{}}
 	e.sk = nostr.GeneratePrivateKey()
 	e.pk, _ = nostr.GetPublicKey(e.sk)
 	logger := slog.New(slog.NewTextHandler(e.log, nil))
-	h := New(e.svc, publicURL, ratelimit.New(2, time.Hour), logger)
+	h := New(e.svc, publicURL, ratelimit.New(2, time.Hour), allowed(e.pk), logger)
 	e.srv = httptest.NewServer(h)
 	t.Cleanup(e.srv.Close)
 	return e
@@ -194,6 +199,25 @@ func TestRegisterRateLimitPerIP(t *testing.T) {
 	}
 	if resp, _ := e.do(t, "POST", "/v1/accounts", body, true, map[string]string{"X-Forwarded-For": "203.0.113.6, 10.0.0.1"}); resp.StatusCode != 200 {
 		t.Fatalf("other ip: %d", resp.StatusCode)
+	}
+}
+
+func TestRegisterAllowlist(t *testing.T) {
+	body := []byte(`{"address":"4A","view_key":"` + strings.Repeat("c", 64) + `"}`)
+	listed := newEnvAllowing(t, func(pk string) []string { return []string{strings.Repeat("b", 64), pk} })
+	if resp, out := listed.do(t, "POST", "/v1/accounts", body, true, nil); resp.StatusCode != 200 {
+		t.Fatalf("listed: %d %v", resp.StatusCode, out)
+	}
+	other := newEnvAllowing(t, func(string) []string { return []string{strings.Repeat("b", 64)} })
+	resp, out := other.do(t, "POST", "/v1/accounts", body, true, nil)
+	if resp.StatusCode != 403 || out["error"] == nil {
+		t.Fatalf("not listed: %d %v", resp.StatusCode, out)
+	}
+	if len(other.svc.registered) != 0 {
+		t.Fatalf("registered %v", other.svc.registered)
+	}
+	if resp, _ := other.do(t, "DELETE", "/v1/accounts", nil, true, nil); resp.StatusCode != 204 {
+		t.Fatalf("unregister stays open: %d", resp.StatusCode)
 	}
 }
 

@@ -14,6 +14,7 @@ import com.monostr.monero.MoneroUri
 import com.monostr.nostr.model.Note
 import com.monostr.nostr.repo.TipsRepository
 import com.monostr.tips.PaymentInfo
+import com.monostr.tips.Watcher
 import com.monostr.tips.TipRequest
 import com.monostr.tips.TipType
 import kotlinx.coroutines.CancellationException
@@ -147,13 +148,7 @@ class TipSheetController(
             _state.update { it.copy(phase = TipPhase.Sending, error = null) }
             try {
                 val prepared = TipRequest.prepare(info, target.recipient, target.noteId, amount, TipType.TIP, "", now(), anonymous = anonymous)
-                val watcherRelays = try {
-                    withTimeoutOrNull(WATCHER_TIMEOUT_MS) { watchers.info(info.watcherUrl).relays } ?: emptyList()
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    emptyList() // spec 5.9: for a public tip the watcher catches up over relays
-                }
+                val watcherRelays = watcherRelays(info)
                 val sentToAny: Boolean
                 val intentId: String
                 if (anonymous) {
@@ -191,6 +186,18 @@ class TipSheetController(
                 if (_state.value.target?.key != key) return@launch
                 _state.update { it.copy(phase = TipPhase.Ready, error = e.userMessage()) }
             }
+        }
+    }
+
+    /** Spec 0.4 §4.2: a personal watcher's relays are in its tag, no `/v1/info`; an HTTP watcher is asked, empty when it does not answer in time. */
+    private suspend fun watcherRelays(info: PaymentInfo.Enabled): List<String> = when (val w = info.watcher) {
+        is Watcher.Personal -> w.relays
+        is Watcher.Http -> try {
+            withTimeoutOrNull(WATCHER_TIMEOUT_MS) { watchers.info(w.url).relays } ?: emptyList()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            emptyList() // spec 5.9: for a public tip the watcher catches up over relays
         }
     }
 

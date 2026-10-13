@@ -25,11 +25,16 @@ type server struct {
 	svc       Service
 	publicURL string
 	regLimit  *ratelimit.Window
+	allowed   map[string]bool // empty: anyone may register
 	log       *slog.Logger
 }
 
-func New(svc Service, publicURL string, registerLimit *ratelimit.Window, logger *slog.Logger) http.Handler {
-	s := &server{svc: svc, publicURL: strings.TrimRight(publicURL, "/"), regLimit: registerLimit, log: logger}
+// New builds the HTTP handler. allowedPubkeys (hex) limits who may register; empty means anyone.
+func New(svc Service, publicURL string, registerLimit *ratelimit.Window, allowedPubkeys []string, logger *slog.Logger) http.Handler {
+	s := &server{svc: svc, publicURL: strings.TrimRight(publicURL, "/"), regLimit: registerLimit, allowed: map[string]bool{}, log: logger}
+	for _, pk := range allowedPubkeys {
+		s.allowed[pk] = true
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /v1/info", s.info)
 	mux.HandleFunc("POST /v1/accounts", s.register)
@@ -137,6 +142,10 @@ func (s *server) register(w http.ResponseWriter, r *http.Request) {
 	}
 	pubkey, ok := s.authenticate(w, r, body)
 	if !ok {
+		return
+	}
+	if len(s.allowed) > 0 && !s.allowed[pubkey] {
+		writeError(w, 403, "this watcher only accepts accounts of its operator")
 		return
 	}
 	var req struct {

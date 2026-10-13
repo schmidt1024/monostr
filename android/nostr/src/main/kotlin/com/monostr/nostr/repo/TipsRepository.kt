@@ -7,6 +7,8 @@ import com.monostr.nostr.PublishResult
 import com.monostr.nostr.RustConvert
 import com.monostr.tips.Kinds
 import com.monostr.tips.PaymentInfo
+import com.monostr.tips.Watcher
+import com.monostr.tips.WatcherStatus
 import com.monostr.tips.PreparedTip
 import com.monostr.tips.ReceiptValidator
 import com.monostr.tips.TipIntent
@@ -48,7 +50,9 @@ interface TipsRepository {
      * Signs and publishes the user's own payment info (spec 3.1). It is kept locally only when a relay
      * accepted it: a copy nobody else can see would still make this device's tip sheet pay to it.
      */
-    suspend fun publishPaymentInfo(address: Address, watcherUrl: String, watcherPubkey: String): PublishResult
+    suspend fun publishPaymentInfo(address: Address, watcher: Watcher): PublishResult
+    /** Spec 0.4 §2.2: only [relays], the newest valid status by [watcherPubkey]; null when none or unreachable. */
+    suspend fun watcherStatus(watcherPubkey: String, relays: List<String>): WatcherStatus?
     /** Publishes an address-less payment info: "no Monero" (spec 6.5). */
     suspend fun disablePaymentInfo(): PublishResult
     /** Signs, stores and publishes a tip intent to the user's relays and to [watcherRelays] (spec 3.2). */
@@ -125,8 +129,31 @@ class NostrTipsRepository(
     /** When the payment info of [pubkey] was last fetched from relays; null if never (for tests). */
     internal suspend fun lastFetchAt(pubkey: String): Long? = mutex.withLock { infoFetchedAt[pubkey] }
 
-    override suspend fun publishPaymentInfo(address: Address, watcherUrl: String, watcherPubkey: String): PublishResult =
-        engine.signAndPublish(RustConvert.toBuilder(PaymentInfo.build(address, watcherUrl, watcherPubkey, now())))
+    override suspend fun publishPaymentInfo(address: Address, watcher: Watcher): PublishResult =
+        engine.signAndPublish(RustConvert.toBuilder(PaymentInfo.build(address, watcher, now())))
+
+    override suspend fun watcherStatus(watcherPubkey: String, relays: List<String>): WatcherStatus? {
+        if (relays.isEmpty()) return null
+        return try {
+            val filter = Filter().kind(Kind(Kinds.WATCHER_STATUS.toUShort())).author(PublicKey.parse(watcherPubkey)).limit(5u)
+            val held = engine.attachTemporary(relays)
+            try {
+                val events = engine.fetchFrom(relays, filter, attach = false)
+                withContext(engine.ffiDispatcher) {
+                    events.map { RustConvert.toTips(it) }
+                        .filter { it.pubkey == watcherPubkey }
+                        .mapNotNull { WatcherStatus.parse(it) }
+                        .maxByOrNull { it.createdAt }
+                }
+            } finally {
+                engine.detachTemporary(held)
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        }
+    }
 
     override suspend fun disablePaymentInfo(): PublishResult = engine.signAndPublish(RustConvert.toBuilder(PaymentInfo.buildDisabled(now())))
 

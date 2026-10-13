@@ -36,6 +36,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.activity.compose.BackHandler
 import com.monostr.nostr.Npub
+import com.monostr.tips.NetworkTag
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -119,6 +120,8 @@ fun MoneroSetupScreen(onDone: () -> Unit, vm: MoneroSetupViewModel = hiltViewMod
                 is SetupStep.Confirm -> ConfirmStep(step, state.error?.asString(), c)
                 SetupStep.Registering -> Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) { CircularProgressIndicator(); Text(stringResource(R.string.setup_registering)) }
                 is SetupStep.Done -> DoneStep(step, c)
+                is SetupStep.Personal -> PersonalStep(step, state.error?.asString(), c::setPersonalInput, c::setPersonalRelay, c::loadPersonal, c::backToWatcher)
+                is SetupStep.PersonalConfirm -> PersonalConfirmStep(step, state.error?.asString(), c::confirmPersonal, c::backToWatcher)
             }
         }
     }
@@ -140,7 +143,46 @@ private fun ColumnScope.WatcherStep(step: SetupStep.Watcher, intro: Boolean, err
     )
     Spacer(Modifier.height(8.dp))
     Button(onClick = c::loadWatcher, enabled = !step.loading, modifier = Modifier.fillMaxWidth().testTag("setup-load")) { Text(stringResource(if (step.loading) R.string.state_loading else R.string.setup_load_watcher)) }
+    Spacer(Modifier.height(8.dp))
+    OutlinedButton(onClick = c::startPersonal, enabled = !step.loading, modifier = Modifier.fillMaxWidth().testTag("setup-personal")) { Text(stringResource(R.string.setup_personal_watcher)) }
+    Text(stringResource(R.string.setup_personal_watcher_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     if (intro) TextButton(onClick = c::skip, modifier = Modifier.align(Alignment.End).testTag("setup-skip")) { Text(stringResource(R.string.setup_skip)) }
+}
+
+@Composable
+internal fun PersonalStep(step: SetupStep.Personal, error: String?, onInput: (String) -> Unit, onRelay: (String) -> Unit, onLoad: () -> Unit, onBack: () -> Unit) {
+    Text(stringResource(R.string.setup_personal_title), style = MaterialTheme.typography.titleMedium)
+    Text(stringResource(R.string.setup_personal_text), style = MaterialTheme.typography.bodySmall)
+    OutlinedTextField(
+        value = step.input, onValueChange = onInput, singleLine = true, label = { Text(stringResource(R.string.setup_personal_input_label)) },
+        isError = error != null, supportingText = { error?.let { Text(it) } }, enabled = !step.loading,
+        modifier = Modifier.fillMaxWidth().testTag("setup-personal-input"),
+    )
+    OutlinedTextField(
+        value = step.relay, onValueChange = onRelay, singleLine = true, label = { Text(stringResource(R.string.setup_personal_relay_label)) },
+        placeholder = { Text(stringResource(R.string.setup_personal_relay_hint)) }, enabled = !step.loading,
+        modifier = Modifier.fillMaxWidth().testTag("setup-personal-relay"),
+    )
+    Spacer(Modifier.height(8.dp))
+    Button(onClick = onLoad, enabled = !step.loading, modifier = Modifier.fillMaxWidth().testTag("setup-personal-load")) { Text(stringResource(if (step.loading) R.string.state_loading else R.string.setup_personal_load)) }
+    TextButton(onClick = onBack, enabled = !step.loading, modifier = Modifier.testTag("setup-personal-back")) { Text(stringResource(R.string.action_back)) }
+}
+
+@Composable
+internal fun PersonalConfirmStep(step: SetupStep.PersonalConfirm, error: String?, onConfirm: () -> Unit, onBack: () -> Unit) {
+    val status = step.status
+    val address = status.address.encode()
+    val height = if (status.height > 0) status.height.toString() else stringResource(R.string.setup_personal_height_unknown)
+    Text(
+        stringResource(R.string.setup_personal_info, Npub.short(status.watcherPubkey), NetworkTag.toTag(status.network!!), height, address.take(8), address.takeLast(6)),
+        style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("setup-personal-info"),
+    )
+    Spacer(Modifier.height(16.dp))
+    Text(stringResource(R.string.setup_personal_privacy), style = MaterialTheme.typography.bodyMedium)
+    error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+    Spacer(Modifier.height(12.dp))
+    Button(onClick = onConfirm, modifier = Modifier.fillMaxWidth().testTag("setup-personal-confirm")) { Text(stringResource(R.string.setup_personal_confirm)) }
+    TextButton(onClick = onBack, modifier = Modifier.testTag("setup-personal-back")) { Text(stringResource(R.string.action_back)) }
 }
 
 @Composable

@@ -13,6 +13,7 @@ import com.monostr.app.ui.tips.TipTarget
 import com.monostr.monero.MoneroKeys
 import com.monostr.monero.Network
 import com.monostr.tips.PaymentInfo
+import com.monostr.tips.Watcher
 import com.monostr.tips.TipType
 import com.monostr.tips.watcher.WatcherException
 import kotlinx.coroutines.CompletableDeferred
@@ -37,7 +38,7 @@ class TipSheetControllerTest {
     private val bob = "b".repeat(64)
     private val watcherPk = "c".repeat(64)
     private val aliceAddress = MoneroKeys.generate().address(Network.MAINNET)
-    private val enabled = PaymentInfo.Enabled(aliceAddress, "https://watcher.example", watcherPk)
+    private val enabled = PaymentInfo.Enabled(aliceAddress, Watcher.Http("https://watcher.example", watcherPk))
     private val n = note('1', alice)
 
     private fun TestScope.eager(): CoroutineScope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher(testScheduler))
@@ -398,5 +399,31 @@ class TipSheetControllerTest {
         c.open(TipTarget.Profile(bob))
         advanceUntilIdle()
         assertEquals(TipPhase.NoMonero, c.state.value.phase)
+    }
+
+    @Test
+    fun `public tip to personal watcher uses tag relays`() = runTest {
+        val personal = PaymentInfo.Enabled(aliceAddress, Watcher.Personal(watcherPk, listOf("wss://w.example")))
+        val rig = Rig(FakeTips(infos = mapOf(alice to personal)))
+        val c = controller(rig)
+        c.open(n)
+        advanceUntilIdle()
+        c.send()
+        advanceUntilIdle()
+        assertEquals(listOf("wss://w.example"), rig.tips.sentWatcherRelays.last())
+        assertEquals(0, rig.gateway.infoCalls)
+    }
+
+    @Test
+    fun `anonymous tip to personal watcher uses tag relays`() = runTest {
+        val personal = PaymentInfo.Enabled(aliceAddress, Watcher.Personal(watcherPk, listOf("wss://w.example")))
+        val rig = Rig(FakeTips(infos = mapOf(alice to personal)), settings = FakeTipSettings().apply { anonymousState.value = true })
+        val c = controller(rig)
+        c.open(n)
+        advanceUntilIdle()
+        c.send()
+        advanceUntilIdle()
+        assertEquals(listOf("wss://w.example"), rig.tips.anonymousRelays.last())
+        assertEquals(0, rig.gateway.infoCalls)
     }
 }

@@ -13,24 +13,35 @@ sealed class PaymentInfo {
     /** No usable payment info: the user takes no tips (spec 5.9). */
     data object Disabled : PaymentInfo()
 
+    /** Accepting tips through [watcher]: an HTTP service (`["watcher", url, pubkey]`) or a personal watcher (`["watcher", pubkey, relay…]`), spec 0.4. */
     data class Enabled(
         val address: Address,
-        val watcherUrl: String,
-        val watcherPubkey: String,
+        val watcher: Watcher,
     ) : PaymentInfo() {
         val network: Network get() = address.network
+        val watcherPubkey: String get() = watcher.pubkey
     }
 
     companion object {
-        fun build(address: Address, watcherUrl: String, watcherPubkey: String, createdAt: Long): UnsignedEvent {
-            require(isHex64(watcherPubkey)) { "watcher pubkey must be 64 lowercase hex chars" }
-            val url = normalizeUrl(watcherUrl) ?: throw IllegalArgumentException("watcher url must start with http:// or https://")
+        fun build(address: Address, watcher: Watcher, createdAt: Long): UnsignedEvent {
+            require(isHex64(watcher.pubkey)) { "watcher pubkey must be 64 lowercase hex chars" }
+            val watcherTag = when (watcher) {
+                is Watcher.Http -> {
+                    val url = normalizeUrl(watcher.url) ?: throw IllegalArgumentException("watcher url must start with http:// or https://")
+                    listOf("watcher", url, watcher.pubkey)
+                }
+                is Watcher.Personal -> {
+                    require(watcher.relays.size in 1..Watcher.MAX_RELAYS) { "a personal watcher needs 1 to ${Watcher.MAX_RELAYS} relays" }
+                    val relays = watcher.relays.map { Watcher.normalizeRelay(it) ?: throw IllegalArgumentException("relay must be wss://") }
+                    listOf("watcher", watcher.pubkey) + relays
+                }
+            }
             return UnsignedEvent(
                 kind = Kinds.PAYMENT_INFO,
                 content = "",
                 tags = listOf(
                     listOf("address", address.encode()),
-                    listOf("watcher", url, watcherPubkey),
+                    watcherTag,
                     listOf("network", NetworkTag.toTag(address.network)),
                 ),
                 createdAt = createdAt,
@@ -40,15 +51,22 @@ sealed class PaymentInfo {
         fun buildDisabled(createdAt: Long): UnsignedEvent =
             UnsignedEvent(kind = Kinds.PAYMENT_INFO, content = "", tags = emptyList(), createdAt = createdAt)
 
-        /** Parses a kind 10037 event. Anything malformed yields [Disabled]. */
+        /** Parses a kind 10037 event, URL or pubkey watcher form (spec 0.4). Anything malformed yields [Disabled]. */
         fun parse(event: Event): PaymentInfo {
             if (event.kind != Kinds.PAYMENT_INFO) return Disabled
             val addressText = event.firstTagValue("address") ?: return Disabled
             val watcher = event.firstTag("watcher") ?: return Disabled
             if (watcher.size < 3) return Disabled
-            val url = normalizeUrl(watcher[1]) ?: return Disabled
-            val pubkey = watcher[2]
-            if (!isHex64(pubkey)) return Disabled
+            val parsedWatcher = if (isHex64(watcher[1])) {
+                val relays = watcher.drop(2)
+                if (relays.size !in 1..Watcher.MAX_RELAYS) return Disabled
+                Watcher.Personal(watcher[1], relays.map { Watcher.normalizeRelay(it) ?: return Disabled })
+            } else {
+                val url = normalizeUrl(watcher[1]) ?: return Disabled
+                val pubkey = watcher[2]
+                if (!isHex64(pubkey)) return Disabled
+                Watcher.Http(url, pubkey)
+            }
             val network = event.firstTagValue("network")?.let(NetworkTag::parse) ?: return Disabled
             val address = try {
                 Address.parse(addressText)
@@ -56,7 +74,7 @@ sealed class PaymentInfo {
                 return Disabled
             }
             if (address.network != network) return Disabled
-            return Enabled(address, url, pubkey)
+            return Enabled(address, parsedWatcher)
         }
 
         /**

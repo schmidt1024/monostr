@@ -10,7 +10,7 @@ class ReceiptValidatorTest {
     private val watcherPubkey = "d".repeat(64)
     private val recipient = "c".repeat(64)
     private val address = Address.parse("42nsXK8WbVGTNayQ6Kjw5UdgqbQY5KCCufdxdCgF7NgTfjC69Mna7DJSYyie77hZTQ8H92G2HwgFhgEUYnDzrnLnQdF28r3")
-    private val info = PaymentInfo.Enabled(address, "https://watcher.monostr.com", watcherPubkey)
+    private val info = PaymentInfo.Enabled(address, Watcher.Http("https://watcher.monostr.com", watcherPubkey))
 
     private fun receipt(watcher: String = watcherPubkey, to: String = recipient, amount: Long = 1000) = TipReceipt(
         id = "1".repeat(64), watcherPubkey = watcher, noteId = "b".repeat(64), recipientPubkey = to,

@@ -19,12 +19,17 @@ import java.io.IOException
 /** The user's Monero receiving setup as registered at a watcher (spec 5.8 "Watcher-Registrierungsstatus"). */
 data class MoneroSetup(
     val address: String,
+    /** Empty for a personal watcher (spec 0.4 §4.3): it is reached over [watcherRelays], not HTTP. */
     val watcherUrl: String,
     val watcherPubkey: String,
     /** `mainnet` or `stagenet`, as reported by the watcher. */
     val network: String,
     val registeredAt: Long,
-)
+    /** The relays of a personal watcher as announced in the payment info; empty for an HTTP watcher. */
+    val watcherRelays: List<String> = emptyList(),
+) {
+    val isPersonal: Boolean get() = watcherUrl.isEmpty()
+}
 
 /** How amounts read and are typed (Settings → Monero); inside, everything stays piconero. */
 enum class AmountUnit(val label: String, val decimals: Int) {
@@ -111,6 +116,8 @@ class PrefsTipSettingsStore(private val store: DataStore<Preferences>) : TipSett
             watcherPubkey = p[SETUP_WATCHER_PUBKEY] ?: return@map null,
             network = p[SETUP_NETWORK] ?: return@map null,
             registeredAt = p[SETUP_REGISTERED_AT] ?: 0L,
+            // absent in setups written before 0.17.0
+            watcherRelays = p[SETUP_WATCHER_RELAYS]?.split(' ')?.filter { it.isNotEmpty() } ?: emptyList(),
         )
     }
 
@@ -128,9 +135,11 @@ class PrefsTipSettingsStore(private val store: DataStore<Preferences>) : TipSett
         store.edit { p ->
             if (setup == null) {
                 p.remove(SETUP_ADDRESS); p.remove(SETUP_WATCHER_URL); p.remove(SETUP_WATCHER_PUBKEY); p.remove(SETUP_NETWORK); p.remove(SETUP_REGISTERED_AT)
+                p.remove(SETUP_WATCHER_RELAYS)
             } else {
                 p[SETUP_ADDRESS] = setup.address; p[SETUP_WATCHER_URL] = setup.watcherUrl; p[SETUP_WATCHER_PUBKEY] = setup.watcherPubkey
                 p[SETUP_NETWORK] = setup.network; p[SETUP_REGISTERED_AT] = setup.registeredAt
+                p[SETUP_WATCHER_RELAYS] = setup.watcherRelays.joinToString(" ")
             }
         }
     }
@@ -150,6 +159,7 @@ class PrefsTipSettingsStore(private val store: DataStore<Preferences>) : TipSett
         val SETUP_WATCHER_PUBKEY = stringPreferencesKey("monero.watcher_pubkey")
         val SETUP_NETWORK = stringPreferencesKey("monero.network")
         val SETUP_REGISTERED_AT = longPreferencesKey("monero.registered_at")
+        val SETUP_WATCHER_RELAYS = stringPreferencesKey("monero.watcher_relays")
         val ONBOARDING_SEEN = booleanPreferencesKey("monero.onboarding_seen")
         val NOTIFICATIONS_READ_AT = longPreferencesKey("notifications.read_at")
         val ANONYMOUS = booleanPreferencesKey("tips.anonymous")

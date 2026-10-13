@@ -229,6 +229,24 @@
     <string name="setup_err_view_key_format">A chave de visualização deve ter 64 caracteres hex</string>
     <string name="setup_err_view_key_mismatch">A chave de visualização não corresponde ao endereço</string>
     <string name="setup_err_not_published">Nenhum relay acessível – informação de pagamento não publicada, tente novamente</string>
+    <string name="setup_personal_err_input">Cole o nprofile (ou npub) do watcher.</string>
+    <string name="setup_personal_err_relay">Informe um relay do watcher (wss://…).</string>
+    <string name="setup_personal_err_not_found">Nenhum status do watcher encontrado nesses relays. O watcher está rodando?</string>
+    <string name="setup_personal_err_other_account">Este watcher pertence a outra conta. Coloque seu npub em WATCHER_RECIPIENT.</string>
+    <string name="setup_personal_err_network">O watcher informa um endereço de outra rede.</string>
+    <string name="setup_personal_err_offline">O watcher está offline desde %1$s.</string>
+    <string name="setup_personal_watcher">Watcher pessoal</string>
+    <string name="setup_personal_watcher_hint">Seu próprio watcher em casa ou em um servidor: a chave de visualização fica com você.</string>
+    <string name="setup_personal_title">Watcher pessoal</string>
+    <string name="setup_personal_text">Cole o nprofile que seu watcher mostra ao iniciar. Com um npub, adicione um dos relays dele.</string>
+    <string name="setup_personal_input_label">nprofile ou npub</string>
+    <string name="setup_personal_relay_label">Relay (opcional)</string>
+    <string name="setup_personal_relay_hint">wss://…</string>
+    <string name="setup_personal_load">Verificar watcher</string>
+    <string name="setup_personal_info">Watcher pessoal %1$s · %2$s · altura %3$s · as gorjetas chegam a %4$s…%5$s</string>
+    <string name="setup_personal_height_unknown">desconhecida</string>
+    <string name="setup_personal_privacy">A chave de visualização fica com você. Nós públicos não veem nenhum endereço. Seu perfil indica este watcher, então quem envia gorjetas as publica nos relays dele.</string>
+    <string name="setup_personal_confirm">Usar este watcher</string>
 
     <!-- settings -->
     <string name="settings_title">Configurações</string>
@@ -275,6 +293,11 @@
     <string name="settings_monero_address">As gorjetas chegam nesta carteira: %1$s…%2$s · %3$s</string>
     <string name="settings_monero_wallet_hint">Não em um endereço Monero da sua bio ou de outros campos do perfil. Os recibos chegam a você pelo watcher e pelos seus relays; relays pagos não são necessários.</string>
     <string name="settings_monero_watcher">Watcher %1$s</string>
+    <string name="settings_monero_personal">Watcher pessoal %1$s</string>
+    <string name="settings_monero_personal_online">Watcher pessoal %1$s · online</string>
+    <string name="settings_monero_personal_offline">Watcher pessoal %1$s · offline desde %2$s</string>
+    <string name="settings_monero_personal_unknown">Watcher pessoal %1$s · nenhum status encontrado</string>
+    <string name="settings_monero_personal_mismatch">Watcher pessoal %1$s · informa outro endereço ou outra conta</string>
     <string name="settings_monero_switch_watcher">Trocar de watcher</string>
     <string name="settings_monero_disable">Desativar gorjetas</string>
     <string name="settings_monero_delete_view_key">Excluir localmente a chave de visualização</string>

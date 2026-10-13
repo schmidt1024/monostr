@@ -229,6 +229,24 @@
     <string name="setup_err_view_key_format">La clave de visualización debe tener 64 caracteres hex</string>
     <string name="setup_err_view_key_mismatch">La clave de visualización no corresponde a la dirección</string>
     <string name="setup_err_not_published">Ningún relay accesible – información de pago no publicada, inténtalo de nuevo</string>
+    <string name="setup_personal_err_input">Pega el nprofile (o npub) del watcher.</string>
+    <string name="setup_personal_err_relay">Indica un relay del watcher (wss://…).</string>
+    <string name="setup_personal_err_not_found">No se encontró ningún estado del watcher en estos relays. ¿Está funcionando el watcher?</string>
+    <string name="setup_personal_err_other_account">Este watcher pertenece a otra cuenta. Pon tu npub en WATCHER_RECIPIENT.</string>
+    <string name="setup_personal_err_network">El watcher indica una dirección de otra red.</string>
+    <string name="setup_personal_err_offline">El watcher está desconectado desde %1$s.</string>
+    <string name="setup_personal_watcher">Watcher personal</string>
+    <string name="setup_personal_watcher_hint">Tu propio watcher en casa o en un servidor: la clave de visualización se queda contigo.</string>
+    <string name="setup_personal_title">Watcher personal</string>
+    <string name="setup_personal_text">Pega el nprofile que tu watcher muestra al arrancar. Con un npub, añade uno de sus relays.</string>
+    <string name="setup_personal_input_label">nprofile o npub</string>
+    <string name="setup_personal_relay_label">Relay (opcional)</string>
+    <string name="setup_personal_relay_hint">wss://…</string>
+    <string name="setup_personal_load">Comprobar watcher</string>
+    <string name="setup_personal_info">Watcher personal %1$s · %2$s · altura %3$s · las propinas llegan a %4$s…%5$s</string>
+    <string name="setup_personal_height_unknown">desconocida</string>
+    <string name="setup_personal_privacy">La clave de visualización se queda contigo. Los nodos públicos no ven ninguna dirección. Tu perfil nombra este watcher, así que quienes te envían propinas las publican en sus relays.</string>
+    <string name="setup_personal_confirm">Usar este watcher</string>
 
     <!-- settings -->
     <string name="settings_title">Ajustes</string>
@@ -275,6 +293,11 @@
     <string name="settings_monero_address">Las propinas llegan a esta cartera: %1$s…%2$s · %3$s</string>
     <string name="settings_monero_wallet_hint">No a una dirección de Monero en tu biografía u otros campos del perfil. Los recibos te llegan a través del watcher y tus propios relays; no hacen falta relays de pago.</string>
     <string name="settings_monero_watcher">Watcher %1$s</string>
+    <string name="settings_monero_personal">Watcher personal %1$s</string>
+    <string name="settings_monero_personal_online">Watcher personal %1$s · en línea</string>
+    <string name="settings_monero_personal_offline">Watcher personal %1$s · sin conexión desde %2$s</string>
+    <string name="settings_monero_personal_unknown">Watcher personal %1$s · no se encontró estado</string>
+    <string name="settings_monero_personal_mismatch">Watcher personal %1$s · informa de otra dirección u otra cuenta</string>
     <string name="settings_monero_switch_watcher">Cambiar de watcher</string>
     <string name="settings_monero_disable">Desactivar propinas</string>
     <string name="settings_monero_delete_view_key">Borrar localmente la clave de visualización</string>

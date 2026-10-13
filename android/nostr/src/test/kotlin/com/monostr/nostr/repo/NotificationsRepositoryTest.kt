@@ -6,6 +6,7 @@ import com.monostr.nostr.LocalSigner
 import com.monostr.nostr.NostrEngine
 import com.monostr.nostr.RustConvert
 import com.monostr.tips.PaymentInfo
+import com.monostr.tips.Watcher
 import com.monostr.tips.TipReceipt
 import com.monostr.tips.TipType
 import kotlinx.coroutines.flow.first
@@ -44,7 +45,7 @@ class NotificationsRepositoryTest {
         e.save(EventBuilder.reaction(mine, "+").customCreatedAt(Timestamp.fromSecs(400u)).signWithKeys(alice))
         // my own payment info names `watcher`
         val myAddress = MoneroKeys.generate().address(Network.MAINNET)
-        e.signAndSend(PaymentInfo.build(myAddress, "https://watcher.example", watcher.publicKey().toHex(), 50))
+        e.signAndSend(PaymentInfo.build(myAddress, Watcher.Http("https://watcher.example", watcher.publicKey().toHex()), 50))
         val intentId = "a".repeat(64)
         e.save(RustConvert.toBuilder(TipReceipt.build(mine.id().toHex(), meHex, alice.publicKey().toHex(), 5_000_000_000, intentId, TipType.LIKE, 500)).signWithKeys(watcher))
         e.save(RustConvert.toBuilder(TipReceipt.build(mine.id().toHex(), meHex, bob.publicKey().toHex(), 7_000_000_000, intentId, TipType.LIKE, 600)).signWithKeys(otherWatcher))
@@ -70,7 +71,7 @@ class NotificationsRepositoryTest {
     fun `profile tips have no note and anonymous tips no sender`() = runTest {
         val e = NostrEngine.create(dir.resolve("lmdb").toString(), LocalSigner(me.secretKey().toHex()), emptyList())
         val meHex = me.publicKey().toHex()
-        e.signAndSend(PaymentInfo.build(MoneroKeys.generate().address(Network.MAINNET), "https://watcher.example", watcher.publicKey().toHex(), 50))
+        e.signAndSend(PaymentInfo.build(MoneroKeys.generate().address(Network.MAINNET), Watcher.Http("https://watcher.example", watcher.publicKey().toHex()), 50))
         e.save(RustConvert.toBuilder(TipReceipt.build(null, meHex, alice.publicKey().toHex(), 5, "a".repeat(64), TipType.TIP, 500)).signWithKeys(watcher))
         e.save(RustConvert.toBuilder(TipReceipt.build(null, meHex, null, 7, "b".repeat(64), TipType.TIP, 600)).signWithKeys(watcher))
         e.save(RustConvert.toBuilder(TipReceipt.build("c".repeat(64), meHex, null, 9, "d".repeat(64), TipType.TIP, 700)).signWithKeys(watcher))

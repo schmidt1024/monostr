@@ -10,6 +10,8 @@ import com.monostr.nostr.RustConvert
 import com.monostr.tips.Kinds
 import com.monostr.tips.PaymentId
 import com.monostr.tips.PaymentInfo
+import com.monostr.tips.Watcher
+import com.monostr.tips.WatcherStatus
 import com.monostr.tips.TipReceipt
 import com.monostr.tips.TipRequest
 import com.monostr.tips.TipType
@@ -46,7 +48,7 @@ class TipsRepositoryTest {
 
     private fun signed(keys: Keys, unsigned: UnsignedEvent): Event = RustConvert.toBuilder(unsigned).signWithKeys(keys)
 
-    private fun alicePaymentInfo(): Event = signed(alice, PaymentInfo.build(aliceAddress, "https://watcher.example", watcher.publicKey().toHex(), clock))
+    private fun alicePaymentInfo(): Event = signed(alice, PaymentInfo.build(aliceAddress, Watcher.Http("https://watcher.example", watcher.publicKey().toHex()), clock))
 
     private fun receipt(by: Keys, noteId: String, recipient: String, amount: Long, intentId: String, at: Long): Event =
         signed(by, TipReceipt.build(noteId, recipient, me.publicKey().toHex(), amount, intentId, TipType.LIKE, at))
@@ -91,12 +93,12 @@ class TipsRepositoryTest {
                 e.connect()
                 val repo = NostrTipsRepository(e) { clock }
                 val myWallet = MoneroKeys.generate().address(Network.MAINNET)
-                val published = repo.publishPaymentInfo(myWallet, "https://watcher.example/", watcher.publicKey().toHex())
+                val published = repo.publishPaymentInfo(myWallet, Watcher.Http("https://watcher.example/", watcher.publicKey().toHex()))
                 assertEquals(Kinds.PAYMENT_INFO, published.kind)
                 assertTrue(published.sentToAny, "failed: ${published.failedRelays}")
                 val mine = repo.paymentInfo(me.publicKey().toHex()) as PaymentInfo.Enabled
                 assertEquals(myWallet, mine.address)
-                assertEquals("https://watcher.example", mine.watcherUrl)
+                assertEquals(Watcher.Http("https://watcher.example", watcher.publicKey().toHex()), mine.watcher)
                 clock += 10
                 assertTrue(repo.disablePaymentInfo().sentToAny)
                 assertEquals(PaymentInfo.Disabled, repo.paymentInfo(me.publicKey().toHex()))
@@ -112,7 +114,7 @@ class TipsRepositoryTest {
         val e = engine() // no relay at all
         val repo = NostrTipsRepository(e) { clock }
         val myWallet = MoneroKeys.generate().address(Network.MAINNET)
-        val published = repo.publishPaymentInfo(myWallet, "https://watcher.example/", watcher.publicKey().toHex())
+        val published = repo.publishPaymentInfo(myWallet, Watcher.Http("https://watcher.example/", watcher.publicKey().toHex()))
         assertFalse(published.sentToAny)
         assertEquals(PaymentInfo.Disabled, repo.cachedPaymentInfo(me.publicKey().toHex()))
         assertTrue(e.query(Filter().kind(Kind(10037u))).isEmpty(), "the tip sheet reads the local copy when the relays are slow")
@@ -308,5 +310,45 @@ class TipsRepositoryTest {
         val anonymous = TipRequest.prepare(info, alice.publicKey().toHex(), null, 1, TipType.TIP, "", clock, anonymous = true)
         assertTrue(runCatching { repo.sendIntent(anonymous, emptyList()) }.exceptionOrNull() is IllegalArgumentException)
         assertTrue(e.query(Filter().kind(Kind(Kinds.TIP_INTENT.toUShort()))).isEmpty(), "nothing signed under the user's key")
+    }
+
+    private fun statusEvent(by: Keys, at: Long, height: Long = 3_000_000): Event = signed(
+        by,
+        UnsignedEvent(
+            Kinds.WATCHER_STATUS, "",
+            listOf(listOf("p", alice.publicKey().toHex()), listOf("address", aliceAddress.encode()), listOf("network", "mainnet"), listOf("height", height.toString()), listOf("version", "0.4.0")),
+            at,
+        ),
+    )
+
+    @Test
+    fun `watcher status comes from the given relays`() = runTest {
+        val ev = statusEvent(watcher, clock)
+        val repo = NostrTipsRepository(engine()) { clock }
+        val got = SilentWsRelay(serve = listOf(ev.asJson())).use { r -> repo.watcherStatus(watcher.publicKey().toHex(), listOf(r.url)) }
+        assertEquals(WatcherStatus.parse(RustConvert.toTips(ev)), got)
+        assertEquals(3_000_000L, got!!.height)
+    }
+
+    @Test
+    fun `status of another author is ignored`() = runTest {
+        val repo = NostrTipsRepository(engine()) { clock }
+        val got = SilentWsRelay(serve = listOf(statusEvent(otherWatcher, clock).asJson())).use { r -> repo.watcherStatus(watcher.publicKey().toHex(), listOf(r.url)) }
+        assertNull(got)
+    }
+
+    @Test
+    fun `newest of two statuses wins`() = runTest {
+        val repo = NostrTipsRepository(engine()) { clock }
+        val served = listOf(statusEvent(watcher, clock - 100, 1).asJson(), statusEvent(watcher, clock, 2).asJson())
+        val got = SilentWsRelay(serve = served).use { r -> repo.watcherStatus(watcher.publicKey().toHex(), listOf(r.url)) }
+        assertEquals(2L, got!!.height)
+    }
+
+    @Test
+    fun `no answer is null`() = runTest {
+        val repo = NostrTipsRepository(engine()) { clock }
+        val got = SilentWsRelay(answerEose = true).use { r -> repo.watcherStatus(watcher.publicKey().toHex(), listOf(r.url)) }
+        assertNull(got)
     }
 }

@@ -229,6 +229,24 @@
     <string name="setup_err_view_key_format">La clé de visualisation doit comporter 64 caractères hex</string>
     <string name="setup_err_view_key_mismatch">La clé de visualisation ne correspond pas à l\'adresse</string>
     <string name="setup_err_not_published">Aucun relais joignable – informations de paiement non publiées, veuillez réessayer</string>
+    <string name="setup_personal_err_input">Collez le nprofile (ou npub) du watcher.</string>
+    <string name="setup_personal_err_relay">Indiquez un relais du watcher (wss://…).</string>
+    <string name="setup_personal_err_not_found">Aucun statut du watcher trouvé sur ces relais. Le watcher est-il en marche ?</string>
+    <string name="setup_personal_err_other_account">Ce watcher appartient à un autre compte. Indiquez votre npub dans WATCHER_RECIPIENT.</string>
+    <string name="setup_personal_err_network">Le watcher signale une adresse d\'un autre réseau.</string>
+    <string name="setup_personal_err_offline">Le watcher est hors ligne depuis %1$s.</string>
+    <string name="setup_personal_watcher">Watcher personnel</string>
+    <string name="setup_personal_watcher_hint">Votre propre watcher chez vous ou sur un serveur : la clé de visualisation reste chez vous.</string>
+    <string name="setup_personal_title">Watcher personnel</string>
+    <string name="setup_personal_text">Collez le nprofile que votre watcher affiche au démarrage. Avec un npub, ajoutez l\'un de ses relais.</string>
+    <string name="setup_personal_input_label">nprofile ou npub</string>
+    <string name="setup_personal_relay_label">Relais (facultatif)</string>
+    <string name="setup_personal_relay_hint">wss://…</string>
+    <string name="setup_personal_load">Vérifier le watcher</string>
+    <string name="setup_personal_info">Watcher personnel %1$s · %2$s · hauteur %3$s · les pourboires arrivent à %4$s…%5$s</string>
+    <string name="setup_personal_height_unknown">inconnue</string>
+    <string name="setup_personal_privacy">La clé de visualisation reste chez vous. Les nœuds publics ne voient aucune adresse. Votre profil désigne ce watcher, les expéditeurs publient donc leurs pourboires sur ses relais.</string>
+    <string name="setup_personal_confirm">Utiliser ce watcher</string>
 
     <!-- settings -->
     <string name="settings_title">Paramètres</string>
@@ -275,6 +293,11 @@
     <string name="settings_monero_address">Les pourboires arrivent dans ce portefeuille : %1$s…%2$s · %3$s</string>
     <string name="settings_monero_wallet_hint">Pas à une adresse Monero de votre bio ou d’autres champs du profil. Les reçus vous parviennent par le watcher et vos propres relais ; les relais payants ne sont pas nécessaires.</string>
     <string name="settings_monero_watcher">Watcher %1$s</string>
+    <string name="settings_monero_personal">Watcher personnel %1$s</string>
+    <string name="settings_monero_personal_online">Watcher personnel %1$s · en ligne</string>
+    <string name="settings_monero_personal_offline">Watcher personnel %1$s · hors ligne depuis %2$s</string>
+    <string name="settings_monero_personal_unknown">Watcher personnel %1$s · aucun statut trouvé</string>
+    <string name="settings_monero_personal_mismatch">Watcher personnel %1$s · signale une autre adresse ou un autre compte</string>
     <string name="settings_monero_switch_watcher">Changer de watcher</string>
     <string name="settings_monero_disable">Désactiver les pourboires</string>
     <string name="settings_monero_delete_view_key">Supprimer localement la clé de visualisation</string>

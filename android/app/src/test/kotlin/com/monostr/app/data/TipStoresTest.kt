@@ -1,6 +1,9 @@
 package com.monostr.app.data
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -114,5 +117,34 @@ class TipStoresTest {
     fun `an entry written before anonDelivered decodes as not delivered`() {
         val old = """[{"intentId":"${"a".repeat(64)}","noteId":null,"amount":5,"createdAt":1000,"recipient":"${"c".repeat(64)}","anonEvent":"{}","anonRelays":["wss://w.example"]}]"""
         assertFalse(PendingTips.decode(old).single().anonDelivered)
+    }
+
+    @Test
+    fun `a personal setup round trips its relays and a 0_16_5 setup reads without relays`() = runTest {
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val store = PreferenceDataStoreFactory.create(scope = scope) { dir.resolve("personal.preferences_pb").toFile() }
+        val settings = PrefsTipSettingsStore(store)
+        val personal = MoneroSetup("4addr", "", "c".repeat(64), "mainnet", 123, listOf("wss://a.example", "wss://b.example"))
+        settings.setSetup(personal)
+        assertEquals(personal, settings.setup.first())
+        assertTrue(settings.setup.first()!!.isPersonal)
+        settings.setSetup(null)
+        assertNull(settings.setup.first())
+        // what 0.16.5 wrote: no relay key
+        store.edit {
+            it[stringPreferencesKey("monero.address")] = "4old"
+            it[stringPreferencesKey("monero.watcher_url")] = "https://w.example"
+            it[stringPreferencesKey("monero.watcher_pubkey")] = "d".repeat(64)
+            it[stringPreferencesKey("monero.network")] = "mainnet"
+            it[longPreferencesKey("monero.registered_at")] = 7
+        }
+        val old = settings.setup.first()!!
+        assertEquals(MoneroSetup("4old", "https://w.example", "d".repeat(64), "mainnet", 7), old)
+        assertEquals(emptyList<String>(), old.watcherRelays)
+        assertFalse(old.isPersonal)
+        settings.setSetup(personal)
+        settings.setSetup(old)
+        assertEquals(old, settings.setup.first(), "an http setup after a personal one leaves no relays behind")
+        scope.cancel()
     }
 }

@@ -1,0 +1,75 @@
+# Personal watcher: watches one wallet with two monero-wallet-rpc instances against public nodes.
+# wallet-rpc (scan wallet) syncs through WATCHER_NODES 1, 3, 5, …; wallet-rpc-check (check
+# wallet, same view-only wallet) through 2, 4, 6, …; a tip counts only when both report it.
+# No node, no domain, no published port. Setup: SELFHOST.md, "Personal watcher".
+# Start: docker compose -f compose.personal.yml up -d --build
+# With Tor: COMPOSE_PROFILES=tor and WATCHER_PROXY=socks5://tor:9050 in .env
+# Stagenet: WATCHER_NETWORK=stagenet and MONERO_NETWORK_FLAG=--stagenet in .env
+name: monostr-personal-watcher
+
+services:
+  wallet-rpc:
+    image: ghcr.io/sethforprivacy/simple-monero-wallet-rpc@sha256:09ff81f470d6d37811e3fde808c5cd1158a8cd2c42abbfb935b33f26f91e879d # v0.18.5.1
+    restart: unless-stopped
+    mem_limit: 512m
+    logging: { driver: json-file, options: { max-size: "20m", max-file: "3" } }
+    volumes:
+      - wallet-data:/home/monero/wallet
+    # only reachable inside this compose network; the watcher drives it over JSON-RPC.
+    # The default daemon is a dead address: until the watcher's set_daemon succeeds the
+    # wallet syncs from nowhere (never from a node the image might pick).
+    # The image's /entrypoint.sh adds --non-interactive and the bind address itself:
+    # RPC_EXPOSE_UNAUTHENTICATED=1 makes it bind 0.0.0.0 with --confirm-external-bind
+    # (no port is published, so only the watcher reaches it).
+    environment:
+      RPC_EXPOSE_UNAUTHENTICATED: "1"
+    command: >
+      --wallet-dir=/home/monero/wallet --rpc-bind-port=18083 --disable-rpc-login
+      --daemon-address=127.0.0.1:1 ${MONERO_NETWORK_FLAG:-}
+
+  wallet-rpc-check:
+    # identical to wallet-rpc, own volume: the check wallet syncs through the other node group
+    image: ghcr.io/sethforprivacy/simple-monero-wallet-rpc@sha256:09ff81f470d6d37811e3fde808c5cd1158a8cd2c42abbfb935b33f26f91e879d # v0.18.5.1
+    restart: unless-stopped
+    mem_limit: 512m
+    logging: { driver: json-file, options: { max-size: "20m", max-file: "3" } }
+    volumes:
+      - wallet-check-data:/home/monero/wallet
+    environment:
+      RPC_EXPOSE_UNAUTHENTICATED: "1"
+    command: >
+      --wallet-dir=/home/monero/wallet --rpc-bind-port=18083 --disable-rpc-login
+      --daemon-address=127.0.0.1:1 ${MONERO_NETWORK_FLAG:-}
+
+  watcher:
+    build:
+      context: .
+      args:
+        VERSION: ${WATCHER_VERSION:-0.4.0}
+    image: monostr-watcher:personal
+    restart: unless-stopped
+    mem_limit: 256m
+    logging: { driver: json-file, options: { max-size: "20m", max-file: "3" } }
+    depends_on:
+      - wallet-rpc
+      - wallet-rpc-check
+    env_file: .env
+    environment:
+      WATCHER_MODE: personal
+      WATCHER_DB: /data/watcher.db
+      WALLET_RPC_URL: http://wallet-rpc:18083/json_rpc
+      WALLET_RPC_CHECK_URL: http://wallet-rpc-check:18083/json_rpc
+    volumes:
+      - watcher-data:/data
+
+  tor:
+    # dockurr/tor listens on 0.0.0.0:9050 (SOCKS5) by default; multi-arch (amd64, arm64, arm/v7)
+    image: dockurr/tor@sha256:38f57fbef35b372f5eac374fa3d44a4edf6c5e2ff2a6883ace851617c09f16bb
+    profiles: [tor]
+    restart: unless-stopped
+    logging: { driver: json-file, options: { max-size: "20m", max-file: "3" } }
+
+volumes:
+  wallet-data:
+  wallet-check-data:
+  watcher-data:

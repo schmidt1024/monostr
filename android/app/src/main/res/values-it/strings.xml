@@ -229,6 +229,24 @@
     <string name="setup_err_view_key_format">La chiave di visualizzazione deve avere 64 caratteri hex</string>
     <string name="setup_err_view_key_mismatch">La chiave di visualizzazione non corrisponde all\'indirizzo</string>
     <string name="setup_err_not_published">Nessun relay raggiungibile – informazioni di pagamento non pubblicate, riprova</string>
+    <string name="setup_personal_err_input">Incolla il nprofile (o npub) del watcher.</string>
+    <string name="setup_personal_err_relay">Indica un relay del watcher (wss://…).</string>
+    <string name="setup_personal_err_not_found">Nessuno stato del watcher trovato su questi relay. Il watcher è in funzione?</string>
+    <string name="setup_personal_err_other_account">Questo watcher appartiene a un altro account. Imposta il tuo npub in WATCHER_RECIPIENT.</string>
+    <string name="setup_personal_err_network">Il watcher segnala un indirizzo di un\'altra rete.</string>
+    <string name="setup_personal_err_offline">Il watcher è offline dal %1$s.</string>
+    <string name="setup_personal_watcher">Watcher personale</string>
+    <string name="setup_personal_watcher_hint">Il tuo watcher a casa o su un server: la chiave di visualizzazione resta con te.</string>
+    <string name="setup_personal_title">Watcher personale</string>
+    <string name="setup_personal_text">Incolla il nprofile che il tuo watcher mostra all\'avvio. Con un npub, aggiungi uno dei suoi relay.</string>
+    <string name="setup_personal_input_label">nprofile o npub</string>
+    <string name="setup_personal_relay_label">Relay (facoltativo)</string>
+    <string name="setup_personal_relay_hint">wss://…</string>
+    <string name="setup_personal_load">Controlla watcher</string>
+    <string name="setup_personal_info">Watcher personale %1$s · %2$s · altezza %3$s · le mance arrivano a %4$s…%5$s</string>
+    <string name="setup_personal_height_unknown">sconosciuta</string>
+    <string name="setup_personal_privacy">La chiave di visualizzazione resta con te. I nodi pubblici non vedono alcun indirizzo. Il tuo profilo indica questo watcher, quindi chi invia mance le pubblica sui suoi relay.</string>
+    <string name="setup_personal_confirm">Usa questo watcher</string>
 
     <!-- settings -->
     <string name="settings_title">Impostazioni</string>
@@ -275,6 +293,11 @@
     <string name="settings_monero_address">Le mance arrivano in questo wallet: %1$s…%2$s · %3$s</string>
     <string name="settings_monero_wallet_hint">Non a un indirizzo Monero nella tua bio o in altri campi del profilo. Le ricevute ti arrivano tramite il watcher e i tuoi relay; i relay a pagamento non servono.</string>
     <string name="settings_monero_watcher">Watcher %1$s</string>
+    <string name="settings_monero_personal">Watcher personale %1$s</string>
+    <string name="settings_monero_personal_online">Watcher personale %1$s · online</string>
+    <string name="settings_monero_personal_offline">Watcher personale %1$s · offline dal %2$s</string>
+    <string name="settings_monero_personal_unknown">Watcher personale %1$s · nessuno stato trovato</string>
+    <string name="settings_monero_personal_mismatch">Watcher personale %1$s · segnala un altro indirizzo o un altro account</string>
     <string name="settings_monero_switch_watcher">Cambia watcher</string>
     <string name="settings_monero_disable">Disattiva le mance</string>
     <string name="settings_monero_delete_view_key">Elimina in locale la chiave di visualizzazione</string>

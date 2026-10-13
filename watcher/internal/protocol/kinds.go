@@ -3,12 +3,13 @@
 package protocol
 
 const (
-	KindPaymentInfo = 10037
-	KindTipIntent   = 9738
-	KindTipReceipt  = 9739
-	KindHTTPAuth    = 27235
-	KindDeletion    = 5
-	KindRelayList   = 10002
+	KindPaymentInfo   = 10037
+	KindTipIntent     = 9738
+	KindTipReceipt    = 9739
+	KindHTTPAuth      = 27235
+	KindDeletion      = 5
+	KindRelayList     = 10002
+	KindWatcherStatus = 10038
 )
 
 func isLowerHex(s string, n int) bool {

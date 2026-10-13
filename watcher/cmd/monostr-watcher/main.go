@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/nbd-wtf/go-nostr/nip19"
 
 	"monostr.com/watcher/internal/api"
 	"monostr.com/watcher/internal/lws"
@@ -41,6 +42,7 @@ type config struct {
 	hookURL         string
 	lwsAdminURL     string
 	lwsAdminKey     string
+	allowedPubkeys  []string
 	monerodRPC      string
 	sweepInterval   time.Duration
 }
@@ -60,6 +62,26 @@ func splitList(s string) []string {
 		}
 	}
 	return out
+}
+
+// parsePubkeys reads a comma-separated list of npubs or 64-char hex pubkeys and returns hex.
+func parsePubkeys(s string) ([]string, error) {
+	var out []string
+	for _, p := range splitList(s) {
+		if strings.HasPrefix(p, "npub1") {
+			prefix, v, err := nip19.Decode(p)
+			if err != nil || prefix != "npub" {
+				return nil, fmt.Errorf("invalid npub %q", p)
+			}
+			p = v.(string)
+		}
+		p = strings.ToLower(p)
+		if !protocol.IsHex64(p) {
+			return nil, fmt.Errorf("%q is neither an npub nor 64 hex chars", p)
+		}
+		out = append(out, p)
+	}
+	return out, nil
 }
 
 func loadConfig() (config, error) {
@@ -92,6 +114,10 @@ func loadConfig() (config, error) {
 	c.lwsAdminURL = env("LWS_ADMIN_URL", "http://127.0.0.1:8443/admin")
 	c.lwsAdminKey = env("LWS_ADMIN_KEY", "")
 	c.monerodRPC = env("MONEROD_RPC_URL", "http://127.0.0.1:18089")
+	c.allowedPubkeys, err = parsePubkeys(env("WATCHER_ALLOWED_PUBKEYS", ""))
+	if err != nil {
+		return c, fmt.Errorf("WATCHER_ALLOWED_PUBKEYS: %w", err)
+	}
 	c.sweepInterval, err = time.ParseDuration(env("WATCHER_SWEEP_INTERVAL", "60s"))
 	if err != nil || c.sweepInterval < time.Second {
 		return c, errors.New("WATCHER_SWEEP_INTERVAL must be a duration >= 1s")
@@ -102,7 +128,16 @@ func loadConfig() (config, error) {
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(logger)
-	if err := run(logger); err != nil {
+	runner := run
+	switch mode := env("WATCHER_MODE", "hosted"); mode {
+	case "hosted":
+	case "personal":
+		runner = runPersonal
+	default:
+		logger.Error("fatal", "err", "WATCHER_MODE must be hosted or personal, got "+mode)
+		os.Exit(1)
+	}
+	if err := runner(logger); err != nil {
 		logger.Error("fatal", "err", err.Error())
 		os.Exit(1)
 	}
@@ -139,7 +174,7 @@ func run(logger *slog.Logger) error {
 	// Startup order (spec 4.4): the HTTP listener comes first so LWS hooks
 	// fired during the rescan reach us; Backfill loads intents published
 	// while we were down before Recover computes the rescan address set.
-	handler := api.New(svc, cfg.publicURL, ratelimit.New(5, time.Hour), logger)
+	handler := api.New(svc, cfg.publicURL, ratelimit.New(5, time.Hour), cfg.allowedPubkeys, logger)
 	srv := &http.Server{Addr: cfg.listen, Handler: handler, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second}
 	errCh := make(chan error, 1)
 	go func() { errCh <- srv.ListenAndServe() }()
@@ -152,11 +187,24 @@ func run(logger *slog.Logger) error {
 		logger.Error("recover", "err", err.Error())
 	}
 
-	// relay subscription for intents
+	defer startLoops(ctx, svc, pool, cfg.sweepInterval, logger)()
+
+	select {
+	case <-ctx.Done():
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		return srv.Shutdown(shutdownCtx)
+	case err := <-errCh:
+		return err
+	}
+}
+
+// startLoops runs the intent subscription and the periodic sweep/reconcile
+// until ctx ends; stop closes the subscription.
+func startLoops(ctx context.Context, svc *watcher.Service, pool *relays.Pool, sweepInterval time.Duration, logger *slog.Logger) (stop func()) {
 	events := make(chan *nostr.Event, 256)
 	sub := relays.NewSubscriber(pool, svc.IntentFilter(), events)
 	sub.Reconcile(svc.SubscriptionRelays())
-	defer sub.Close()
 	go func() {
 		for {
 			select {
@@ -169,10 +217,8 @@ func run(logger *slog.Logger) error {
 			}
 		}
 	}()
-
-	// periodic sweep + relay-set reconcile
 	go func() {
-		ticker := time.NewTicker(cfg.sweepInterval)
+		ticker := time.NewTicker(sweepInterval)
 		defer ticker.Stop()
 		reconcile := time.NewTicker(5 * time.Minute)
 		defer reconcile.Stop()
@@ -192,13 +238,5 @@ func run(logger *slog.Logger) error {
 			}
 		}
 	}()
-
-	select {
-	case <-ctx.Done():
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		return srv.Shutdown(shutdownCtx)
-	case err := <-errCh:
-		return err
-	}
+	return sub.Close
 }

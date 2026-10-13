@@ -29,7 +29,7 @@ class PaymentInfoTest {
 
     @Test
     fun `build produces the protocol tags`() {
-        val unsigned = PaymentInfo.build(Address.parse(mainnet), watcherUrl, watcherPubkey, createdAt = 1700000000)
+        val unsigned = PaymentInfo.build(Address.parse(mainnet), Watcher.Http(watcherUrl, watcherPubkey), createdAt = 1700000000)
         assertEquals(UnsignedEvent(Kinds.PAYMENT_INFO, "", validTags, 1700000000), unsigned)
     }
 
@@ -37,16 +37,16 @@ class PaymentInfoTest {
     fun `build rejects testnet, bad pubkey and bad url`() {
         val stage = Address.parse(stagenet)
         val testnet = Address(Network.TESTNET, stage.spendPublic, stage.viewPublic)
-        assertThrows(IllegalArgumentException::class.java) { PaymentInfo.build(testnet, watcherUrl, watcherPubkey, 1) }
-        assertThrows(IllegalArgumentException::class.java) { PaymentInfo.build(stage, watcherUrl, "C".repeat(64), 1) }
-        assertThrows(IllegalArgumentException::class.java) { PaymentInfo.build(stage, "watcher.monostr.com", watcherPubkey, 1) }
+        assertThrows(IllegalArgumentException::class.java) { PaymentInfo.build(testnet, Watcher.Http(watcherUrl, watcherPubkey), 1) }
+        assertThrows(IllegalArgumentException::class.java) { PaymentInfo.build(stage, Watcher.Http(watcherUrl, "C".repeat(64)), 1) }
+        assertThrows(IllegalArgumentException::class.java) { PaymentInfo.build(stage, Watcher.Http("watcher.monostr.com", watcherPubkey), 1) }
     }
 
     @Test
     fun `build then parse roundtrip on stagenet`() = runTest {
         val address = Address.parse(stagenet)
-        val signed = signer.sign(PaymentInfo.build(address, "$watcherUrl/", watcherPubkey, 1))
-        assertEquals(PaymentInfo.Enabled(address, watcherUrl, watcherPubkey), PaymentInfo.parse(signed))
+        val signed = signer.sign(PaymentInfo.build(address, Watcher.Http("$watcherUrl/", watcherPubkey), 1))
+        assertEquals(PaymentInfo.Enabled(address, Watcher.Http(watcherUrl, watcherPubkey)), PaymentInfo.parse(signed))
     }
 
     @Test
@@ -54,14 +54,14 @@ class PaymentInfoTest {
         val info = PaymentInfo.parse(event(tags = validTags)) as PaymentInfo.Enabled
         assertEquals(Address.parse(mainnet), info.address)
         assertEquals(Network.MAINNET, info.network)
-        assertEquals(watcherUrl, info.watcherUrl)
+        assertEquals(Watcher.Http(watcherUrl, watcherPubkey), info.watcher)
         assertEquals(watcherPubkey, info.watcherPubkey)
     }
 
     @Test
     fun `parse accepts http url for local watchers`() {
         val tags = validTags.map { if (it[0] == "watcher") listOf("watcher", "http://10.0.2.2:8080", watcherPubkey) else it }
-        assertEquals("http://10.0.2.2:8080", (PaymentInfo.parse(event(tags = tags)) as PaymentInfo.Enabled).watcherUrl)
+        assertEquals("http://10.0.2.2:8080", (PaymentInfo.parse(event(tags = tags)) as PaymentInfo.Enabled).watcher.let { (it as Watcher.Http).url })
     }
 
     @Test
@@ -80,7 +80,7 @@ class PaymentInfoTest {
     @Test
     fun `parse canonicalizes watcher url casing and trailing slash`() {
         val tags = validTags.map { if (it[0] == "watcher") listOf("watcher", "https://Watcher.Example/", watcherPubkey) else it }
-        assertEquals("https://watcher.example", (PaymentInfo.parse(event(tags = tags)) as PaymentInfo.Enabled).watcherUrl)
+        assertEquals("https://watcher.example", (PaymentInfo.parse(event(tags = tags)) as PaymentInfo.Enabled).watcher.let { (it as Watcher.Http).url })
     }
 
     @Test
@@ -119,5 +119,55 @@ class PaymentInfoTest {
         assertEquals(Network.STAGENET, NetworkTag.parse("stagenet"))
         assertNull(NetworkTag.parse("testnet"))
         assertNull(NetworkTag.parse("Mainnet"))
+    }
+
+    private val relay = "wss://relay.example.com"
+
+    @Test
+    fun `build and parse the pubkey form`() = runTest {
+        val unsigned = PaymentInfo.build(Address.parse(mainnet), Watcher.Personal(watcherPubkey, listOf(relay, "wss://nos.lol")), 100)
+        assertEquals(listOf("watcher", watcherPubkey, relay, "wss://nos.lol"), unsigned.tags[1])
+        val parsed = PaymentInfo.parse(signer.sign(unsigned))
+        assertEquals(PaymentInfo.Enabled(Address.parse(mainnet), Watcher.Personal(watcherPubkey, listOf(relay, "wss://nos.lol"))), parsed)
+        assertEquals(watcherPubkey, (parsed as PaymentInfo.Enabled).watcherPubkey)
+    }
+
+    @Test
+    fun `build rejects a personal watcher without relays, with five, or with ws`() {
+        val a = Address.parse(mainnet)
+        assertThrows(IllegalArgumentException::class.java) { PaymentInfo.build(a, Watcher.Personal(watcherPubkey, emptyList()), 1) }
+        assertThrows(IllegalArgumentException::class.java) { PaymentInfo.build(a, Watcher.Personal(watcherPubkey, List(5) { "wss://r$it.example" }), 1) }
+        assertThrows(IllegalArgumentException::class.java) { PaymentInfo.build(a, Watcher.Personal(watcherPubkey, listOf("ws://r.example")), 1) }
+    }
+
+    @Test
+    fun `pubkey form with bad relays is Disabled`() = runTest {
+        val bad = listOf(
+            listOf("watcher", watcherPubkey),
+            listOf("watcher", watcherPubkey) + List(5) { "wss://r$it.example" },
+            listOf("watcher", watcherPubkey, "ws://r.example"),
+            listOf("watcher", watcherPubkey, "https://r.example"),
+            listOf("watcher", watcherPubkey, "wss://user@r.example"),
+            listOf("watcher", watcherPubkey, "wss://r.example?x=1"),
+            listOf("watcher", watcherPubkey, "wss://r.example#f"),
+            listOf("watcher", watcherPubkey, "wss://"),
+            listOf("watcher", watcherPubkey.uppercase(), relay),
+        )
+        for (w in bad) {
+            val tags = listOf(listOf("address", mainnet), w, listOf("network", "mainnet"))
+            assertEquals(PaymentInfo.Disabled, PaymentInfo.parse(event(Kinds.PAYMENT_INFO, tags)), "tag $w")
+        }
+    }
+
+    @Test
+    fun `old url form still parses next to the pubkey form`() = runTest {
+        assertEquals(PaymentInfo.Enabled(Address.parse(mainnet), Watcher.Http(watcherUrl, watcherPubkey)), PaymentInfo.parse(event(Kinds.PAYMENT_INFO, validTags)))
+    }
+
+    @Test
+    fun `relay urls are canonicalized`() {
+        assertEquals("wss://relay.example.com", Watcher.normalizeRelay(" WSS://Relay.Example.com/ "))
+        assertEquals("wss://stagenet.watcher.monostr.com/relay", Watcher.normalizeRelay("wss://stagenet.watcher.monostr.com/relay"))
+        assertNull(Watcher.normalizeRelay("ws://relay.example.com"))
     }
 }

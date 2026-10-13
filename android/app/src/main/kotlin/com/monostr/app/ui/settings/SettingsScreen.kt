@@ -422,7 +422,17 @@ fun SettingsScreen(onBack: () -> Unit, onMoneroSetup: () -> Unit, onSupport: () 
                     TextButton(onClick = { copyToClipboard(context, setup.address, copied) }, modifier = Modifier.testTag("settings-monero-copy-address")) { Text(stringResource(R.string.action_copy_address)) }
                 }
                 Text(stringResource(R.string.settings_monero_wallet_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("settings-monero-wallet-hint"))
-                Text(stringResource(R.string.settings_monero_watcher, setup.watcherUrl), style = MaterialTheme.typography.bodySmall)
+                if (setup.isPersonal) {
+                    val name = com.monostr.nostr.Npub.short(setup.watcherPubkey)
+                    val line = when (val l = monero.personalLine) {
+                        PersonalWatcherLine.Unknown -> stringResource(R.string.settings_monero_personal, name)
+                        PersonalWatcherLine.NotFound -> stringResource(R.string.settings_monero_personal_unknown, name)
+                        PersonalWatcherLine.Online -> stringResource(R.string.settings_monero_personal_online, name)
+                        PersonalWatcherLine.Mismatch -> stringResource(R.string.settings_monero_personal_mismatch, name)
+                        is PersonalWatcherLine.Offline -> stringResource(R.string.settings_monero_personal_offline, name, com.monostr.app.ui.monero.localTime(l.since))
+                    }
+                    Text(line, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("settings-monero-watcher"))
+                } else Text(stringResource(R.string.settings_monero_watcher, setup.watcherUrl), style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("settings-monero-watcher"))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = onMoneroSetup, modifier = Modifier.testTag("settings-monero-setup")) { Text(stringResource(R.string.settings_monero_switch_watcher)) }
                     OutlinedButton(onClick = vm.monero::disable, enabled = !monero.busy, modifier = Modifier.testTag("settings-monero-disable")) { Text(stringResource(R.string.settings_monero_disable)) }

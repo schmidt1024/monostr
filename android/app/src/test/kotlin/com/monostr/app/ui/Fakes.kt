@@ -63,6 +63,8 @@ import com.monostr.nostr.repo.TipsRepository
 import com.monostr.nostr.repo.Unwrap
 import com.monostr.nostr.repo.WrapFetch
 import com.monostr.tips.PaymentInfo
+import com.monostr.tips.Watcher
+import com.monostr.tips.WatcherStatus
 import com.monostr.tips.PreparedTip
 import com.monostr.tips.watcher.WatcherException
 import com.monostr.tips.watcher.WatcherInfo
@@ -233,7 +235,7 @@ class FakeTips(
 ) : TipsRepository {
     val sentIntents = ArrayList<PreparedTip>()
     val sentWatcherRelays = ArrayList<List<String>>()
-    val publishedInfos = ArrayList<Triple<Address, String, String>>()
+    val publishedInfos = ArrayList<Pair<Address, Watcher>>()
     var disabledCalls = 0
     /** Summaries emitted by observeReceipts; tests push new values to simulate arriving receipts. */
     val receipts = MutableStateFlow<Map<String, TipSummary>>(emptyMap())
@@ -261,9 +263,18 @@ class FakeTips(
         cachedCalls += pubkey
         return infos[pubkey] ?: PaymentInfo.Disabled
     }
-    override suspend fun publishPaymentInfo(address: Address, watcherUrl: String, watcherPubkey: String): PublishResult {
-        publishedInfos += Triple(address, watcherUrl, watcherPubkey)
+    override suspend fun publishPaymentInfo(address: Address, watcher: Watcher): PublishResult {
+        publishedInfos += Pair(address, watcher)
         return PublishResult((++counter).toString().padStart(64, '0'), 10037, if (relaysOk) listOf("wss://r") else emptyList(), emptyMap())
+    }
+    val statuses = HashMap<String, WatcherStatus?>()
+    val statusRequests = ArrayList<Pair<String, List<String>>>()
+    /** When set, watcherStatus suspends until it completes. */
+    var statusGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+    override suspend fun watcherStatus(watcherPubkey: String, relays: List<String>): WatcherStatus? {
+        statusRequests += watcherPubkey to relays
+        statusGate?.await()
+        return statuses[watcherPubkey]
     }
     override suspend fun disablePaymentInfo(): PublishResult {
         disabledCalls++
@@ -422,7 +433,8 @@ class FakeWatcherGateway(
 ) : WatcherGateway {
     val registered = ArrayList<Triple<String, Address, String>>()
     val unregistered = ArrayList<String>()
-    override suspend fun info(url: String): WatcherInfo { infoError?.let { throw it }; return info ?: throw WatcherException.Protocol("no info") }
+    var infoCalls = 0
+    override suspend fun info(url: String): WatcherInfo { infoCalls++; infoError?.let { throw it }; return info ?: throw WatcherException.Protocol("no info") }
     override suspend fun register(url: String, address: Address, viewSecret: ByteArray): String {
         registerError?.let { throw it }
         registered += Triple(url, address, viewSecret.toHex())

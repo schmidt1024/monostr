@@ -232,6 +232,24 @@
     <string name="setup_err_view_key_format">Ключ просмотра должен содержать 64 hex-символа</string>
     <string name="setup_err_view_key_mismatch">Ключ просмотра не соответствует адресу</string>
     <string name="setup_err_not_published">Нет доступных релеев – платёжная информация не опубликована, попробуйте снова</string>
+    <string name="setup_personal_err_input">Вставьте nprofile (или npub) watcher.</string>
+    <string name="setup_personal_err_relay">Укажите релей watcher (wss://…).</string>
+    <string name="setup_personal_err_not_found">На этих релеях не найден статус watcher. Watcher запущен?</string>
+    <string name="setup_personal_err_other_account">Этот watcher принадлежит другому аккаунту. Укажите свой npub в WATCHER_RECIPIENT.</string>
+    <string name="setup_personal_err_network">Watcher сообщает адрес из другой сети.</string>
+    <string name="setup_personal_err_offline">Watcher не в сети с %1$s.</string>
+    <string name="setup_personal_watcher">Личный watcher</string>
+    <string name="setup_personal_watcher_hint">Ваш собственный watcher дома или на сервере: ключ просмотра остаётся у вас.</string>
+    <string name="setup_personal_title">Личный watcher</string>
+    <string name="setup_personal_text">Вставьте nprofile, который watcher выводит при запуске. Для npub добавьте один из его релеев.</string>
+    <string name="setup_personal_input_label">nprofile или npub</string>
+    <string name="setup_personal_relay_label">Релей (необязательно)</string>
+    <string name="setup_personal_relay_hint">wss://…</string>
+    <string name="setup_personal_load">Проверить watcher</string>
+    <string name="setup_personal_info">Личный watcher %1$s · %2$s · высота %3$s · чаевые приходят на %4$s…%5$s</string>
+    <string name="setup_personal_height_unknown">неизвестна</string>
+    <string name="setup_personal_privacy">Ключ просмотра остаётся у вас. Публичные ноды не видят адреса. Ваш профиль указывает на этот watcher, поэтому отправители публикуют чаевые на его релеях.</string>
+    <string name="setup_personal_confirm">Использовать этот watcher</string>
 
     <!-- settings -->
     <string name="settings_title">Настройки</string>
@@ -278,6 +296,11 @@
     <string name="settings_monero_address">Чаевые приходят в этот кошелёк: %1$s…%2$s · %3$s</string>
     <string name="settings_monero_wallet_hint">Не на адрес Monero из описания или других полей профиля. Квитанции приходят через watcher и ваши релеи; платные релеи не нужны.</string>
     <string name="settings_monero_watcher">Watcher %1$s</string>
+    <string name="settings_monero_personal">Личный watcher %1$s</string>
+    <string name="settings_monero_personal_online">Личный watcher %1$s · онлайн</string>
+    <string name="settings_monero_personal_offline">Личный watcher %1$s · офлайн с %2$s</string>
+    <string name="settings_monero_personal_unknown">Личный watcher %1$s · статус не найден</string>
+    <string name="settings_monero_personal_mismatch">Личный watcher %1$s · сообщает другой адрес или другой аккаунт</string>
     <string name="settings_monero_switch_watcher">Сменить watcher</string>
     <string name="settings_monero_disable">Отключить чаевые</string>
     <string name="settings_monero_delete_view_key">Удалить ключ просмотра локально</string>

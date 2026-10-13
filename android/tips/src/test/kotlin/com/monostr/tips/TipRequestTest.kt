@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test
 class TipRequestTest {
     private val mainnet = "42nsXK8WbVGTNayQ6Kjw5UdgqbQY5KCCufdxdCgF7NgTfjC69Mna7DJSYyie77hZTQ8H92G2HwgFhgEUYnDzrnLnQdF28r3"
     private val integrated = "4CVYY7x1CknTNayQ6Kjw5UdgqbQY5KCCufdxdCgF7NgTfjC69Mna7DJSYyie77hZTQ8H92G2HwgFhgEUYnDzrnLnbxc5xHroTU8U3vykdq"
-    private val info = PaymentInfo.Enabled(Address.parse(mainnet), "https://watcher.monostr.com", "d".repeat(64))
+    private val info = PaymentInfo.Enabled(Address.parse(mainnet), Watcher.Http("https://watcher.monostr.com", "d".repeat(64)))
     private val note = "b".repeat(64)
     private val recipient = "c".repeat(64)
 

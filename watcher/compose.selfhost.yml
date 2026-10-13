@@ -1,0 +1,82 @@
+# Self-hosted watcher: monerod (pruned) + monero-lws + watcher + Caddy (TLS) on one host.
+# Setup: SELFHOST.md. Start: docker compose -f compose.selfhost.yml up -d
+name: monostr-watcher
+
+services:
+  monerod:
+    image: ghcr.io/sethforprivacy/simple-monerod@sha256:233f3fa6b59e5b36b2fda105ac10bc91fa5a0f3dadcff8dc657a6ced42123bd7 # v0.18.5.3
+    restart: unless-stopped
+    logging: { driver: json-file, options: { max-size: "50m", max-file: "5" } }
+    ports:
+      - "18080:18080" # P2P; RPC and ZMQ stay inside the compose network
+    volumes:
+      - monerod-data:/home/monero
+    command: >
+      --prune-blockchain --sync-pruned-blocks
+      --rpc-restricted-bind-ip=0.0.0.0 --rpc-restricted-bind-port=18089 --no-igd
+      --zmq-rpc-bind-ip=0.0.0.0 --zmq-rpc-bind-port=18082 --confirm-zmq-rpc-external-bind
+      --zmq-pub=tcp://0.0.0.0:18083
+
+  monero-lws:
+    image: vtnerd/monero-lws@sha256:637bfc6225422eed94950b85b05a0d771490632ad121f0c38b272ee92c73c53d # v1.0.1; 1.0.2 dies with SIGILL on some CPUs
+    restart: unless-stopped
+    mem_limit: 512m
+    logging: { driver: json-file, options: { max-size: "50m", max-file: "5" } }
+    depends_on:
+      - monerod
+    volumes:
+      - lws-data:/home/monero-lws/.bitmonero/light_wallet_server
+    # The admin API is reachable only inside this compose network (Caddy never forwards to it),
+    # so it runs without an admin key.
+    command: >
+      monero-lws-daemon
+      --daemon tcp://monerod:18082
+      --sub tcp://monerod:18083
+      --rest-server http://0.0.0.0:8443/wallet
+      --admin-rest-server http://0.0.0.0:8443/admin
+      --disable-admin-auth
+      --webhook-ssl-verification none
+      --confirm-external-bind
+      --log-level 1
+
+  watcher:
+    build: .
+    image: monostr-watcher:selfhost
+    restart: unless-stopped
+    mem_limit: 256m
+    logging: { driver: json-file, options: { max-size: "50m", max-file: "5" } }
+    depends_on:
+      - monero-lws
+    env_file: .env
+    environment:
+      WATCHER_NETWORK: mainnet
+      WATCHER_PUBLIC_URL: https://${WATCHER_DOMAIN:?set WATCHER_DOMAIN in .env}
+      WATCHER_LISTEN: 0.0.0.0:8080
+      WATCHER_DB: /data/watcher.db
+      WATCHER_HOOK_URL: http://watcher:8080/internal/lws-hook
+      LWS_ADMIN_URL: http://monero-lws:8443/admin
+      MONEROD_RPC_URL: http://monerod:18089
+      WATCHER_RELAYS: ${WATCHER_RELAYS:-wss://relay.monostr.com,wss://relay.damus.io,wss://nos.lol}
+    volumes:
+      - watcher-data:/data
+
+  caddy:
+    image: caddy@sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc24061f9b52 # caddy:2 as of 2026-09-25
+    restart: unless-stopped
+    logging: { driver: json-file, options: { max-size: "50m", max-file: "5" } }
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      WATCHER_DOMAIN: ${WATCHER_DOMAIN:?set WATCHER_DOMAIN in .env}
+    volumes:
+      - ./Caddyfile.selfhost:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  monerod-data:
+  lws-data:
+  watcher-data:
+  caddy-data:
+  caddy-config:

@@ -5,9 +5,12 @@ import com.monostr.app.R
 import com.monostr.app.data.KeystoreSecretStore
 import com.monostr.app.data.MoneroSetup
 import com.monostr.app.ui.settings.MoneroSettingsController
+import com.monostr.app.ui.settings.PersonalWatcherLine
 import com.monostr.monero.MoneroKeys
 import com.monostr.monero.Network
 import com.monostr.tips.PaymentInfo
+import com.monostr.tips.Watcher
+import com.monostr.tips.WatcherStatus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
@@ -90,7 +93,7 @@ class MoneroSettingsControllerTest {
     fun `without a setup here the address announced from another device is shown`() = runTest {
         val self = "5".repeat(64)
         val announced = MoneroKeys.generate().address(Network.MAINNET)
-        val tips = FakeTips(infos = mapOf(self to PaymentInfo.Enabled(announced, "https://w.example", "c".repeat(64))))
+        val tips = FakeTips(infos = mapOf(self to PaymentInfo.Enabled(announced, Watcher.Http("https://w.example", "c".repeat(64)))))
         val c = MoneroSettingsController(FakeTipSettings(), FakeSecrets(), tips, FakeWatcherGateway(), { true }, eager(), selfPubkey = self)
         c.start()
         advanceUntilIdle()
@@ -103,7 +106,7 @@ class MoneroSettingsControllerTest {
         val self = "5".repeat(64)
         val own = MoneroKeys.generate().address(Network.MAINNET)
         val setup = MoneroSetup(own.encode(), "https://w.example", "c".repeat(64), "mainnet", 1)
-        val tips = FakeTips(infos = mapOf(self to PaymentInfo.Enabled(own, "https://w.example", "c".repeat(64))))
+        val tips = FakeTips(infos = mapOf(self to PaymentInfo.Enabled(own, Watcher.Http("https://w.example", "c".repeat(64)))))
         val c = MoneroSettingsController(FakeTipSettings(setup = setup), FakeSecrets(), tips, FakeWatcherGateway(), { true }, eager(), selfPubkey = self)
         c.start()
         advanceUntilIdle()
@@ -155,5 +158,97 @@ class MoneroSettingsControllerTest {
         c.savePresets(listOf("2", "0,5"))
         advanceUntilIdle()
         assertEquals(listOf(500_000_000L, 2_000_000_000L), settings.presetsState.value)
+    }
+
+    private val watcherHex = "d".repeat(64)
+    private val relays = listOf("wss://w.example", "wss://w2.example")
+    private val personal = MoneroSetup("4addr", "", watcherHex, "mainnet", 1, relays)
+    private val status = WatcherStatus(watcherHex, "5".repeat(64), MoneroKeys.generate().address(Network.MAINNET), Network.MAINNET, 3_512_345, "0.4.0", 1_000)
+
+    @Test
+    fun `personal setup loads the watcher status`() = runTest {
+        val tips = FakeTips().apply { statuses[watcherHex] = status }
+        val c = MoneroSettingsController(FakeTipSettings(setup = personal), FakeSecrets(), tips, FakeWatcherGateway(), { true }, eager(), now = { 1_100 })
+        c.start()
+        advanceUntilIdle()
+        assertEquals(watcherHex to relays, tips.statusRequests.last())
+        assertEquals(status, c.state.value.watcherStatus)
+        assertTrue(c.state.value.statusChecked)
+    }
+
+    @Test
+    fun `http setup loads no status`() = runTest {
+        val setup = MoneroSetup("4addr", "https://w.example", "c".repeat(64), "mainnet", 1)
+        val tips = FakeTips()
+        val c = MoneroSettingsController(FakeTipSettings(setup = setup), FakeSecrets(), tips, FakeWatcherGateway(), { true }, eager())
+        c.start()
+        advanceUntilIdle()
+        assertTrue(tips.statusRequests.isEmpty())
+        assertNull(c.state.value.watcherStatus)
+    }
+
+    @Test
+    fun `disable of a personal watcher sends no DELETE`() = runTest {
+        val settings = FakeTipSettings(setup = personal)
+        val tips = FakeTips()
+        val gateway = FakeWatcherGateway()
+        val c = MoneroSettingsController(settings, FakeSecrets(), tips, gateway, { true }, eager())
+        c.start()
+        advanceUntilIdle()
+        c.disable()
+        advanceUntilIdle()
+        assertTrue(gateway.unregistered.isEmpty())
+        assertEquals(1, tips.disabledCalls)
+        assertNull(settings.setupState.value)
+    }
+
+    @Test
+    fun `missing status is checked but null`() = runTest {
+        val c = MoneroSettingsController(FakeTipSettings(setup = personal), FakeSecrets(), FakeTips(), FakeWatcherGateway(), { true }, eager())
+        c.start()
+        advanceUntilIdle()
+        assertTrue(c.state.value.statusChecked)
+        assertNull(c.state.value.watcherStatus)
+    }
+
+    private val self = "5".repeat(64)
+    private val ownAddress = MoneroKeys.generate().address(Network.MAINNET)
+    private val ownSetup = MoneroSetup(ownAddress.encode(), "", watcherHex, "mainnet", 1, relays)
+    private fun ownStatus(createdAt: Long = 1_000, recipient: String = self, address: com.monostr.monero.Address = ownAddress) =
+        WatcherStatus(watcherHex, recipient, address, Network.MAINNET, 3_512_345, "0.4.0", createdAt)
+
+    private fun TestScope.lineAt(now: Long, st: WatcherStatus?): PersonalWatcherLine {
+        val tips = FakeTips().apply { if (st != null) statuses[watcherHex] = st }
+        val c = MoneroSettingsController(FakeTipSettings(setup = ownSetup), FakeSecrets(), tips, FakeWatcherGateway(), { true }, eager(), selfPubkey = self, now = { now })
+        c.start()
+        advanceUntilIdle()
+        return c.state.value.personalLine
+    }
+
+    @Test
+    fun `line is unknown before the lookup finishes`() = runTest {
+        val tips = FakeTips().apply { statusGate = kotlinx.coroutines.CompletableDeferred() }
+        val c = MoneroSettingsController(FakeTipSettings(setup = ownSetup), FakeSecrets(), tips, FakeWatcherGateway(), { true }, eager(), selfPubkey = self, now = { 1_000 })
+        c.start()
+        advanceUntilIdle()
+        assertEquals(PersonalWatcherLine.Unknown, c.state.value.personalLine)
+    }
+
+    @Test
+    fun `line is online up to 900 seconds and offline after`() = runTest {
+        assertEquals(PersonalWatcherLine.Online, lineAt(1_900, ownStatus()))
+        assertEquals(PersonalWatcherLine.Offline(1_000), lineAt(1_901, ownStatus()))
+    }
+
+    @Test
+    fun `line is not found without a status`() = runTest {
+        assertEquals(PersonalWatcherLine.NotFound, lineAt(1_000, null))
+    }
+
+    @Test
+    fun `line is mismatch for another account or another address`() = runTest {
+        assertEquals(PersonalWatcherLine.Mismatch, lineAt(1_000, ownStatus(recipient = "6".repeat(64))))
+        assertEquals(PersonalWatcherLine.Mismatch, lineAt(1_000, ownStatus(address = MoneroKeys.generate().address(Network.MAINNET))))
+        assertEquals(PersonalWatcherLine.Mismatch, lineAt(5_000, ownStatus(recipient = "6".repeat(64))), "mismatch wins over offline")
     }
 }

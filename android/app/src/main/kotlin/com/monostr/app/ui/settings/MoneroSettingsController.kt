@@ -15,12 +15,27 @@ import com.monostr.app.ui.common.userMessage
 import com.monostr.nostr.repo.TipsRepository
 import kotlinx.coroutines.CancellationException
 import com.monostr.tips.PaymentInfo
+import com.monostr.tips.WatcherStatus
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+
+/** What the Settings row says about a personal watcher; decided in the controller, the screen only renders it. */
+sealed class PersonalWatcherLine {
+    /** The lookup has not finished. */
+    data object Unknown : PersonalWatcherLine()
+    /** The lookup finished without a status. */
+    data object NotFound : PersonalWatcherLine()
+    data object Online : PersonalWatcherLine()
+    /** The newest status is older than [com.monostr.tips.WatcherStatus.ONLINE_SECONDS]; [since] is its created_at. */
+    data class Offline(val since: Long) : PersonalWatcherLine()
+    /** The status names another account or another address than the stored setup. */
+    data object Mismatch : PersonalWatcherLine()
+}
 
 data class MoneroSettingsState(
     val setup: MoneroSetup? = null,
@@ -33,6 +48,12 @@ data class MoneroSettingsState(
     val announced: String? = null,
     val error: UiText? = null,
     val message: UiText? = null,
+    /** Personal watcher only: its newest kind 10038, null when none was found (see [statusChecked]). */
+    val watcherStatus: WatcherStatus? = null,
+    /** True once the status lookup for a personal watcher has finished. */
+    val statusChecked: Boolean = false,
+    /** Personal watcher only: the verdict on [watcherStatus] against the stored setup. */
+    val personalLine: PersonalWatcherLine = PersonalWatcherLine.Unknown,
 ) {
     val canAddPreset: Boolean get() = presets.size < Presets.MAX
 }
@@ -47,7 +68,10 @@ class MoneroSettingsController(
     private val scope: CoroutineScope,
     /** The logged-in account; null in tests that do not look at announced payment info. */
     private val selfPubkey: String? = null,
+    private val now: () -> Long = { System.currentTimeMillis() / 1000 },
 ) {
+    private var statusJob: Job? = null
+
     private val _state = MutableStateFlow(MoneroSettingsState())
     val state: StateFlow<MoneroSettingsState> = _state.asStateFlow()
 
@@ -58,6 +82,20 @@ class MoneroSettingsController(
                 // after a reinstall or on a second device "not set up" would be wrong: tips still arrive at the announced address
                 val announced = if (s == null && selfPubkey != null) announcedAddress(selfPubkey) else null
                 _state.update { it.copy(announced = announced.takeIf { _ -> it.setup == null }) }
+                statusJob?.cancel()
+                _state.update { it.copy(watcherStatus = null, statusChecked = false, personalLine = PersonalWatcherLine.Unknown) }
+                if (s != null && s.isPersonal) {
+                    statusJob = launch {
+                        val st = try {
+                            tips.watcherStatus(s.watcherPubkey, s.watcherRelays)
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            null
+                        }
+                        _state.update { it.copy(watcherStatus = st, statusChecked = true, personalLine = personalLine(s, st)) }
+                    }
+                }
             }
         }
         scope.launch {
@@ -65,6 +103,14 @@ class MoneroSettingsController(
                 _state.update { it.copy(presets = p.map { v -> Presets.format(v, u) }, unit = u) }
             }
         }
+    }
+
+    /** The status must name this account and the stored address, or the watcher watches something else (a null [selfPubkey] skips the account check). */
+    private fun personalLine(setup: MoneroSetup, st: WatcherStatus?): PersonalWatcherLine = when {
+        st == null -> PersonalWatcherLine.NotFound
+        (selfPubkey != null && st.recipient != selfPubkey) || st.address.encode() != setup.address -> PersonalWatcherLine.Mismatch
+        st.isOnline(now()) -> PersonalWatcherLine.Online
+        else -> PersonalWatcherLine.Offline(st.createdAt)
     }
 
     /** Unreachable relays count as nothing announced: the row then says "not set up", as before. */
@@ -111,7 +157,8 @@ class MoneroSettingsController(
             _state.update { it.copy(busy = true, error = null) }
             try {
                 try {
-                    gateway.unregister(setup.watcherUrl)
+                    // a personal watcher has no HTTP endpoint: the empty payment info (kind 10037) is all it takes
+                    if (!setup.isPersonal) gateway.unregister(setup.watcherUrl)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {

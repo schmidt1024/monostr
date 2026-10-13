@@ -16,8 +16,10 @@ monostr is in beta.
 ## How the Monero tips work
 
 1. The sender taps the Monero icon under a note or on a profile. monostr opens the sender's own wallet app (Monerujo, Cake, Feather …) with a `monero:` link; the app never holds a wallet or a spend key.
-2. To receive tips, a user registers the primary address and the **private view key** with a *watcher* — `watcher.monostr.com` by default, or one they run themselves (`watcher/`). The view key lets the watcher see incoming payments, nothing more; the watcher operator can see them too.
+2. To receive tips, a user registers the primary address and the **private view key** with a *watcher* — `watcher.monostr.com` by default, or one they run themselves (`watcher/`). The view key lets the watcher see incoming payments but never spend; the watcher operator can see them too.
 3. The watcher publishes a signed tip receipt on Nostr. Clients show the tip under the note.
+
+**Privacy:** the view key reveals *every* incoming payment to that wallet, not only tips, so use a separate wallet just for tips (setup can create one), never your everyday wallet. Receipts are public: recipient, amount, time and the note are visible to anyone, the sender too unless the tip is anonymous. For no third party at all, [run your own watcher](watcher/SELFHOST.md).
 
 The protocol is specified in [`docs/protocol/monostr-tips.md`](docs/protocol/monostr-tips.md).
 

@@ -9,10 +9,18 @@ import com.monostr.app.ui.monero.SetupStep
 import com.monostr.monero.Mnemonic
 import com.monostr.monero.MoneroKeys
 import com.monostr.tips.PaymentInfo
+import com.monostr.tips.Watcher
 import com.monostr.monero.Network
 import com.monostr.monero.toHex
 import com.monostr.tips.watcher.WatcherException
 import com.monostr.tips.watcher.WatcherInfo
+import com.monostr.tips.WatcherStatus
+import com.monostr.app.data.Presets
+import com.monostr.app.ui.common.UiText
+import rust.nostr.sdk.Keys
+import rust.nostr.sdk.Nip19Profile
+import rust.nostr.sdk.PublicKey
+import rust.nostr.sdk.RelayUrl
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
@@ -47,8 +55,23 @@ class MoneroSetupControllerTest {
 
     private fun TestScope.controller(rig: Rig, intro: Boolean = false) = MoneroSetupController(
         intro = intro, gateway = rig.gateway, tips = rig.tips, settings = rig.settings, secrets = rig.secrets,
-        relays = { rig.relays += it }, scope = eager(), selfPubkey = self, keyGen = { rig.keys }, random = Random(7), now = { 5_000 },
+        relays = { rig.relays += it }, scope = eager(), selfPubkey = self, keyGen = { rig.keys }, random = Random(7), now = { NOW },
+        formatTime = { "t$it" },
     ).also { it.start(); advanceUntilIdle() }
+
+    private val watcherHex = Keys.generate().publicKey().toHex()
+    private val personalWallet = MoneroKeys.generate()
+    private val personalAddress = personalWallet.address(Network.MAINNET)
+
+    private fun nprofile(vararg relays: String): String =
+        Nip19Profile(PublicKey.parse(watcherHex), relays.map { RelayUrl.parse(it) }).toBech32()
+
+    private fun status(recipient: String = self, network: Network? = Network.MAINNET, createdAt: Long = NOW) =
+        WatcherStatus(watcherHex, recipient, personalAddress, network, 3_512_345, "0.4.0", createdAt)
+
+    private fun TestScope.loadPersonal(c: MoneroSetupController, input: String, relay: String = "") {
+        c.startPersonal(); c.setPersonalInput(input); c.setPersonalRelay(relay); c.loadPersonal(); advanceUntilIdle()
+    }
 
     private fun MoneroSetupController.loadDefaultWatcher() { setWatcherUrl(url); loadWatcher() }
 
@@ -82,7 +105,7 @@ class MoneroSetupControllerTest {
         advanceUntilIdle()
         assertEquals(SetupStep.Done(expectedAddress.encode(), 3_000_000L), c.state.value.step)
         assertEquals(listOf(Triple(url, expectedAddress, expectedViewKey)), rig.gateway.registered)
-        assertEquals(listOf(Triple(expectedAddress, url, watcherPk)), rig.tips.publishedInfos)
+        assertEquals(listOf(Pair(expectedAddress, Watcher.Http(url, watcherPk))), rig.tips.publishedInfos)
         assertEquals(expectedViewKey, rig.secrets.get(KeystoreSecretStore.SECRET_VIEW_KEY))
         assertEquals(MoneroSetup(expectedAddress.encode(), url, watcherPk, "mainnet", 5_000), rig.settings.setupState.value)
         assertTrue(rig.settings.seenState.value)
@@ -95,7 +118,7 @@ class MoneroSetupControllerTest {
     @Test
     fun `the intro skips itself when the account already announces a tip address`() = runTest {
         val announced = MoneroKeys.generate().address(Network.MAINNET)
-        val rig = Rig(tips = FakeTips().apply { liveInfos = mapOf(self to PaymentInfo.Enabled(announced, url, watcherPk)) })
+        val rig = Rig(tips = FakeTips().apply { liveInfos = mapOf(self to PaymentInfo.Enabled(announced, Watcher.Http(url, watcherPk))) })
         val c = controller(rig, intro = true)
         assertTrue(c.state.value.finished)
         assertTrue(rig.settings.seenState.value)
@@ -106,7 +129,7 @@ class MoneroSetupControllerTest {
     @Test
     fun `setup from settings warns that it replaces an address announced elsewhere`() = runTest {
         val announced = MoneroKeys.generate().address(Network.MAINNET)
-        val rig = Rig(tips = FakeTips().apply { liveInfos = mapOf(self to PaymentInfo.Enabled(announced, url, watcherPk)) })
+        val rig = Rig(tips = FakeTips().apply { liveInfos = mapOf(self to PaymentInfo.Enabled(announced, Watcher.Http(url, watcherPk))) })
         val c = controller(rig)
         assertFalse(c.state.value.finished)
         assertEquals(announced.encode(), c.state.value.announced)
@@ -115,7 +138,7 @@ class MoneroSetupControllerTest {
     @Test
     fun `a setup on this device is not treated as announced elsewhere`() = runTest {
         val own = MoneroKeys.generate().address(Network.MAINNET)
-        val rig = Rig(tips = FakeTips().apply { liveInfos = mapOf(self to PaymentInfo.Enabled(own, url, watcherPk)) })
+        val rig = Rig(tips = FakeTips().apply { liveInfos = mapOf(self to PaymentInfo.Enabled(own, Watcher.Http(url, watcherPk))) })
         rig.settings.setupState.value = MoneroSetup(own.encode(), url, watcherPk, "mainnet", 1)
         val c = controller(rig)
         assertNull(c.state.value.announced)
@@ -279,7 +302,7 @@ class MoneroSetupControllerTest {
         // logout cleared the local setup; the watcher account and the kind 10037 on the relays stayed
         val wallet = MoneroKeys.generate()
         val address = wallet.address(Network.MAINNET)
-        val announced = PaymentInfo.Enabled(address, url, watcherPk)
+        val announced = PaymentInfo.Enabled(address, Watcher.Http(url, watcherPk))
         val rig = Rig(tips = FakeTips(infos = mapOf(self to announced), relaysOk = false))
         val c = controller(rig)
         c.loadDefaultWatcher()
@@ -346,5 +369,246 @@ class MoneroSetupControllerTest {
         assertTrue(rig.gateway.unregistered.isEmpty(), "the working setup is not thrown away")
         assertEquals(oldAddress.encode(), rig.settings.setupState.value?.address)
         assertEquals(old.viewSecret.toHex(), rig.secrets.get(KeystoreSecretStore.SECRET_VIEW_KEY))
+    }
+
+    @Test
+    fun `personal watcher from nprofile is announced in pubkey form`() = runTest {
+        val rig = Rig()
+        rig.tips.statuses[watcherHex] = status()
+        val c = controller(rig)
+        val input = nprofile("wss://w.example")
+        loadPersonal(c, input)
+        assertNull(c.state.value.error)
+        assertEquals(SetupStep.PersonalConfirm(status(), listOf("wss://w.example")), c.state.value.step)
+        assertEquals(listOf(watcherHex to listOf("wss://w.example")), rig.tips.statusRequests)
+        c.confirmPersonal()
+        advanceUntilIdle()
+        assertEquals(Pair(personalAddress, Watcher.Personal(watcherHex, listOf("wss://w.example"))), rig.tips.publishedInfos.last())
+        assertEquals(MoneroSetup(personalAddress.encode(), "", watcherHex, "mainnet", NOW, listOf("wss://w.example")), rig.settings.setupState.value)
+        assertTrue(rig.settings.setupState.value!!.isPersonal)
+        assertTrue(rig.settings.seenState.value)
+        assertEquals(listOf(listOf("wss://w.example")), rig.relays)
+        assertEquals(SetupStep.Done(personalAddress.encode(), null), c.state.value.step)
+        assertTrue(rig.secrets.values.isEmpty(), "no view key on the personal path")
+        assertTrue(rig.gateway.registered.isEmpty())
+        assertTrue(rig.gateway.unregistered.isEmpty())
+        assertEquals(0, rig.gateway.infoCalls)
+    }
+
+    @Test
+    fun `npub without relay is rejected`() = runTest {
+        val rig = Rig()
+        val c = controller(rig)
+        val npub = com.monostr.nostr.Npub.encode(watcherHex)
+        loadPersonal(c, npub)
+        assertEquals(MoneroSetupController.ERR_PERSONAL_RELAY, c.state.value.error)
+        assertEquals(SetupStep.Personal(npub, ""), c.state.value.step)
+        assertTrue(rig.tips.statusRequests.isEmpty())
+    }
+
+    @Test
+    fun `unreadable input is rejected`() = runTest {
+        val rig = Rig()
+        val c = controller(rig)
+        loadPersonal(c, "hello", "wss://w.example")
+        assertEquals(MoneroSetupController.ERR_PERSONAL_INPUT, c.state.value.error)
+        assertEquals(SetupStep.Personal("hello", "wss://w.example"), c.state.value.step)
+        assertTrue(rig.tips.statusRequests.isEmpty())
+        c.setPersonalInput("hell")
+        assertNull(c.state.value.error, "typing clears the error")
+    }
+
+    @Test
+    fun `relays are filtered to wss and capped at four`() = runTest {
+        val rig = Rig()
+        rig.tips.statuses[watcherHex] = status()
+        val c = controller(rig)
+        loadPersonal(c, nprofile("ws://x.example", "wss://1.example", "wss://2.example", "wss://3.example"), "wss://4.example/")
+        val expected = listOf("wss://1.example", "wss://2.example", "wss://3.example", "wss://4.example")
+        assertEquals(listOf(watcherHex to expected), rig.tips.statusRequests)
+        assertEquals(SetupStep.PersonalConfirm(status(), expected), c.state.value.step)
+        c.startPersonal()
+        loadPersonal(c, nprofile("wss://1.example", "wss://2.example", "wss://3.example", "wss://4.example", "wss://5.example"))
+        assertEquals(watcherHex to expected, rig.tips.statusRequests.last())
+    }
+
+    @Test
+    fun `missing status`() = runTest {
+        val rig = Rig()
+        val c = controller(rig)
+        val input = nprofile("wss://w.example")
+        loadPersonal(c, input, "wss://r.example")
+        assertEquals(MoneroSetupController.ERR_PERSONAL_NOT_FOUND, c.state.value.error)
+        assertEquals(SetupStep.Personal(input, "wss://r.example"), c.state.value.step, "input kept")
+        assertEquals(1, rig.tips.statusRequests.size)
+    }
+
+    @Test
+    fun `status of another account is refused`() = runTest {
+        val rig = Rig()
+        rig.tips.statuses[watcherHex] = status(recipient = "c".repeat(64))
+        val c = controller(rig)
+        loadPersonal(c, nprofile("wss://w.example"))
+        assertEquals(MoneroSetupController.ERR_PERSONAL_OTHER_ACCOUNT, c.state.value.error)
+        assertTrue(c.state.value.step is SetupStep.Personal)
+        c.confirmPersonal()
+        advanceUntilIdle()
+        assertTrue(rig.tips.publishedInfos.isEmpty())
+        assertNull(rig.settings.setupState.value)
+    }
+
+    @Test
+    fun `status with unknown or mismatching network is refused`() = runTest {
+        val rig = Rig()
+        val c = controller(rig)
+        for (net in listOf(null, Network.STAGENET)) {
+            rig.tips.statuses[watcherHex] = status(network = net)
+            loadPersonal(c, nprofile("wss://w.example"))
+            assertEquals(MoneroSetupController.ERR_PERSONAL_NETWORK, c.state.value.error, "network $net")
+            assertTrue(c.state.value.step is SetupStep.Personal)
+        }
+        assertTrue(rig.tips.publishedInfos.isEmpty())
+    }
+
+    @Test
+    fun `offline watcher shows since when`() = runTest {
+        val rig = Rig()
+        rig.tips.statuses[watcherHex] = status(createdAt = NOW - 901)
+        val c = controller(rig)
+        loadPersonal(c, nprofile("wss://w.example"))
+        assertEquals(UiText.Res(R.string.setup_personal_err_offline, listOf("t${NOW - 901}")), c.state.value.error)
+        assertTrue(c.state.value.step is SetupStep.Personal)
+        // exactly 15 minutes is still online
+        rig.tips.statuses[watcherHex] = status(createdAt = NOW - 900)
+        c.loadPersonal()
+        advanceUntilIdle()
+        assertTrue(c.state.value.step is SetupStep.PersonalConfirm, "step ${c.state.value.step}")
+    }
+
+    @Test
+    fun `switch from http watcher unregisters only after publishing`() = runTest {
+        val wallet = MoneroKeys.generate()
+        val oldUrl = "https://old.example"
+        val rig = Rig(settings = FakeTipSettings(setup = MoneroSetup(wallet.address(Network.MAINNET).encode(), oldUrl, "e".repeat(64), "mainnet", 1)))
+        rig.secrets.put(KeystoreSecretStore.SECRET_VIEW_KEY, wallet.viewSecret.toHex())
+        val order = ArrayList<String>()
+        val gateway = object : com.monostr.app.data.WatcherGateway by rig.gateway {
+            override suspend fun unregister(url: String) { order += "unregister"; rig.gateway.unregister(url) }
+        }
+        val tips = object : com.monostr.nostr.repo.TipsRepository by rig.tips {
+            override suspend fun publishPaymentInfo(address: com.monostr.monero.Address, watcher: Watcher) =
+                rig.tips.publishPaymentInfo(address, watcher).also { order += "publish" }
+        }
+        rig.tips.statuses[watcherHex] = status()
+        val c = MoneroSetupController(
+            intro = false, gateway = gateway, tips = tips, settings = rig.settings, secrets = rig.secrets,
+            relays = { rig.relays += it }, scope = eager(), selfPubkey = self, now = { NOW }, formatTime = { "t$it" },
+        ).also { it.start(); advanceUntilIdle() }
+        loadPersonal(c, nprofile("wss://w.example"))
+        c.confirmPersonal()
+        advanceUntilIdle()
+        assertEquals(listOf("publish", "unregister"), order)
+        assertEquals(listOf(oldUrl), rig.gateway.unregistered)
+        assertEquals(wallet.viewSecret.toHex(), rig.secrets.get(KeystoreSecretStore.SECRET_VIEW_KEY), "view key untouched")
+        assertTrue(rig.settings.setupState.value!!.isPersonal)
+    }
+
+    @Test
+    fun `failed publish keeps the old setup`() = runTest {
+        val wallet = MoneroKeys.generate()
+        val old = MoneroSetup(wallet.address(Network.MAINNET).encode(), "https://old.example", "e".repeat(64), "mainnet", 1)
+        val rig = Rig(tips = FakeTips(relaysOk = false), settings = FakeTipSettings(setup = old))
+        rig.tips.statuses[watcherHex] = status()
+        val c = controller(rig)
+        loadPersonal(c, nprofile("wss://w.example"))
+        c.confirmPersonal()
+        advanceUntilIdle()
+        assertEquals(SetupStep.PersonalConfirm(status(), listOf("wss://w.example")), c.state.value.step)
+        assertEquals(MoneroSetupController.ERR_NOT_PUBLISHED, c.state.value.error)
+        assertEquals(old, rig.settings.setupState.value)
+        assertTrue(rig.gateway.unregistered.isEmpty())
+        assertTrue(rig.relays.isEmpty())
+    }
+
+    @Test
+    fun `switch from personal to http starts with the default url and cannot reuse`() = runTest {
+        val rig = Rig(settings = FakeTipSettings(setup = MoneroSetup(personalAddress.encode(), "", watcherHex, "mainnet", 1, listOf("wss://w.example"))))
+        rig.secrets.put(KeystoreSecretStore.SECRET_VIEW_KEY, MoneroKeys.generate().viewSecret.toHex())
+        val c = controller(rig)
+        assertEquals(SetupStep.Watcher(Presets.DEFAULT_WATCHER), c.state.value.step)
+        c.loadWatcher()
+        advanceUntilIdle()
+        assertFalse((c.state.value.step as SetupStep.Choose).canReuse)
+    }
+
+    @Test
+    fun `status arriving after back to watcher is dropped`() = runTest {
+        val rig = Rig()
+        rig.tips.statuses[watcherHex] = status()
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        rig.tips.statusGate = gate
+        val c = controller(rig)
+        c.startPersonal(); c.setPersonalInput(nprofile("wss://w.example")); c.loadPersonal()
+        advanceUntilIdle()
+        assertEquals(true, (c.state.value.step as SetupStep.Personal).loading)
+        c.backToWatcher()
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(SetupStep.Watcher(Presets.DEFAULT_WATCHER), c.state.value.step)
+        c.confirmPersonal()
+        advanceUntilIdle()
+        assertTrue(rig.tips.publishedInfos.isEmpty())
+        assertNull(rig.settings.setupState.value)
+    }
+
+    @Test
+    fun `switch from personal to http registers fully and never unregisters the empty url`() = runTest {
+        val old = MoneroSetup(personalAddress.encode(), "", watcherHex, "mainnet", 1, listOf("wss://w.example"))
+        val rig = Rig(settings = FakeTipSettings(setup = old))
+        val c = controller(rig)
+        c.loadDefaultWatcher()
+        advanceUntilIdle()
+        c.startNew(); c.seedWritten()
+        val verify = c.state.value.step as SetupStep.Verify
+        val words = Mnemonic.encode(rig.keys.spendSecret)
+        c.verify(verify.positions.map { words[it] })
+        advanceUntilIdle()
+        assertTrue(c.state.value.step is SetupStep.Done, "step ${c.state.value.step}")
+        assertEquals(1, rig.gateway.registered.size)
+        assertTrue(rig.gateway.unregistered.isEmpty(), "no unregister: ${rig.gateway.unregistered}")
+        val now = rig.settings.setupState.value!!
+        assertEquals(url, now.watcherUrl)
+        assertFalse(now.isPersonal)
+        assertEquals(listOf(Pair(rig.keys.address(Network.MAINNET), Watcher.Http(url, watcherPk))), rig.tips.publishedInfos)
+    }
+
+    @Test
+    fun `switch from personal to personal stores and adopts the new relays without gateway calls`() = runTest {
+        val old = MoneroSetup(personalAddress.encode(), "", watcherHex, "mainnet", 1, listOf("wss://old.example"))
+        val rig = Rig(settings = FakeTipSettings(setup = old))
+        rig.tips.statuses[watcherHex] = status()
+        val c = controller(rig)
+        loadPersonal(c, nprofile("wss://new.example"))
+        c.confirmPersonal()
+        advanceUntilIdle()
+        assertEquals(SetupStep.Done(personalAddress.encode(), null), c.state.value.step)
+        assertEquals(listOf("wss://new.example"), rig.settings.setupState.value!!.watcherRelays)
+        assertEquals(listOf(listOf("wss://new.example")), rig.relays)
+        assertTrue(rig.gateway.unregistered.isEmpty())
+        assertTrue(rig.gateway.registered.isEmpty())
+        assertEquals(0, rig.gateway.infoCalls)
+    }
+
+    @Test
+    fun `back to watcher`() = runTest {
+        val c = controller(Rig())
+        c.startPersonal()
+        assertEquals(SetupStep.Personal("", ""), c.state.value.step)
+        c.backToWatcher()
+        assertEquals(SetupStep.Watcher(Presets.DEFAULT_WATCHER), c.state.value.step)
+    }
+
+    private companion object {
+        const val NOW = 5_000L
     }
 }
