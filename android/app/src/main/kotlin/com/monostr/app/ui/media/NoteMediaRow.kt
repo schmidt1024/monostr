@@ -16,8 +16,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Image
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material.icons.filled.BrokenImage
-import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Icon
@@ -82,20 +83,34 @@ fun NoteMediaRow(note: Note, onOpenMedia: (index: Int) -> Unit, onOpenVideo: (ur
             Cover(tag = "note-media-cover-$tag", icon = Icons.Filled.VisibilityOff, title = stringResource(R.string.media_sensitive),
                 subtitle = note.contentWarning?.takeIf { it.isNotBlank() } ?: stringResource(R.string.media_tap_to_show)) { MediaReveals.reveal(note.id) }
         } else if (waiting) {
-            Cover(tag = "note-media-load-$tag", icon = Icons.Filled.Download, title = stringResource(R.string.media_tap_to_load), subtitle = null) { MediaReveals.reveal(note.id) }
+            Cover(tag = "note-media-load-$tag", icon = Icons.Outlined.Image, title = stringResource(R.string.media_tap_to_load), subtitle = null) { MediaReveals.reveal(note.id) }
         }
     }
 }
 
 @Composable
 private fun BoxScope.Cover(tag: String, icon: ImageVector, title: String, subtitle: String?, onTap: () -> Unit) {
-    Column(
+    Box(
         Modifier.matchParentSize().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.35f)).clickable(onClick = onTap, onClickLabel = title).testTag(tag),
-        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
+        contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary)
-        Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimary)
-        subtitle?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimary) }
+        MediaCoverBadge(icon, title, subtitle, Modifier.testTag("media-cover-badge-${tag.substringAfterLast('-')}"))
+    }
+}
+
+/**
+ * Icon and text over a covered or waiting picture: light on a dark translucent pill, readable in
+ * both themes and over any blurhash (the theme's onPrimary is black in the dark theme).
+ */
+@Composable
+fun MediaCoverBadge(icon: ImageVector, title: String?, subtitle: String? = null, modifier: Modifier = Modifier) {
+    Column(
+        modifier.clip(RoundedCornerShape(16.dp)).background(Color.Black.copy(alpha = 0.6f)).padding(horizontal = 14.dp, vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(icon, contentDescription = null, tint = Color.White)
+        title?.let { Text(it, style = MaterialTheme.typography.labelLarge, color = Color.White) }
+        subtitle?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.85f)) }
     }
 }
 
@@ -161,6 +176,6 @@ private fun MediaCell(
                 onError = { failed = true },
             )
         }
-        if (m.kind == NoteMedia.Kind.VIDEO) Icon(Icons.Filled.PlayArrow, contentDescription = videoLabel, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.5f), RoundedCornerShape(50)).padding(12.dp))
+        if (m.kind == NoteMedia.Kind.VIDEO) Icon(Icons.Filled.PlayArrow, contentDescription = videoLabel, tint = Color.White, modifier = Modifier.background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.5f), RoundedCornerShape(50)).padding(12.dp))
     }
 }

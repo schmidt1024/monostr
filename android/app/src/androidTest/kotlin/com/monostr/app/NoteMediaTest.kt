@@ -1,6 +1,9 @@
 package com.monostr.app
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -16,6 +19,7 @@ import com.monostr.nostr.model.Note
 import com.monostr.nostr.model.NoteMedia
 import com.monostr.nostr.model.Profile
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -42,8 +46,24 @@ class NoteMediaTest {
     )
     private fun ui(n: Note) = NoteUi(n, Profile.empty(n.author), Profile.empty(n.author))
 
-    private fun set(n: Note, settings: MediaSettings = MediaSettings(mediaOnTap = false), onMedia: (String, Int) -> Unit = { _, _ -> }, onVideo: (String) -> Unit = {}) {
-        rule.setContent { CompositionLocalProvider(LocalMediaSettings provides settings) { MaterialTheme { NoteCard(ui(n), onOpen = {}, onOpenProfile = {}, onReply = {}, onLike = {}, onRepost = {}, onOpenMedia = onMedia, onOpenVideo = onVideo) } } }
+    private fun set(n: Note, settings: MediaSettings = MediaSettings(mediaOnTap = false), onMedia: (String, Int) -> Unit = { _, _ -> }, onVideo: (String) -> Unit = {}, dark: Boolean = false) {
+        rule.setContent {
+            CompositionLocalProvider(LocalMediaSettings provides settings) {
+                val scheme = if (dark) darkColorScheme() else MaterialTheme.colorScheme
+                MaterialTheme(colorScheme = scheme) { NoteCard(ui(n), onOpen = {}, onOpenProfile = {}, onReply = {}, onLike = {}, onRepost = {}, onOpenMedia = onMedia, onOpenVideo = onVideo) }
+            }
+        }
+    }
+
+    /** Share of near-white pixels: the cover's icon and text must stand out whatever the theme. */
+    private fun brightShare(tag: String): Float {
+        val px = rule.onNodeWithTag(tag, useUnmergedTree = true).captureToImage().toPixelMap()
+        var bright = 0
+        for (x in 0 until px.width) for (y in 0 until px.height) {
+            val c = px[x, y]
+            if (c.red > 0.85f && c.green > 0.85f && c.blue > 0.85f) bright++
+        }
+        return bright.toFloat() / (px.width * px.height)
     }
 
     @Test
@@ -69,6 +89,21 @@ class NoteMediaTest {
     fun blur_setting_off_shows_sensitive_media_directly() {
         set(note(sensitive = true, onlyMedia = false), settings = MediaSettings(blurSensitive = false, mediaOnTap = false))
         rule.onNodeWithTag("note-media-cover-$id8").assertDoesNotExist()
+    }
+
+    @Test
+    fun load_cover_is_readable_in_the_dark_theme_without_blurhash() {
+        set(note(sensitive = false, onlyMedia = false), settings = MediaSettings(mediaOnTap = true), dark = true)
+        rule.onNodeWithTag("media-cover-badge-$id8", useUnmergedTree = true).assertIsDisplayed()
+        val share = brightShare("media-cover-badge-$id8")
+        assertTrue("icon and text must be light on the badge, bright share $share", share > 0.03f)
+    }
+
+    @Test
+    fun sensitive_cover_is_readable_in_the_dark_theme() {
+        set(note(sensitive = true, onlyMedia = false), dark = true)
+        val share = brightShare("media-cover-badge-$id8")
+        assertTrue("bright share $share", share > 0.03f)
     }
 
     @Test

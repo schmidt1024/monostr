@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -139,7 +139,7 @@ private fun PreviewImage(url: String, note: Note, covered: Boolean, waiting: Boo
     ) {
         if (hidden) {
             Icon(
-                if (covered) Icons.Filled.VisibilityOff else Icons.Filled.Download,
+                if (covered) Icons.Filled.VisibilityOff else Icons.Outlined.Image,
                 contentDescription = stringResource(if (covered) R.string.media_sensitive else R.string.media_tap_to_load),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.Center),
             )

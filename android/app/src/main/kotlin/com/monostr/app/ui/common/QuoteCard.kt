@@ -17,7 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.monostr.app.R
 import com.monostr.app.ui.media.rememberBlurhash
+import com.monostr.app.ui.media.MediaCoverBadge
 import com.monostr.app.ui.media.rememberMediaCover
 import com.monostr.app.ui.media.MediaReveals
 import com.monostr.nostr.model.Note
@@ -213,10 +214,9 @@ private fun QuoteImage(note: Note, media: NoteMedia, onOpen: () -> Unit) {
         if (covered || waiting) {
             // covered or waiting media is never fetched: only the blurhash (or the plain box) shows
             placeholder?.let { Image(it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
-            Icon(
-                if (covered) Icons.Filled.VisibilityOff else Icons.Filled.Download,
-                contentDescription = stringResource(if (covered) R.string.media_sensitive else R.string.media_tap_to_load),
-                tint = MaterialTheme.colorScheme.onPrimary,
+            MediaCoverBadge(
+                if (covered) Icons.Filled.VisibilityOff else Icons.Outlined.Image,
+                title = stringResource(if (covered) R.string.media_sensitive else R.string.media_tap_to_load),
             )
         } else {
             AsyncImage(model = media.url, contentDescription = media.alt, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())

@@ -1,0 +1,1 @@
+• Le immagini in attesa di un tocco mostrano un avviso chiaro per caricarle, anche nel tema scuro

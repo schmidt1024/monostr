@@ -1,0 +1,1 @@
+• Pictures that wait for a tap show a clear "Tap to load pictures" badge, also in the dark theme
