@@ -245,6 +245,7 @@
     <string name="setup_personal_info">Persönlicher Watcher %1$s · %2$s · Höhe %3$s · Tips kommen an bei %4$s…%5$s</string>
     <string name="setup_personal_height_unknown">unbekannt</string>
     <string name="setup_personal_privacy">Der View-Key bleibt bei dir. Öffentliche Nodes sehen keine Adresse. Dein Profil nennt diesen Watcher, Sender schicken ihre Tips an seine Relays.</string>
+    <string name="setup_amounts_private">Tip-Beträge bleiben privat: Quittungen zeigen nur, dass du einen Tip bekommen hast.</string>
     <string name="setup_personal_confirm">Diesen Watcher nutzen</string>
 
     <!-- settings -->
@@ -291,6 +292,10 @@
     <string name="settings_monero_set_up">Monero-Tips empfangen einrichten</string>
     <string name="settings_monero_address">Tips kommen in dieser Wallet an: %1$s…%2$s · %3$s</string>
     <string name="settings_monero_wallet_hint">Nicht an einer Monero-Adresse in deiner Bio oder anderen Profilfeldern. Tip-Belege erreichen dich über den Watcher und deine eigenen Relays; bezahlte Relays sind nicht nötig.</string>
+    <string name="settings_monero_amounts_public">Tip-Beträge öffentlich zeigen</string>
+    <string name="settings_monero_amounts_public_hint">Aus: Quittungen zeigen nur, dass du einen Tip bekommen hast.</string>
+    <string name="settings_monero_amounts_unsupported">Dein Watcher unterstützt das noch nicht.</string>
+    <string name="settings_monero_amounts_checking">Prüfe, ob dein Watcher das unterstützt …</string>
     <string name="settings_monero_watcher">Watcher %1$s</string>
     <string name="settings_monero_personal">Persönlicher Watcher %1$s</string>
     <string name="settings_monero_personal_online">Persönlicher Watcher %1$s · online</string>
@@ -403,9 +408,11 @@
     <string name="notif_note_missing">Note nicht geladen</string>
     <string name="notif_note_withdrawn">gelöschte Note</string>
     <string name="notif_tipped">hat %1$s %2$s getippt</string>
+    <string name="notif_tipped_plain">hat dir einen Tip geschickt</string>
     <string name="notif_channel_name">Monero-Tips</string>
     <string name="notif_tip_title">Monero-Tip erhalten</string>
     <string name="notif_tip_text">%1$s hat dir %2$s %3$s getippt</string>
+    <string name="notif_tip_text_plain">%1$s hat dir einen Tip geschickt</string>
     <string name="notif_dm_channel">Nachrichten</string>
     <string name="notif_dm_title">Nachricht von %1$s</string>
     <string name="notif_dm_title_anonymous">Neue Nachricht</string>
@@ -509,4 +516,8 @@
         <item quantity="one">%1$d Bild konnte nicht vom Server entfernt werden</item>
         <item quantity="other">%1$d Bilder konnten nicht vom Server entfernt werden</item>
     </plurals>
+    <string name="amounts_prompt_title">Tip-Beträge verbergen?</string>
+    <string name="amounts_prompt_text">Quittungen zeigen dann nur, dass du einen Tip bekommen hast, nicht wie viel. Deine Wallet zeigt die Beträge weiter.</string>
+    <string name="amounts_prompt_yes">Beträge verbergen</string>
+    <string name="amounts_prompt_no">Öffentlich lassen</string>
 </resources>

@@ -3,6 +3,7 @@ package com.monostr.app.ui.settings
 import com.monostr.app.data.AmountUnit
 import kotlinx.coroutines.flow.combine
 import com.monostr.app.R
+import com.monostr.app.data.HintStore
 import com.monostr.app.data.KeystoreSecretStore
 import com.monostr.app.data.MoneroSetup
 import com.monostr.app.data.Presets
@@ -12,6 +13,8 @@ import com.monostr.app.data.WatcherGateway
 import com.monostr.app.ui.common.UiText
 import com.monostr.app.ui.common.uiText
 import com.monostr.app.ui.common.userMessage
+import com.monostr.app.ui.tips.AmountsPrompt
+import com.monostr.app.ui.tips.AmountsVisibility
 import com.monostr.nostr.repo.TipsRepository
 import kotlinx.coroutines.CancellationException
 import com.monostr.tips.PaymentInfo
@@ -54,6 +57,8 @@ data class MoneroSettingsState(
     val statusChecked: Boolean = false,
     /** Personal watcher only: the verdict on [watcherStatus] against the stored setup. */
     val personalLine: PersonalWatcherLine = PersonalWatcherLine.Unknown,
+    /** Whether the watcher speaks protocol 0.5 (hidden amounts); null while unknown or unreachable. */
+    val amountsSupported: Boolean? = null,
 ) {
     val canAddPreset: Boolean get() = presets.size < Presets.MAX
 }
@@ -69,8 +74,12 @@ class MoneroSettingsController(
     /** The logged-in account; null in tests that do not look at announced payment info. */
     private val selfPubkey: String? = null,
     private val now: () -> Long = { System.currentTimeMillis() / 1000 },
+    /** With [selfPubkey]: a successful choice here also answers the one-time amounts question. */
+    private val hints: HintStore? = null,
 ) {
     private var statusJob: Job? = null
+    private var supportJob: Job? = null
+    private val visibility = AmountsVisibility(tips, gateway, settings)
 
     private val _state = MutableStateFlow(MoneroSettingsState())
     val state: StateFlow<MoneroSettingsState> = _state.asStateFlow()
@@ -84,6 +93,12 @@ class MoneroSettingsController(
                 _state.update { it.copy(announced = announced.takeIf { _ -> it.setup == null }) }
                 statusJob?.cancel()
                 _state.update { it.copy(watcherStatus = null, statusChecked = false, personalLine = PersonalWatcherLine.Unknown) }
+                supportJob?.cancel()
+                _state.update { it.copy(amountsSupported = null) }
+                if (s != null) supportJob = launch {
+                    val ok = visibility.supported(s)
+                    _state.update { it.copy(amountsSupported = ok) }
+                }
                 if (s != null && s.isPersonal) {
                     statusJob = launch {
                         val st = try {
@@ -171,6 +186,34 @@ class MoneroSettingsController(
                 }
                 settings.setSetup(null)
                 _state.update { it.copy(busy = false, message = uiText(R.string.settings_msg_disabled)) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(busy = false, error = e.userMessage()) }
+            }
+        }
+    }
+
+    /** Switch "show tip amounts publicly": republishes the payment info; nothing changes if that fails. */
+    fun setAmountsPublic(public: Boolean) {
+        val st = _state.value
+        if (st.setup == null || st.busy) return
+        // switching back to public is always allowed; hiding needs a watcher that speaks 0.5
+        if (if (public) !st.setup.amountsHidden else st.amountsSupported != true) return
+        scope.launch {
+            _state.update { it.copy(busy = true, error = null) }
+            try {
+                val ok = visibility.setHidden(!public)
+                if (ok && hints != null && selfPubkey != null) {
+                    try {
+                        hints.dismiss(selfPubkey, AmountsPrompt.HINT)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        // the choice itself took effect; the question stays off via the stored flag or announced info
+                    }
+                }
+                _state.update { it.copy(busy = false, error = if (ok) null else ERR_NOT_PUBLISHED) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

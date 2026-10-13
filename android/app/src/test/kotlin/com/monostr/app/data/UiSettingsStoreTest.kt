@@ -1,6 +1,7 @@
 package com.monostr.app.data
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -38,13 +39,13 @@ class UiSettingsStoreTest {
         assertEquals(Accent.ORANGE, settings.accent.first())
         // spec 11.4 §3: the custom hue defaults, round-trips, and an invalid value falls back
         assertEquals(200f, settings.customHue.first())
-        // NIP-89 "via Monostr" tag: on by default, round-trips
-        assertTrue(settings.clientTag.first())
-        settings.setClientTag(false)
+        // NIP-89 "via monostr" tag: off by default (0.18), round-trips
         assertFalse(settings.clientTag.first())
-        assertTrue(settings.primalStats.first())
-        settings.setPrimalStats(false)
+        settings.setClientTag(true)
+        assertTrue(settings.clientTag.first())
         assertFalse(settings.primalStats.first())
+        settings.setPrimalStats(true)
+        assertTrue(settings.primalStats.first())
         settings.setCustomHue(33.5f); assertEquals(33.5f, settings.customHue.first())
         settings.setCustomHue(400f); assertEquals(200f, settings.customHue.first())
         settings.setAccent(Accent.CUSTOM); assertEquals(Accent.CUSTOM, settings.accent.first())
@@ -64,9 +65,9 @@ class UiSettingsStoreTest {
     @Test
     fun `media and outbox defaults, then set`() = runTest {
         val s = PrefsUiSettingsStore(store())
-        assertTrue(s.blurSensitive.first()); assertFalse(s.mediaOnTap.first()); assertTrue(s.authorRelays.first())
-        s.setBlurSensitive(false); s.setMediaOnTap(true); s.setAuthorRelays(false)
-        assertFalse(s.blurSensitive.first()); assertTrue(s.mediaOnTap.first()); assertFalse(s.authorRelays.first())
+        assertTrue(s.blurSensitive.first()); assertTrue(s.mediaOnTap.first()); assertTrue(s.authorRelays.first())
+        s.setBlurSensitive(false); s.setMediaOnTap(false); s.setAuthorRelays(false)
+        assertFalse(s.blurSensitive.first()); assertFalse(s.mediaOnTap.first()); assertFalse(s.authorRelays.first())
     }
 
     @Test
@@ -106,5 +107,17 @@ class UiSettingsStoreTest {
         assertEquals(20, settings.powBits.first())
         settings.setPowBits(13)
         assertEquals(8, settings.powBits.first())
+    }
+
+    @Test
+    fun `stored values from before 0_18 are kept`() = runTest {
+        val st = store()
+        val s = PrefsUiSettingsStore(st)
+        st.edit {
+            it[booleanPreferencesKey("ui.primal_stats")] = true
+            it[booleanPreferencesKey("ui.client_tag")] = true
+            it[booleanPreferencesKey("ui.media_on_tap")] = false
+        }
+        assertTrue(s.primalStats.first()); assertTrue(s.clientTag.first()); assertFalse(s.mediaOnTap.first())
     }
 }

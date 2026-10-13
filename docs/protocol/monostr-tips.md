@@ -1,7 +1,7 @@
 # Monostr Tips – Monero-Zahlungen für Nostr-Notes und -Profile
 
 Status: Draft
-Version: 0.4
+Version: 0.5
 
 ## Zusammenfassung
 
@@ -36,7 +36,8 @@ Autor: Empfänger.
   "tags": [
     ["address", "4..."],
     ["watcher", "https://watcher.example", "<watcher-hex-pubkey>"],
-    ["network", "mainnet"]
+    ["network", "mainnet"],
+    ["amounts", "hidden"]
   ]
 }
 ```
@@ -52,6 +53,13 @@ Autor: Empfänger.
     machen das Event ungültig (= keine Tips). Clients bis 0.3 lesen das erste Feld
     als URL, scheitern und zeigen den Empfänger ohne Tips an.
 - `network`: `mainnet` oder `stagenet`.
+- `amounts` (optional, ab 0.5): `["amounts", "hidden"]` heißt, der Empfänger
+  will keine öffentlichen Beträge. Fehlt das Tag oder hat es einen anderen
+  Wert, sind Beträge öffentlich, wie in 0.4; bestehende Events und Clients
+  funktionieren so unverändert weiter, und weitere Werte bleiben möglich.
+  Ein Empfänger setzt `hidden` nur, wenn sein Watcher `protocol` ≥ 0.5
+  meldet (siehe Watcher-HTTP-API und Watcher-Status); ein älterer Watcher
+  verwirft jeden Intent ohne `amount`, und es kämen keine Receipts.
 - Ein Event ohne `address`-Tag bedeutet: Empfänger nimmt keine Tips an.
 - Der private View-Key erscheint nie in einem Nostr-Event.
 
@@ -74,6 +82,12 @@ Autor: Sender.
 }
 ```
 
+- `amount` (ab 0.5 optional): Betrag in Piconero. Der Sender MUSS `amount`
+  weglassen, wenn die Payment-Info des Empfängers `["amounts", "hidden"]`
+  enthält, und MUSS es sonst angeben (Watcher vor 0.5 verwerfen Intents ohne
+  `amount`). Ein Watcher ab 0.5 akzeptiert Intents mit und ohne `amount`. Ein
+  vorhandenes, aber ungültiges `amount` (keine positive ganze Zahl) macht den
+  Intent weiterhin ungültig.
 - `e` ist optional. Mit `e` gilt der Tip einer Note, ohne `e` dem Profil des
   Empfängers aus `p`. Ein vorhandenes, aber ungültiges `e` (nicht 64
   Hex-Zeichen klein) macht den Intent ungültig; er gilt nicht als Profil-Tip.
@@ -140,7 +154,9 @@ Autor: Watcher.
   ohne `e` zählt für keine Note.
 - `P` steht genau dann im Receipt, wenn der Intent kein `anon`-Tag hatte. Ein
   Receipt ohne `P` ist ein anonymer Tip.
-- `amount`: tatsächlich empfangener Betrag.
+- `amount`: tatsächlich empfangener Betrag. Das Tag steht genau dann im
+  Receipt, wenn der Intent ein `amount` hatte. Ein Receipt ohne `amount` ist
+  gültig und zählt als Tip, trägt aber zu keiner Summe bei.
 - `type`: wie im Intent. Fehlt `type`, gilt `tip`.
 - Kein txid.
 - Mehrere Zahlungen mit derselben `pid` erzeugen je ein Receipt mit
@@ -168,11 +184,15 @@ danach alle 5 Minuten auf seinen Relays.
     ["address", "4..."],
     ["network", "mainnet"],
     ["height", "3512345"],
-    ["version", "0.4.0"]
+    ["version", "0.4.0"],
+    ["protocol", "0.5"]
   ]
 }
 ```
 
+- `version` ist die Build-Version des Watchers, `protocol` (ab 0.5) die
+  Version dieses Protokolls, die er umsetzt. Fehlt `protocol`, ist der
+  Watcher älter als 0.5.
 - Ein Client wertet den Watcher als online, wenn der neueste Status höchstens
   15 Minuten alt ist (`created_at`).
 - Clients prüfen vor dem Veröffentlichen von kind 10037: `p` ist der eigene
@@ -195,9 +215,14 @@ Basis: `https://<watcher>/v1/`. Authentifizierte Endpunkte verwenden NIP-98.
 
 | Methode | Pfad | Auth | Body / Antwort |
 |---|---|---|---|
-| GET | `/v1/info` | – | `{"pubkey": hex, "relays": [url…], "network": "mainnet"\|"stagenet", "height": int, "version": string}` |
+| GET | `/v1/info` | – | `{"pubkey": hex, "relays": [url…], "network": "mainnet"\|"stagenet", "height": int, "version": string, "protocol": string}` |
 | POST | `/v1/accounts` | NIP-98 | Body `{"address": string, "view_key": hex}`. Antwort `{"watcher_pubkey": hex}`. Ein Account pro Pubkey; erneuter POST ersetzt. |
 | DELETE | `/v1/accounts` | NIP-98 | Entfernt den Account des aufrufenden Pubkeys. Antwort 204. |
+
+`version` ist die Build-Version, `protocol` (ab 0.5, z. B. `"0.5"`) die
+Protokollversion des Watchers. Fehlt `protocol`, ist der Watcher älter als
+0.5. Ein Client bietet "Beträge verbergen" nur an, wenn `protocol` ≥ 0.5
+(Major.Minor-Vergleich).
 
 Der Watcher prüft bei `POST /v1/accounts`, dass `view_key · G` dem
 öffentlichen View-Key der Adresse entspricht, und lehnt Subadressen und
@@ -210,7 +235,15 @@ registrierten Wallet, nicht nur Tips. Empfängern wird eine eigene Wallet nur
 für Tips empfohlen.
 
 Öffentlich sichtbar sind bei jedem Tip Empfänger, Betrag, Zeitpunkt, die
-Ziel-Note (falls vorhanden) und – außer bei `anon` – der Sender. Ein anonymer
+Ziel-Note (falls vorhanden) und – außer bei `anon` – der Sender. Mit
+`["amounts", "hidden"]` (ab 0.5) bleibt der Betrag aus Intent und Receipt
+weg: Öffentlich sichtbar sind dann Empfänger, Zeitpunkt, Ziel-Note und –
+außer bei `anon` – der Sender, aber kein Betrag. Grenzen: Der Watcher sieht
+den Betrag weiterhin; Clients vor 0.18 schreiben ihn weiter in den Intent;
+Receipts, die vor der Umstellung veröffentlicht wurden, behalten ihren
+Betrag. Clients vor 0.18 verwerfen Receipts ohne `amount`;
+Tips an Empfänger mit verborgenen Beträgen, gesendet von 0.18-Clients,
+erscheinen in älteren Apps deshalb gar nicht. Ein anonymer
 Tip verbirgt den Sender vor Öffentlichkeit, Empfänger und Watcher. Ein Relay
 sieht weiterhin die IP-Adresse der Verbindung, über die der Intent kommt;
 dagegen hilft nur ein VPN oder Tor beim Sender. Clients senden einen anonymen

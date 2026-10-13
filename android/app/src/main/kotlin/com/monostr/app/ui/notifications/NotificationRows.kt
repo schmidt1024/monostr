@@ -193,7 +193,7 @@ private fun TipRow(single: NotificationRow.Single, row: NotificationRowUi, names
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             val name = item.from?.let { row.names[it] } ?: stringResource(R.string.tip_anonymous)
-            Text("$name ${stringResource(R.string.notif_tipped, Presets.format(item.amount ?: 0, LocalAmountUnit.current), LocalAmountUnit.current.label)}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+            Text("$name ${item.amount?.let { stringResource(R.string.notif_tipped, Presets.format(it, LocalAmountUnit.current), LocalAmountUnit.current.label) } ?: stringResource(R.string.notif_tipped_plain)}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
             Text(if (item.aboutId == null) stringResource(R.string.notif_tip_profile) else aboutText(row.about, names), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.testTag("notification-about-${item.id}"))
             Text(relativeTime(item.createdAt).asString(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }

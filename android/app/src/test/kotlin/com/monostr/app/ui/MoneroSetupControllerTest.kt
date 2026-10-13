@@ -105,7 +105,7 @@ class MoneroSetupControllerTest {
         advanceUntilIdle()
         assertEquals(SetupStep.Done(expectedAddress.encode(), 3_000_000L), c.state.value.step)
         assertEquals(listOf(Triple(url, expectedAddress, expectedViewKey)), rig.gateway.registered)
-        assertEquals(listOf(Pair(expectedAddress, Watcher.Http(url, watcherPk))), rig.tips.publishedInfos)
+        assertEquals(listOf(Triple(expectedAddress, Watcher.Http(url, watcherPk), false)), rig.tips.publishedInfos)
         assertEquals(expectedViewKey, rig.secrets.get(KeystoreSecretStore.SECRET_VIEW_KEY))
         assertEquals(MoneroSetup(expectedAddress.encode(), url, watcherPk, "mainnet", 5_000), rig.settings.setupState.value)
         assertTrue(rig.settings.seenState.value)
@@ -383,7 +383,7 @@ class MoneroSetupControllerTest {
         assertEquals(listOf(watcherHex to listOf("wss://w.example")), rig.tips.statusRequests)
         c.confirmPersonal()
         advanceUntilIdle()
-        assertEquals(Pair(personalAddress, Watcher.Personal(watcherHex, listOf("wss://w.example"))), rig.tips.publishedInfos.last())
+        assertEquals(Triple(personalAddress, Watcher.Personal(watcherHex, listOf("wss://w.example")), false), rig.tips.publishedInfos.last())
         assertEquals(MoneroSetup(personalAddress.encode(), "", watcherHex, "mainnet", NOW, listOf("wss://w.example")), rig.settings.setupState.value)
         assertTrue(rig.settings.setupState.value!!.isPersonal)
         assertTrue(rig.settings.seenState.value)
@@ -496,8 +496,8 @@ class MoneroSetupControllerTest {
             override suspend fun unregister(url: String) { order += "unregister"; rig.gateway.unregister(url) }
         }
         val tips = object : com.monostr.nostr.repo.TipsRepository by rig.tips {
-            override suspend fun publishPaymentInfo(address: com.monostr.monero.Address, watcher: Watcher) =
-                rig.tips.publishPaymentInfo(address, watcher).also { order += "publish" }
+            override suspend fun publishPaymentInfo(address: com.monostr.monero.Address, watcher: Watcher, amountsHidden: Boolean) =
+                rig.tips.publishPaymentInfo(address, watcher, amountsHidden).also { order += "publish" }
         }
         rig.tips.statuses[watcherHex] = status()
         val c = MoneroSetupController(
@@ -579,7 +579,7 @@ class MoneroSetupControllerTest {
         val now = rig.settings.setupState.value!!
         assertEquals(url, now.watcherUrl)
         assertFalse(now.isPersonal)
-        assertEquals(listOf(Pair(rig.keys.address(Network.MAINNET), Watcher.Http(url, watcherPk))), rig.tips.publishedInfos)
+        assertEquals(listOf(Triple(rig.keys.address(Network.MAINNET), Watcher.Http(url, watcherPk), false)), rig.tips.publishedInfos)
     }
 
     @Test
@@ -597,6 +597,83 @@ class MoneroSetupControllerTest {
         assertTrue(rig.gateway.unregistered.isEmpty())
         assertTrue(rig.gateway.registered.isEmpty())
         assertEquals(0, rig.gateway.infoCalls)
+    }
+
+    @Test
+    fun `new http setup hides amounts when the watcher supports it`() = runTest {
+        val rig = Rig(FakeWatcherGateway(info = WatcherInfo(watcherPk, listOf("wss://watcher-relay.example"), "mainnet", 3_000_000, "test", protocol = "0.5")))
+        val c = controller(rig)
+        c.loadDefaultWatcher(); advanceUntilIdle()
+        c.startExisting()
+        val wallet = MoneroKeys.generate()
+        c.setAddress(wallet.address(Network.MAINNET).encode()); c.setViewKey(wallet.viewSecret.toHex()); c.checkExisting()
+        assertEquals(true, (c.state.value.step as SetupStep.Confirm).amountsHidden)
+        c.confirm(); advanceUntilIdle()
+        assertTrue(rig.tips.publishedInfos.last().third)
+        assertTrue(rig.settings.setupState.value!!.amountsHidden)
+    }
+
+    private fun TestScope.pathA(rig: Rig): SetupStep.Done {
+        val c = controller(rig)
+        c.loadDefaultWatcher(); advanceUntilIdle()
+        c.startNew()
+        val seed = c.state.value.step as SetupStep.Seed
+        c.seedWritten()
+        val verify = c.state.value.step as SetupStep.Verify
+        c.verify(verify.positions.map { seed.words[it] }); advanceUntilIdle()
+        return c.state.value.step as SetupStep.Done
+    }
+
+    @Test
+    fun `path A with a 0_5 watcher tells on done that amounts are hidden`() = runTest {
+        val rig = Rig(FakeWatcherGateway(info = WatcherInfo(watcherPk, listOf("wss://watcher-relay.example"), "mainnet", 3_000_000, "test", protocol = "0.5")))
+        assertTrue(pathA(rig).amountsHidden)
+        assertTrue(rig.tips.publishedInfos.last().third)
+        assertTrue(rig.settings.setupState.value!!.amountsHidden)
+    }
+
+    @Test
+    fun `path A with an old watcher does not`() = runTest {
+        val rig = Rig()
+        assertFalse(pathA(rig).amountsHidden)
+        assertFalse(rig.tips.publishedInfos.last().third)
+    }
+
+    @Test
+    fun `old watcher gets no hidden tag`() = runTest {
+        val rig = Rig()
+        val c = controller(rig)
+        c.loadDefaultWatcher(); advanceUntilIdle()
+        c.startExisting()
+        val wallet = MoneroKeys.generate()
+        c.setAddress(wallet.address(Network.MAINNET).encode()); c.setViewKey(wallet.viewSecret.toHex()); c.checkExisting()
+        assertEquals(false, (c.state.value.step as SetupStep.Confirm).amountsHidden)
+        c.confirm(); advanceUntilIdle()
+        assertFalse(rig.tips.publishedInfos.last().third)
+        assertFalse(rig.settings.setupState.value!!.amountsHidden)
+    }
+
+    @Test
+    fun `new personal setup hides amounts when the watcher supports it`() = runTest {
+        val rig = Rig()
+        rig.tips.statuses[watcherHex] = status().copy(protocol = "0.5")
+        val c = controller(rig)
+        loadPersonal(c, nprofile("wss://w.example"))
+        c.confirmPersonal(); advanceUntilIdle()
+        assertTrue((c.state.value.step as SetupStep.Done).amountsHidden)
+        assertTrue(rig.tips.publishedInfos.last().third)
+        assertTrue(rig.settings.setupState.value!!.amountsHidden)
+    }
+
+    @Test
+    fun `old personal watcher gets no hidden tag`() = runTest {
+        val rig = Rig()
+        rig.tips.statuses[watcherHex] = status()
+        val c = controller(rig)
+        loadPersonal(c, nprofile("wss://w.example"))
+        c.confirmPersonal(); advanceUntilIdle()
+        assertFalse(rig.tips.publishedInfos.last().third)
+        assertFalse(rig.settings.setupState.value!!.amountsHidden)
     }
 
     @Test

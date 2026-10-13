@@ -6,7 +6,9 @@ import com.monostr.tips.event.Event
 import com.monostr.tips.event.UnsignedEvent
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 
@@ -169,5 +171,26 @@ class PaymentInfoTest {
         assertEquals("wss://relay.example.com", Watcher.normalizeRelay(" WSS://Relay.Example.com/ "))
         assertEquals("wss://stagenet.watcher.monostr.com/relay", Watcher.normalizeRelay("wss://stagenet.watcher.monostr.com/relay"))
         assertNull(Watcher.normalizeRelay("ws://relay.example.com"))
+    }
+
+    @Test
+    fun `hidden tag round trip`() = runTest {
+        val address = Address.parse(mainnet)
+        val unsigned = PaymentInfo.build(address, Watcher.Http(watcherUrl, watcherPubkey), 1, amountsHidden = true)
+        assertTrue(unsigned.tags.contains(listOf("amounts", "hidden")))
+        val parsed = PaymentInfo.parse(signer.sign(unsigned)) as PaymentInfo.Enabled
+        assertTrue(parsed.amountsHidden)
+    }
+
+    @Test
+    fun `unknown amounts value is public`() {
+        val parsed = PaymentInfo.parse(event(tags = validTags + listOf(listOf("amounts", "shown")))) as PaymentInfo.Enabled
+        assertFalse(parsed.amountsHidden)
+    }
+
+    @Test
+    fun `missing tag is public`() {
+        assertFalse((PaymentInfo.parse(event(tags = validTags)) as PaymentInfo.Enabled).amountsHidden)
+        assertTrue(PaymentInfo.build(Address.parse(mainnet), Watcher.Http(watcherUrl, watcherPubkey), 1).tags.none { it[0] == "amounts" })
     }
 }

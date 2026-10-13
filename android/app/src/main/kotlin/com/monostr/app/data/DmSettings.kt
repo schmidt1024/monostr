@@ -23,7 +23,7 @@ interface DmSettingsStore {
 
 class PrefsDmSettingsStore(private val store: DataStore<Preferences>) : DmSettingsStore {
     override val relays: Flow<List<String>> = store.data.map { p -> p[RELAYS]?.sorted() ?: DEFAULT_RELAYS }
-    override val previewName: Flow<Boolean> = store.data.map { it[PREVIEW_NAME] ?: true }
+    override val previewName: Flow<Boolean> = store.data.map { it[PREVIEW_NAME] ?: false }
     override val previewText: Flow<Boolean> = store.data.map { it[PREVIEW_TEXT] ?: false }
     override val listAdopted: Flow<Boolean> = store.data.map { it[LIST_ADOPTED] ?: false }
 

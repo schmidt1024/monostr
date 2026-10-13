@@ -70,7 +70,7 @@ class TipNotifier(private val context: Context) {
         val notification = NotificationCompat.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(context.getString(R.string.notif_tip_title))
-            .setContentText(context.getString(R.string.notif_tip_text, fromName, Presets.format(item.amount ?: 0, unit), unit.label))
+            .setContentText(item.amount?.let { context.getString(R.string.notif_tip_text, fromName, Presets.format(it, unit), unit.label) } ?: context.getString(R.string.notif_tip_text_plain, fromName))
             .setContentIntent(open)
             .setAutoCancel(true)
             .build()

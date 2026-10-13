@@ -249,6 +249,7 @@
     <string name="setup_personal_info">Личный watcher %1$s · %2$s · высота %3$s · чаевые приходят на %4$s…%5$s</string>
     <string name="setup_personal_height_unknown">неизвестна</string>
     <string name="setup_personal_privacy">Ключ просмотра остаётся у вас. Публичные ноды не видят адреса. Ваш профиль указывает на этот watcher, поэтому отправители публикуют чаевые на его релеях.</string>
+    <string name="setup_amounts_private">Суммы чаевых остаются скрытыми: квитанции показывают только, что вы получили чаевые.</string>
     <string name="setup_personal_confirm">Использовать этот watcher</string>
 
     <!-- settings -->
@@ -295,6 +296,10 @@
     <string name="settings_monero_set_up">Настроить приём чаевых</string>
     <string name="settings_monero_address">Чаевые приходят в этот кошелёк: %1$s…%2$s · %3$s</string>
     <string name="settings_monero_wallet_hint">Не на адрес Monero из описания или других полей профиля. Квитанции приходят через watcher и ваши релеи; платные релеи не нужны.</string>
+    <string name="settings_monero_amounts_public">Показывать суммы чаевых публично</string>
+    <string name="settings_monero_amounts_public_hint">Выкл.: квитанции показывают только, что вы получили чаевые.</string>
+    <string name="settings_monero_amounts_unsupported">Ваш watcher пока не поддерживает это.</string>
+    <string name="settings_monero_amounts_checking">Проверяем, поддерживает ли это ваш watcher…</string>
     <string name="settings_monero_watcher">Watcher %1$s</string>
     <string name="settings_monero_personal">Личный watcher %1$s</string>
     <string name="settings_monero_personal_online">Личный watcher %1$s · онлайн</string>
@@ -417,9 +422,11 @@
     <string name="notif_note_missing">заметка не загружена</string>
     <string name="notif_note_withdrawn">удалённая заметка</string>
     <string name="notif_tipped">отправил(а) чаевые %1$s %2$s</string>
+    <string name="notif_tipped_plain">отправил(а) вам чаевые</string>
     <string name="notif_channel_name">Чаевые в Monero</string>
     <string name="notif_tip_title">Получены чаевые в Monero</string>
     <string name="notif_tip_text">%1$s отправил(а) вам чаевые %2$s %3$s</string>
+    <string name="notif_tip_text_plain">%1$s отправил(а) вам чаевые</string>
     <string name="notif_dm_channel">Сообщения</string>
     <string name="notif_dm_title">Сообщение от %1$s</string>
     <string name="notif_dm_title_anonymous">Новое сообщение</string>
@@ -527,4 +534,8 @@
         <item quantity="many">Не удалось удалить %1$d изображений с сервера</item>
         <item quantity="other">Не удалось удалить %1$d изображений с сервера</item>
     </plurals>
+    <string name="amounts_prompt_title">Скрыть суммы чаевых?</string>
+    <string name="amounts_prompt_text">Квитанции будут показывать только, что вы получили чаевые, но не сколько. Ваш кошелёк по-прежнему показывает суммы.</string>
+    <string name="amounts_prompt_yes">Скрыть суммы</string>
+    <string name="amounts_prompt_no">Оставить публичными</string>
 </resources>

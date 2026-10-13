@@ -20,6 +20,7 @@ func TestBuildStatus(t *testing.T) {
 		{"network", "mainnet"},
 		{"height", "3512345"},
 		{"version", "0.4.0"},
+		{"protocol", "0.5"},
 	}
 	if !reflect.DeepEqual(ev.Tags, want) {
 		t.Fatalf("tags %v", ev.Tags)

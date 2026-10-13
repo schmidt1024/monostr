@@ -1,0 +1,2 @@
+• Les montants des pourboires restent privés : les nouvelles configurations les masquent, les existantes sont interrogées une fois. Les images se chargent au toucher ; les chiffres Primal et la mention « via monostr » sont désactivés par défaut
+• Les notifications de DM n'affichent plus le nom de l'expéditeur par défaut

@@ -123,9 +123,11 @@ The images of monerod, monero-lws and Caddy are pinned by digest in `compose.sel
 ### Backup
 
 Back up `.env` (secret key). The watcher database lives in the volume
-`monostr-watcher_watcher-data` (`watcher.db`, SQLite) and holds open tips and receipts; losing it
-loses at most the receipts of tips that are still open. Wallets registered in monero-lws are added
-again the next time the app registers. The blockchain does not need a backup.
+`monostr-watcher_watcher-data` (`watcher.db`, SQLite) and holds open tips and receipts. Losing it
+is not fatal: on the next start the watcher reads the last day's tip intents from the relays again
+and takes over the receipts it had already published instead of publishing them twice. Tips older
+than a day that were still open are lost. Wallets registered in monero-lws are added again the next
+time the app registers. The blockchain does not need a backup.
 
 ### Using an existing node
 

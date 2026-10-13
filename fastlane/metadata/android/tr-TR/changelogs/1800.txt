@@ -1,0 +1,2 @@
+• Bahşiş tutarları gizli kalır: yeni kurulumlar gizler, mevcutlar bir kez sorulur. Resimler dokununca yüklenir, Primal sayıları ve «via monostr» etiketi varsayılan olarak kapalı
+• DM bildirimleri artık varsayılan olarak gönderen adını göstermez

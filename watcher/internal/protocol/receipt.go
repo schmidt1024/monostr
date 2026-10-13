@@ -18,8 +18,11 @@ func BuildReceipt(in Intent, amount, createdAt int64) nostr.Event {
 	if !in.Anon {
 		tags = append(tags, nostr.Tag{"P", in.Sender})
 	}
+	// The amount is named only when the intent had one (protocol 0.5).
+	if in.Amount > 0 {
+		tags = append(tags, nostr.Tag{"amount", strconv.FormatInt(amount, 10)})
+	}
 	tags = append(tags,
-		nostr.Tag{"amount", strconv.FormatInt(amount, 10)},
 		nostr.Tag{"intent", in.ID},
 		nostr.Tag{"type", in.Type},
 	)

@@ -19,7 +19,7 @@ monostr is in beta.
 2. To receive tips, a user registers the primary address and the **private view key** with a *watcher* — `watcher.monostr.com` by default, or one they run themselves (`watcher/`). The view key lets the watcher see incoming payments but never spend; the watcher operator can see them too.
 3. The watcher publishes a signed tip receipt on Nostr. Clients show the tip under the note.
 
-**Privacy:** the view key reveals *every* incoming payment to that wallet, not only tips, so use a separate wallet just for tips (setup can create one), never your everyday wallet. Receipts are public: recipient, amount, time and the note are visible to anyone, the sender too unless the tip is anonymous. For no third party at all, [run your own watcher](watcher/SELFHOST.md).
+**Privacy:** the view key reveals *every* incoming payment to that wallet, not only tips, so use a separate wallet just for tips (setup can create one), never your everyday wallet. Receipts are public: recipient, time and the note are visible to anyone, the sender too unless the tip is anonymous, and the amount unless the recipient hides amounts (hidden by default for new setups from 0.18). For no third party at all, [run your own watcher](watcher/SELFHOST.md).
 
 The protocol is specified in [`docs/protocol/monostr-tips.md`](docs/protocol/monostr-tips.md).
 
@@ -52,8 +52,11 @@ Release APKs are signed with this certificate (SHA-256):
 
 ## Privacy notes
 
-- Notes, likes and reposts carry a NIP-89 `client` tag ("via monostr"); Settings can switch it off.
-- Follower numbers can come from Primal's index (`cache2.primal.net`), a proprietary service; Settings can switch it off, then only relays count.
+- Tip amounts are hidden by default for new setups from 0.18 (protocol 0.5; existing setups are asked once): the intent and receipt leave out the amount, so only the count of tips shows; Settings can show amounts again.
+- DM notifications hide the sender name by default; Settings can show it.
+- Pictures load only on tap by default; Settings can load them automatically.
+- Notes, likes and reposts carry a NIP-89 `client` tag ("via monostr") only if you switch it on in Settings; off by default.
+- Follower numbers come from Primal's index (`cache2.primal.net`), a proprietary service, only if you switch it on in Settings; off by default, then only relays count.
 
 ## License
 

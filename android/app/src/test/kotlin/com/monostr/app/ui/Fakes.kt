@@ -235,7 +235,7 @@ class FakeTips(
 ) : TipsRepository {
     val sentIntents = ArrayList<PreparedTip>()
     val sentWatcherRelays = ArrayList<List<String>>()
-    val publishedInfos = ArrayList<Pair<Address, Watcher>>()
+    val publishedInfos = ArrayList<Triple<Address, Watcher, Boolean>>()
     var disabledCalls = 0
     /** Summaries emitted by observeReceipts; tests push new values to simulate arriving receipts. */
     val receipts = MutableStateFlow<Map<String, TipSummary>>(emptyMap())
@@ -263,8 +263,11 @@ class FakeTips(
         cachedCalls += pubkey
         return infos[pubkey] ?: PaymentInfo.Disabled
     }
-    override suspend fun publishPaymentInfo(address: Address, watcher: Watcher): PublishResult {
-        publishedInfos += Pair(address, watcher)
+    /** When set, publishPaymentInfo throws it (after recording the call). */
+    var publishError: Exception? = null
+    override suspend fun publishPaymentInfo(address: Address, watcher: Watcher, amountsHidden: Boolean): PublishResult {
+        publishedInfos += Triple(address, watcher, amountsHidden)
+        publishError?.let { throw it }
         return PublishResult((++counter).toString().padStart(64, '0'), 10037, if (relaysOk) listOf("wss://r") else emptyList(), emptyMap())
     }
     val statuses = HashMap<String, WatcherStatus?>()
@@ -454,7 +457,7 @@ class FakeUiSettings : UiSettingsStore {
     val modeState = MutableStateFlow(ThemeMode.SYSTEM)
     val accentState = MutableStateFlow(Accent.MONO)
     val blurSensitiveState = MutableStateFlow(true)
-    val mediaOnTapState = MutableStateFlow(false)
+    val mediaOnTapState = MutableStateFlow(true)
     val authorRelaysState = MutableStateFlow(true)
     override val themeMode: Flow<ThemeMode> = modeState
     override val accent: Flow<Accent> = accentState
@@ -475,10 +478,10 @@ class FakeUiSettings : UiSettingsStore {
     override val linkPreviews: Flow<Boolean> = linkPreviewsState
     override suspend fun setLinkPreviews(on: Boolean) { linkPreviewsState.value = on }
     override suspend fun setAuthorRelays(on: Boolean) { authorRelaysState.value = on }
-    val clientTagState = MutableStateFlow(true)
+    val clientTagState = MutableStateFlow(false)
     override val clientTag: Flow<Boolean> = clientTagState
     override suspend fun setClientTag(on: Boolean) { clientTagState.value = on }
-    val primalStatsState = MutableStateFlow(true)
+    val primalStatsState = MutableStateFlow(false)
     override val primalStats: Flow<Boolean> = primalStatsState
     override suspend fun setPrimalStats(on: Boolean) { primalStatsState.value = on }
     val feedWithRepliesState = MutableStateFlow(false)
@@ -628,7 +631,7 @@ class FakeDmRelays(var own: OwnDmRelays = OwnDmRelays.None, private val peers: M
 
 class FakeDmSettings(relays: List<String> = listOf("wss://relay.monostr.com")) : DmSettingsStore {
     val relayState = MutableStateFlow(relays)
-    val previewNameState = MutableStateFlow(true)
+    val previewNameState = MutableStateFlow(false)
     val previewTextState = MutableStateFlow(false)
     val listAdoptedState = MutableStateFlow(false)
     override val relays: Flow<List<String>> = relayState

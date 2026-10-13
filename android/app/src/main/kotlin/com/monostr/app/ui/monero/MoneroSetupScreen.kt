@@ -37,6 +37,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.activity.compose.BackHandler
 import com.monostr.nostr.Npub
 import com.monostr.tips.NetworkTag
+import com.monostr.tips.ProtocolVersion
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -179,6 +180,7 @@ internal fun PersonalConfirmStep(step: SetupStep.PersonalConfirm, error: String?
     )
     Spacer(Modifier.height(16.dp))
     Text(stringResource(R.string.setup_personal_privacy), style = MaterialTheme.typography.bodyMedium)
+    if (ProtocolVersion.supportsHiddenAmounts(status.protocol)) AmountsPrivateText()
     error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
     Spacer(Modifier.height(12.dp))
     Button(onClick = onConfirm, modifier = Modifier.fillMaxWidth().testTag("setup-personal-confirm")) { Text(stringResource(R.string.setup_personal_confirm)) }
@@ -262,6 +264,7 @@ private fun ConfirmStep(step: SetupStep.Confirm, error: String?, c: MoneroSetupC
     var understood by rememberSaveable { mutableStateOf(false) }
     Text(stringResource(R.string.setup_confirm_title), style = MaterialTheme.typography.titleMedium)
     Text(stringResource(R.string.setup_confirm_text), style = MaterialTheme.typography.bodyMedium)
+    if (step.amountsHidden) AmountsPrivateText()
     Spacer(Modifier.height(8.dp))
     Text(step.address, fontFamily = MonostrFonts.mono, style = MaterialTheme.typography.bodySmall)
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -271,6 +274,13 @@ private fun ConfirmStep(step: SetupStep.Confirm, error: String?, c: MoneroSetupC
     error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
     Spacer(Modifier.height(12.dp))
     Button(onClick = c::confirm, enabled = understood, modifier = Modifier.fillMaxWidth().testTag("setup-confirm")) { Text(stringResource(R.string.setup_register)) }
+}
+
+/** Protocol 0.5: the new payment info hides tip amounts. */
+@Composable
+private fun AmountsPrivateText() {
+    Spacer(Modifier.height(8.dp))
+    Text(stringResource(R.string.setup_amounts_private), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("setup-amounts-private"))
 }
 
 @Composable
@@ -286,6 +296,7 @@ private fun ColumnScope.DoneStep(step: SetupStep.Done, c: MoneroSetupController)
     }
     Text(stringResource(R.string.setup_done_title), style = MaterialTheme.typography.titleMedium)
     Text(stringResource(R.string.setup_done_text), style = MaterialTheme.typography.bodyMedium)
+    if (step.amountsHidden) AmountsPrivateText()
     Spacer(Modifier.height(12.dp))
     QrCode(step.address, Modifier.size(220.dp).align(Alignment.CenterHorizontally))
     Spacer(Modifier.height(8.dp))

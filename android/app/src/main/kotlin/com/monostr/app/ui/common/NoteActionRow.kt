@@ -141,7 +141,7 @@ fun NoteActionRow(
                 val openTippers = stringResource(R.string.note_tips_open)
                 var compact by remember(t) { mutableStateOf(false) }
                 Text(
-                    text = if (compact) t.count.toString() else stringResource(R.string.note_tips_chip, Presets.withUnit(t.total, LocalAmountUnit.current), t.count),
+                    text = if (compact || !t.amountsKnown) t.count.toString() else stringResource(R.string.note_tips_chip, Presets.withUnit(t.total, LocalAmountUnit.current), t.count),
                     style = MaterialTheme.typography.labelSmall, fontFamily = MonostrFonts.mono, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis,
                     onTextLayout = { if (it.hasVisualOverflow && !compact) compact = true },

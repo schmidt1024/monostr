@@ -1,0 +1,2 @@
+• Tip amounts stay private: new setups hide them, existing ones are asked once. Pictures load on tap, Primal counts and the "via monostr" tag are off by default
+• DM notifications no longer show the sender name by default

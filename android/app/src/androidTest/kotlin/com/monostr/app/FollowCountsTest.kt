@@ -29,7 +29,7 @@ class FollowCountsTest {
     private val entry get() = EntryPointAccessors.fromApplication(ctx, NostrSessionEntryPoint::class.java)
     private fun nodes(tag: String) = rule.onAllNodes(hasTestTag(tag)).fetchSemanticsNodes()
 
-    @After fun logout() { runBlocking { runCatching { entry.session().logout() }; entry.uiSettings().setPrimalStats(true) } }
+    @After fun logout() { runBlocking { runCatching { entry.session().logout() }; entry.uiSettings().setPrimalStats(false) } }
 
     private fun reachFeed() {
         runBlocking { runCatching { entry.session().logout() } }
@@ -45,6 +45,11 @@ class FollowCountsTest {
 
     @Test
     fun theOwnProfileCountsTheContactList() {
+        runBlocking { entry.uiSettings().setPrimalStats(true) } // 0.18: off by default, this test covers the Primal path
+        countsTheContactList()
+    }
+
+    private fun countsTheContactList() {
         reachFeed()
         val ready = entry.session().requireReady()
         val contacts = List(3) { Contact(Keys.generate().publicKey(), null, null) }
@@ -58,6 +63,6 @@ class FollowCountsTest {
     @Test
     fun withPrimalSwitchedOffTheOwnListIsStillCounted() {
         runBlocking { entry.uiSettings().setPrimalStats(false) }
-        theOwnProfileCountsTheContactList()
+        countsTheContactList()
     }
 }

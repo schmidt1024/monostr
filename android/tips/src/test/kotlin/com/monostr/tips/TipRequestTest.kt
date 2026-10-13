@@ -49,4 +49,21 @@ class TipRequestTest {
         assertTrue(p.unsignedEvent.tags.none { it[0] == "e" })
         assertEquals(listOf("anon"), p.unsignedEvent.tags.last())
     }
+
+    @Test
+    fun `hidden recipient gets an intent without amount`() {
+        val hidden = info.copy(amountsHidden = true)
+        for (anon in listOf(false, true)) {
+            val p = TipRequest.prepare(hidden, recipient, note, 5_000_000_000L, TipType.TIP, "", now = 1, anonymous = anon)
+            assertTrue(p.intent.hideAmount)
+            assertTrue(p.unsignedEvent.tags.none { it[0] == "amount" })
+            assertTrue(p.paymentUri.contains("tx_amount=0.005"), p.paymentUri)
+        }
+    }
+
+    @Test
+    fun `public recipient keeps amount`() {
+        val p = TipRequest.prepare(info, recipient, note, 5_000_000_000L, TipType.TIP, "", now = 1)
+        assertTrue(p.unsignedEvent.tags.contains(listOf("amount", "5000000000")))
+    }
 }

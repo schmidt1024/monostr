@@ -111,4 +111,24 @@ class TipIntentTest {
         assertNull(TipIntent.create(null, recipient, 1, TipType.TIP, "", pid, 1).noteId)
         assertThrows(IllegalArgumentException::class.java) { TipIntent.create("", recipient, 1, TipType.TIP, "", pid, 1) }
     }
+
+    @Test
+    fun `hidden intent has no amount tag`() {
+        val u = TipIntent.create(note, recipient, 5_000_000_000L, TipType.LIKE, "", pid, 1, hideAmount = true).toUnsignedEvent()
+        assertTrue(u.tags.none { it[0] == "amount" })
+    }
+
+    @Test
+    fun `intent without amount parses`() = runTest {
+        val u = TipIntent.create(note, recipient, 5_000_000_000L, TipType.LIKE, "", pid, 1, hideAmount = true).toUnsignedEvent()
+        val parsed = TipIntent.parse(signer.sign(u))!!
+        assertEquals(0L, parsed.amount)
+        assertTrue(parsed.hideAmount)
+    }
+
+    @Test
+    fun `present but invalid amount is malformed`() = runTest {
+        val good = signer.sign(intent().toUnsignedEvent())
+        assertNull(TipIntent.parse(good.copy(tags = good.tags.map { if (it[0] == "amount") listOf("amount", "0") else it })))
+    }
 }

@@ -84,6 +84,8 @@ type Service struct {
 	deps   Deps
 	pubkey string
 	log    *slog.Logger
+	// startedAt: intents older than this may have receipts from a run whose database is gone
+	startedAt int64
 }
 
 func New(cfg Config, deps Deps) (*Service, error) {
@@ -103,7 +105,7 @@ func New(cfg Config, deps Deps) (*Service, error) {
 	if deps.Store == nil || deps.LWS == nil || deps.Relays == nil || deps.Height == nil {
 		return nil, errors.New("watcher: missing dependency")
 	}
-	return &Service{cfg: cfg, deps: deps, pubkey: pubkey, log: deps.Logger}, nil
+	return &Service{cfg: cfg, deps: deps, pubkey: pubkey, log: deps.Logger, startedAt: cfg.Now()}, nil
 }
 
 func (s *Service) Pubkey() string { return s.pubkey }
@@ -117,7 +119,7 @@ func (s *Service) Info(ctx context.Context) api.InfoResponse {
 	if len(s.cfg.PublicRelays) > 0 {
 		relays = s.cfg.PublicRelays
 	}
-	return api.InfoResponse{Pubkey: s.pubkey, Relays: relays, Network: s.cfg.Network.String(), Height: height, Version: s.cfg.Version}
+	return api.InfoResponse{Pubkey: s.pubkey, Relays: relays, Network: s.cfg.Network.String(), Height: height, Version: s.cfg.Version, Protocol: protocol.Version}
 }
 
 func badRequest(msg string) error { return &api.HTTPError{Status: 400, Message: msg} }

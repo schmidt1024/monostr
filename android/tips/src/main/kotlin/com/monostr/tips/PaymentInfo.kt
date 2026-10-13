@@ -17,13 +17,18 @@ sealed class PaymentInfo {
     data class Enabled(
         val address: Address,
         val watcher: Watcher,
+        /** The recipient asks senders to leave the amount out of the intent (protocol 0.5). */
+        val amountsHidden: Boolean = false,
     ) : PaymentInfo() {
         val network: Network get() = address.network
         val watcherPubkey: String get() = watcher.pubkey
     }
 
     companion object {
-        fun build(address: Address, watcher: Watcher, createdAt: Long): UnsignedEvent {
+        const val AMOUNTS_TAG = "amounts"
+        const val AMOUNTS_HIDDEN = "hidden"
+
+        fun build(address: Address, watcher: Watcher, createdAt: Long, amountsHidden: Boolean = false): UnsignedEvent {
             require(isHex64(watcher.pubkey)) { "watcher pubkey must be 64 lowercase hex chars" }
             val watcherTag = when (watcher) {
                 is Watcher.Http -> {
@@ -43,7 +48,7 @@ sealed class PaymentInfo {
                     listOf("address", address.encode()),
                     watcherTag,
                     listOf("network", NetworkTag.toTag(address.network)),
-                ),
+                ) + if (amountsHidden) listOf(listOf(AMOUNTS_TAG, AMOUNTS_HIDDEN)) else emptyList(),
                 createdAt = createdAt,
             )
         }
@@ -74,7 +79,7 @@ sealed class PaymentInfo {
                 return Disabled
             }
             if (address.network != network) return Disabled
-            return Enabled(address, parsedWatcher)
+            return Enabled(address, parsedWatcher, event.firstTagValue(AMOUNTS_TAG) == AMOUNTS_HIDDEN)
         }
 
         /**

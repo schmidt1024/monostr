@@ -42,7 +42,7 @@ class NoteMediaTest {
     )
     private fun ui(n: Note) = NoteUi(n, Profile.empty(n.author), Profile.empty(n.author))
 
-    private fun set(n: Note, settings: MediaSettings = MediaSettings(), onMedia: (String, Int) -> Unit = { _, _ -> }, onVideo: (String) -> Unit = {}) {
+    private fun set(n: Note, settings: MediaSettings = MediaSettings(mediaOnTap = false), onMedia: (String, Int) -> Unit = { _, _ -> }, onVideo: (String) -> Unit = {}) {
         rule.setContent { CompositionLocalProvider(LocalMediaSettings provides settings) { MaterialTheme { NoteCard(ui(n), onOpen = {}, onOpenProfile = {}, onReply = {}, onLike = {}, onRepost = {}, onOpenMedia = onMedia, onOpenVideo = onVideo) } } }
     }
 
@@ -67,7 +67,7 @@ class NoteMediaTest {
 
     @Test
     fun blur_setting_off_shows_sensitive_media_directly() {
-        set(note(sensitive = true, onlyMedia = false), settings = MediaSettings(blurSensitive = false))
+        set(note(sensitive = true, onlyMedia = false), settings = MediaSettings(blurSensitive = false, mediaOnTap = false))
         rule.onNodeWithTag("note-media-cover-$id8").assertDoesNotExist()
     }
 

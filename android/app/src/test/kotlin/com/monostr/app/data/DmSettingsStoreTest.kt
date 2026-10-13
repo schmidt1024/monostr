@@ -1,6 +1,8 @@
 package com.monostr.app.data
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -26,11 +28,11 @@ class DmSettingsStoreTest {
     fun `defaults and round trip`() = runTest {
         val s = PrefsDmSettingsStore(store())
         assertEquals(listOf("wss://relay.monostr.com"), s.relays.first())
-        assertTrue(s.previewName.first()); assertFalse(s.previewText.first())
+        assertFalse(s.previewName.first()); assertFalse(s.previewText.first())
         s.setRelays(listOf("wss://one.example"))
-        s.setPreviewName(false); s.setPreviewText(true)
+        s.setPreviewName(true); s.setPreviewText(true)
         assertEquals(listOf("wss://one.example"), s.relays.first())
-        assertFalse(s.previewName.first()); assertTrue(s.previewText.first())
+        assertTrue(s.previewName.first()); assertTrue(s.previewText.first())
         assertFalse(s.listAdopted.first())
         s.setListAdopted(true); assertTrue(s.listAdopted.first())
         s.setListAdopted(false); assertFalse(s.listAdopted.first())
@@ -43,5 +45,12 @@ class DmSettingsStoreTest {
         assertEquals(listOf("wss://two.example"), s.relays.first())
         s.setRelays(emptyList())
         assertEquals(emptyList<String>(), s.relays.first())
+    }
+
+    @Test
+    fun `a stored preview name from before 0_18 is kept`() = runTest {
+        val st = store()
+        st.edit { it[booleanPreferencesKey("dm_preview_name")] = true }
+        assertTrue(PrefsDmSettingsStore(st).previewName.first())
     }
 }

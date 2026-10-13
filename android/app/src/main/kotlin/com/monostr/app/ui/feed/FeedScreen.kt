@@ -13,6 +13,7 @@ import com.monostr.app.ui.common.rememberHideOnScroll
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Card
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.clickable
@@ -108,6 +109,7 @@ fun FeedScreen(
     val dmUnread by vm.dmUnread.collectAsStateWithLifecycle()
     val self by vm.self.collectAsStateWithLifecycle()
     val supportHint by vm.supportHint.collectAsStateWithLifecycle()
+    val amountsPrompt by vm.amountsPrompt.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -230,6 +232,16 @@ fun FeedScreen(
         }
     }
     TipSheetHost(vm.tipSheet)
+    if (amountsPrompt) {
+        // back or a tap outside is no answer: the question comes again next start
+        AlertDialog(
+            onDismissRequest = vm::deferAmountsPrompt,
+            title = { Text(stringResource(R.string.amounts_prompt_title)) },
+            text = { Text(stringResource(R.string.amounts_prompt_text)) },
+            confirmButton = { TextButton(onClick = { vm.answerAmountsPrompt(true) }, modifier = Modifier.testTag("amounts-prompt-yes")) { Text(stringResource(R.string.amounts_prompt_yes)) } },
+            dismissButton = { TextButton(onClick = { vm.answerAmountsPrompt(false) }, modifier = Modifier.testTag("amounts-prompt-no")) { Text(stringResource(R.string.amounts_prompt_no)) } },
+        )
+    }
     tippersFor?.let { TippersDialog(it, load = vm.decorations::tippers, onDismiss = { tippersFor = null }) }
 }
 

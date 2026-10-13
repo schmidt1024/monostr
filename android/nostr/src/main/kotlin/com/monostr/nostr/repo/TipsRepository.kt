@@ -32,8 +32,8 @@ import rust.nostr.sdk.Kind
 import rust.nostr.sdk.PublicKey
 import rust.nostr.sdk.Timestamp
 
-/** Valid receipts of one note (spec 3.4), newest first, with their sum in piconero. */
-data class TipSummary(val total: Long, val count: Int, val receipts: List<TipReceipt>)
+/** Valid receipts of one note (spec 3.4), newest first, with the sum of the known amounts in piconero; [amountsKnown] is false when a receipt carries none (protocol 0.5). */
+data class TipSummary(val total: Long, val count: Int, val receipts: List<TipReceipt>, val amountsKnown: Boolean = true)
 
 /** One valid receipt with the comment of its intent (spec 5.6). */
 data class Tipper(val receipt: TipReceipt, val comment: String)
@@ -50,7 +50,7 @@ interface TipsRepository {
      * Signs and publishes the user's own payment info (spec 3.1). It is kept locally only when a relay
      * accepted it: a copy nobody else can see would still make this device's tip sheet pay to it.
      */
-    suspend fun publishPaymentInfo(address: Address, watcher: Watcher): PublishResult
+    suspend fun publishPaymentInfo(address: Address, watcher: Watcher, amountsHidden: Boolean): PublishResult
     /** Spec 0.4 §2.2: only [relays], the newest valid status by [watcherPubkey]; null when none or unreachable. */
     suspend fun watcherStatus(watcherPubkey: String, relays: List<String>): WatcherStatus?
     /** Publishes an address-less payment info: "no Monero" (spec 6.5). */
@@ -129,8 +129,8 @@ class NostrTipsRepository(
     /** When the payment info of [pubkey] was last fetched from relays; null if never (for tests). */
     internal suspend fun lastFetchAt(pubkey: String): Long? = mutex.withLock { infoFetchedAt[pubkey] }
 
-    override suspend fun publishPaymentInfo(address: Address, watcher: Watcher): PublishResult =
-        engine.signAndPublish(RustConvert.toBuilder(PaymentInfo.build(address, watcher, now())))
+    override suspend fun publishPaymentInfo(address: Address, watcher: Watcher, amountsHidden: Boolean): PublishResult =
+        engine.signAndPublish(RustConvert.toBuilder(PaymentInfo.build(address, watcher, now(), amountsHidden)))
 
     override suspend fun watcherStatus(watcherPubkey: String, relays: List<String>): WatcherStatus? {
         if (relays.isEmpty()) return null
@@ -297,7 +297,7 @@ class NostrTipsRepository(
         }
         return valid.groupBy({ it.first }, { it.second }).mapValues { (_, rs) ->
             val sorted = rs.sortedByDescending { it.createdAt }
-            TipSummary(ReceiptValidator.total(sorted), sorted.size, sorted)
+            TipSummary(ReceiptValidator.total(sorted), sorted.size, sorted, sorted.all { it.amount != null })
         }
     }
 

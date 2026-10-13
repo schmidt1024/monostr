@@ -18,6 +18,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.flow.first
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
@@ -250,5 +251,141 @@ class MoneroSettingsControllerTest {
         assertEquals(PersonalWatcherLine.Mismatch, lineAt(1_000, ownStatus(recipient = "6".repeat(64))))
         assertEquals(PersonalWatcherLine.Mismatch, lineAt(1_000, ownStatus(address = MoneroKeys.generate().address(Network.MAINNET))))
         assertEquals(PersonalWatcherLine.Mismatch, lineAt(5_000, ownStatus(recipient = "6".repeat(64))), "mismatch wins over offline")
+    }
+
+    private val httpSetup = MoneroSetup(MoneroKeys.generate().address(Network.MAINNET).encode(), "https://w.example", "c".repeat(64), "mainnet", 1)
+    private val v05 = com.monostr.tips.watcher.WatcherInfo("c".repeat(64), listOf("wss://r"), "mainnet", 1, "t", "0.5")
+
+    @Test
+    fun `switch republishes and stores`() = runTest {
+        val settings = FakeTipSettings(setup = httpSetup)
+        val tips = FakeTips()
+        val c = MoneroSettingsController(settings, FakeSecrets(), tips, FakeWatcherGateway(info = v05), { true }, eager())
+        c.start()
+        advanceUntilIdle()
+        assertEquals(true, c.state.value.amountsSupported)
+        c.setAmountsPublic(false)
+        advanceUntilIdle()
+        assertTrue(tips.publishedInfos.last().third)
+        assertTrue(settings.setupState.value!!.amountsHidden)
+        assertTrue(c.state.value.setup!!.amountsHidden)
+        assertFalse(c.state.value.busy)
+        assertNull(c.state.value.error)
+        c.setAmountsPublic(true)
+        advanceUntilIdle()
+        assertFalse(tips.publishedInfos.last().third)
+        assertFalse(settings.setupState.value!!.amountsHidden)
+    }
+
+    @Test
+    fun `failed republish keeps the old state`() = runTest {
+        val settings = FakeTipSettings(setup = httpSetup)
+        val tips = FakeTips(relaysOk = false)
+        val c = MoneroSettingsController(settings, FakeSecrets(), tips, FakeWatcherGateway(info = v05), { true }, eager())
+        c.start()
+        advanceUntilIdle()
+        c.setAmountsPublic(false)
+        advanceUntilIdle()
+        assertEquals(MoneroSettingsController.ERR_NOT_PUBLISHED, c.state.value.error)
+        assertEquals(httpSetup, settings.setupState.value)
+        assertFalse(c.state.value.busy)
+    }
+
+    @Test
+    fun `switch disabled below 0_5`() = runTest {
+        val settings = FakeTipSettings(setup = httpSetup)
+        val tips = FakeTips()
+        val old = v05.copy(protocol = null)
+        val c = MoneroSettingsController(settings, FakeSecrets(), tips, FakeWatcherGateway(info = old), { true }, eager())
+        c.start()
+        advanceUntilIdle()
+        assertEquals(false, c.state.value.amountsSupported)
+        c.setAmountsPublic(false)
+        advanceUntilIdle()
+        assertTrue(tips.publishedInfos.isEmpty())
+        assertEquals(httpSetup, settings.setupState.value)
+    }
+
+    private class MemHints : com.monostr.app.data.HintStore {
+        val done = kotlinx.coroutines.flow.MutableStateFlow(emptySet<String>())
+        override suspend fun firstLoginAt(pubkey: String): Long? = null
+        override suspend fun markFirstLogin(pubkey: String, at: Long) {}
+        override fun supportHintDone(pubkey: String) = kotlinx.coroutines.flow.MutableStateFlow(false)
+        override suspend fun setSupportHintDone(pubkey: String) {}
+        override fun dismissed(pubkey: String, hint: String) = kotlinx.coroutines.flow.flow { emit("$pubkey/$hint" in done.value) }
+        override suspend fun dismiss(pubkey: String, hint: String) { done.value = done.value + "$pubkey/$hint" }
+    }
+
+    @Test
+    fun `a successful switch in settings answers the one-time question`() = runTest {
+        val settings = FakeTipSettings(setup = httpSetup)
+        val hints = MemHints()
+        val self = "a".repeat(64)
+        val c = MoneroSettingsController(settings, FakeSecrets(), FakeTips(), FakeWatcherGateway(info = v05), { true }, eager(), selfPubkey = self, hints = hints)
+        c.start()
+        advanceUntilIdle()
+        c.setAmountsPublic(false)
+        advanceUntilIdle()
+        assertTrue(hints.dismissed(self, com.monostr.app.ui.tips.AmountsPrompt.HINT).first())
+    }
+
+    @Test
+    fun `a failed switch leaves the one-time question open`() = runTest {
+        val hints = MemHints()
+        val self = "a".repeat(64)
+        val c = MoneroSettingsController(FakeTipSettings(setup = httpSetup), FakeSecrets(), FakeTips(relaysOk = false), FakeWatcherGateway(info = v05), { true }, eager(), selfPubkey = self, hints = hints)
+        c.start()
+        advanceUntilIdle()
+        c.setAmountsPublic(false)
+        advanceUntilIdle()
+        assertFalse(hints.dismissed(self, com.monostr.app.ui.tips.AmountsPrompt.HINT).first())
+    }
+
+    @Test
+    fun `hidden setup on an unsupported watcher can switch back to public`() = runTest {
+        val hiddenSetup = httpSetup.copy(amountsHidden = true)
+        val settings = FakeTipSettings(setup = hiddenSetup)
+        val tips = FakeTips()
+        val c = MoneroSettingsController(settings, FakeSecrets(), tips, FakeWatcherGateway(info = v05.copy(protocol = null)), { true }, eager())
+        c.start()
+        advanceUntilIdle()
+        assertEquals(false, c.state.value.amountsSupported)
+        c.setAmountsPublic(true)
+        advanceUntilIdle()
+        assertFalse(tips.publishedInfos.last().third)
+        assertFalse(settings.setupState.value!!.amountsHidden)
+    }
+
+    @Test
+    fun `public setup on an unsupported watcher cannot be hidden`() = runTest {
+        val tips = FakeTips()
+        val c = MoneroSettingsController(FakeTipSettings(setup = httpSetup), FakeSecrets(), tips, FakeWatcherGateway(info = v05.copy(protocol = null)), { true }, eager())
+        c.start()
+        advanceUntilIdle()
+        c.setAmountsPublic(false)
+        advanceUntilIdle()
+        assertTrue(tips.publishedInfos.isEmpty())
+    }
+
+    @Test
+    fun `support is checked when the screen opens`() = runTest {
+        val gateway = FakeWatcherGateway(info = v05)
+        val c = MoneroSettingsController(FakeTipSettings(setup = httpSetup), FakeSecrets(), FakeTips(), gateway, { true }, eager())
+        assertNull(c.state.value.amountsSupported)
+        c.start()
+        advanceUntilIdle()
+        assertEquals(1, gateway.infoCalls)
+        assertEquals(true, c.state.value.amountsSupported)
+
+        val tips = FakeTips().apply { statuses[watcherHex] = status.copy(protocol = "0.5") }
+        val p = MoneroSettingsController(FakeTipSettings(setup = personal), FakeSecrets(), tips, FakeWatcherGateway(), { true }, eager())
+        p.start()
+        advanceUntilIdle()
+        assertEquals(true, p.state.value.amountsSupported)
+
+        val unreachable = MoneroSettingsController(FakeTipSettings(setup = httpSetup), FakeSecrets(), FakeTips(), FakeWatcherGateway(infoError = java.io.IOException("x")), { true }, eager())
+        unreachable.start()
+        advanceUntilIdle()
+        assertNull(unreachable.state.value.amountsSupported)
     }
 }

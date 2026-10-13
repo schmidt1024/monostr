@@ -246,6 +246,7 @@
     <string name="setup_personal_info">Watcher pessoal %1$s · %2$s · altura %3$s · as gorjetas chegam a %4$s…%5$s</string>
     <string name="setup_personal_height_unknown">desconhecida</string>
     <string name="setup_personal_privacy">A chave de visualização fica com você. Nós públicos não veem nenhum endereço. Seu perfil indica este watcher, então quem envia gorjetas as publica nos relays dele.</string>
+    <string name="setup_amounts_private">Os valores das gorjetas ficam privados: os recibos mostram apenas que você recebeu uma gorjeta.</string>
     <string name="setup_personal_confirm">Usar este watcher</string>
 
     <!-- settings -->
@@ -292,6 +293,10 @@
     <string name="settings_monero_set_up">Configurar recebimento de gorjetas</string>
     <string name="settings_monero_address">As gorjetas chegam nesta carteira: %1$s…%2$s · %3$s</string>
     <string name="settings_monero_wallet_hint">Não em um endereço Monero da sua bio ou de outros campos do perfil. Os recibos chegam a você pelo watcher e pelos seus relays; relays pagos não são necessários.</string>
+    <string name="settings_monero_amounts_public">Mostrar publicamente os valores das gorjetas</string>
+    <string name="settings_monero_amounts_public_hint">Desativado: os recibos mostram apenas que você recebeu uma gorjeta.</string>
+    <string name="settings_monero_amounts_unsupported">Seu watcher ainda não oferece suporte a isso.</string>
+    <string name="settings_monero_amounts_checking">Verificando se seu watcher oferece suporte a isso…</string>
     <string name="settings_monero_watcher">Watcher %1$s</string>
     <string name="settings_monero_personal">Watcher pessoal %1$s</string>
     <string name="settings_monero_personal_online">Watcher pessoal %1$s · online</string>
@@ -407,9 +412,11 @@
     <string name="notif_note_missing">nota não carregada</string>
     <string name="notif_note_withdrawn">nota excluída</string>
     <string name="notif_tipped">deu uma gorjeta de %1$s %2$s</string>
+    <string name="notif_tipped_plain">deu uma gorjeta para você</string>
     <string name="notif_channel_name">Gorjetas em Monero</string>
     <string name="notif_tip_title">Gorjeta em Monero recebida</string>
     <string name="notif_tip_text">%1$s deu uma gorjeta de %2$s %3$s para você</string>
+    <string name="notif_tip_text_plain">%1$s deu uma gorjeta para você</string>
     <string name="notif_dm_channel">Mensagens</string>
     <string name="notif_dm_title">Mensagem de %1$s</string>
     <string name="notif_dm_title_anonymous">Nova mensagem</string>
@@ -515,4 +522,8 @@
         <item quantity="many">Não foi possível remover %1$d imagens do servidor</item>
         <item quantity="other">Não foi possível remover %1$d imagens do servidor</item>
     </plurals>
+    <string name="amounts_prompt_title">Ocultar os valores das gorjetas?</string>
+    <string name="amounts_prompt_text">Os recibos mostrariam apenas que você recebeu uma gorjeta, não quanto. Sua carteira continua mostrando os valores.</string>
+    <string name="amounts_prompt_yes">Ocultar valores</string>
+    <string name="amounts_prompt_no">Manter públicos</string>
 </resources>

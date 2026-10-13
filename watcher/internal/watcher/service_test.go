@@ -10,12 +10,13 @@ import (
 
 	"monostr.com/watcher/internal/api"
 	"monostr.com/watcher/internal/monero"
+	"monostr.com/watcher/internal/protocol"
 )
 
 func TestInfo(t *testing.T) {
 	e := newEnv(t, monero.Mainnet)
 	info := e.svc.Info(context.Background())
-	if info.Pubkey != e.pk || info.Network != "mainnet" || info.Height != 3200000 || info.Version != "test" ||
+	if info.Pubkey != e.pk || info.Network != "mainnet" || info.Height != 3200000 || info.Version != "test" || info.Protocol != protocol.Version ||
 		len(info.Relays) != 2 || info.Relays[0] != "wss://w1.example" {
 		t.Fatalf("%+v", info)
 	}

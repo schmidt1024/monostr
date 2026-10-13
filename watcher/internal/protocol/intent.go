@@ -88,13 +88,16 @@ func ParseIntent(ev *nostr.Event, now int64) (Intent, error) {
 	if !ok || !IsHex64(recipient) {
 		return Intent{}, invalid("bad p tag")
 	}
-	amountStr, ok := firstTagValue(ev.Tags, "amount")
-	if !ok {
-		return Intent{}, invalid("missing amount")
-	}
-	amount, err := strconv.ParseInt(amountStr, 10, 64)
-	if err != nil || amount <= 0 {
-		return Intent{}, invalid("bad amount")
+	// The amount is optional since protocol 0.5 (recipient hides amounts);
+	// 0 means "no amount". A present amount must be a positive integer.
+	var amount int64
+	var err error
+	if _, present := firstTag(ev.Tags, "amount"); present {
+		amountStr, _ := firstTagValue(ev.Tags, "amount")
+		amount, err = strconv.ParseInt(amountStr, 10, 64)
+		if err != nil || amount <= 0 {
+			return Intent{}, invalid("bad amount")
+		}
 	}
 	pid, ok := firstTagValue(ev.Tags, "pid")
 	if !ok || !IsHex16(pid) {

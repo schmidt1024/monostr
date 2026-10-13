@@ -23,7 +23,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.launch
 
 /** [name] is null for an anonymous tip; the UI shows "Anonymous" in its language. */
-data class TipperUi(val name: String?, val amount: Long, val comment: String, val createdAt: Long)
+data class TipperUi(val name: String?, val amount: Long?, val comment: String, val createdAt: Long)
 
 /**
  * Receipt sums and pending markers for the notes a screen shows (spec 5.5 step 5, 5.6): one

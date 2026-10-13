@@ -7,5 +7,5 @@ object ReceiptValidator {
             recipientInfo is PaymentInfo.Enabled &&
             receipt.watcherPubkey == recipientInfo.watcherPubkey
 
-    fun total(receipts: Collection<TipReceipt>): Long = receipts.sumOf { it.amount }
+    fun total(receipts: Collection<TipReceipt>): Long = receipts.sumOf { it.amount ?: 0L }
 }

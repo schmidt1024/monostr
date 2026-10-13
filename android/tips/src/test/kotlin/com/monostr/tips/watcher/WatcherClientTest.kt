@@ -39,7 +39,7 @@ class WatcherClientTest {
     fun `info parses the response and hits GET v1 info`() = runTest {
         server.enqueue(MockResponse().setBody(infoJson).addHeader("Content-Type", "application/json"))
         val info = client.info()
-        assertEquals(WatcherInfo("d".repeat(64), listOf("wss://relay.monostr.com"), "stagenet", 1234567, "0.1.0"), info)
+        assertEquals(WatcherInfo("d".repeat(64), listOf("wss://relay.monostr.com"), "stagenet", 1234567, "0.1.0", null), info)
         val req = server.takeRequest()
         assertEquals("GET", req.method)
         assertEquals("/v1/info", req.path)
@@ -219,5 +219,11 @@ class WatcherClientTest {
         assertEquals("DELETE", auth.firstTagValue("method"))
         assertEquals(server.url("/v1/accounts").toString(), auth.firstTagValue("u"))
         assertNull(auth.firstTagValue("payload"))
+    }
+
+    @Test
+    fun `info reads protocol when present and null when missing`() = runTest {
+        server.enqueue(MockResponse().setBody(infoJson.dropLast(1) + ""","protocol":"0.5"}"""))
+        assertEquals("0.5", client.info().protocol)
     }
 }

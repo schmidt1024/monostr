@@ -6,6 +6,7 @@ import com.monostr.nostr.repo.OwnReactions
 import com.monostr.nostr.repo.MemoryOwnReactions
 import com.monostr.app.data.dm.unreadTotalExcept
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
@@ -28,6 +29,8 @@ import com.monostr.app.ui.common.UiText
 import com.monostr.app.ui.common.noteMenu
 import com.monostr.app.ui.common.uiText
 import com.monostr.app.ui.notifications.Unread
+import com.monostr.app.ui.tips.AmountsPrompt
+import com.monostr.app.ui.tips.AmountsVisibility
 import com.monostr.app.ui.tips.TipDecorations
 import com.monostr.app.ui.tips.TipSheetFactory
 import com.monostr.nostr.model.Note
@@ -309,6 +312,23 @@ class FeedViewModel @Inject constructor(session: NostrSession, factory: TipSheet
         viewModelScope.launch { runCatching { hints.setSupportHintDone(ready.pubkey) } }
     }
 
+    private val amountsPromptLogic = AmountsPrompt(settings, ready.tips, hints, AmountsVisibility(ready.tips, ready.watchers, settings), ready.pubkey)
+    private val _amountsPrompt = MutableStateFlow(false)
+
+    /** The one-time "hide tip amounts?" question, decided once per start after the feed loaded; never while a tip sheet is open. */
+    val amountsPrompt: StateFlow<Boolean> = combine(_amountsPrompt, tipSheet.state) { ask, sheet -> ask && sheet.target == null }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    /** Back or a tap outside: no answer, nothing stored; asked again next start. */
+    fun deferAmountsPrompt() {
+        _amountsPrompt.value = false
+    }
+
+    fun answerAmountsPrompt(hide: Boolean) {
+        _amountsPrompt.value = false
+        viewModelScope.launch { runCatching { amountsPromptLogic.answer(hide) } }
+    }
+
     /** The tab choice is kept per device; the controller starts with it. */
     fun setWithReplies(on: Boolean) {
         controller.setWithReplies(on)
@@ -316,7 +336,11 @@ class FeedViewModel @Inject constructor(session: NostrSession, factory: TipSheet
     }
 
     init {
-        viewModelScope.launch { controller.start(runCatching { uiSettings.feedWithReplies.first() }.getOrDefault(false)) }
+        viewModelScope.launch {
+            controller.start(runCatching { uiSettings.feedWithReplies.first() }.getOrDefault(false))
+            controller.state.first { !it.loading }
+            _amountsPrompt.value = amountsPromptLogic.shouldAsk()
+        }
         viewModelScope.launch {
             try {
                 ready.profiles.get(ready.pubkey)

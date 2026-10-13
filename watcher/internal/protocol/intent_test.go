@@ -117,7 +117,6 @@ func TestParseIntentRejectsMalformed(t *testing.T) {
 		"e empty":               set("e", ""),
 		"e without value":       func(ev *nostr.Event) { ev.Tags[0] = nostr.Tag{"e"} },
 		"p missing":             drop("p"),
-		"amount missing":        drop("amount"),
 		"pid missing":           drop("pid"),
 		"type without value":    set("type", ""),
 		"created_at far future": func(ev *nostr.Event) { ev.CreatedAt = nostr.Timestamp(now + 10 + MaxFutureSkew + 1) },
@@ -197,5 +196,16 @@ func TestParseIntentAcceptsMaxTTL(t *testing.T) {
 	in, err := ParseIntent(ev, now+10)
 	if err != nil || in.Expiration != now+MaxIntentTTL {
 		t.Fatalf("created_at + 7d must be accepted: %+v %v", in, err)
+	}
+}
+
+func TestParseIntentWithoutAmount(t *testing.T) {
+	ev := validIntentEvent(t, func(ev *nostr.Event) { ev.Tags = ev.Tags.FilterOut([]string{"amount"}) })
+	in, err := ParseIntent(ev, now+10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if in.Amount != 0 {
+		t.Fatalf("amount %d", in.Amount)
 	}
 }

@@ -245,6 +245,7 @@
     <string name="setup_personal_info">Kişisel watcher %1$s · %2$s · yükseklik %3$s · bahşişler şuraya gelir: %4$s…%5$s</string>
     <string name="setup_personal_height_unknown">bilinmiyor</string>
     <string name="setup_personal_privacy">Görüntüleme anahtarı sende kalır. Herkese açık düğümler hiçbir adres görmez. Profilin bu watcher\'ı gösterir, bu yüzden göndericiler bahşişlerini onun relay\'lerine yollar.</string>
+    <string name="setup_amounts_private">Bahşiş tutarları gizli kalır: makbuzlar yalnızca bahşiş aldığını gösterir.</string>
     <string name="setup_personal_confirm">Bu watcher\'ı kullan</string>
 
     <!-- settings -->
@@ -291,6 +292,10 @@
     <string name="settings_monero_set_up">Monero bahşişi almayı kur</string>
     <string name="settings_monero_address">Bahşişler bu cüzdana gelir: %1$s…%2$s · %3$s</string>
     <string name="settings_monero_wallet_hint">Profil açıklamandaki veya diğer profil alanlarındaki bir Monero adresine değil. Makbuzlar sana watcher ve kendi relay’lerin üzerinden ulaşır; ücretli relay’ler gerekmez.</string>
+    <string name="settings_monero_amounts_public">Bahşiş tutarlarını herkese göster</string>
+    <string name="settings_monero_amounts_public_hint">Kapalı: makbuzlar yalnızca bahşiş aldığını gösterir.</string>
+    <string name="settings_monero_amounts_unsupported">Watcher\'ın bunu henüz desteklemiyor.</string>
+    <string name="settings_monero_amounts_checking">Watcher\'ın bunu destekleyip desteklemediği kontrol ediliyor…</string>
     <string name="settings_monero_watcher">Watcher %1$s</string>
     <string name="settings_monero_personal">Kişisel watcher %1$s</string>
     <string name="settings_monero_personal_online">Kişisel watcher %1$s · çevrimiçi</string>
@@ -403,9 +408,11 @@
     <string name="notif_note_missing">not yüklenmedi</string>
     <string name="notif_note_withdrawn">silinmiş not</string>
     <string name="notif_tipped">%1$s %2$s bahşiş verdi</string>
+    <string name="notif_tipped_plain">sana bahşiş verdi</string>
     <string name="notif_channel_name">Monero bahşişleri</string>
     <string name="notif_tip_title">Monero bahşişi alındı</string>
     <string name="notif_tip_text">%1$s sana %2$s %3$s bahşiş verdi</string>
+    <string name="notif_tip_text_plain">%1$s sana bahşiş verdi</string>
     <string name="notif_dm_channel">Mesajlar</string>
     <string name="notif_dm_title">%1$s kişisinden mesaj</string>
     <string name="notif_dm_title_anonymous">Yeni mesaj</string>
@@ -509,4 +516,8 @@
         <item quantity="one">%1$d resim sunucudan kaldırılamadı</item>
         <item quantity="other">%1$d resim sunucudan kaldırılamadı</item>
     </plurals>
+    <string name="amounts_prompt_title">Bahşiş tutarları gizlensin mi?</string>
+    <string name="amounts_prompt_text">Makbuzlar yalnızca bahşiş aldığını gösterir, ne kadar olduğunu göstermez. Cüzdanın tutarları göstermeye devam eder.</string>
+    <string name="amounts_prompt_yes">Tutarları gizle</string>
+    <string name="amounts_prompt_no">Herkese açık kalsın</string>
 </resources>

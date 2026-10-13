@@ -1,0 +1,2 @@
+• Os valores das gorjetas continuam privados: novas configurações os ocultam, as existentes recebem uma pergunta única. As imagens carregam ao tocar; os números do Primal e a etiqueta «via monostr» vêm desativados
+• As notificações de DM não mostram mais o nome do remetente por padrão

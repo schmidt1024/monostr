@@ -58,4 +58,10 @@ class WatcherStatusTest {
         assertTrue(s.isOnline(1_900))
         assertFalse(s.isOnline(1_901))
     }
+
+    @Test
+    fun `protocol tag is read`() = runTest {
+        assertEquals("0.5", WatcherStatus.parse(status(tags() + listOf(listOf("protocol", "0.5"))))!!.protocol)
+        assertNull(WatcherStatus.parse(status(tags()))!!.protocol)
+    }
 }

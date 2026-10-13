@@ -11,6 +11,7 @@ data class WatcherInfo(
     val network: String,
     val height: Long,
     val version: String,
+    val protocol: String? = null,
 )
 
 @Serializable

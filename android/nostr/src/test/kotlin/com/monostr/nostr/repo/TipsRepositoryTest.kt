@@ -50,7 +50,7 @@ class TipsRepositoryTest {
 
     private fun alicePaymentInfo(): Event = signed(alice, PaymentInfo.build(aliceAddress, Watcher.Http("https://watcher.example", watcher.publicKey().toHex()), clock))
 
-    private fun receipt(by: Keys, noteId: String, recipient: String, amount: Long, intentId: String, at: Long): Event =
+    private fun receipt(by: Keys, noteId: String, recipient: String, amount: Long?, intentId: String, at: Long): Event =
         signed(by, TipReceipt.build(noteId, recipient, me.publicKey().toHex(), amount, intentId, TipType.LIKE, at))
 
     @Test
@@ -93,7 +93,7 @@ class TipsRepositoryTest {
                 e.connect()
                 val repo = NostrTipsRepository(e) { clock }
                 val myWallet = MoneroKeys.generate().address(Network.MAINNET)
-                val published = repo.publishPaymentInfo(myWallet, Watcher.Http("https://watcher.example/", watcher.publicKey().toHex()))
+                val published = repo.publishPaymentInfo(myWallet, Watcher.Http("https://watcher.example/", watcher.publicKey().toHex()), false)
                 assertEquals(Kinds.PAYMENT_INFO, published.kind)
                 assertTrue(published.sentToAny, "failed: ${published.failedRelays}")
                 val mine = repo.paymentInfo(me.publicKey().toHex()) as PaymentInfo.Enabled
@@ -114,7 +114,7 @@ class TipsRepositoryTest {
         val e = engine() // no relay at all
         val repo = NostrTipsRepository(e) { clock }
         val myWallet = MoneroKeys.generate().address(Network.MAINNET)
-        val published = repo.publishPaymentInfo(myWallet, Watcher.Http("https://watcher.example/", watcher.publicKey().toHex()))
+        val published = repo.publishPaymentInfo(myWallet, Watcher.Http("https://watcher.example/", watcher.publicKey().toHex()), false)
         assertFalse(published.sentToAny)
         assertEquals(PaymentInfo.Disabled, repo.cachedPaymentInfo(me.publicKey().toHex()))
         assertTrue(e.query(Filter().kind(Kind(10037u))).isEmpty(), "the tip sheet reads the local copy when the relays are slow")
@@ -165,6 +165,7 @@ class TipsRepositoryTest {
         val s = summaries.getValue(noteId)
         assertEquals(3_000_000_000, s.total)
         assertEquals(2, s.count)
+        assertTrue(s.amountsKnown)
         assertEquals(listOf(clock + 2, clock + 1), s.receipts.map { it.createdAt })
         assertFalse(summaries.containsKey(bobNote.id().toHex()))
         val tippers = repo.tippers(noteId, aliceHex)
@@ -172,6 +173,22 @@ class TipsRepositoryTest {
         assertEquals("hi", tippers[0].comment)
         assertEquals(me.publicKey().toHex(), tippers[0].receipt.senderPubkey)
         assertTrue(repo.observeReceipts(emptyMap()).first().isEmpty())
+    }
+
+    @Test
+    fun `mixed receipts show count only`() = runTest {
+        val e = engine()
+        e.save(alicePaymentInfo())
+        val note = EventBuilder.textNote("tip me").signWithKeys(alice); e.save(note)
+        val noteId = note.id().toHex()
+        val aliceHex = alice.publicKey().toHex()
+        val intent = e.signAndSend(TipRequest.prepare(PaymentInfo.parse(RustConvert.toTips(alicePaymentInfo())) as PaymentInfo.Enabled, aliceHex, noteId, 1_000_000_000, TipType.LIKE, "hi", clock).unsignedEvent)
+        e.save(receipt(watcher, noteId, aliceHex, 1_000_000_000, intent.eventId, clock + 1))
+        e.save(receipt(watcher, noteId, aliceHex, null, intent.eventId, clock + 2))
+        val s = NostrTipsRepository(e) { clock }.observeReceipts(mapOf(noteId to aliceHex)).first().getValue(noteId)
+        assertEquals(2, s.count)
+        assertFalse(s.amountsKnown)
+        assertEquals(1_000_000_000, s.total)
     }
 
     @Test

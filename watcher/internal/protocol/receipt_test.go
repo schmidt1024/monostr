@@ -14,6 +14,7 @@ func TestBuildReceiptTagsAndVector(t *testing.T) {
 		Recipient: strings.Repeat("c", 64),
 		NoteID:    strings.Repeat("b", 64),
 		Type:      "boost",
+		Amount:    5000000000,
 	}
 	ev := BuildReceipt(in, 4949570000, 1700000000)
 	ev.PubKey = strings.Repeat("a", 64)
@@ -57,7 +58,7 @@ func TestBuildReceiptTipType(t *testing.T) {
 func TestBuildReceiptOmitsNoteAndSender(t *testing.T) {
 	base := Intent{
 		ID: strings.Repeat("d", 64), Sender: strings.Repeat("e", 64),
-		Recipient: strings.Repeat("c", 64), NoteID: strings.Repeat("b", 64), Type: "tip",
+		Recipient: strings.Repeat("c", 64), NoteID: strings.Repeat("b", 64), Type: "tip", Amount: 1,
 	}
 	cases := []struct {
 		name   string
@@ -111,5 +112,31 @@ func TestSignedReceiptVerifies(t *testing.T) {
 	}
 	if ok, err := ev.CheckSignature(); !ok || err != nil {
 		t.Fatalf("signature: %v %v", ok, err)
+	}
+}
+
+func TestBuildReceiptWithoutAmount(t *testing.T) {
+	in := Intent{
+		ID: strings.Repeat("d", 64), Sender: strings.Repeat("e", 64),
+		Recipient: strings.Repeat("c", 64), NoteID: strings.Repeat("b", 64), Type: "tip", Amount: 0,
+	}
+	ev := BuildReceipt(in, 7, 1700000000)
+	var names []string
+	for _, tag := range ev.Tags {
+		names = append(names, tag[0])
+	}
+	if strings.Join(names, ",") != "e,p,P,intent,type" {
+		t.Fatalf("tags %v", ev.Tags)
+	}
+}
+
+func TestBuildReceiptAmountIsReceived(t *testing.T) {
+	in := Intent{
+		ID: strings.Repeat("d", 64), Sender: strings.Repeat("e", 64),
+		Recipient: strings.Repeat("c", 64), Type: "tip", Amount: 5,
+	}
+	ev := BuildReceipt(in, 7, 1700000000)
+	if tag := ev.Tags.Find("amount"); tag == nil || tag[1] != "7" {
+		t.Fatalf("tags %v", ev.Tags)
 	}
 }

@@ -6,7 +6,7 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 )
 
-// BuildStatus builds the status of a personal watcher (kind 10038, spec 0.4):
+// BuildStatus builds the status of a personal watcher (kind 10038, spec 0.4, protocol tag 0.5):
 // whom it watches, the watched address, network, chain height and version.
 func BuildStatus(recipient, address, network string, height uint64, version string, createdAt int64) nostr.Event {
 	return nostr.Event{
@@ -19,6 +19,7 @@ func BuildStatus(recipient, address, network string, height uint64, version stri
 			{"network", network},
 			{"height", strconv.FormatUint(height, 10)},
 			{"version", version},
+			{"protocol", Version},
 		},
 	}
 }

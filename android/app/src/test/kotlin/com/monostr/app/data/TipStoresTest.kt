@@ -1,6 +1,7 @@
 package com.monostr.app.data
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -145,6 +146,29 @@ class TipStoresTest {
         settings.setSetup(personal)
         settings.setSetup(old)
         assertEquals(old, settings.setup.first(), "an http setup after a personal one leaves no relays behind")
+        scope.cancel()
+    }
+    @Test
+    fun `hidden amounts round trip and a 0_17 setup reads as public`() = runTest {
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val store = PreferenceDataStoreFactory.create(scope = scope) { dir.resolve("hidden.preferences_pb").toFile() }
+        val settings = PrefsTipSettingsStore(store)
+        val hidden = MoneroSetup("4addr", "https://w.example", "c".repeat(64), "mainnet", 123, amountsHidden = true)
+        settings.setSetup(hidden)
+        assertEquals(hidden, settings.setup.first())
+        assertTrue(settings.setup.first()!!.amountsHidden)
+        settings.setSetup(null)
+        assertNull(settings.setup.first())
+        assertFalse(store.data.first().contains(booleanPreferencesKey("monero.amounts_hidden")), "setSetup(null) removes the flag")
+        // what 0.17 wrote: no amounts key
+        store.edit {
+            it[stringPreferencesKey("monero.address")] = "4old"
+            it[stringPreferencesKey("monero.watcher_url")] = "https://w.example"
+            it[stringPreferencesKey("monero.watcher_pubkey")] = "d".repeat(64)
+            it[stringPreferencesKey("monero.network")] = "mainnet"
+            it[longPreferencesKey("monero.registered_at")] = 7
+        }
+        assertFalse(settings.setup.first()!!.amountsHidden)
         scope.cancel()
     }
 }

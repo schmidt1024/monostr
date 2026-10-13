@@ -246,6 +246,7 @@
     <string name="setup_personal_info">Watcher personnel %1$s · %2$s · hauteur %3$s · les pourboires arrivent à %4$s…%5$s</string>
     <string name="setup_personal_height_unknown">inconnue</string>
     <string name="setup_personal_privacy">La clé de visualisation reste chez vous. Les nœuds publics ne voient aucune adresse. Votre profil désigne ce watcher, les expéditeurs publient donc leurs pourboires sur ses relais.</string>
+    <string name="setup_amounts_private">Les montants des pourboires restent privés : les reçus indiquent seulement que vous avez reçu un pourboire.</string>
     <string name="setup_personal_confirm">Utiliser ce watcher</string>
 
     <!-- settings -->
@@ -292,6 +293,10 @@
     <string name="settings_monero_set_up">Configurer la réception de pourboires</string>
     <string name="settings_monero_address">Les pourboires arrivent dans ce portefeuille : %1$s…%2$s · %3$s</string>
     <string name="settings_monero_wallet_hint">Pas à une adresse Monero de votre bio ou d’autres champs du profil. Les reçus vous parviennent par le watcher et vos propres relais ; les relais payants ne sont pas nécessaires.</string>
+    <string name="settings_monero_amounts_public">Afficher publiquement les montants des pourboires</string>
+    <string name="settings_monero_amounts_public_hint">Désactivé : les reçus montrent seulement que vous avez reçu un pourboire.</string>
+    <string name="settings_monero_amounts_unsupported">Votre watcher ne prend pas encore cela en charge.</string>
+    <string name="settings_monero_amounts_checking">Vérification de la prise en charge par votre watcher…</string>
     <string name="settings_monero_watcher">Watcher %1$s</string>
     <string name="settings_monero_personal">Watcher personnel %1$s</string>
     <string name="settings_monero_personal_online">Watcher personnel %1$s · en ligne</string>
@@ -407,9 +412,11 @@
     <string name="notif_note_missing">note non chargée</string>
     <string name="notif_note_withdrawn">note supprimée</string>
     <string name="notif_tipped">a donné un pourboire de %1$s %2$s</string>
+    <string name="notif_tipped_plain">vous a donné un pourboire</string>
     <string name="notif_channel_name">Pourboires Monero</string>
     <string name="notif_tip_title">Pourboire Monero reçu</string>
     <string name="notif_tip_text">%1$s vous a donné un pourboire de %2$s %3$s</string>
+    <string name="notif_tip_text_plain">%1$s vous a donné un pourboire</string>
     <string name="notif_dm_channel">Messages</string>
     <string name="notif_dm_title">Message de %1$s</string>
     <string name="notif_dm_title_anonymous">Nouveau message</string>
@@ -515,4 +522,8 @@
         <item quantity="many">%1$d images n’ont pas pu être retirées du serveur</item>
         <item quantity="other">%1$d images n’ont pas pu être retirées du serveur</item>
     </plurals>
+    <string name="amounts_prompt_title">Masquer les montants des pourboires ?</string>
+    <string name="amounts_prompt_text">Les reçus indiqueraient seulement que vous avez reçu un pourboire, pas le montant. Votre portefeuille affiche toujours les montants.</string>
+    <string name="amounts_prompt_yes">Masquer les montants</string>
+    <string name="amounts_prompt_no">Laisser public</string>
 </resources>

@@ -1,0 +1,2 @@
+• Los importes de las propinas siguen siendo privados: las configuraciones nuevas los ocultan, las existentes reciben una pregunta única. Las imágenes se cargan al tocar; los números de Primal y la etiqueta «via monostr» vienen desactivados
+• Las notificaciones de DM ya no muestran por defecto el nombre del remitente

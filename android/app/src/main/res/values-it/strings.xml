@@ -246,6 +246,7 @@
     <string name="setup_personal_info">Watcher personale %1$s · %2$s · altezza %3$s · le mance arrivano a %4$s…%5$s</string>
     <string name="setup_personal_height_unknown">sconosciuta</string>
     <string name="setup_personal_privacy">La chiave di visualizzazione resta con te. I nodi pubblici non vedono alcun indirizzo. Il tuo profilo indica questo watcher, quindi chi invia mance le pubblica sui suoi relay.</string>
+    <string name="setup_amounts_private">Gli importi delle mance restano privati: le ricevute mostrano solo che hai ricevuto una mancia.</string>
     <string name="setup_personal_confirm">Usa questo watcher</string>
 
     <!-- settings -->
@@ -292,6 +293,10 @@
     <string name="settings_monero_set_up">Configura la ricezione di mance</string>
     <string name="settings_monero_address">Le mance arrivano in questo wallet: %1$s…%2$s · %3$s</string>
     <string name="settings_monero_wallet_hint">Non a un indirizzo Monero nella tua bio o in altri campi del profilo. Le ricevute ti arrivano tramite il watcher e i tuoi relay; i relay a pagamento non servono.</string>
+    <string name="settings_monero_amounts_public">Mostra pubblicamente gli importi delle mance</string>
+    <string name="settings_monero_amounts_public_hint">Disattivato: le ricevute mostrano solo che hai ricevuto una mancia.</string>
+    <string name="settings_monero_amounts_unsupported">Il tuo watcher non lo supporta ancora.</string>
+    <string name="settings_monero_amounts_checking">Verifico se il tuo watcher lo supporta…</string>
     <string name="settings_monero_watcher">Watcher %1$s</string>
     <string name="settings_monero_personal">Watcher personale %1$s</string>
     <string name="settings_monero_personal_online">Watcher personale %1$s · online</string>
@@ -407,9 +412,11 @@
     <string name="notif_note_missing">nota non caricata</string>
     <string name="notif_note_withdrawn">nota eliminata</string>
     <string name="notif_tipped">ha inviato una mancia di %1$s %2$s</string>
+    <string name="notif_tipped_plain">ti ha inviato una mancia</string>
     <string name="notif_channel_name">Mance in Monero</string>
     <string name="notif_tip_title">Mancia in Monero ricevuta</string>
     <string name="notif_tip_text">%1$s ti ha inviato una mancia di %2$s %3$s</string>
+    <string name="notif_tip_text_plain">%1$s ti ha inviato una mancia</string>
     <string name="notif_dm_channel">Messaggi</string>
     <string name="notif_dm_title">Messaggio da %1$s</string>
     <string name="notif_dm_title_anonymous">Nuovo messaggio</string>
@@ -515,4 +522,8 @@
         <item quantity="many">Non è stato possibile rimuovere %1$d immagini dal server</item>
         <item quantity="other">Non è stato possibile rimuovere %1$d immagini dal server</item>
     </plurals>
+    <string name="amounts_prompt_title">Nascondere gli importi delle mance?</string>
+    <string name="amounts_prompt_text">Le ricevute mostrerebbero solo che hai ricevuto una mancia, non quanto. Il tuo portafoglio mostra comunque gli importi.</string>
+    <string name="amounts_prompt_yes">Nascondi importi</string>
+    <string name="amounts_prompt_no">Lascia pubblici</string>
 </resources>

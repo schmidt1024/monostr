@@ -24,7 +24,7 @@ object TipRequest {
         paymentId: PaymentId = PaymentId.random(),
         anonymous: Boolean = false,
     ): PreparedTip {
-        val intent = TipIntent.create(noteId, recipientPubkey, amount, type, comment, paymentId, now, anonymous)
+        val intent = TipIntent.create(noteId, recipientPubkey, amount, type, comment, paymentId, now, anonymous, hideAmount = recipient.amountsHidden)
         val integrated = recipient.address.integrated(paymentId.bytes)
         val uri = MoneroUri.build(integrated, amount, description(type, noteId ?: recipientPubkey))
         return PreparedTip(intent, intent.toUnsignedEvent(), integrated, uri)

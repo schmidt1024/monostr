@@ -16,6 +16,6 @@ monostr è un client Nostr per Android con mance in Monero.
 • Sono possibili mance anonime
 
 <b>Aperto</b>
-monostr è software libero (AGPL-3.0-or-later). Note, mi piace e ripubblicazioni riportano «via monostr» (disattivabile). Il numero di follower può venire dall'indice di Primal, un servizio proprietario; anche questo è disattivabile.
+monostr è software libero (AGPL-3.0-or-later). Note, mi piace e ripubblicazioni riportano «via monostr» (disattivato di default, attivabile). Il numero di follower può venire dall'indice di Primal, un servizio proprietario; anche questo è disattivato di default e attivabile.
 
 monostr è in beta.

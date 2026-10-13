@@ -42,4 +42,9 @@ class ReceiptValidatorTest {
         assertEquals(0L, ReceiptValidator.total(emptyList()))
         assertEquals(3000L, ReceiptValidator.total(listOf(receipt(amount = 1000), receipt(amount = 2000))))
     }
+
+    @Test
+    fun `total ignores receipts without amount`() {
+        assertEquals(1500L, ReceiptValidator.total(listOf(receipt(amount = 1000), receipt(amount = 500), receipt().copy(amount = null))))
+    }
 }

@@ -3,6 +3,7 @@ package com.monostr.tips
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 class TipReceiptTest {
@@ -65,7 +66,7 @@ class TipReceiptTest {
         fun set(tag: String, value: String) = good.copy(tags = good.tags.map { if (it[0] == tag) listOf(tag, value) else it })
 
         assertNull(TipReceipt.parse(good.copy(kind = Kinds.TIP_INTENT)))
-        for (t in listOf("p", "amount", "intent")) assertNull(TipReceipt.parse(drop(t)), t)
+        for (t in listOf("p", "intent")) assertNull(TipReceipt.parse(drop(t)), t)
         assertNull(TipReceipt.parse(set("e", "short")))
         assertNull(TipReceipt.parse(set("amount", "0")))
         assertNull(TipReceipt.parse(set("amount", "-1")))
@@ -84,5 +85,25 @@ class TipReceiptTest {
         assertNull(anonymous.senderPubkey)
         val both = TipReceipt.build(null, recipient, null, 5, intentId, TipType.TIP, 1)
         assertEquals(listOf("p", "amount", "intent", "type"), both.tags.map { it[0] })
+    }
+
+    @Test
+    fun `receipt without amount parses`() = runTest {
+        val good = watcher.sign(unsigned())
+        assertNull(TipReceipt.parse(good.copy(tags = good.tags.filter { it[0] != "amount" }))!!.amount)
+    }
+
+    @Test
+    fun `invalid amount makes the receipt invalid`() = runTest {
+        val good = watcher.sign(unsigned())
+        for (bad in listOf("0", "-1", "x")) {
+            assertNull(TipReceipt.parse(good.copy(tags = good.tags.map { if (it[0] == "amount") listOf("amount", bad) else it })))
+        }
+    }
+
+    @Test
+    fun `build without amount has no tag`() {
+        val u = TipReceipt.build(note, recipient, sender, null, intentId, TipType.TIP, createdAt = 1)
+        assertTrue(u.tags.none { it[0] == "amount" })
     }
 }

@@ -27,6 +27,8 @@ data class MoneroSetup(
     val registeredAt: Long,
     /** The relays of a personal watcher as announced in the payment info; empty for an HTTP watcher. */
     val watcherRelays: List<String> = emptyList(),
+    /** Whether the payment info announces `["amounts", "hidden"]` (protocol 0.5); false for setups from 0.17 and older. */
+    val amountsHidden: Boolean = false,
 ) {
     val isPersonal: Boolean get() = watcherUrl.isEmpty()
 }
@@ -118,6 +120,8 @@ class PrefsTipSettingsStore(private val store: DataStore<Preferences>) : TipSett
             registeredAt = p[SETUP_REGISTERED_AT] ?: 0L,
             // absent in setups written before 0.17.0
             watcherRelays = p[SETUP_WATCHER_RELAYS]?.split(' ')?.filter { it.isNotEmpty() } ?: emptyList(),
+            // absent in setups written before 0.18.0
+            amountsHidden = p[SETUP_AMOUNTS_HIDDEN] ?: false,
         )
     }
 
@@ -135,11 +139,12 @@ class PrefsTipSettingsStore(private val store: DataStore<Preferences>) : TipSett
         store.edit { p ->
             if (setup == null) {
                 p.remove(SETUP_ADDRESS); p.remove(SETUP_WATCHER_URL); p.remove(SETUP_WATCHER_PUBKEY); p.remove(SETUP_NETWORK); p.remove(SETUP_REGISTERED_AT)
-                p.remove(SETUP_WATCHER_RELAYS)
+                p.remove(SETUP_WATCHER_RELAYS); p.remove(SETUP_AMOUNTS_HIDDEN)
             } else {
                 p[SETUP_ADDRESS] = setup.address; p[SETUP_WATCHER_URL] = setup.watcherUrl; p[SETUP_WATCHER_PUBKEY] = setup.watcherPubkey
                 p[SETUP_NETWORK] = setup.network; p[SETUP_REGISTERED_AT] = setup.registeredAt
                 p[SETUP_WATCHER_RELAYS] = setup.watcherRelays.joinToString(" ")
+                p[SETUP_AMOUNTS_HIDDEN] = setup.amountsHidden
             }
         }
     }
@@ -160,6 +165,7 @@ class PrefsTipSettingsStore(private val store: DataStore<Preferences>) : TipSett
         val SETUP_NETWORK = stringPreferencesKey("monero.network")
         val SETUP_REGISTERED_AT = longPreferencesKey("monero.registered_at")
         val SETUP_WATCHER_RELAYS = stringPreferencesKey("monero.watcher_relays")
+        val SETUP_AMOUNTS_HIDDEN = booleanPreferencesKey("monero.amounts_hidden")
         val ONBOARDING_SEEN = booleanPreferencesKey("monero.onboarding_seen")
         val NOTIFICATIONS_READ_AT = longPreferencesKey("notifications.read_at")
         val ANONYMOUS = booleanPreferencesKey("tips.anonymous")

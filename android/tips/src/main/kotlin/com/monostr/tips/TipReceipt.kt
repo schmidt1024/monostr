@@ -13,7 +13,8 @@ data class TipReceipt(
     val recipientPubkey: String,
     /** Null for an anonymous tip (the intent carried `anon`). */
     val senderPubkey: String?,
-    val amount: Long,
+    /** Null when the intent left the amount out (protocol 0.5). */
+    val amount: Long?,
     val intentId: String,
     val type: TipType,
     val createdAt: Long,
@@ -23,13 +24,13 @@ data class TipReceipt(
             noteId: String?,
             recipientPubkey: String,
             senderPubkey: String?,
-            amount: Long,
+            amount: Long?,
             intentId: String,
             type: TipType,
             createdAt: Long,
         ): UnsignedEvent {
             require((noteId == null || isHex64(noteId)) && isHex64(recipientPubkey) && (senderPubkey == null || isHex64(senderPubkey)) && isHex64(intentId)) { "ids must be 64 lowercase hex chars" }
-            require(amount > 0) { "amount must be positive" }
+            require(amount == null || amount > 0) { "amount must be positive" }
             return UnsignedEvent(
                 kind = Kinds.TIP_RECEIPT,
                 content = "",
@@ -37,7 +38,7 @@ data class TipReceipt(
                     if (noteId != null) add(listOf("e", noteId))
                     add(listOf("p", recipientPubkey))
                     if (senderPubkey != null) add(listOf("P", senderPubkey))
-                    add(listOf("amount", amount.toString()))
+                    if (amount != null) add(listOf("amount", amount.toString()))
                     add(listOf("intent", intentId))
                     add(listOf("type", type.tag))
                 },
@@ -51,7 +52,7 @@ data class TipReceipt(
             val noteId = if (event.firstTag("e") != null) (event.firstTagValue("e")?.takeIf(::isHex64) ?: return null) else null
             val recipient = event.firstTagValue("p")?.takeIf(::isHex64) ?: return null
             val sender = if (event.firstTag("P") != null) (event.firstTagValue("P")?.takeIf(::isHex64) ?: return null) else null
-            val amount = event.firstTagValue("amount")?.toLongOrNull()?.takeIf { it > 0 } ?: return null
+            val amount = if (event.firstTag("amount") != null) (event.firstTagValue("amount")?.toLongOrNull()?.takeIf { it > 0 } ?: return null) else null
             val intentId = event.firstTagValue("intent")?.takeIf(::isHex64) ?: return null
             val type = if (event.firstTag("type") != null) (event.firstTagValue("type")?.let(TipType::fromTag) ?: return null) else TipType.TIP
             return TipReceipt(event.id, event.pubkey, noteId, recipient, sender, amount, intentId, type, event.createdAt)

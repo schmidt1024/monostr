@@ -14,6 +14,8 @@ type InfoResponse struct {
 	Network string   `json:"network"`
 	Height  uint64   `json:"height"`
 	Version string   `json:"version"`
+	// Protocol is the tip protocol version (missing = older than 0.5).
+	Protocol string `json:"protocol"`
 }
 
 // HTTPError lets the service pick the status code of a client-visible error.

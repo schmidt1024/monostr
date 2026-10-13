@@ -104,6 +104,9 @@ type fakeRelays struct {
 	fetch          []*nostr.Event
 	fetchedURLs    [][]string
 	fetchedFilters []nostr.Filter
+	// onFetch, if set, runs at the end of Fetch outside the lock (a concurrent change while the
+	// service waits for the relays)
+	onFetch func()
 	// onPublish, if set, runs after an event was recorded and before
 	// Publish returns, outside the lock: it lets a test land a concurrent
 	// hook while the service is waiting for the relays.
@@ -135,7 +138,13 @@ func (f *fakeRelays) Fetch(_ context.Context, urls []string, filter nostr.Filter
 	defer f.mu.Unlock()
 	f.fetchedURLs = append(f.fetchedURLs, urls)
 	f.fetchedFilters = append(f.fetchedFilters, filter)
-	return f.fetch
+	out, hook := f.fetch, f.onFetch
+	f.mu.Unlock()
+	if hook != nil {
+		hook()
+	}
+	f.mu.Lock()
+	return out
 }
 func (f *fakeRelays) events() []nostr.Event {
 	f.mu.Lock()
@@ -200,6 +209,9 @@ func intentEvent(t *testing.T, senderSK, recipientPK, pid string, amount int64, 
 			{"e", strings.Repeat("b", 64)}, {"p", recipientPK}, {"amount", strconv.FormatInt(amount, 10)},
 			{"pid", pid}, {"type", "like"}, {"expiration", strconv.FormatInt(createdAt+86400, 10)},
 		},
+	}
+	if amount == 0 { // hidden amount: intent without amount tag
+		ev.Tags = ev.Tags.FilterOut([]string{"amount"})
 	}
 	if err := ev.Sign(senderSK); err != nil {
 		t.Fatal(err)

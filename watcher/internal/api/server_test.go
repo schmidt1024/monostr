@@ -16,6 +16,7 @@ import (
 
 	"monostr.com/watcher/internal/lws"
 	"monostr.com/watcher/internal/nip98"
+	"monostr.com/watcher/internal/protocol"
 	"monostr.com/watcher/internal/ratelimit"
 )
 
@@ -30,7 +31,7 @@ type fakeService struct {
 }
 
 func (f *fakeService) Info(context.Context) InfoResponse {
-	return InfoResponse{Pubkey: strings.Repeat("a", 64), Relays: []string{"wss://r.example"}, Network: "stagenet", Height: 42, Version: "test"}
+	return InfoResponse{Pubkey: strings.Repeat("a", 64), Relays: []string{"wss://r.example"}, Network: "stagenet", Height: 42, Version: "test", Protocol: protocol.Version}
 }
 func (f *fakeService) Register(_ context.Context, pubkey, address, viewKey string) error {
 	if f.registerErr != nil {
@@ -107,6 +108,9 @@ func TestInfo(t *testing.T) {
 	resp, out := e.do(t, "GET", "/v1/info", nil, false, nil)
 	if resp.StatusCode != 200 || out["pubkey"] != strings.Repeat("a", 64) || out["network"] != "stagenet" || out["height"] != float64(42) {
 		t.Fatalf("%d %v", resp.StatusCode, out)
+	}
+	if out["protocol"] != "0.5" {
+		t.Fatalf("protocol %v", out["protocol"])
 	}
 	if resp.Header.Get("Content-Type") != "application/json" {
 		t.Fatalf("content-type %q", resp.Header.Get("Content-Type"))

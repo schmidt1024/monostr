@@ -1,0 +1,2 @@
+• Tip-Beträge bleiben privat: neue Setups verbergen sie, bestehende werden einmal gefragt. Bilder laden erst auf Tipp, Primal-Zahlen und „via monostr“ sind standardmäßig aus
+• Benachrichtigungen für DMs zeigen den Absendernamen nicht mehr standardmäßig

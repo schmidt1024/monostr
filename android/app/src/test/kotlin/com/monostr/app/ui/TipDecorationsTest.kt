@@ -30,7 +30,7 @@ class TipDecorationsTest {
 
     private fun TestScope.eager(): CoroutineScope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher(testScheduler))
 
-    private fun receipt(noteId: String, intentId: String, amount: Long, at: Long) =
+    private fun receipt(noteId: String, intentId: String, amount: Long?, at: Long) =
         TipReceipt("r$at".padEnd(64, '0'), watcher, noteId, alice, bob, amount, intentId, TipType.LIKE, at)
 
     @Test
@@ -72,6 +72,15 @@ class TipDecorationsTest {
         assertEquals("Bob", list[0].name)
         assertEquals(7L, list[0].amount)
         assertEquals("danke", list[0].comment)
+    }
+
+    @Test
+    fun `a tipper without amount has none`() = runTest {
+        val tips = FakeTips()
+        val original = note('1', alice, 1000)
+        tips.tippers = mapOf(original.id to listOf(Tipper(receipt(original.id, "e".repeat(64), null, 100), "")))
+        val d = TipDecorations(tips, FakePendingTips(), profiles, FakePublish(), eager()) { 5_000 }
+        assertNull(d.tippers(original)[0].amount)
     }
 
     @Test

@@ -214,11 +214,11 @@ class SettingsViewModel @Inject constructor(
     val dmSecondDismissed: StateFlow<Boolean> = hints.dismissed(session.requireReady().pubkey, DmInboxHints.HINT_SECOND)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
     fun dismissDmHint(hint: String) = viewModelScope.launch { runCatching { hints.dismiss(session.requireReady().pubkey, hint) } }
-    val dmPreviewName: StateFlow<Boolean> = dmSettings.previewName.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+    val dmPreviewName: StateFlow<Boolean> = dmSettings.previewName.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
     val dmPreviewText: StateFlow<Boolean> = dmSettings.previewText.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
     fun setDmPreviewName(on: Boolean) = viewModelScope.launch { dmSettings.setPreviewName(on) }
     fun setDmPreviewText(on: Boolean) = viewModelScope.launch { dmSettings.setPreviewText(on) }
-    val monero = MoneroSettingsController(settings, secrets, session.requireReady().tips, session.requireReady().watchers, { session.adoptRelayList() }, viewModelScope, session.requireReady().pubkey)
+    val monero = MoneroSettingsController(settings, secrets, session.requireReady().tips, session.requireReady().watchers, { session.adoptRelayList() }, viewModelScope, session.requireReady().pubkey, hints = hints)
     val pubkey: String = session.requireReady().pubkey
     val isAmber: Boolean = session.requireReady().signer is AmberSigner
     private val _notice = MutableStateFlow<UiText?>(null)
@@ -230,7 +230,7 @@ class SettingsViewModel @Inject constructor(
     val accent: StateFlow<Accent> = uiSettings.accent.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), Accent.DEFAULT)
     val customHue: StateFlow<Float> = uiSettings.customHue.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AccentSeed.DEFAULT_HUE)
     val blurSensitive: StateFlow<Boolean> = uiSettings.blurSensitive.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
-    val mediaOnTap: StateFlow<Boolean> = uiSettings.mediaOnTap.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+    val mediaOnTap: StateFlow<Boolean> = uiSettings.mediaOnTap.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
     val linkPreviews: StateFlow<Boolean> = uiSettings.linkPreviews.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
     fun setLinkPreviews(on: Boolean) = viewModelScope.launch { uiSettings.setLinkPreviews(on) }
     val authorRelays: StateFlow<Boolean> = uiSettings.authorRelays.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
@@ -240,9 +240,9 @@ class SettingsViewModel @Inject constructor(
     fun setBlurSensitive(on: Boolean) = viewModelScope.launch { uiSettings.setBlurSensitive(on) }
     fun setMediaOnTap(on: Boolean) = viewModelScope.launch { uiSettings.setMediaOnTap(on) }
     fun setAuthorRelays(on: Boolean) = viewModelScope.launch { uiSettings.setAuthorRelays(on) }
-    val clientTag: StateFlow<Boolean> = uiSettings.clientTag.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+    val clientTag: StateFlow<Boolean> = uiSettings.clientTag.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
     fun setClientTag(on: Boolean) = viewModelScope.launch { uiSettings.setClientTag(on) }
-    val primalStats: StateFlow<Boolean> = uiSettings.primalStats.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+    val primalStats: StateFlow<Boolean> = uiSettings.primalStats.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
     fun setPrimalStats(on: Boolean) = viewModelScope.launch { uiSettings.setPrimalStats(on) }
     val powBits: StateFlow<Int> = uiSettings.powBits.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), POW_DEFAULT)
     fun setPowBits(bits: Int) = viewModelScope.launch { uiSettings.setPowBits(bits) }
@@ -438,6 +438,20 @@ fun SettingsScreen(onBack: () -> Unit, onMoneroSetup: () -> Unit, onSupport: () 
                     OutlinedButton(onClick = vm.monero::disable, enabled = !monero.busy, modifier = Modifier.testTag("settings-monero-disable")) { Text(stringResource(R.string.settings_monero_disable)) }
                 }
             }
+            if (setup != null) {
+                SettingSwitch(
+                    stringResource(R.string.settings_monero_amounts_public),
+                    stringResource(
+                        when {
+                            monero.amountsSupported == false -> R.string.settings_monero_amounts_unsupported
+                            monero.amountsSupported == null && !setup.amountsHidden -> R.string.settings_monero_amounts_checking
+                            else -> R.string.settings_monero_amounts_public_hint
+                        },
+                    ),
+                    !setup.amountsHidden, vm.monero::setAmountsPublic, "settings-monero-amounts",
+                    enabled = (monero.amountsSupported == true || setup.amountsHidden) && !monero.busy,
+                )
+            }
             if (monero.hasViewKey) {
                 TextButton(onClick = vm.monero::deleteViewKey) { Text(stringResource(R.string.settings_monero_delete_view_key)) }
             }
@@ -587,13 +601,13 @@ private fun MessagesSection(
 
 /** A titled switch row; the row itself (not just the thumb) toggles the value. */
 @Composable
-private fun SettingSwitch(title: String, hint: String, checked: Boolean, onChange: (Boolean) -> Unit, tag: String) {
-    Row(Modifier.fillMaxWidth().toggleable(value = checked, role = Role.Switch, onValueChange = onChange).padding(vertical = 8.dp).testTag(tag), verticalAlignment = Alignment.CenterVertically) {
+private fun SettingSwitch(title: String, hint: String, checked: Boolean, onChange: (Boolean) -> Unit, tag: String, enabled: Boolean = true) {
+    Row(Modifier.fillMaxWidth().toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onChange).padding(vertical = 8.dp).testTag(tag), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.bodyLarge)
             if (hint.isNotEmpty()) Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Switch(checked = checked, onCheckedChange = null)
+        Switch(checked = checked, onCheckedChange = null, enabled = enabled)
     }
 }
 

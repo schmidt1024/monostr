@@ -41,7 +41,7 @@ interface UiSettingsStore {
     val accent: Flow<Accent>
     /** Spec 3.2: blur media of sensitive notes until tapped. */
     val blurSensitive: Flow<Boolean>
-    /** Spec 3.2: never load pictures until tapped. */
+    /** Spec 3.2: never load pictures until tapped; on by default (0.18), a stored choice is kept. */
     val mediaOnTap: Flow<Boolean>
     /** Spec link previews 3.5: cards for web links in notes; off by default, the linked site sees the IP. */
     val linkPreviews: Flow<Boolean>
@@ -51,9 +51,9 @@ interface UiSettingsStore {
     val mediaServer: Flow<String>
     /** Spec 11.4 §3: the hue (0 ≤ h < 360) of [Accent.CUSTOM]; an invalid stored value falls back to the default. */
     val customHue: Flow<Float>
-    /** NIP-89: notes, likes and reposts carry a `client` tag, so other apps show "via Monostr"; on by default. */
+    /** NIP-89: notes, likes and reposts carry a `client` tag, so other apps show "via monostr"; off by default (0.18). */
     val clientTag: Flow<Boolean>
-    /** Follower numbers from Primal's cache (a proprietary service); on by default, off leaves the relays' NIP-45 COUNTs. */
+    /** Follower numbers from Primal's cache (a proprietary service); off by default (0.18), then only the relays' NIP-45 COUNTs. */
     val primalStats: Flow<Boolean>
     /** The home feed shows the "Replies" tab (replies alone); off by default ("Posts"). */
     val feedWithReplies: Flow<Boolean>
@@ -83,12 +83,12 @@ class PrefsUiSettingsStore(private val store: DataStore<Preferences>) : UiSettin
     override val themeMode: Flow<ThemeMode> = data.map { p -> p[THEME_MODE]?.let { v -> ThemeMode.entries.firstOrNull { it.name == v } } ?: ThemeMode.SYSTEM }
     override val accent: Flow<Accent> = data.map { p -> p[ACCENT]?.let { v -> Accent.entries.firstOrNull { it.name == v } ?: if (v in Accent.LEGACY_HUES) Accent.CUSTOM else null } ?: Accent.DEFAULT }
     override val blurSensitive: Flow<Boolean> = data.map { it[BLUR_SENSITIVE] ?: true }
-    override val mediaOnTap: Flow<Boolean> = data.map { it[MEDIA_ON_TAP] ?: false }
+    override val mediaOnTap: Flow<Boolean> = data.map { it[MEDIA_ON_TAP] ?: true }
     override val linkPreviews: Flow<Boolean> = data.map { it[LINK_PREVIEWS] ?: false }
     override val authorRelays: Flow<Boolean> = data.map { it[AUTHOR_RELAYS] ?: true }
     override val mediaServer: Flow<String> = data.map { it[MEDIA_SERVER]?.takeIf { v -> v.isNotBlank() } ?: MediaServer.DEFAULT }
-    override val clientTag: Flow<Boolean> = data.map { it[CLIENT_TAG] ?: true }
-    override val primalStats: Flow<Boolean> = data.map { it[PRIMAL_STATS] ?: true }
+    override val clientTag: Flow<Boolean> = data.map { it[CLIENT_TAG] ?: false }
+    override val primalStats: Flow<Boolean> = data.map { it[PRIMAL_STATS] ?: false }
     override val feedWithReplies: Flow<Boolean> = data.map { it[FEED_WITH_REPLIES] ?: false }
     override val quickReactions: Flow<List<String>> = data.map { Reactions.decode(it[QUICK_REACTIONS]) }
     override val powBits: Flow<Int> = data.map { p -> p[POW_BITS]?.let { powChoice(it) } ?: POW_DEFAULT }

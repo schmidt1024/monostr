@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
 /** Spec 3.2/3.4: how the note cards treat media; provided once by the nav host from UiSettingsStore. */
-data class MediaSettings(val blurSensitive: Boolean = true, val mediaOnTap: Boolean = false, val linkPreviews: Boolean = false)
+data class MediaSettings(val blurSensitive: Boolean = true, val mediaOnTap: Boolean = true, val linkPreviews: Boolean = false)
 
 val LocalMediaSettings = compositionLocalOf { MediaSettings() }
 

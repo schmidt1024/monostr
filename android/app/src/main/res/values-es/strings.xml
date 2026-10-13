@@ -246,6 +246,7 @@
     <string name="setup_personal_info">Watcher personal %1$s · %2$s · altura %3$s · las propinas llegan a %4$s…%5$s</string>
     <string name="setup_personal_height_unknown">desconocida</string>
     <string name="setup_personal_privacy">La clave de visualización se queda contigo. Los nodos públicos no ven ninguna dirección. Tu perfil nombra este watcher, así que quienes te envían propinas las publican en sus relays.</string>
+    <string name="setup_amounts_private">Los importes de las propinas son privados: los recibos solo muestran que recibiste una propina.</string>
     <string name="setup_personal_confirm">Usar este watcher</string>
 
     <!-- settings -->
@@ -292,6 +293,10 @@
     <string name="settings_monero_set_up">Configurar recepción de propinas</string>
     <string name="settings_monero_address">Las propinas llegan a esta cartera: %1$s…%2$s · %3$s</string>
     <string name="settings_monero_wallet_hint">No a una dirección de Monero en tu biografía u otros campos del perfil. Los recibos te llegan a través del watcher y tus propios relays; no hacen falta relays de pago.</string>
+    <string name="settings_monero_amounts_public">Mostrar públicamente los importes de las propinas</string>
+    <string name="settings_monero_amounts_public_hint">Desactivado: los recibos solo muestran que recibiste una propina.</string>
+    <string name="settings_monero_amounts_unsupported">Tu watcher aún no admite esto.</string>
+    <string name="settings_monero_amounts_checking">Comprobando si tu watcher admite esto…</string>
     <string name="settings_monero_watcher">Watcher %1$s</string>
     <string name="settings_monero_personal">Watcher personal %1$s</string>
     <string name="settings_monero_personal_online">Watcher personal %1$s · en línea</string>
@@ -407,9 +412,11 @@
     <string name="notif_note_missing">nota no cargada</string>
     <string name="notif_note_withdrawn">nota eliminada</string>
     <string name="notif_tipped">dio una propina de %1$s %2$s</string>
+    <string name="notif_tipped_plain">te dio una propina</string>
     <string name="notif_channel_name">Propinas en Monero</string>
     <string name="notif_tip_title">Propina en Monero recibida</string>
     <string name="notif_tip_text">%1$s te dio una propina de %2$s %3$s</string>
+    <string name="notif_tip_text_plain">%1$s te dio una propina</string>
     <string name="notif_dm_channel">Mensajes</string>
     <string name="notif_dm_title">Mensaje de %1$s</string>
     <string name="notif_dm_title_anonymous">Nuevo mensaje</string>
@@ -515,4 +522,8 @@
         <item quantity="many">No se pudieron quitar %1$d imágenes del servidor</item>
         <item quantity="other">No se pudieron quitar %1$d imágenes del servidor</item>
     </plurals>
+    <string name="amounts_prompt_title">¿Ocultar los importes de las propinas?</string>
+    <string name="amounts_prompt_text">Los recibos solo mostrarían que recibiste una propina, no cuánto. Tu wallet sigue mostrando los importes.</string>
+    <string name="amounts_prompt_yes">Ocultar importes</string>
+    <string name="amounts_prompt_no">Dejar públicos</string>
 </resources>

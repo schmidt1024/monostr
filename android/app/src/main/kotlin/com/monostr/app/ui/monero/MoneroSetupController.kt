@@ -21,6 +21,7 @@ import com.monostr.nostr.WatcherProfile
 import com.monostr.nostr.repo.TipsRepository
 import com.monostr.tips.NetworkTag
 import com.monostr.tips.PaymentInfo
+import com.monostr.tips.ProtocolVersion
 import com.monostr.tips.Watcher
 import com.monostr.tips.WatcherStatus
 import com.monostr.tips.event.isHex64
@@ -56,13 +57,15 @@ sealed class SetupStep {
         override fun toString() = "Existing(address=$address, viewKey=<redacted ${viewKey.length} chars>)"
     }
     /** Spec 6.3 step 4: the privacy warning before anything leaves the device. */
-    data class Confirm(val address: String, val restoreHeight: Long?) : SetupStep()
+    /** [amountsHidden]: the watcher speaks protocol 0.5, so the payment info will hide tip amounts. */
+    data class Confirm(val address: String, val restoreHeight: Long?, val amountsHidden: Boolean = false) : SetupStep()
     /** Spec 0.4 §4.3: the watcher's nprofile (or npub/hex plus [relay]). */
     data class Personal(val input: String, val relay: String, val loading: Boolean = false) : SetupStep()
     /** A fresh status of a personal watcher for this account; confirming announces it in pubkey form. */
     data class PersonalConfirm(val status: WatcherStatus, val relays: List<String>) : SetupStep()
     data object Registering : SetupStep()
-    data class Done(val address: String, val restoreHeight: Long?) : SetupStep()
+    /** [amountsHidden]: the published payment info hides tip amounts (protocol 0.5). */
+    data class Done(val address: String, val restoreHeight: Long?, val amountsHidden: Boolean = false) : SetupStep()
 }
 
 data class SetupState(
@@ -230,7 +233,7 @@ class MoneroSetupController(
         if (!MoneroKeys.viewKeyMatches(address, viewKey)) return fail(ERR_VIEW_KEY_MISMATCH)
         pendingAddress = address
         pendingViewKey = viewKey
-        _state.update { it.copy(step = SetupStep.Confirm(address.encode(), null), error = null) }
+        _state.update { it.copy(step = SetupStep.Confirm(address.encode(), null, hidesAmounts()), error = null) }
     }
 
     /** Spec 6.5: move the stored wallet to the newly chosen watcher. */
@@ -243,7 +246,7 @@ class MoneroSetupController(
         if (address.network != network) return fail(ERR_NETWORK)
         pendingAddress = address
         pendingViewKey = hex.hexToBytes()
-        _state.update { it.copy(step = SetupStep.Confirm(address.encode(), null), error = null) }
+        _state.update { it.copy(step = SetupStep.Confirm(address.encode(), null, hidesAmounts()), error = null) }
     }
 
     fun startPersonal() {
@@ -309,8 +312,9 @@ class MoneroSetupController(
         scope.launch {
             try {
                 val old = existing
-                if (!tips.publishPaymentInfo(status.address, Watcher.Personal(profile.pubkey, profile.relays)).sentToAny) throw SetupFailure(ERR_NOT_PUBLISHED)
-                settings.setSetup(MoneroSetup(status.address.encode(), "", profile.pubkey, NetworkTag.toTag(status.network ?: return@launch), now(), profile.relays))
+                val hidden = ProtocolVersion.supportsHiddenAmounts(status.protocol)
+                if (!tips.publishPaymentInfo(status.address, Watcher.Personal(profile.pubkey, profile.relays), hidden).sentToAny) throw SetupFailure(ERR_NOT_PUBLISHED)
+                settings.setSetup(MoneroSetup(status.address.encode(), "", profile.pubkey, NetworkTag.toTag(status.network ?: return@launch), now(), profile.relays, hidden))
                 settings.setOnboardingSeen()
                 if (old != null && !old.isPersonal) {
                     // only now: until the new payment info is out, the old watcher is the announced one
@@ -330,7 +334,7 @@ class MoneroSetupController(
                     // receipts may arrive later via the watcher's relays; the setup itself is complete
                 }
                 existing = settings.setup.first()
-                _state.update { it.copy(step = SetupStep.Done(status.address.encode(), null), error = null) }
+                _state.update { it.copy(step = SetupStep.Done(status.address.encode(), null, hidden), error = null) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: SetupFailure) {
@@ -361,6 +365,7 @@ class MoneroSetupController(
         val address = pendingAddress ?: return
         val viewKey = pendingViewKey ?: return
         val loaded = info ?: return
+        val hidden = ProtocolVersion.supportsHiddenAmounts(loaded.protocol)
         _state.update { it.copy(step = SetupStep.Registering, error = null) }
         scope.launch {
             try {
@@ -369,14 +374,14 @@ class MoneroSetupController(
                 try {
                     if (watcherPubkey != loaded.pubkey) throw WatcherException.Protocol("watcher pubkey differs from /v1/info")
                     // without a relay nobody can find the payment info; nothing is persisted, the user retries (spec 6.2 step 6)
-                    if (!tips.publishPaymentInfo(address, Watcher.Http(url, watcherPubkey)).sentToAny) throw SetupFailure(ERR_NOT_PUBLISHED)
+                    if (!tips.publishPaymentInfo(address, Watcher.Http(url, watcherPubkey), hidden).sentToAny) throw SetupFailure(ERR_NOT_PUBLISHED)
                 } catch (e: Exception) {
                     // cancellation included: the watcher must not keep watching a wallet nobody announced
                     withContext(NonCancellable) { undoRegistration(old) }
                     throw e
                 }
                 secrets.put(KeystoreSecretStore.SECRET_VIEW_KEY, viewKey.toHex())
-                settings.setSetup(MoneroSetup(address.encode(), url, watcherPubkey, NetworkTag.toTag(network), now()))
+                settings.setSetup(MoneroSetup(address.encode(), url, watcherPubkey, NetworkTag.toTag(network), now(), amountsHidden = hidden))
                 settings.setOnboardingSeen()
                 if (old != null && !old.isPersonal && old.watcherUrl != url) {
                     // only now: until the new payment info is out, the old watcher is the announced one
@@ -397,13 +402,13 @@ class MoneroSetupController(
                 }
                 existing = settings.setup.first()
                 wipe()
-                _state.update { it.copy(step = SetupStep.Done(address.encode(), restoreHeight), error = null) }
+                _state.update { it.copy(step = SetupStep.Done(address.encode(), restoreHeight, hidden), error = null) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: SetupFailure) {
-                _state.update { it.copy(step = SetupStep.Confirm(address.encode(), restoreHeight), error = e.text) }
+                _state.update { it.copy(step = SetupStep.Confirm(address.encode(), restoreHeight, hidden), error = e.text) }
             } catch (e: Exception) {
-                _state.update { it.copy(step = SetupStep.Confirm(address.encode(), restoreHeight), error = e.userMessage()) }
+                _state.update { it.copy(step = SetupStep.Confirm(address.encode(), restoreHeight, hidden), error = e.userMessage()) }
             }
         }
     }
@@ -452,6 +457,9 @@ class MoneroSetupController(
         keys = null
         seedWords = emptyList()
     }
+
+    /** Whether the loaded HTTP watcher speaks protocol 0.5: the payment info then hides tip amounts. */
+    private fun hidesAmounts(): Boolean = ProtocolVersion.supportsHiddenAmounts(info?.protocol)
 
     private fun fail(text: UiText) = _state.update { it.copy(error = text) }
 

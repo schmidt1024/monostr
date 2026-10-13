@@ -15,6 +15,8 @@ data class WatcherStatus(
     val height: Long,
     val version: String,
     val createdAt: Long,
+    /** Protocol version the watcher speaks (`["protocol", "0.5"]`); null = older than 0.5. */
+    val protocol: String? = null,
 ) {
     fun isOnline(now: Long): Boolean = now - createdAt <= ONLINE_SECONDS
 
@@ -29,7 +31,7 @@ data class WatcherStatus(
             } ?: return null
             val network = event.firstTagValue("network")?.let(NetworkTag::parse)
             val height = event.firstTagValue("height")?.toLongOrNull()?.takeIf { it > 0 } ?: 0L
-            return WatcherStatus(event.pubkey, recipient, address, network, height, event.firstTagValue("version").orEmpty(), event.createdAt)
+            return WatcherStatus(event.pubkey, recipient, address, network, height, event.firstTagValue("version").orEmpty(), event.createdAt, event.firstTagValue("protocol"))
         }
     }
 }

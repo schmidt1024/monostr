@@ -1,0 +1,2 @@
+• Gli importi delle mance restano privati: le nuove configurazioni li nascondono, quelle esistenti ricevono una domanda una tantum. Le immagini si caricano al tocco; i numeri di Primal e il tag «via monostr» sono disattivati di default
+• Le notifiche dei DM non mostrano più di default il nome del mittente

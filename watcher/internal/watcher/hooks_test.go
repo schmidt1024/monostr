@@ -19,7 +19,9 @@ type hookEnv struct {
 	intent      *nostr.Event
 }
 
-func newHookEnv(t *testing.T) *hookEnv {
+func newHookEnv(t *testing.T) *hookEnv { return newHookEnvAmount(t, 5000) }
+
+func newHookEnvAmount(t *testing.T, intentAmount int64) *hookEnv {
 	e := newEnv(t, monero.Mainnet)
 	rsk := nostr.GeneratePrivateKey()
 	rpk, _ := nostr.GetPublicKey(rsk)
@@ -27,7 +29,7 @@ func newHookEnv(t *testing.T) *hookEnv {
 	e.register(t, rsk)
 	eventually(t, "cache", func() bool { _, _, ok, _ := e.st.GetRelayCache(rpk + ":write"); return ok })
 	sender := nostr.GeneratePrivateKey()
-	ev := intentEvent(t, sender, rpk, "0123456789abcdef", 5000, t0)
+	ev := intentEvent(t, sender, rpk, "0123456789abcdef", intentAmount, t0)
 	if err := e.svc.HandleIntent(context.Background(), ev); err != nil {
 		t.Fatal(err)
 	}
@@ -69,6 +71,25 @@ func TestHookPublishesReceiptOnZeroConf(t *testing.T) {
 	row, _, _ := h.st.GetIntent(h.intent.ID)
 	if row.State != store.StateSeen {
 		t.Fatalf("intent state %s", row.State)
+	}
+}
+
+func TestHookWithoutIntentAmountPublishesNoAmount(t *testing.T) {
+	h := newHookEnvAmount(t, 0)
+	h.now = t0 + 30
+	if err := h.svc.HandleHook(context.Background(), hook(h.intent.ID, "0123456789abcdef", "event1", strings.Repeat("7", 64), 0, 4949)); err != nil {
+		t.Fatal(err)
+	}
+	pubs := h.relays.published
+	if len(pubs) != 1 {
+		t.Fatalf("published %d", len(pubs))
+	}
+	if tag := pubs[0].ev.Tags.Find("amount"); tag != nil {
+		t.Fatalf("amount tag %v", tag)
+	}
+	r, ok, _ := h.st.ReceiptByTx(h.intent.ID, strings.Repeat("7", 64))
+	if !ok || r.Amount != 4949 {
+		t.Fatalf("receipt %+v %v", r, ok)
 	}
 }
 
