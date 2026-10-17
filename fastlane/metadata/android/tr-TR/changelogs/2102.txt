@@ -1,0 +1,2 @@
+• Bir dizi akışta yalnızca bir kez görünür, ilk gönderisi ayrıca tekrarlanmaz
+• Yenilemek için Bildirimler'de aşağı çekin

@@ -11,6 +11,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
@@ -92,13 +95,18 @@ fun NotificationsScreen(onFeed: () -> Unit, onSearch: () -> Unit, onBookmarks: (
         bottomBar = { HideOnScrollFooter(hide) { MonostrBottomBar(BottomTab.NOTIFICATIONS, unread = 0, dmUnread = dmUnread, onFeed = onFeed, onSearch = onSearch, onBookmarks = onBookmarks, onMessages = onMessages, onNotifications = hide::show, windowInsets = WindowInsets(0)) } },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
-        when {
-            state.loading -> LoadingScreen()
-            state.rows.isEmpty() -> Box(Modifier.padding(padding).fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) { Text(stringResource(R.string.notifications_empty), textAlign = TextAlign.Center) }
-            else -> LazyColumn(state = listState, modifier = Modifier.padding(padding).fillMaxSize().testTag("notifications-list")) {
-                items(state.rows, key = { it.row.key }) { row ->
-                    NotificationRowItem(row, names, onOpenThread = onOpenThread, onOpenProfile = onOpenProfile)
-                    HorizontalDivider()
+        if (state.loading) LoadingScreen()
+        // like the home feed: pulling down at the top fetches from the relays
+        else PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = vm.controller::refresh, modifier = Modifier.padding(padding).fillMaxSize().testTag("notifications-refresh")) {
+            if (state.rows.isEmpty()) {
+                // scrollable so the pull works on the empty state too
+                Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(32.dp), contentAlignment = Alignment.Center) { Text(stringResource(R.string.notifications_empty), textAlign = TextAlign.Center) }
+            } else {
+                LazyColumn(state = listState, modifier = Modifier.fillMaxSize().testTag("notifications-list")) {
+                    items(state.rows, key = { it.row.key }) { row ->
+                        NotificationRowItem(row, names, onOpenThread = onOpenThread, onOpenProfile = onOpenProfile)
+                        HorizontalDivider()
+                    }
                 }
             }
         }

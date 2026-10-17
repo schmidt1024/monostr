@@ -1,0 +1,2 @@
+• Un fil n’apparaît qu’une fois dans le fil d’actualité, sans répéter sa première note
+• Tirez vers le bas dans Notifications pour actualiser

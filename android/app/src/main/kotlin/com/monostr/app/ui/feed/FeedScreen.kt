@@ -118,7 +118,7 @@ fun FeedScreen(
     val scope = rememberCoroutineScope()
     // spec 7: up to 30 entries away the list scrolls, beyond that it jumps (a long animation over hundreds of cards stutters and loads pictures for nothing)
     val hide = rememberHideOnScroll()
-    ShowBarsWhenStuck(hide, listState, hasList = !state.loading && state.notes.isNotEmpty())
+    ShowBarsWhenStuck(hide, listState, hasList = !state.loading && state.entries.isNotEmpty())
     val toTop: () -> Unit = {
         hide.show()
         scope.launch {
@@ -191,7 +191,7 @@ fun FeedScreen(
         PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = vm.controller::refresh, modifier = Modifier.fillMaxSize().testTag("feed-refresh")) {
             if (state.loading) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-            } else if (state.notes.isEmpty()) {
+            } else if (state.entries.isEmpty()) {
                 // scrollable so pull-to-refresh works on the empty state too
                 Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(32.dp), contentAlignment = Alignment.Center) { Text(stringResource(R.string.feed_empty), textAlign = TextAlign.Center) }
             } else {
@@ -201,7 +201,7 @@ fun FeedScreen(
                             SupportHintCard(onSupport = { vm.dismissSupportHint(); onSupport() }, onDismiss = vm::dismissSupportHint)
                         }
                     }
-                    items(state.notes, key = { it.note.id }) { n ->
+                    items(state.entries, key = { it.note.id }) { n ->
                         // spec 2026-10-16 §3: a reply stands under the notes above it, joined by the thread line (X's conversation block)
                         val chain = state.chains[n.note.id]
                         Column(Modifier.testTag(if (chain != null) "conversation-${n.note.id.take(8)}" else "entry-${n.note.id.take(8)}")) {

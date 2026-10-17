@@ -1,0 +1,2 @@
+• Un hilo aparece una sola vez en el feed, sin repetir su primera publicación
+• Desliza hacia abajo en Notificaciones para actualizar

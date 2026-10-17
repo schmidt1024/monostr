@@ -20,6 +20,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -62,6 +64,8 @@ data class NotificationsUiState(
     /** The visible events behind [rows]; the badge counts these, not rows (spec 11-C §3). */
     val items: List<NotificationItem> = emptyList(),
     val loading: Boolean = true,
+    /** A pull-to-refresh is waiting for the relays. */
+    val refreshing: Boolean = false,
     val readAt: Long = 0,
     val message: UiText? = null,
 ) {
@@ -107,6 +111,8 @@ class NotificationsController(
     val names: StateFlow<Map<String, String>> get() = mentions.names
     private val _state = MutableStateFlow(NotificationsUiState())
     val state: StateFlow<NotificationsUiState> = _state.asStateFlow()
+    /** The list right after a pull-to-refresh, so the rows update without waiting for the live subscription. */
+    private val pulled = MutableSharedFlow<List<NotificationItem>>(extraBufferCapacity = 1)
 
     fun start() {
         // mentions in the events' texts and in the excerpts of the referenced notes get names
@@ -117,7 +123,7 @@ class NotificationsController(
                 // the referenced notes known so far: an emission never blanks an excerpt that is already on screen
                 var known: Map<String, AboutNote> = emptyMap()
                 // collectLatest: a newer list cancels a pending lookup (up to 8 s on a silent relay) instead of waiting for it
-                notifications.live().combine(muted) { items, m -> NotificationFilter.visible(items, m) }.collectLatest { items ->
+                merge(notifications.live(), pulled).combine(muted) { items, m -> NotificationFilter.visible(items, m) }.collectLatest { items ->
                     val rows = NotificationGroups.build(items)
                     val pubkeys = rows.flatMap { it.pubkeys }.distinct()
                     profiles.prefetch(pubkeys)
@@ -143,6 +149,24 @@ class NotificationsController(
                 throw e
             } catch (e: Exception) {
                 _state.update { it.copy(loading = false, message = uiText(R.string.notifications_error_load)) }
+            }
+        }
+    }
+
+    /** Pull-to-refresh, like the home feed: fetches from the relays once (a second pull while one runs is ignored). */
+    fun refresh() {
+        if (_state.value.refreshing) return
+        _state.update { it.copy(refreshing = true) }
+        scope.launch {
+            try {
+                notifications.refresh()
+                pulled.emit(notifications.list())
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(message = uiText(R.string.notifications_error_load)) }
+            } finally {
+                _state.update { it.copy(refreshing = false) }
             }
         }
     }

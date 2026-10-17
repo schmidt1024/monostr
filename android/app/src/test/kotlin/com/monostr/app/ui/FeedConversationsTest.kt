@@ -58,6 +58,52 @@ class FeedConversationsTest {
     }
 
     @Test
+    fun `a note shown as an ancestor is not shown again on its own`() = runTest {
+        val feed = FakeFeed().apply { current = listOf(reply, root) } // newest first: the thread, then its first post
+        val convs = FakeConversations(mapOf(reply.id to Chain(listOf(Slot.Shown(root)), cut = false)))
+        val c = controller(feed, conversations = convs)
+        c.start(); advanceUntilIdle()
+        assertEquals(listOf(reply.id), c.state.value.entries.map { it.note.id }, "the thread stands once, at its newest reply")
+        assertEquals(listOf(reply.id, root.id), c.state.value.notes.map { it.note.id }, "the loaded page itself is unchanged")
+    }
+
+    @Test
+    fun `a middle reply inside a longer chain is not shown as its own block`() = runTest {
+        val middle = note('m', createdAt = 950, replyTo = root.id)
+        val last = note('l', createdAt = 1200, replyTo = middle.id)
+        val feed = FakeFeed().apply { current = listOf(last, middle) }
+        val convs = FakeConversations(mapOf(
+            last.id to Chain(listOf(Slot.Shown(root), Slot.Shown(middle)), cut = false),
+            middle.id to Chain(listOf(Slot.Shown(root)), cut = false),
+        ))
+        val c = controller(feed, conversations = convs)
+        c.start(); advanceUntilIdle()
+        assertEquals(listOf(last.id), c.state.value.entries.map { it.note.id })
+    }
+
+    @Test
+    fun `when the reply goes away its first post is shown again`() = runTest {
+        val muted = MutableStateFlow(emptySet<String>())
+        val feed = FakeFeed().apply { current = listOf(reply, root) }
+        val convs = FakeConversations(mapOf(reply.id to Chain(listOf(Slot.Shown(root)), cut = false)))
+        val c = controller(feed, conversations = convs, muted = muted)
+        c.start(); advanceUntilIdle()
+        muted.value = setOf(reply.author)
+        advanceUntilIdle()
+        assertEquals(listOf(root.id), c.state.value.entries.map { it.note.id })
+    }
+
+    @Test
+    fun `a repost of an ancestor stays, it says who reposted it`() = runTest {
+        val rp = repostOf(root, by = alice, createdAt = 1100)
+        val feed = FakeFeed().apply { current = listOf(rp, reply) }
+        val convs = FakeConversations(mapOf(reply.id to Chain(listOf(Slot.Shown(root)), cut = false)))
+        val c = controller(feed, conversations = convs)
+        c.start(); advanceUntilIdle()
+        assertEquals(listOf(rp.id, reply.id), c.state.value.entries.map { it.note.id })
+    }
+
+    @Test
     fun `reply without chain stays single`() = runTest {
         val feed = FakeFeed().apply { current = listOf(reply) }
         val c = controller(feed, conversations = FakeConversations())

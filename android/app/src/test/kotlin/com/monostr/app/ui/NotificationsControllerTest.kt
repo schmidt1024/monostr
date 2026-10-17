@@ -26,6 +26,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.jupiter.api.Assertions.assertTrue
+import kotlinx.coroutines.test.runCurrent
 import org.junit.jupiter.api.Test
 import rust.nostr.sdk.Keys
 
@@ -278,5 +279,32 @@ class NotificationsControllerTest {
         assertEquals(NotificationTarget.None, (rows[0].row as NotificationRow.Single).item.target)
         assertEquals(NotificationTarget.Profile(alice), (rows[1].row as NotificationRow.Single).item.target)
         assertEquals(NotificationTarget.Thread("9".repeat(64)), (rows[2].row as NotificationRow.Single).item.target)
+    }
+
+    @Test
+    fun `pulling down refreshes from the relays and shows what came in`() = runTest {
+        val notifications = FakeNotifications(listOf(item('1', NotificationKind.REPLY, alice, 500)))
+        val c = NotificationsController(notifications, profiles, FakeTipSettings(), eager()) { 1_000 }
+        c.start(); advanceUntilIdle()
+        assertEquals(1, c.state.value.items.size)
+        val gate = CompletableDeferred<Unit>()
+        notifications.refreshGate = gate
+        notifications.items = notifications.items + item('2', NotificationKind.REPLY, alice, 900)
+        c.refresh(); runCurrent()
+        assertTrue(c.state.value.refreshing, "the indicator shows while the relays answer")
+        gate.complete(Unit); advanceUntilIdle()
+        assertFalse(c.state.value.refreshing)
+        assertEquals(2, c.state.value.items.size, "the new reply is shown without waiting for the live subscription")
+        assertEquals(listOf<Long?>(null, null), notifications.refreshCalls)
+    }
+
+    @Test
+    fun `a second pull while one runs does not fetch twice`() = runTest {
+        val notifications = FakeNotifications()
+        val c = NotificationsController(notifications, profiles, FakeTipSettings(), eager()) { 1_000 }
+        c.start(); advanceUntilIdle()
+        notifications.refreshGate = CompletableDeferred()
+        c.refresh(); c.refresh(); runCurrent()
+        assertEquals(2, notifications.refreshCalls.size, "start + one pull")
     }
 }

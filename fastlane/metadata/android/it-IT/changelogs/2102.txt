@@ -1,0 +1,2 @@
+• Un thread appare una sola volta nel feed, senza ripetere il primo post
+• Trascina verso il basso nelle notifiche per aggiornare

@@ -1,0 +1,2 @@
+• Ein Thread erscheint im Feed nur noch einmal, nicht zusätzlich sein erster Beitrag
+• Benachrichtigungen: zum Aktualisieren nach unten ziehen

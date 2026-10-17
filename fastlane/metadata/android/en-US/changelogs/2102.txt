@@ -1,0 +1,2 @@
+• A thread shows once in the feed, not its first post again on its own
+• Pull down on Notifications to refresh

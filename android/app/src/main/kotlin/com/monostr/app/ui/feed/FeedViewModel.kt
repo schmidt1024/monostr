@@ -106,7 +106,17 @@ data class FeedUiState(
     val loadingMore: Boolean = false,
     /** The snackbar's message; after a mute it offers to unmute the account (spec 9.4). */
     val message: Message? = null,
-)
+) {
+    /**
+     * What the feed shows: [notes] without the ones that already stand as an ancestor in a conversation
+     * block, so a thread appears once, at its newest reply, like on X. A repost stays: it tells who reposted.
+     */
+    val entries: List<NoteUi> by lazy {
+        // only blocks that are shown: a reply hidden later (mute, delete) gives its first post back
+        val inBlocks = notes.flatMapTo(HashSet()) { chains[it.note.id]?.ancestors.orEmpty() }
+        if (inBlocks.isEmpty()) notes else notes.filterNot { it.note.repostOf == null && it.note.id in inBlocks }
+    }
+}
 
 /** Feed logic shared by the Hilt ViewModel and the JVM tests. */
 class FeedController(
