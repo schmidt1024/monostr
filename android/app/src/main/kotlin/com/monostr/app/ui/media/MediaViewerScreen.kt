@@ -73,15 +73,16 @@ import com.monostr.app.media.PictureFiles
 import com.monostr.app.media.PictureSaver
 import com.monostr.app.media.PictureSharer
 import com.monostr.app.media.PictureSource
+import com.monostr.app.media.PictureTooLargeException
 import com.monostr.app.session.NostrSession
 import com.monostr.nostr.model.NoteMedia
 import com.monostr.nostr.repo.ThreadRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.File
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -90,7 +91,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 
 data class MediaViewerUiState(val media: List<NoteMedia> = emptyList(), val page: Int = 0, val missing: Boolean = false)
@@ -129,7 +129,9 @@ class MediaViewerController private constructor(private val load: suspend () -> 
 sealed interface PictureEvent {
     data object Saved : PictureEvent
     data object SaveFailed : PictureEvent
+    data object SaveTooLarge : PictureEvent
     data object ShareFailed : PictureEvent
+    data object ShareTooLarge : PictureEvent
     data class Share(val uri: Uri, val mime: String) : PictureEvent
 }
 
@@ -155,12 +157,15 @@ class MediaViewerViewModel @Inject constructor(
     fun save(url: String) {
         viewModelScope.launch {
             val event = try {
-                val p = pictures.load(url)
-                val mime = PictureFiles.mime(sniff(p.bytes), p.header, url)
-                withContext(Dispatchers.IO) { PictureSaver.save(context, p.bytes, PictureFiles.name(url, mime), mime) }
+                pictures.use(url) { p ->
+                    val mime = PictureFiles.mime(sniff(p.file), p.header, url)
+                    PictureSaver.save(context, p.file, PictureFiles.name(url, mime), mime)
+                }
                 PictureEvent.Saved
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: PictureTooLargeException) {
+                PictureEvent.SaveTooLarge
             } catch (e: Exception) {
                 PictureEvent.SaveFailed
             }
@@ -171,12 +176,14 @@ class MediaViewerViewModel @Inject constructor(
     fun share(url: String) {
         viewModelScope.launch {
             val event = try {
-                val p = pictures.load(url)
-                val mime = PictureFiles.mime(sniff(p.bytes), p.header, url)
-                val uri = withContext(Dispatchers.IO) { PictureSharer.prepare(context, p.bytes, PictureFiles.name(url, mime)) }
-                PictureEvent.Share(uri, mime)
+                pictures.use(url) { p ->
+                    val mime = PictureFiles.mime(sniff(p.file), p.header, url)
+                    PictureEvent.Share(PictureSharer.prepare(context, p.file, PictureFiles.name(url, mime)), mime)
+                }
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: PictureTooLargeException) {
+                PictureEvent.ShareTooLarge
             } catch (e: Exception) {
                 PictureEvent.ShareFailed
             }
@@ -184,9 +191,9 @@ class MediaViewerViewModel @Inject constructor(
         }
     }
 
-    /** The type the bytes say they are (the decoder reads only the header); null for anything it cannot read. */
-    private fun sniff(bytes: ByteArray): String? =
-        BitmapFactory.Options().apply { inJustDecodeBounds = true }.also { BitmapFactory.decodeByteArray(bytes, 0, bytes.size, it) }.outMimeType
+    /** The type the file says it is (the decoder reads only the bounds; called on the IO thread); null for anything it cannot read. */
+    private fun sniff(file: File): String? =
+        BitmapFactory.Options().apply { inJustDecodeBounds = true }.also { BitmapFactory.decodeFile(file.path, it) }.outMimeType
 }
 
 /** The viewer's long-press sheet: save and share first (spec 2026-10-16 §7), then the link actions. */
@@ -211,6 +218,8 @@ fun MediaViewerScreen(onBack: () -> Unit, vm: MediaViewerViewModel = hiltViewMod
     val saved = stringResource(R.string.media_saved)
     val saveFailed = stringResource(R.string.media_save_failed)
     val shareFailed = stringResource(R.string.media_share_failed)
+    val saveTooLarge = stringResource(R.string.media_save_too_large)
+    val shareTooLarge = stringResource(R.string.media_share_too_large)
     val shareTitle = stringResource(R.string.media_share_title)
     // Android 8–9 only: the storage permission, asked on the first save
     // saveable: the permission dialog may recreate the activity before its result arrives
@@ -225,6 +234,8 @@ fun MediaViewerScreen(onBack: () -> Unit, vm: MediaViewerViewModel = hiltViewMod
                 PictureEvent.Saved -> snackbar.showSnackbar(saved)
                 PictureEvent.SaveFailed -> snackbar.showSnackbar(saveFailed)
                 PictureEvent.ShareFailed -> snackbar.showSnackbar(shareFailed)
+                PictureEvent.SaveTooLarge -> snackbar.showSnackbar(saveTooLarge)
+                PictureEvent.ShareTooLarge -> snackbar.showSnackbar(shareTooLarge)
                 is PictureEvent.Share -> if (runCatching { context.startActivity(PictureSharer.intent(e.uri, e.mime, shareTitle)) }.isFailure) snackbar.showSnackbar(shareFailed)
             }
         }

@@ -1,0 +1,3 @@
+• Die Tip-Einrichtung startet sofort; eine vorhandene Tip-Adresse zeigt einen Hinweis statt zu schliessen
+• Entwürfe zeigen Erwähnungen wieder als Namen
+• Bilder speichern und teilen braucht weniger Speicher (bis 50 MB)

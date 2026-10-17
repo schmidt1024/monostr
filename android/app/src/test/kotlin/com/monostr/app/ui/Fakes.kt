@@ -262,12 +262,23 @@ class FakeTips(
     /** When set, `maxAgeSeconds == 0` (a forced relay fetch) answers from here instead of the cached [infos]. */
     var liveInfos: Map<String, PaymentInfo>? = null
     var liveDelayMs = 0L
+    /** When set, the forced relay fetch suspends here; [liveCalls] counts those fetches, [liveCancelled] the cancelled ones. */
+    var liveGate: CompletableDeferred<Unit>? = null
+    var liveCalls = 0
+    var liveCancelled = 0
     /** Pubkeys asked through the local-only path, and through the age-limited (possibly fetching) path. */
     val cachedCalls = ArrayList<String>()
     val staleCalls = ArrayList<String>()
     override suspend fun paymentInfo(pubkey: String, maxAgeSeconds: Long): PaymentInfo {
         if (maxAgeSeconds == 0L && liveInfos != null) {
-            if (liveDelayMs > 0) delay(liveDelayMs)
+            liveCalls++
+            try {
+                if (liveDelayMs > 0) delay(liveDelayMs)
+                liveGate?.await()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                liveCancelled++
+                throw e
+            }
             return liveInfos!![pubkey] ?: PaymentInfo.Disabled
         }
         if (maxAgeSeconds != 0L) staleCalls += pubkey

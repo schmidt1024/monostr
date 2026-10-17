@@ -79,6 +79,8 @@
     <string name="media_save_failed">Impossibile salvare l\'immagine</string>
     <string name="media_share_title">Condividi immagine</string>
     <string name="media_share_failed">Impossibile condividere l\'immagine</string>
+    <string name="media_save_too_large">L\'immagine è troppo grande per essere salvata (oltre 50 MB)</string>
+    <string name="media_share_too_large">L\'immagine è troppo grande per essere condivisa (oltre 50 MB)</string>
     <string name="profile_extra_relays">Note anche da %1$s</string>
     <!-- profile header: "12 Following · 3,373 Followers"; the numbers are formatted apart -->
     <string name="profile_following_label">Seguiti</string>
@@ -204,6 +206,8 @@
     <string name="setup_path_new_hint">Crea un nuovo seed di 25 parole su questo telefono. monostr osserva solo le mance in arrivo; per spenderle, importa il seed in Cake Wallet, Monerujo o Feather.</string>
     <string name="setup_path_existing_hint">Incolla l\'indirizzo principale e la chiave di visualizzazione privata da Cake Wallet, Monerujo o Feather.</string>
     <string name="setup_announced_warning">Questo account riceve già mance su %1$s…%2$s, configurato su un altro dispositivo. Configurare qui sostituisce quell\'indirizzo.</string>
+    <string name="setup_announced_notice">Le mance sono già configurate per questo account (indirizzo %1$s…%2$s).</string>
+    <string name="setup_keep_existing">Mantienilo</string>
     <string name="setup_new_wallet">Crea un nuovo portafoglio per mance (consigliato)</string>
     <string name="setup_existing_wallet">Usa un portafoglio esistente</string>
     <string name="setup_reuse_wallet">Sposta il portafoglio salvato su questo watcher</string>

@@ -88,7 +88,10 @@ data class SetupState(
     /** Shown right after login as a skippable screen (spec 6). */
     val intro: Boolean = false,
     val finished: Boolean = false,
-    /** The tip address this account already announces (kind 10037) without a setup on this device: going on replaces it. */
+    /**
+     * The tip address this account already announces (kind 10037) without a setup on this device, found in the
+     * background: the watcher step offers to keep it, the choose step warns that going on replaces it.
+     */
     val announced: String? = null,
 )
 
@@ -135,28 +138,24 @@ class MoneroSetupController(
     private var prefetchUrl: String? = null
     /** The check the user started (watcher or personal); [cancelCheck] stops it. */
     private var check: Job? = null
-    /** The start phase; "Later" stops it, so no watcher step and no prefetch follow. */
+    /** The start phase with the announced lookup; "Later" and "Keep it" stop it. */
     private var starting: Job? = null
     private var infoLogged = false
 
     fun start() {
         starting = scope.launch {
-            // spec §12: the start phase gets the same slow hint (no Cancel: "Later" and back stay available)
-            val slow = markSlowLater { (it as? SetupStep.Watcher)?.takeIf { w -> w.loading && !w.checking }?.copy(slow = true) }
-            try {
-                existing = settings.setup.first()
-                // a personal setup has no URL: switching to HTTP starts at the default watcher
-                url = existing?.watcherUrl?.takeIf { it.isNotEmpty() } ?: Presets.DEFAULT_WATCHER
-                // set up on another device or before a reinstall: the intro must not offer to replace a working tip address
-                val asked = System.nanoTime()
-                val announced = if (existing != null) null else announcedAddress()
-                if (existing == null) log("announced tip address (relays): ${(System.nanoTime() - asked) / 1_000_000} ms")
-                if (announced != null && _state.value.intro) return@launch skip()
-                _state.update { it.copy(step = SetupStep.Watcher(url), announced = announced) }
-                prefetch()
-            } finally {
-                slow.cancel()
-            }
+            existing = settings.setup.first()
+            // a personal setup has no URL: switching to HTTP starts at the default watcher
+            url = existing?.watcherUrl?.takeIf { it.isNotEmpty() } ?: Presets.DEFAULT_WATCHER
+            // the step is usable at once; the announced lookup below runs behind it
+            _state.update { it.copy(step = SetupStep.Watcher(url)) }
+            prefetch()
+            if (existing != null) return@launch
+            // set up on another device or before a reinstall: the watcher step offers to keep that tip address
+            val asked = System.nanoTime()
+            val announced = announcedAddress()
+            log("announced tip address (relays): ${(System.nanoTime() - asked) / 1_000_000} ms")
+            if (announced != null) _state.update { it.copy(announced = announced) }
         }
     }
 
@@ -621,7 +620,7 @@ class MoneroSetupController(
         /** Spec §12: the slow hint after 3 s, the timeout after 15 s per check. */
         const val SLOW_MS = 3_000L
         const val TIMEOUT_MS = 15_000L
-        /** Spec §12: the start phase does not wait longer than this for the announced tip address. */
+        /** Spec §12: the announced lookup gives up after this; nothing counts as announced then. */
         const val ANNOUNCED_TIMEOUT_MS = 5_000L
         private val LOOPBACK = setOf("127.0.0.1", "localhost", "10.0.2.2", "::1")
     }

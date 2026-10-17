@@ -1,0 +1,3 @@
+• Tip setup opens at once; an existing tip address shows a notice instead of closing
+• Drafts show mentions as names again
+• Saving and sharing pictures uses less memory (up to 50 MB)

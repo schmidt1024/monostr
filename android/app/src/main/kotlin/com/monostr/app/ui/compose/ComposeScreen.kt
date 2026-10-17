@@ -79,6 +79,7 @@ import com.monostr.app.ui.common.userMessage
 import com.monostr.nostr.Npub
 import com.monostr.nostr.model.Note
 import com.monostr.nostr.model.NoteMedia
+import com.monostr.nostr.model.MentionTags
 import com.monostr.nostr.model.Profile
 import com.monostr.nostr.repo.PublishRepository
 import com.monostr.nostr.repo.ThreadRepository
@@ -154,6 +155,8 @@ class ComposeController(
     private val background: CoroutineScope? = null,
     private val draftDelayMs: Long = 1_000,
     private val now: () -> Long = { System.currentTimeMillis() / 1000 },
+    /** pubkey → shown name from the local database only (no network); restored drafts show their mentions with it. */
+    private val localNames: suspend (List<String>) -> Map<String, String> = { emptyMap() },
 ) {
     private val _state = MutableStateFlow(ComposeUiState())
     val state: StateFlow<ComposeUiState> = _state.asStateFlow()
@@ -235,10 +238,24 @@ class ComposeController(
             }
             if (text.isEmpty() && draft.text.isNotEmpty()) {
                 text = draft.text
-                _state.update { it.copy(restoredText = draft.text) }
+                val names = restoredNames(draft.text)
+                _state.update { it.copy(restoredText = draft.text, mentionNames = names + it.mentionNames) }
             }
         }
         draftLoaded = true
+    }
+
+    /** Names of the draft's mentions known locally; unknown pubkeys stay raw, a failing lookup restores without names. */
+    private suspend fun restoredNames(text: String): Map<String, String> {
+        val pubkeys = MentionTags.pubkeys(text)
+        if (pubkeys.isEmpty()) return emptyMap()
+        return try {
+            localNames(pubkeys)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            emptyMap()
+        }
     }
 
     /** The field took (or ignored) [ComposeUiState.restoredText]. */
@@ -493,6 +510,7 @@ class ComposeViewModel @Inject constructor(
         uploader = ready.media,
         release = { ReceivedImages.release(it, received) },
         drafts = drafts, account = ready.pubkey, background = ready.engine.backgroundScope,
+        localNames = { keys -> ready.profiles.local(keys).associate { it.pubkey to it.shownName } },
     )
     init {
         ReceivedImages.sweep(received, System.currentTimeMillis())

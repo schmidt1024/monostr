@@ -79,6 +79,8 @@
     <string name="media_save_failed">No se pudo guardar la imagen</string>
     <string name="media_share_title">Compartir imagen</string>
     <string name="media_share_failed">No se pudo compartir la imagen</string>
+    <string name="media_save_too_large">La imagen es demasiado grande para guardarla (más de 50 MB)</string>
+    <string name="media_share_too_large">La imagen es demasiado grande para compartirla (más de 50 MB)</string>
     <string name="profile_extra_relays">Notas también de %1$s</string>
     <!-- profile header: "12 Following · 3,373 Followers"; the numbers are formatted apart -->
     <string name="profile_following_label">Siguiendo</string>
@@ -204,6 +206,8 @@
     <string name="setup_path_new_hint">Crea una semilla nueva de 25 palabras en este teléfono. monostr solo observa las propinas entrantes; para gastarlas, importa la semilla en Cake Wallet, Monerujo o Feather.</string>
     <string name="setup_path_existing_hint">Pega la dirección principal y la clave de visualización privada de Cake Wallet, Monerujo o Feather.</string>
     <string name="setup_announced_warning">Esta cuenta ya recibe propinas en %1$s…%2$s, configurada en otro dispositivo. Configurar aquí reemplaza esa dirección.</string>
+    <string name="setup_announced_notice">Las propinas ya están configuradas para esta cuenta (dirección %1$s…%2$s).</string>
+    <string name="setup_keep_existing">Mantenerla</string>
     <string name="setup_new_wallet">Crear una wallet nueva para propinas (recomendado)</string>
     <string name="setup_existing_wallet">Usar una wallet existente</string>
     <string name="setup_reuse_wallet">Pasar la wallet guardada a este watcher</string>

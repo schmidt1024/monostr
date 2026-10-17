@@ -79,6 +79,8 @@
     <string name="media_save_failed">Görsel kaydedilemedi</string>
     <string name="media_share_title">Görseli paylaş</string>
     <string name="media_share_failed">Görseli paylaşılamadı</string>
+    <string name="media_save_too_large">Görsel kaydetmek için çok büyük (50 MB üzeri)</string>
+    <string name="media_share_too_large">Görsel paylaşmak için çok büyük (50 MB üzeri)</string>
     <string name="profile_extra_relays">Notlar ayrıca %1$s üzerinden</string>
     <!-- profile header: "12 Following · 3,373 Followers"; the numbers are formatted apart -->
     <string name="profile_following_label">Takip edilen</string>
@@ -203,6 +205,8 @@
     <string name="setup_path_new_hint">Bu telefonda 25 kelimelik yeni bir seed oluşturur. monostr yalnızca gelen bahşişleri izler; harcamak için seed\'i Cake Wallet, Monerujo veya Feather\'a aktar.</string>
     <string name="setup_path_existing_hint">Cake Wallet, Monerujo veya Feather\'dan ana adresi ve özel görüntüleme anahtarını yapıştır.</string>
     <string name="setup_announced_warning">Bu hesap bahşişleri zaten %1$s…%2$s adresine alıyor, başka bir cihazda kuruldu. Burada kurmak bu adresi değiştirir.</string>
+    <string name="setup_announced_notice">Bu hesap için bahşişler zaten kurulu (adres %1$s…%2$s).</string>
+    <string name="setup_keep_existing">Koru</string>
     <string name="setup_new_wallet">Yeni bahşiş cüzdanı oluştur (önerilen)</string>
     <string name="setup_existing_wallet">Mevcut bir cüzdanı kullan</string>
     <string name="setup_reuse_wallet">Kayıtlı cüzdanı bu watcher\'a taşı</string>

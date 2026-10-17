@@ -33,7 +33,8 @@ class ComposeDraftsTest {
         publish: FakePublish = FakePublish(),
         replyTo: String? = null,
         threads: FakeThreads = FakeThreads(emptyMap()),
-    ) = ComposeController(replyTo, threads, publish, eager(), uploader = uploader, drafts = drafts, account = me, background = eager(), now = { 5_000L })
+        localNames: suspend (List<String>) -> Map<String, String> = { emptyMap() },
+    ) = ComposeController(replyTo, threads, publish, eager(), uploader = uploader, drafts = drafts, account = me, background = eager(), now = { 5_000L }, localNames = localNames)
 
     @Test
     fun `opening the composer restores the draft of its target, pictures without a new upload`() = runTest {
@@ -245,5 +246,31 @@ class ComposeDraftsTest {
         advanceUntilIdle()
         assertNull(drafts.stored(me, "reply:${root.id}"))
         assertEquals("new note", drafts.stored(me, DraftTargets.NOTE)!!.text)
+    }
+
+    private val known = "a".repeat(64)
+    private val unknown = "b".repeat(64)
+    private fun npub(hex: String) = com.monostr.nostr.Npub.encode(hex)
+
+    @Test
+    fun `a restored draft names its known mentions and keeps the text raw`() = runTest {
+        val text = "hi nostr:${npub(known)} and nostr:${npub(unknown)}"
+        val drafts = FakeDraftStore().apply { put(me, DraftTargets.NOTE, Draft(text, sensitive = false, attachments = emptyList(), updatedAt = 4_000)) }
+        val c = controller(drafts, localNames = { keys -> keys.filter { it == known }.associateWith { "Alice" } })
+        c.start()
+        advanceUntilIdle()
+        assertEquals(text, c.state.value.restoredText)
+        assertEquals(mapOf(known to "Alice"), c.state.value.mentionNames)
+    }
+
+    @Test
+    fun `a failing name lookup still restores the text, without names`() = runTest {
+        val text = "hi nostr:${npub(known)}"
+        val drafts = FakeDraftStore().apply { put(me, DraftTargets.NOTE, Draft(text, sensitive = false, attachments = emptyList(), updatedAt = 4_000)) }
+        val c = controller(drafts, localNames = { error("db down") })
+        c.start()
+        advanceUntilIdle()
+        assertEquals(text, c.state.value.restoredText)
+        assertTrue(c.state.value.mentionNames.isEmpty())
     }
 }

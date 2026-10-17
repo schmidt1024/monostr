@@ -32,9 +32,12 @@ class PictureExportTest {
     @get:Rule val rule = createComposeRule()
     private val ctx get() = InstrumentationRegistry.getInstrumentation().targetContext
 
-    private fun jpeg(): ByteArray {
+    /** A small JPEG in a temp file, as PictureSource leaves it under cacheDir/export. */
+    private fun jpeg(): File {
         val bmp = Bitmap.createBitmap(32, 24, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.RED) }
-        return ByteArrayOutputStream().also { bmp.compress(Bitmap.CompressFormat.JPEG, 90, it) }.toByteArray()
+        val bytes = ByteArrayOutputStream().also { bmp.compress(Bitmap.CompressFormat.JPEG, 90, it) }.toByteArray()
+        val dir = File(ctx.cacheDir, "export").apply { mkdirs() }
+        return File.createTempFile("picture", ".tmp", dir).apply { writeBytes(bytes); deleteOnExit() }
     }
 
     @Test

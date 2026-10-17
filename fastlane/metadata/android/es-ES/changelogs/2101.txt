@@ -1,0 +1,3 @@
+• La configuración de propinas se abre al instante; una dirección existente muestra un aviso en lugar de cerrarse
+• Los borradores vuelven a mostrar las menciones como nombres
+• Guardar y compartir imágenes usa menos memoria (hasta 50 MB)

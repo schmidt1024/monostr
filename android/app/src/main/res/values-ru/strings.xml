@@ -79,6 +79,8 @@
     <string name="media_save_failed">Не удалось сохранить изображение</string>
     <string name="media_share_title">Поделиться изображением</string>
     <string name="media_share_failed">Не удалось поделиться изображением</string>
+    <string name="media_save_too_large">Изображение слишком большое для сохранения (более 50 МБ)</string>
+    <string name="media_share_too_large">Изображение слишком большое, чтобы поделиться (более 50 МБ)</string>
     <string name="profile_extra_relays">Заметки также с %1$s</string>
     <!-- profile header: "12 Following · 3,373 Followers"; the numbers are formatted apart -->
     <string name="profile_following_label">Подписки</string>
@@ -207,6 +209,8 @@
     <string name="setup_path_new_hint">Создаёт новую сид-фразу из 25 слов на этом телефоне. monostr только отслеживает входящие чаевые; чтобы их потратить, импортируйте сид-фразу в Cake Wallet, Monerujo или Feather.</string>
     <string name="setup_path_existing_hint">Вставьте основной адрес и приватный ключ просмотра из Cake Wallet, Monerujo или Feather.</string>
     <string name="setup_announced_warning">Этот аккаунт уже получает чаевые на адрес %1$s…%2$s, настроенный на другом устройстве. Настройка здесь заменит этот адрес.</string>
+    <string name="setup_announced_notice">Чаевые для этого аккаунта уже настроены (адрес %1$s…%2$s).</string>
+    <string name="setup_keep_existing">Оставить</string>
     <string name="setup_new_wallet">Создать новый кошелёк для чаевых (рекомендуется)</string>
     <string name="setup_existing_wallet">Использовать существующий кошелёк</string>
     <string name="setup_reuse_wallet">Перенести сохранённый кошелёк на этот watcher</string>

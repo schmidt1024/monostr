@@ -1,0 +1,3 @@
+• Bahşiş kurulumu hemen açılır; mevcut bir bahşiş adresi kapanmak yerine bildirim gösterir
+• Taslaklar bahsetmeleri yeniden isim olarak gösterir
+• Resim kaydetme ve paylaşma daha az bellek kullanır (50 MB'a kadar)

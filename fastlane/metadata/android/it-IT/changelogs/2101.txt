@@ -1,0 +1,3 @@
+• La configurazione delle mance si apre subito; un indirizzo esistente mostra un avviso invece di chiudersi
+• Le bozze mostrano di nuovo le menzioni come nomi
+• Salvare e condividere le immagini usa meno memoria (fino a 50 MB)

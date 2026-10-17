@@ -79,6 +79,8 @@
     <string name="media_save_failed">Não foi possível salvar a imagem</string>
     <string name="media_share_title">Compartilhar imagem</string>
     <string name="media_share_failed">Não foi possível compartilhar a imagem</string>
+    <string name="media_save_too_large">A imagem é grande demais para salvar (mais de 50 MB)</string>
+    <string name="media_share_too_large">A imagem é grande demais para compartilhar (mais de 50 MB)</string>
     <string name="profile_extra_relays">Notas também de %1$s</string>
     <!-- profile header: "12 Following · 3,373 Followers"; the numbers are formatted apart -->
     <string name="profile_following_label">Seguindo</string>
@@ -204,6 +206,8 @@
     <string name="setup_path_new_hint">Cria uma nova seed de 25 palavras neste telefone. O monostr só observa as gorjetas recebidas; para gastá-las, importe a seed no Cake Wallet, Monerujo ou Feather.</string>
     <string name="setup_path_existing_hint">Cole o endereço principal e a chave de visualização privada do Cake Wallet, Monerujo ou Feather.</string>
     <string name="setup_announced_warning">Esta conta já recebe gorjetas em %1$s…%2$s, configurada em outro dispositivo. Configurar aqui substitui esse endereço.</string>
+    <string name="setup_announced_notice">As gorjetas já estão configuradas para esta conta (endereço %1$s…%2$s).</string>
+    <string name="setup_keep_existing">Manter</string>
     <string name="setup_new_wallet">Criar uma nova carteira de gorjetas (recomendado)</string>
     <string name="setup_existing_wallet">Usar uma carteira existente</string>
     <string name="setup_reuse_wallet">Mover a carteira salva para este watcher</string>

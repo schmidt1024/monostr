@@ -118,10 +118,16 @@ class MoneroSetupControllerTest {
     }
 
     @Test
-    fun `the intro skips itself when the account already announces a tip address`() = runTest {
+    fun `an announced tip address shows a notice in the intro instead of closing it`() = runTest {
         val announced = MoneroKeys.generate().address(Network.MAINNET)
         val rig = Rig(tips = FakeTips().apply { liveInfos = mapOf(self to PaymentInfo.Enabled(announced, Watcher.Http(url, watcherPk))) })
         val c = controller(rig, intro = true)
+        assertFalse(c.state.value.finished, "no silent skip")
+        assertEquals(announced.encode(), c.state.value.announced)
+        assertEquals(SetupStep.Watcher(Presets.DEFAULT_WATCHER), c.state.value.step)
+        assertFalse(rig.settings.seenState.value)
+        // "Keep it" on the notice
+        c.skip(); advanceUntilIdle()
         assertTrue(c.state.value.finished)
         assertTrue(rig.settings.seenState.value)
         assertTrue(rig.gateway.registered.isEmpty())
@@ -825,15 +831,56 @@ class MoneroSetupControllerTest {
     ).also { it.start(); runCurrent() }
 
     @Test
-    fun `a slow start phase shows the hint after 3 s`() = runTest {
-        val rig = Rig(tips = FakeTips().apply { liveInfos = emptyMap(); liveDelayMs = 4_000 })
+    fun `the watcher step is usable at once while the announced lookup runs`() = runTest {
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val announced = MoneroKeys.generate().address(Network.MAINNET)
+        val rig = Rig(tips = FakeTips().apply { liveInfos = mapOf(self to PaymentInfo.Enabled(announced, Watcher.Http(url, watcherPk))); liveGate = gate })
         val c = started(rig, intro = true)
-        assertEquals(SetupStep.Watcher(Presets.DEFAULT_WATCHER, loading = true), c.state.value.step)
+        assertEquals(SetupStep.Watcher(Presets.DEFAULT_WATCHER), c.state.value.step, "not loading while the lookup is pending")
+        assertEquals(1, rig.tips.liveCalls)
+        assertEquals(listOf(Presets.DEFAULT_WATCHER), rig.gateway.infoUrls, "the prefetch does not wait for the lookup")
         advanceTimeBy(3_001); runCurrent()
-        assertEquals(SetupStep.Watcher(Presets.DEFAULT_WATCHER, loading = true, slow = true), c.state.value.step)
-        advanceTimeBy(1_000); runCurrent()
-        assertEquals(SetupStep.Watcher(Presets.DEFAULT_WATCHER), c.state.value.step)
+        assertEquals(SetupStep.Watcher(Presets.DEFAULT_WATCHER), c.state.value.step, "no slow hint for the lookup")
         assertNull(c.state.value.announced)
+        gate.complete(Unit); runCurrent()
+        assertEquals(announced.encode(), c.state.value.announced)
+        assertFalse(c.state.value.finished, "the intro stays open")
+        assertEquals(SetupStep.Watcher(Presets.DEFAULT_WATCHER), c.state.value.step)
+    }
+
+    @Test
+    fun `keep it during the lookup finishes and cancels the lookup`() = runTest {
+        val rig = Rig(tips = FakeTips().apply { liveInfos = emptyMap(); liveGate = kotlinx.coroutines.CompletableDeferred() })
+        val c = started(rig, intro = true)
+        c.skip(); runCurrent()
+        assertTrue(c.state.value.finished)
+        assertTrue(rig.settings.seenState.value)
+        assertEquals(1, rig.tips.liveCancelled)
+    }
+
+    @Test
+    fun `an address arriving after the watcher step was left only sets announced`() = runTest {
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val announced = MoneroKeys.generate().address(Network.MAINNET)
+        val rig = Rig(tips = FakeTips().apply { liveInfos = mapOf(self to PaymentInfo.Enabled(announced, Watcher.Http(url, watcherPk))); liveGate = gate })
+        val c = started(rig, intro = true)
+        c.loadDefaultWatcher(); runCurrent()
+        val choose = c.state.value.step
+        assertTrue(choose is SetupStep.Choose, "step $choose")
+        gate.complete(Unit); runCurrent()
+        assertEquals(choose, c.state.value.step, "the step is kept")
+        assertEquals(announced.encode(), c.state.value.announced)
+        assertFalse(c.state.value.finished)
+    }
+
+    @Test
+    fun `with a local setup no lookup happens`() = runTest {
+        val own = MoneroKeys.generate().address(Network.MAINNET)
+        val rig = Rig(tips = FakeTips().apply { liveInfos = mapOf(self to PaymentInfo.Enabled(own, Watcher.Http(url, watcherPk))) })
+        rig.settings.setupState.value = MoneroSetup(own.encode(), url, watcherPk, "mainnet", 1)
+        val c = started(rig)
+        assertEquals(SetupStep.Watcher(url), c.state.value.step)
+        assertEquals(0, rig.tips.liveCalls)
     }
 
     @Test
@@ -841,13 +888,13 @@ class MoneroSetupControllerTest {
         val announced = MoneroKeys.generate().address(Network.MAINNET)
         val rig = Rig(tips = FakeTips().apply { liveInfos = mapOf(self to PaymentInfo.Enabled(announced, Watcher.Http(url, watcherPk))); liveDelayMs = 8_000 })
         val c = started(rig, intro = true)
-        advanceTimeBy(4_999); runCurrent()
-        assertTrue((c.state.value.step as SetupStep.Watcher).loading)
-        advanceTimeBy(2); runCurrent()
         assertEquals(SetupStep.Watcher(Presets.DEFAULT_WATCHER), c.state.value.step)
+        assertEquals(listOf(Presets.DEFAULT_WATCHER), rig.gateway.infoUrls, "the watcher step starts its prefetch at once")
+        advanceTimeBy(5_001); runCurrent()
+        assertEquals(1, rig.tips.liveCancelled, "the lookup is given up after 5 s")
+        advanceTimeBy(5_000); runCurrent()
         assertNull(c.state.value.announced)
         assertFalse(c.state.value.finished, "the intro stays: nothing counts as announced")
-        assertEquals(listOf(Presets.DEFAULT_WATCHER), rig.gateway.infoUrls, "the watcher step starts its prefetch as usual")
     }
 
     @Test
@@ -874,15 +921,16 @@ class MoneroSetupControllerTest {
     }
 
     @Test
-    fun `later during the start phase stops it, no watcher step and no prefetch follow`() = runTest {
-        val rig = Rig(tips = FakeTips().apply { liveInfos = emptyMap(); liveDelayMs = 4_000 })
+    fun `later during the lookup stops it, no announced address follows`() = runTest {
+        val announced = MoneroKeys.generate().address(Network.MAINNET)
+        val rig = Rig(tips = FakeTips().apply { liveInfos = mapOf(self to PaymentInfo.Enabled(announced, Watcher.Http(url, watcherPk))); liveDelayMs = 4_000 })
         val c = started(rig, intro = true)
         advanceTimeBy(1_000); runCurrent()
         c.skip(); runCurrent()
         advanceTimeBy(10_000); runCurrent()
         assertTrue(c.state.value.finished)
-        assertEquals(SetupStep.Watcher(Presets.DEFAULT_WATCHER, loading = true), c.state.value.step, "the start phase did not go on")
-        assertEquals(emptyList<String>(), rig.gateway.infoUrls, "no prefetch after leaving")
+        assertNull(c.state.value.announced, "the lookup did not go on")
+        assertEquals(1, rig.tips.liveCancelled)
     }
 
     @Test

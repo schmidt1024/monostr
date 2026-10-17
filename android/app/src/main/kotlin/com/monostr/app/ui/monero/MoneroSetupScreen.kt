@@ -20,6 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -105,6 +106,8 @@ fun MoneroSetupScreen(onDone: () -> Unit, vm: MoneroSetupViewModel = hiltViewMod
         Column(Modifier.padding(padding).padding(16.dp).fillMaxSize().verticalScroll(rememberScrollState())) {
             // spec 6.1: leaving the intro with the system back gesture counts as "later"
             if (state.intro) BackHandler { c.skip() }
+            val announced = state.announced
+            if (announced != null && (state.step is SetupStep.Watcher || state.step is SetupStep.Personal)) AnnouncedNotice(announced, c::skip)
             when (val step = state.step) {
                 is SetupStep.Watcher -> WatcherStep(step, state.intro, state.error?.asString(), c::setWatcherUrl, c::loadWatcher, c::cancelCheck, c::startPersonal, c::skip)
                 is SetupStep.Choose -> ChooseStep(step, state.announced, c)
@@ -142,6 +145,20 @@ private fun BusyLabel(text: String) {
     }
 }
 
+/** An address this account already announces, found while the first steps are open: "Keep it" leaves the setup. */
+@Composable
+internal fun AnnouncedNotice(address: String, onKeep: () -> Unit) {
+    Card(Modifier.fillMaxWidth().testTag("setup-announced-notice")) {
+        Column(Modifier.padding(16.dp)) {
+            Text(stringResource(R.string.setup_announced_notice, address.take(8), address.takeLast(6)), style = MaterialTheme.typography.bodyMedium)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = onKeep, modifier = Modifier.testTag("setup-keep-existing")) { Text(stringResource(R.string.setup_keep_existing)) }
+            }
+        }
+    }
+    Spacer(Modifier.height(16.dp))
+}
+
 @Composable
 internal fun ColumnScope.WatcherStep(
     step: SetupStep.Watcher, intro: Boolean, error: String?,
@@ -159,7 +176,7 @@ internal fun ColumnScope.WatcherStep(
         isError = error != null, supportingText = { error?.let { Text(it) } }, enabled = !step.loading,
         modifier = Modifier.fillMaxWidth().testTag("setup-watcher-url"),
     )
-    // the start phase (stored settings, announced address) shows progress too, but "Loading…" and no Cancel
+    // the short read of the stored settings shows progress too, but "Loading…" and no Cancel
     if (step.loading) CheckProgress(step.slow, onCancel.takeIf { step.checking }, "setup-progress", "setup-slow-hint", "setup-cancel-check")
     Spacer(Modifier.height(8.dp))
     Button(onClick = onLoad, enabled = !step.loading, modifier = Modifier.fillMaxWidth().testTag("setup-load")) {

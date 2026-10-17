@@ -11,6 +11,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.monostr.app.ui.monero.AnnouncedNotice
 import com.monostr.app.ui.monero.PersonalStep
 import com.monostr.app.ui.monero.SetupStep
 import com.monostr.app.ui.monero.WatcherStep
@@ -19,7 +20,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** Spec §12: progress, slow hint, Cancel and "Try again" of the watcher checks. */
+/** Spec §12: progress, slow hint, Cancel and "Try again" of the watcher checks; the announced-address notice. */
 @RunWith(AndroidJUnit4::class)
 class SetupProgressTest {
     @get:Rule val rule = createComposeRule()
@@ -65,12 +66,14 @@ class SetupProgressTest {
     }
 
     @Test
-    fun slowStartPhaseShowsTheHintButNoCancel() {
-        watcher(SetupStep.Watcher(url, loading = true, slow = true))
-        rule.onNodeWithTag("setup-progress").assertIsDisplayed()
-        rule.onNodeWithTag("setup-slow-hint").assertIsDisplayed()
-        rule.onNodeWithTag("setup-cancel-check").assertDoesNotExist()
-        rule.onNodeWithTag("setup-load").assertTextContains(str(R.string.state_loading))
+    fun announcedNoticeOffersToKeepTheAddress() {
+        val address = "4" + "A".repeat(80) + "xyz123"
+        var keeps = 0
+        rule.setContent { MaterialTheme { Column { AnnouncedNotice(address) { keeps++ } } } }
+        rule.onNodeWithTag("setup-announced-notice").assertIsDisplayed()
+        rule.onNodeWithText(InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.setup_announced_notice, address.take(8), address.takeLast(6))).assertIsDisplayed()
+        rule.onNodeWithTag("setup-keep-existing").assertTextContains(str(R.string.setup_keep_existing)).performClick()
+        assertEquals(1, keeps)
     }
 
     @Test

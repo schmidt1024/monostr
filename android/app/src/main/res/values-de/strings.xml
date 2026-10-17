@@ -79,6 +79,8 @@
     <string name="media_save_failed">Das Bild konnte nicht gespeichert werden</string>
     <string name="media_share_title">Bild teilen</string>
     <string name="media_share_failed">Das Bild konnte nicht geteilt werden</string>
+    <string name="media_save_too_large">Das Bild ist zu gross zum Speichern (über 50 MB)</string>
+    <string name="media_share_too_large">Das Bild ist zu gross zum Teilen (über 50 MB)</string>
     <string name="profile_extra_relays">Notes auch von %1$s</string>
     <!-- profile header: "12 Following · 3,373 Followers"; the numbers are formatted apart -->
     <string name="profile_following_label">Folge ich</string>
@@ -203,6 +205,8 @@
     <string name="setup_path_new_hint">Erzeugt einen neuen 25-Wort-Seed auf diesem Gerät. monostr sieht nur Eingänge; zum Ausgeben importierst du den Seed in Cake Wallet, Monerujo oder Feather.</string>
     <string name="setup_path_existing_hint">Hauptadresse und privaten View-Key aus Cake Wallet, Monerujo oder Feather einfügen.</string>
     <string name="setup_announced_warning">Dieser Account empfängt Tips bereits an %1$s…%2$s, eingerichtet auf einem anderen Gerät. Eine Einrichtung hier ersetzt diese Adresse.</string>
+    <string name="setup_announced_notice">Für diesen Account sind Tips bereits eingerichtet (Adresse %1$s…%2$s).</string>
+    <string name="setup_keep_existing">Beibehalten</string>
     <string name="setup_new_wallet">Neue Tip-Wallet erstellen (empfohlen)</string>
     <string name="setup_existing_wallet">Bestehende Wallet verwenden</string>
     <string name="setup_reuse_wallet">Gespeicherte Wallet auf diesen Watcher umziehen</string>

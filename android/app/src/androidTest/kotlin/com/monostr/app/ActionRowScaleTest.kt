@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.monostr.app.data.AmountUnit
 import com.monostr.app.data.Presets
 import androidx.compose.foundation.layout.padding
 import com.monostr.app.ui.common.NoteActionRow
@@ -36,7 +37,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** Spec 6: five action icons plus the tip counter fit one row at font scale 1.3 in the action row of a 360 dp wide card (spec 11.5: in a list card the row sits in the column beside the avatar, so it is narrower there and the chip may collapse earlier). */
+/** Spec 6: five action icons plus the tip counter fit one row at font scale 1.3 in the action row of a 360 dp wide card (spec 11.5: in a list card the row sits in the column beside the avatar, 272 dp wide at 360 dp, so the tips text shows the bare count there; the spread detail row has room for the full chip). */
 @RunWith(AndroidJUnit4::class)
 class ActionRowScaleTest {
     @get:Rule val rule = createComposeRule()
@@ -50,11 +51,11 @@ class ActionRowScaleTest {
     private fun ui(tips: TipSummary, counts: NoteCounts? = null) = NoteUi(note(), Profile.empty(note().author), Profile.empty(note().author), tips = tips, counts = counts)
 
     /** The row alone at exactly [widthDp] (a list card's column, spec 11.5 §2). */
-    private fun setRow(widthDp: Dp, tips: TipSummary, counts: NoteCounts? = null) {
+    private fun setRow(widthDp: Dp, tips: TipSummary, counts: NoteCounts? = null, spread: Boolean = false) {
         rule.setContent {
             val d = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(d.density, fontScale = 1.3f)) {
-                MaterialTheme { Box(Modifier.width(widthDp)) { NoteActionRow(ui(tips, counts), note(), onReply = {}, onRepost = {}, onQuote = {}, onLike = {}, onBookmark = {}, onTip = {}, onShowTippers = {}) } }
+                MaterialTheme { Box(Modifier.width(widthDp)) { NoteActionRow(ui(tips, counts), note(), onReply = {}, onRepost = {}, onQuote = {}, onLike = {}, onBookmark = {}, onTip = {}, onShowTippers = {}, spread = spread) } }
             }
         }
     }
@@ -69,38 +70,57 @@ class ActionRowScaleTest {
         }
     }
 
-    @Test
-    fun allActionsVisibleInsideTheCardAtLargeFont() {
-        // 2.5 XMR from 3 tippers: a short chip ("2.5 · 3") that comfortably fits the ~88 dp left
-        // over after five 48 dp touch-target icons at 360 dp, so it must NOT collapse here.
-        val total = 2_500_000_000_000L
-        val count = 3
-        setNote(360.dp, TipSummary(total, count, emptyList()))
+    /** The five actions right of the reply glyph all lie inside [limit] and the counter follows the Monero glyph on its row. */
+    private fun assertFiveActionsInside(limit: Dp) {
         for (tag in fiveActionTags) {
             rule.onNodeWithTag(tag).assertIsDisplayed()
             val b = rule.onNodeWithTag(tag).getBoundsInRoot()
-            assertTrue("$tag right edge ${b.right} exceeds 360 dp", b.right <= 360.dp)
+            assertTrue("$tag right edge ${b.right} exceeds $limit", b.right <= limit)
         }
         val tip = rule.onNodeWithTag("note-tip-$id8").getBoundsInRoot()
         val chip = rule.onNodeWithTag("note-tips-$id8").getBoundsInRoot()
-        assertTrue("counter must start after the Monero glyph in the same row", chip.left > tip.left + 13.dp && chip.right > tip.right && chip.top < tip.bottom)
+        assertTrue("counter must start after the Monero glyph in the same row: tip=$tip chip=$chip", chip.left > tip.left + 13.dp && chip.top < tip.bottom)
+    }
 
-        // The card is wide enough that the chip must NOT have collapsed to the count-only fallback:
-        // it stays on a single line (well under the 48 dp touch target, and under 2x a one-line
-        // labelSmall's height at 1.3x), showing the full "<amount> · <count>" text.
+    @Test
+    fun allActionsVisibleInsideTheListCardAtLargeFont() {
+        // The list card puts the row in the column beside the avatar: 360 dp card - 2 x 16 dp padding
+        // - 44 dp avatar (LIST_AVATAR) - 12 dp gap (LIST_GAP), both private in ui/common/Common.kt = 272 dp.
+        // At font 1.3 only ~20 dp remain for the tips text, so it shows the bare count "3".
+        val total = 2_500_000_000_000L
+        val count = 3
+        val rowWidth = 360.dp - 32.dp - 44.dp - 12.dp
+        setRow(rowWidth, TipSummary(total, count, emptyList()))
+        assertFiveActionsInside(rowWidth)
+        rule.onNodeWithTag("note-tips-$id8").assertTextEquals(count.toString())
+    }
+
+    @Test
+    fun allActionsVisibleInsideTheDetailCardAtLargeFont() {
+        // The detail card spreads the row over the full inner width. At 412 dp (a common phone width, 380 dp inside the
+        // padding) ~140 dp are left over after five 48 dp icons, enough for "2.5 XMR · 3" at 1.3x, which shows in full
+        // on a single line. (At 360 dp only ~88 dp remain and the unit label makes the chip collapse to the count.)
+        val total = 2_500_000_000_000L
+        val count = 3
+        val rowWidth = 412.dp - 32.dp
+        setRow(rowWidth, TipSummary(total, count, emptyList()), spread = true)
+        assertFiveActionsInside(rowWidth)
+        val chip = rule.onNodeWithTag("note-tips-$id8").getBoundsInRoot()
+        assertTrue("the full chip ends right of the Monero glyph", chip.right > rule.onNodeWithTag("note-tip-$id8").getBoundsInRoot().right)
         val chipHeight = chip.bottom - chip.top
         assertTrue("chip height $chipHeight must fit the 48 dp touch target", chipHeight <= 48.dp)
         assertTrue("chip height $chipHeight must be a single line (< 40 dp)", chipHeight < 40.dp)
+        // built the way the app builds it (NoteActionRow): amount with unit, then the count
         val expectedFull = InstrumentationRegistry.getInstrumentation().targetContext
-            .getString(R.string.note_tips_chip, Presets.format(total), count)
+            .getString(R.string.note_tips_chip, Presets.withUnit(total, AmountUnit.XMR), count)
         rule.onNodeWithTag("note-tips-$id8").assertTextEquals(expectedFull)
     }
 
     @Test
     fun counterCollapsesToCountWhenThereIsNoRoom() {
         // 12.345678900 XMR from 12 tippers formats to the long mono string "0.0123456789 · 12"
-        // (measured ~153 dp unconstrained at 1.3x), which cannot fit in the ~88 dp left over after
-        // five 48 dp touch-target icons even at 360 dp -- let alone a narrower 300 dp card -- so the
+        // (measured ~153 dp unconstrained at 1.3x), which cannot fit in the room left over after
+        // five 48 dp touch-target icons even in a 360 dp card -- let alone a narrower 300 dp one -- so the
         // chip must collapse to the bare count.
         val total = 12_345_678_900L
         val count = 12

@@ -79,6 +79,8 @@
     <string name="media_save_failed">Impossible d\'enregistrer l\'image</string>
     <string name="media_share_title">Partager l\'image</string>
     <string name="media_share_failed">Impossible de partager l\'image</string>
+    <string name="media_save_too_large">L\'image est trop grande pour être enregistrée (plus de 50 Mo)</string>
+    <string name="media_share_too_large">L\'image est trop grande pour être partagée (plus de 50 Mo)</string>
     <string name="profile_extra_relays">Notes aussi depuis %1$s</string>
     <!-- profile header: "12 Following · 3,373 Followers"; the numbers are formatted apart -->
     <string name="profile_following_label">Abonnements</string>
@@ -204,6 +206,8 @@
     <string name="setup_path_new_hint">Crée une nouvelle phrase seed de 25 mots sur ce téléphone. monostr ne fait qu\'observer les pourboires reçus ; pour les dépenser, importez la phrase seed dans Cake Wallet, Monerujo ou Feather.</string>
     <string name="setup_path_existing_hint">Collez l\'adresse principale et la clé de visualisation privée depuis Cake Wallet, Monerujo ou Feather.</string>
     <string name="setup_announced_warning">Ce compte reçoit déjà des pourboires à %1$s…%2$s, configuré sur un autre appareil. Une configuration ici remplace cette adresse.</string>
+    <string name="setup_announced_notice">Les pourboires sont déjà configurés pour ce compte (adresse %1$s…%2$s).</string>
+    <string name="setup_keep_existing">La garder</string>
     <string name="setup_new_wallet">Créer un portefeuille de pourboires (recommandé)</string>
     <string name="setup_existing_wallet">Utiliser un portefeuille existant</string>
     <string name="setup_reuse_wallet">Transférer le portefeuille enregistré vers ce watcher</string>

@@ -1,0 +1,3 @@
+• A configuração de gorjetas abre de imediato; um endereço existente mostra um aviso em vez de fechar
+• Os rascunhos voltam a mostrar as menções como nomes
+• Salvar e compartilhar imagens usa menos memória (até 50 MB)
