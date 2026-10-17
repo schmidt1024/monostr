@@ -33,6 +33,7 @@ import com.monostr.app.ui.thread.ThreadController
 import com.monostr.app.ui.tips.TipDecorations
 import com.monostr.nostr.repo.MuteRepository
 import com.monostr.nostr.repo.ThreadRepository
+import com.monostr.nostr.repo.Slot
 import com.monostr.nostr.repo.ThreadView
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -50,7 +51,7 @@ class ThreadComposeControllerTest {
         val root = note('1', alice, 100)
         val r1 = note('2', bob, 200, replyTo = root.id)
         val r2 = note('3', alice, 300, replyTo = r1.id, root = root.id)
-        val threads = FakeThreads(mapOf(r1.id to ThreadView(root, r1, listOf(r1, r2))))
+        val threads = FakeThreads(mapOf(r1.id to ThreadView(root, r1, listOf(r1, r2), ancestors = listOf(Slot.Shown(root)))))
         val c = ThreadController(r1.id, threads, profiles, FakePublish(), decorations(), BookmarkActions(FakeBookmarks(), eager()), FakeCounts(), eager())
         c.start()
         advanceUntilIdle()

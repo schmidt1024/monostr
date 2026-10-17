@@ -7,6 +7,9 @@ import android.content.Context
 import com.monostr.app.MainActivity
 import com.monostr.app.R
 import com.monostr.app.data.DmSettingsStore
+import com.monostr.app.data.DraftStore
+import com.monostr.app.data.expireDrafts
+import com.monostr.app.data.removeDrafts
 import com.monostr.app.data.HintStore
 import com.monostr.app.data.PrefsDmSettingsStore
 import com.monostr.app.data.dm.DmDatabase
@@ -69,6 +72,8 @@ import com.monostr.nostr.repo.NostrCountsRepository
 import com.monostr.nostr.repo.NostrDmRelaysRepository
 import com.monostr.nostr.repo.NostrDmRepository
 import com.monostr.nostr.repo.NostrPublishRepository
+import com.monostr.nostr.repo.ConversationRepository
+import com.monostr.nostr.repo.NostrConversationRepository
 import com.monostr.nostr.repo.NostrThreadRepository
 import com.monostr.nostr.repo.NostrSearchRepository
 import com.monostr.nostr.repo.NostrTipsRepository
@@ -84,6 +89,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -94,6 +100,8 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import okhttp3.OkHttpClient
@@ -108,6 +116,7 @@ class Ready(
     val engine: NostrEngine,
     val feed: FeedRepository,
     val threads: ThreadRepository,
+    val conversations: ConversationRepository,
     val profiles: ProfileRepository,
     val publish: PublishRepository,
     val tips: TipsRepository,
@@ -157,6 +166,7 @@ interface NostrSessionEntryPoint {
     fun session(): NostrSession
     fun searchRelays(): SearchRelayStore
     fun uiSettings(): UiSettingsStore
+    fun drafts(): DraftStore
 }
 
 /** Spec 6: outcome of re-requesting Amber's permissions. */
@@ -192,6 +202,7 @@ class NostrSession @Inject constructor(
     private val hints: HintStore,
     private val uiSettings: UiSettingsStore,
     private val linkPreviews: LinkPreviews,
+    private val drafts: DraftStore,
 ) {
     private val _state = MutableStateFlow<SessionState>(SessionState.Loading)
     val state: StateFlow<SessionState> = _state.asStateFlow()
@@ -199,6 +210,8 @@ class NostrSession @Inject constructor(
 
     companion object {
         val RESTORE_FAILED: UiText = uiText(R.string.session_restore_failed)
+        /** Logout waits at most this long for the drafts' pictures to leave the server. */
+        private const val DRAFT_CLEANUP_MS = 5_000L
 
         fun renewOutcome(sessionPubkey: String, ok: Boolean, response: Nip55.Response?): RenewResult = when (val o = Nip55.parsePubkeyResponse(ok, response)) {
             is Nip55.Outcome.Pubkey -> if (o.pubkey == sessionPubkey) RenewResult.Updated else RenewResult.WrongKey
@@ -222,7 +235,7 @@ class NostrSession @Inject constructor(
             }
             val signer = signerFor(info)
             if (signer == null) {
-                clearStaleSession()
+                clearStaleSession(info.pubkey)
                 return@withLock
             }
             _state.value = SessionState.Active(start(signer))
@@ -273,9 +286,17 @@ class NostrSession @Inject constructor(
         }
     }
 
-    suspend fun logout() = mutex.withLock {
+    /**
+     * Runs to the end even when the caller is cancelled (e.g. the settings screen is left during the
+     * draft cleanup): a cancelled logout would leave the secret gone but the session still Active.
+     */
+    suspend fun logout() = mutex.withLock { withContext(NonCancellable) { logoutLocked() } }
+
+    private suspend fun logoutLocked() {
         val ready = (_state.value as? SessionState.Active)?.ready
         try {
+            // spec 2026-10-16 §8: the drafts leave the device with the account; their pictures go while signer and engine still work
+            if (ready != null) bestEffort { withTimeoutOrNull(DRAFT_CLEANUP_MS) { removeDrafts(drafts, ready.pubkey, ready.media) } }
             ready?.dms?.stop()
             ready?.engine?.close()
         } finally {
@@ -293,7 +314,7 @@ class NostrSession @Inject constructor(
                 bestEffort { (ready.dmStore as? DmDatabase)?.close() }
                 bestEffort { DmDatabase.delete(context, ready.pubkey) }
             }
-            clearStaleSession()
+            clearStaleSession(ready?.pubkey)
         }
     }
 
@@ -319,11 +340,13 @@ class NostrSession @Inject constructor(
     /**
      * Drops the persisted session and secret and moves to [SessionState.LoggedOut]. The Monero
      * state (view key, setup, pending tips, notification watermarks) belongs to the account and
-     * is cleared too, best effort: one failing step does not stop the others.
+     * is cleared too, best effort: one failing step does not stop the others. So are the drafts of
+     * [pubkey] (spec 2026-10-16 §8; without a signer their pictures stay on the server).
      */
-    private suspend fun clearStaleSession() {
+    private suspend fun clearStaleSession(pubkey: String?) {
         secrets.remove(KeystoreSecretStore.SECRET_NSEC)
         sessions.clear()
+        if (pubkey != null) bestEffort { drafts.removeAll(pubkey) }
         bestEffort { secrets.remove(KeystoreSecretStore.SECRET_VIEW_KEY) }
         bestEffort { tipSettings.setSetup(null) }
         bestEffort { pendingTips.clear() }
@@ -413,10 +436,18 @@ class NostrSession @Inject constructor(
                         ?.let { ProfileJson.fields(it) }
                 },
                 delete = { server, sha256 -> blossom.delete(server, sha256, silent = false) },
+                // spec 2026-10-16 §8: a stored draft still shows its pictures
+                draftPictures = { drafts.all(signer.pubkey).flatMap { d -> d.attachments.map { it.sha256 } } },
+                storedProfile = { profiles.local(listOf(signer.pubkey)).flatMap { listOfNotNull(it.picture, it.banner) } },
             )
+            val conversations = NostrConversationRepository(engine)
+            // spec 2026-10-16 §8: a discarded draft or composer picture stays while a published note or the profile shows it
+            val media = BlossomMediaUploader(ImagePreparer(context.contentResolver), blossom, uiSettings, engine.backgroundScope, inUse = pictures::published)
+            // spec 2026-10-16 §8.2: drafts untouched for 30 days go with their pictures; silent, best effort, off the start path
+            engine.backgroundScope.launch { bestEffort { expireDrafts(drafts, signer.pubkey, System.currentTimeMillis() / 1000, media) } }
             return Ready(
                 pubkey = signer.pubkey, signer = signer, engine = engine,
-                feed = feed, threads = NostrThreadRepository(engine),
+                feed = feed, threads = NostrThreadRepository(engine, conversations), conversations = conversations,
                 profiles = profiles, publish = publish,
                 tips = tips, notifications = NostrNotificationsRepository(engine, tips), search = NostrSearchRepository(engine),
                 bookmarks = NostrBookmarksRepository(engine, signer, watch = engine.backgroundScope),
@@ -428,7 +459,7 @@ class NostrSession @Inject constructor(
                 follows = follows,
                 followCounts = followCounts,
                 deletions = NoteDeletions(engine.backgroundScope),
-                media = BlossomMediaUploader(ImagePreparer(context.contentResolver), blossom, uiSettings, engine.backgroundScope),
+                media = media,
                 pictures = pictures,
                 afterNoteDelete = { n ->
                     pictures.remove(pictures.candidates(n), exceptNoteId = n.id)

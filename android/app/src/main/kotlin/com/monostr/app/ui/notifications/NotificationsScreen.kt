@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -43,6 +44,11 @@ import com.monostr.app.session.NostrSession
 import com.monostr.app.ui.common.BottomTab
 import com.monostr.app.ui.common.LoadingScreen
 import com.monostr.app.ui.common.MonostrBottomBar
+import com.monostr.app.ui.common.HideOnScrollFooter
+import com.monostr.app.ui.common.ShowBarsWhenStuck
+import com.monostr.app.ui.common.rememberHideOnScroll
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import com.monostr.app.ui.common.asString
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
@@ -77,15 +83,19 @@ fun NotificationsScreen(onFeed: () -> Unit, onSearch: () -> Unit, onBookmarks: (
     LaunchedEffect(state.loading, state.items.size) { if (!state.loading) vm.controller.markRead() }
     val message = state.message?.asString()
     LaunchedEffect(message) { message?.let { snackbar.showSnackbar(it); vm.controller.clearMessage() } }
+    val hide = rememberHideOnScroll()
+    val listState = rememberLazyListState()
+    ShowBarsWhenStuck(hide, listState, hasList = !state.loading && state.rows.isNotEmpty())
     Scaffold(
+        modifier = Modifier.nestedScroll(hide.connection),
         topBar = { TopAppBar(title = { Text(stringResource(R.string.notifications_title)) }) },
-        bottomBar = { MonostrBottomBar(BottomTab.NOTIFICATIONS, unread = 0, dmUnread = dmUnread, onFeed = onFeed, onSearch = onSearch, onBookmarks = onBookmarks, onMessages = onMessages, onNotifications = {}) },
+        bottomBar = { HideOnScrollFooter(hide) { MonostrBottomBar(BottomTab.NOTIFICATIONS, unread = 0, dmUnread = dmUnread, onFeed = onFeed, onSearch = onSearch, onBookmarks = onBookmarks, onMessages = onMessages, onNotifications = hide::show, windowInsets = WindowInsets(0)) } },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         when {
             state.loading -> LoadingScreen()
             state.rows.isEmpty() -> Box(Modifier.padding(padding).fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) { Text(stringResource(R.string.notifications_empty), textAlign = TextAlign.Center) }
-            else -> LazyColumn(Modifier.padding(padding).fillMaxSize().testTag("notifications-list")) {
+            else -> LazyColumn(state = listState, modifier = Modifier.padding(padding).fillMaxSize().testTag("notifications-list")) {
                 items(state.rows, key = { it.row.key }) { row ->
                     NotificationRowItem(row, names, onOpenThread = onOpenThread, onOpenProfile = onOpenProfile)
                     HorizontalDivider()

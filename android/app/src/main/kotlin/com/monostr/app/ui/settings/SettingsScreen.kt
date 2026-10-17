@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
@@ -32,6 +33,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -297,8 +299,13 @@ class SettingsViewModel @Inject constructor(
     }
     fun clearNotice() { _notice.value = null }
     init { controller.start(); search.start(); dm.start(); monero.start() }
+    private val _logoutBusy = MutableStateFlow(false)
+    /** True while a logout runs (up to a few seconds for the draft pictures); the button waits. */
+    val logoutBusy: StateFlow<Boolean> = _logoutBusy.asStateFlow()
     /** Logs out; the session clears its state even when closing the engine fails, so navigation always happens. */
     fun logout(onDone: () -> Unit) = viewModelScope.launch {
+        if (_logoutBusy.value) return@launch
+        _logoutBusy.value = true
         try {
             session.logout()
         } catch (e: CancellationException) {
@@ -489,7 +496,14 @@ fun SettingsScreen(onBack: () -> Unit, onMoneroSetup: () -> Unit, onSupport: () 
             Spacer(Modifier.height(8.dp))
             OutlinedButton(onClick = onAbout, modifier = Modifier.fillMaxWidth().testTag("settings-about")) { Text(stringResource(R.string.about_title)) }
             Spacer(Modifier.height(24.dp))
-            OutlinedButton(onClick = { vm.logout(onBack) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.settings_logout)) }
+            val logoutBusy by vm.logoutBusy.collectAsStateWithLifecycle()
+            OutlinedButton(onClick = { vm.logout(onBack) }, enabled = !logoutBusy, modifier = Modifier.fillMaxWidth().testTag("settings-logout")) {
+                if (logoutBusy) {
+                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text(stringResource(R.string.settings_logout))
+            }
         }
     }
 }

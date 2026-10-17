@@ -17,15 +17,19 @@ class OwnPictures(
     /** The fields of the own kind 0 as published now; null when they could not be read (not the same as "none"). */
     private val profileFields: suspend () -> Map<String, String>?,
     private val delete: suspend (server: String, sha256: String) -> Unit,
+    /** Spec 2026-10-16 §8: the SHA-256s the account's stored drafts name; they protect their pictures too. */
+    private val draftPictures: suspend () -> Collection<String> = { emptyList() },
+    /** The picture and banner of the own kind 0 stored in the local database (no network), for [published]. */
+    private val storedProfile: suspend () -> Collection<String> = { emptyList() },
 ) {
     /** The picture addresses of [note] that sit on the configured server. */
     fun candidates(note: Note): List<String> = note.media.map { it.url }.filter { sha256Of(it, server.value) != null }.distinct()
 
     /**
      * Deletes the blobs behind [urls] unless something still shows them; [exceptNoteId] is the note being
-     * deleted, which does not protect its own pictures. Returns how many deletes failed.
-     * A lookup that fails must never read as "nothing uses it": when the own notes or the profile cannot be
-     * read, nothing is deleted and every candidate counts as failed.
+     * deleted, which does not protect its own pictures; a stored draft does (spec 2026-10-16 §8). Returns how
+     * many deletes failed. A lookup that fails must never read as "nothing uses it": when the own notes, the
+     * profile or the drafts cannot be read, nothing is deleted and every candidate counts as failed.
      */
     suspend fun remove(urls: List<String>, exceptNoteId: String? = null): Int {
         val base = server.value
@@ -34,7 +38,8 @@ class OwnPictures(
         // the hash, not the address: the same blob may be named with another extension
         val inUse = try {
             val fields = profileFields() ?: return hashes.size
-            ownNotes().filter { it.id != exceptNoteId }.map { it.content.lowercase() } + fields.values.map { it.lowercase() }
+            ownNotes().filter { it.id != exceptNoteId }.map { it.content.lowercase() } + fields.values.map { it.lowercase() } +
+                draftPictures().map { it.lowercase() }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -52,6 +57,24 @@ class OwnPictures(
             }
         }
         return failed
+    }
+
+    /**
+     * Spec 2026-10-16 §8: true when an own note or the stored own profile shows the blob [sha256], e.g. uploaded
+     * there again (not fresh) while a draft holds the fresh upload. Local reads only, as it runs before every
+     * discard; no stored kind 0 means no profile pictures. A lookup that fails counts as shown. Drafts are not
+     * asked: the composer and the draft expiry discard exactly what a draft names.
+     */
+    suspend fun published(sha256: String): Boolean {
+        val texts = try {
+            ownNotes().map { it.content.lowercase() } + storedProfile().map { it.lowercase() }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return true
+        }
+        val hash = sha256.lowercase()
+        return texts.any { hash in it }
     }
 
     companion object {

@@ -26,7 +26,9 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -195,7 +197,7 @@ class MoneroSetupControllerTest {
         c.loadDefaultWatcher()
         advanceUntilIdle()
         assertEquals(uiText(R.string.error_watcher_unreachable), c.state.value.error)
-        assertEquals(SetupStep.Watcher(url), c.state.value.step)
+        assertEquals(SetupStep.Watcher(url, retry = true), c.state.value.step)
         rig.gateway.infoError = null
         rig.gateway.info = WatcherInfo(watcherPk, emptyList(), "testnet", 1, "x")
         c.loadWatcher()
@@ -392,7 +394,7 @@ class MoneroSetupControllerTest {
         assertTrue(rig.secrets.values.isEmpty(), "no view key on the personal path")
         assertTrue(rig.gateway.registered.isEmpty())
         assertTrue(rig.gateway.unregistered.isEmpty())
-        assertEquals(0, rig.gateway.infoCalls)
+        assertEquals(listOf(Presets.DEFAULT_WATCHER), rig.gateway.infoUrls, "only the prefetch of the prefilled watcher")
     }
 
     @Test
@@ -549,7 +551,7 @@ class MoneroSetupControllerTest {
         rig.tips.statusGate = gate
         val c = controller(rig)
         c.startPersonal(); c.setPersonalInput(nprofile("wss://w.example")); c.loadPersonal()
-        advanceUntilIdle()
+        runCurrent() // not idle: that would run into the 15 s timeout (spec §12)
         assertEquals(true, (c.state.value.step as SetupStep.Personal).loading)
         c.backToWatcher()
         gate.complete(Unit)
@@ -596,7 +598,7 @@ class MoneroSetupControllerTest {
         assertEquals(listOf(listOf("wss://new.example")), rig.relays)
         assertTrue(rig.gateway.unregistered.isEmpty())
         assertTrue(rig.gateway.registered.isEmpty())
-        assertEquals(0, rig.gateway.infoCalls)
+        assertEquals(listOf(Presets.DEFAULT_WATCHER), rig.gateway.infoUrls, "only the prefetch of the prefilled watcher")
     }
 
     @Test
@@ -683,6 +685,225 @@ class MoneroSetupControllerTest {
         assertEquals(SetupStep.Personal("", ""), c.state.value.step)
         c.backToWatcher()
         assertEquals(SetupStep.Watcher(Presets.DEFAULT_WATCHER), c.state.value.step)
+    }
+
+    // spec §12: prefetch, progress and timeout of the watcher check
+
+    @Test
+    fun `a finished prefetch is reused and the next step appears at once`() = runTest {
+        val rig = Rig()
+        val c = controller(rig)
+        assertEquals(listOf(Presets.DEFAULT_WATCHER), rig.gateway.infoUrls, "the prefilled watcher is prefetched")
+        c.loadWatcher()
+        assertTrue(c.state.value.step is SetupStep.Choose, "step ${c.state.value.step}")
+        assertEquals(1, rig.gateway.infoCalls)
+    }
+
+    @Test
+    fun `a running prefetch is joined, not started again`() = runTest {
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val rig = Rig(FakeWatcherGateway().apply { infoGate = gate })
+        val c = controller(rig)
+        c.loadWatcher()
+        val step = c.state.value.step as SetupStep.Watcher
+        assertTrue(step.loading && step.checking, "step $step")
+        gate.complete(Unit)
+        runCurrent()
+        assertTrue(c.state.value.step is SetupStep.Choose, "step ${c.state.value.step}")
+        assertEquals(1, rig.gateway.infoCalls)
+    }
+
+    @Test
+    fun `editing the url cancels the prefetch`() = runTest {
+        val rig = Rig(FakeWatcherGateway().apply { infoGate = kotlinx.coroutines.CompletableDeferred() })
+        val c = controller(rig)
+        c.setWatcherUrl(" ${Presets.DEFAULT_WATCHER} ")
+        assertEquals(0, rig.gateway.infoCancelled, "the same url keeps its prefetch")
+        c.setWatcherUrl(url)
+        assertEquals(1, rig.gateway.infoCancelled)
+        rig.gateway.infoGate = null
+        c.loadWatcher()
+        runCurrent()
+        assertEquals(listOf(Presets.DEFAULT_WATCHER, url), rig.gateway.infoUrls)
+        assertTrue(c.state.value.step is SetupStep.Choose, "step ${c.state.value.step}")
+    }
+
+    @Test
+    fun `a failed prefetch stays silent until the user checks`() = runTest {
+        val rig = Rig(FakeWatcherGateway(infoError = WatcherException.Network(IOException("down"))))
+        val c = controller(rig)
+        assertEquals(SetupStep.Watcher(Presets.DEFAULT_WATCHER), c.state.value.step)
+        assertNull(c.state.value.error)
+        c.loadWatcher()
+        runCurrent()
+        assertEquals(2, rig.gateway.infoCalls, "the check runs anew")
+        assertEquals(uiText(R.string.error_watcher_unreachable), c.state.value.error)
+        assertEquals(SetupStep.Watcher(Presets.DEFAULT_WATCHER, retry = true), c.state.value.step)
+    }
+
+    @Test
+    fun `a rejected watcher is no reason to try again`() = runTest {
+        val rig = Rig(FakeWatcherGateway(infoError = WatcherException.Protocol("bad")))
+        val c = controller(rig)
+        c.loadWatcher()
+        runCurrent()
+        assertEquals(SetupStep.Watcher(Presets.DEFAULT_WATCHER), c.state.value.step)
+        assertEquals(uiText(R.string.error_watcher_invalid), c.state.value.error)
+    }
+
+    @Test
+    fun `a slow check says so after 3 s and times out after 15 s`() = runTest {
+        val rig = Rig(FakeWatcherGateway().apply { infoGate = kotlinx.coroutines.CompletableDeferred() })
+        val c = controller(rig)
+        c.setWatcherUrl(url); c.loadWatcher()
+        advanceTimeBy(2_999); runCurrent()
+        assertEquals(SetupStep.Watcher(url, loading = true, checking = true), c.state.value.step)
+        advanceTimeBy(2); runCurrent()
+        assertEquals(SetupStep.Watcher(url, loading = true, checking = true, slow = true), c.state.value.step)
+        advanceTimeBy(11_998); runCurrent()
+        assertNull(c.state.value.error)
+        advanceTimeBy(2); runCurrent()
+        assertEquals(MoneroSetupController.ERR_TIMEOUT, c.state.value.error)
+        assertEquals(SetupStep.Watcher(url, retry = true), c.state.value.step)
+        assertEquals(2, rig.gateway.infoCancelled, "prefetch (url edited) and the timed-out check")
+    }
+
+    @Test
+    fun `cancel stops the check without an error`() = runTest {
+        val rig = Rig(FakeWatcherGateway().apply { infoGate = kotlinx.coroutines.CompletableDeferred() })
+        val c = controller(rig)
+        c.loadWatcher()
+        advanceTimeBy(3_500); runCurrent()
+        assertTrue((c.state.value.step as SetupStep.Watcher).slow)
+        c.cancelCheck()
+        assertEquals(SetupStep.Watcher(Presets.DEFAULT_WATCHER), c.state.value.step)
+        advanceTimeBy(20_000); runCurrent()
+        assertEquals(SetupStep.Watcher(Presets.DEFAULT_WATCHER), c.state.value.step)
+        assertNull(c.state.value.error)
+        assertEquals(1, rig.gateway.infoCancelled)
+    }
+
+    @Test
+    fun `the personal check is slow after 3 s and times out after 15 s`() = runTest {
+        val rig = Rig()
+        rig.tips.statusGate = kotlinx.coroutines.CompletableDeferred()
+        val c = controller(rig)
+        val input = nprofile("wss://w.example")
+        c.startPersonal(); c.setPersonalInput(input); c.loadPersonal()
+        advanceTimeBy(2_999); runCurrent()
+        assertEquals(SetupStep.Personal(input, "", loading = true), c.state.value.step)
+        advanceTimeBy(2); runCurrent()
+        assertEquals(SetupStep.Personal(input, "", loading = true, slow = true), c.state.value.step)
+        advanceTimeBy(12_000); runCurrent()
+        assertEquals(MoneroSetupController.ERR_TIMEOUT, c.state.value.error)
+        assertEquals(SetupStep.Personal(input, "", retry = true), c.state.value.step)
+    }
+
+    @Test
+    fun `the personal check can be cancelled`() = runTest {
+        val rig = Rig()
+        rig.tips.statuses[watcherHex] = status()
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        rig.tips.statusGate = gate
+        val c = controller(rig)
+        val input = nprofile("wss://w.example")
+        c.startPersonal(); c.setPersonalInput(input); c.loadPersonal()
+        advanceTimeBy(4_000); runCurrent()
+        c.cancelCheck()
+        assertEquals(SetupStep.Personal(input, ""), c.state.value.step)
+        gate.complete(Unit)
+        advanceTimeBy(20_000); runCurrent()
+        assertEquals(SetupStep.Personal(input, ""), c.state.value.step)
+        assertNull(c.state.value.error)
+    }
+
+    /** Started, but time is not advanced: for the start phase in virtual time. */
+    private fun TestScope.started(rig: Rig, intro: Boolean = false) = MoneroSetupController(
+        intro = intro, gateway = rig.gateway, tips = rig.tips, settings = rig.settings, secrets = rig.secrets,
+        relays = { rig.relays += it }, scope = eager(), selfPubkey = self, keyGen = { rig.keys }, random = Random(7), now = { NOW },
+        formatTime = { "t$it" },
+    ).also { it.start(); runCurrent() }
+
+    @Test
+    fun `a slow start phase shows the hint after 3 s`() = runTest {
+        val rig = Rig(tips = FakeTips().apply { liveInfos = emptyMap(); liveDelayMs = 4_000 })
+        val c = started(rig, intro = true)
+        assertEquals(SetupStep.Watcher(Presets.DEFAULT_WATCHER, loading = true), c.state.value.step)
+        advanceTimeBy(3_001); runCurrent()
+        assertEquals(SetupStep.Watcher(Presets.DEFAULT_WATCHER, loading = true, slow = true), c.state.value.step)
+        advanceTimeBy(1_000); runCurrent()
+        assertEquals(SetupStep.Watcher(Presets.DEFAULT_WATCHER), c.state.value.step)
+        assertNull(c.state.value.announced)
+    }
+
+    @Test
+    fun `the announced address lookup gives up after 5 s and counts as nothing announced`() = runTest {
+        val announced = MoneroKeys.generate().address(Network.MAINNET)
+        val rig = Rig(tips = FakeTips().apply { liveInfos = mapOf(self to PaymentInfo.Enabled(announced, Watcher.Http(url, watcherPk))); liveDelayMs = 8_000 })
+        val c = started(rig, intro = true)
+        advanceTimeBy(4_999); runCurrent()
+        assertTrue((c.state.value.step as SetupStep.Watcher).loading)
+        advanceTimeBy(2); runCurrent()
+        assertEquals(SetupStep.Watcher(Presets.DEFAULT_WATCHER), c.state.value.step)
+        assertNull(c.state.value.announced)
+        assertFalse(c.state.value.finished, "the intro stays: nothing counts as announced")
+        assertEquals(listOf(Presets.DEFAULT_WATCHER), rig.gateway.infoUrls, "the watcher step starts its prefetch as usual")
+    }
+
+    @Test
+    fun `a fast start phase is unchanged`() = runTest {
+        val announced = MoneroKeys.generate().address(Network.MAINNET)
+        val rig = Rig(tips = FakeTips().apply { liveInfos = mapOf(self to PaymentInfo.Enabled(announced, Watcher.Http(url, watcherPk))) })
+        val c = started(rig)
+        assertEquals(SetupStep.Watcher(Presets.DEFAULT_WATCHER), c.state.value.step)
+        assertEquals(announced.encode(), c.state.value.announced)
+    }
+
+    @Test
+    fun `back to watcher reuses the prefetch or starts one for the edited url`() = runTest {
+        val rig = Rig()
+        val c = controller(rig)
+        c.startPersonal(); c.backToWatcher()
+        assertEquals(1, rig.gateway.infoCalls, "the finished prefetch is kept")
+        c.setWatcherUrl(url)
+        c.startPersonal(); c.backToWatcher()
+        assertEquals(listOf(Presets.DEFAULT_WATCHER, url), rig.gateway.infoUrls)
+        c.loadWatcher()
+        assertTrue(c.state.value.step is SetupStep.Choose, "step ${c.state.value.step}")
+        assertEquals(2, rig.gateway.infoCalls)
+    }
+
+    @Test
+    fun `later during the start phase stops it, no watcher step and no prefetch follow`() = runTest {
+        val rig = Rig(tips = FakeTips().apply { liveInfos = emptyMap(); liveDelayMs = 4_000 })
+        val c = started(rig, intro = true)
+        advanceTimeBy(1_000); runCurrent()
+        c.skip(); runCurrent()
+        advanceTimeBy(10_000); runCurrent()
+        assertTrue(c.state.value.finished)
+        assertEquals(SetupStep.Watcher(Presets.DEFAULT_WATCHER, loading = true), c.state.value.step, "the start phase did not go on")
+        assertEquals(emptyList<String>(), rig.gateway.infoUrls, "no prefetch after leaving")
+    }
+
+    @Test
+    fun `later drops the prefetch`() = runTest {
+        val rig = Rig(FakeWatcherGateway().apply { infoGate = kotlinx.coroutines.CompletableDeferred() })
+        val c = controller(rig, intro = true)
+        c.skip(); runCurrent()
+        assertTrue(c.state.value.finished)
+        assertEquals(1, rig.gateway.infoCancelled)
+    }
+
+    @Test
+    fun `later during a check stops it`() = runTest {
+        val rig = Rig(FakeWatcherGateway().apply { infoGate = kotlinx.coroutines.CompletableDeferred() })
+        val c = controller(rig, intro = true)
+        c.setWatcherUrl(url); c.loadWatcher()
+        c.skip()
+        advanceTimeBy(20_000); runCurrent()
+        assertTrue(c.state.value.finished)
+        assertNull(c.state.value.error, "no timeout after leaving")
+        assertEquals(2, rig.gateway.infoCancelled, "prefetch (url edited) and the check")
     }
 
     private companion object {

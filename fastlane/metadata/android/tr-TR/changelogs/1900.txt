@@ -1,0 +1,2 @@
+• X gibi ana akış: yanıtlarla tek bir akış, yanıtladıkları notun altında
+• Konular yanıtları dallar halinde gösterir, bir yanıta verilen yanıt onun altında durur

@@ -119,13 +119,18 @@ private fun MediaGrid(media: List<NoteMedia>, tag: String, blurred: Boolean, pla
     val shape = RoundedCornerShape(12.dp)
     if (media.size == 1) {
         val m = media[0]
+        val video = m.kind == NoteMedia.Kind.VIDEO
+        // spec 2026-10-16 §5/§6: without dim, the size learned when the picture (or the video's poster) loaded;
+        // remembered per URL, so scrolling back shows the right box at once
+        var learned by remember(m.url) { mutableStateOf(MediaRatios[m.url]) }
         // Full width, height from the real ratio up to a cap (see MediaBoxes): only a picture taller
         // than the cap is cropped, everything else is fully visible.
         BoxWithConstraints(Modifier.fillMaxWidth()) {
-            val box = MediaBoxes.single(m.dim, widthDp = maxWidth.value)
+            val box = MediaBoxes.single(m.dim ?: learned, widthDp = maxWidth.value, video = video)
             MediaCell(
                 m, 0, tag, Modifier.fillMaxWidth().aspectRatio(box.ratio).clip(shape), blurred, placeholderOnly, enabled, onOpenMedia, onOpenVideo,
                 contentScale = if (box.crop) ContentScale.Crop else ContentScale.Fit,
+                onSize = if (m.dim == null) { w, h -> MediaRatios.put(m.url, w, h); learned = MediaRatios[m.url] } else null,
             )
         }
         return
@@ -147,6 +152,8 @@ private fun MediaGrid(media: List<NoteMedia>, tag: String, blurred: Boolean, pla
 private fun MediaCell(
     m: NoteMedia, index: Int, tag: String, modifier: Modifier, blurred: Boolean, placeholderOnly: Boolean, enabled: Boolean, onOpenMedia: (Int) -> Unit, onOpenVideo: (String) -> Unit,
     contentScale: ContentScale = ContentScale.Crop,
+    /** Called with the loaded picture's (or poster's) size; only for a single item without `dim`. */
+    onSize: ((Int, Int) -> Unit)? = null,
 ) {
     val placeholder = rememberBlurhash(m.blurhash)
     val videoLabel = stringResource(R.string.media_video)
@@ -173,6 +180,7 @@ private fun MediaCell(
                 model = source, contentDescription = m.alt, contentScale = contentScale, modifier = Modifier.fillMaxSize(),
                 loading = { if (placeholder != null) Image(placeholder, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) },
                 error = { Icon(Icons.Filled.BrokenImage, contentDescription = stringResource(R.string.media_failed), tint = MaterialTheme.colorScheme.outline) },
+                onSuccess = { s -> onSize?.invoke(s.result.image.width, s.result.image.height) },
                 onError = { failed = true },
             )
         }

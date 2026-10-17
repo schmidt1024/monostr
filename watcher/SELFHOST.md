@@ -4,6 +4,9 @@ The watcher holds the private view key of your tip wallet, detects incoming tips
 signed receipts on Nostr. `watcher.monostr.com` does this for anyone; if you run your own, nobody
 else sees your view key or your incoming payments.
 
+Step-by-step tutorials with screenshots: [personal watcher](https://monostr.com/watcher/personal/)
+and [host a watcher](https://monostr.com/watcher/self-host/).
+
 This setup runs everything on one host with Docker Compose: a pruned Monero node (`monerod`), the
 scanner `monero-lws`, the watcher, and Caddy for HTTPS.
 
@@ -26,7 +29,8 @@ sed -i "s/^WATCHER_SECRET_KEY=.*/WATCHER_SECRET_KEY=$(openssl rand -hex 32)/" .e
 ```
 
 Fill in `.env`: your npub (`WATCHER_RECIPIENT`), the primary address and private view key of your
-tip wallet (Cake, Monerujo and Feather show both under the wallet's keys). Then:
+tip wallet (Cake: Settings → Recovery & Keys; Monerujo: Settings → Show Secrets!; monfluo: tap the
+wallet name → Display wallet secrets). Then:
 
 ```bash
 docker compose -f compose.personal.yml up -d --build

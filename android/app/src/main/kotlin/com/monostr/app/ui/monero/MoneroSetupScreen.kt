@@ -27,6 +27,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -61,6 +62,8 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import android.util.Log
+import com.monostr.app.BuildConfig
 import com.monostr.app.R
 import com.monostr.app.data.SecretStore
 import com.monostr.app.data.TipSettingsStore
@@ -80,6 +83,8 @@ class MoneroSetupViewModel @Inject constructor(session: NostrSession, settings: 
             intro = handle.get<Boolean>("intro") ?: false,
             gateway = ready.watchers, tips = ready.tips, settings = settings, secrets = secrets,
             relays = { session.ensureRelays(it) }, scope = viewModelScope, selfPubkey = ready.pubkey,
+            // spec §12: where the wait of the first /v1/info after login comes from
+            log = { if (BuildConfig.DEBUG) Log.d("monostr.setup", it) },
         )
         controller.start()
     }
@@ -113,7 +118,7 @@ fun MoneroSetupScreen(onDone: () -> Unit, vm: MoneroSetupViewModel = hiltViewMod
             // spec 6.1: leaving the intro with the system back gesture counts as "later"
             if (state.intro) BackHandler { c.skip() }
             when (val step = state.step) {
-                is SetupStep.Watcher -> WatcherStep(step, state.intro, state.error?.asString(), c)
+                is SetupStep.Watcher -> WatcherStep(step, state.intro, state.error?.asString(), c::setWatcherUrl, c::loadWatcher, c::cancelCheck, c::startPersonal, c::skip)
                 is SetupStep.Choose -> ChooseStep(step, state.announced, c)
                 is SetupStep.Seed -> SeedStep(step, c)
                 is SetupStep.Verify -> VerifyStep(step, c)
@@ -121,15 +126,39 @@ fun MoneroSetupScreen(onDone: () -> Unit, vm: MoneroSetupViewModel = hiltViewMod
                 is SetupStep.Confirm -> ConfirmStep(step, state.error?.asString(), c)
                 SetupStep.Registering -> Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) { CircularProgressIndicator(); Text(stringResource(R.string.setup_registering)) }
                 is SetupStep.Done -> DoneStep(step, c)
-                is SetupStep.Personal -> PersonalStep(step, state.error?.asString(), c::setPersonalInput, c::setPersonalRelay, c::loadPersonal, c::backToWatcher)
+                is SetupStep.Personal -> PersonalStep(step, state.error?.asString(), c::setPersonalInput, c::setPersonalRelay, c::loadPersonal, c::backToWatcher, c::cancelCheck)
                 is SetupStep.PersonalConfirm -> PersonalConfirmStep(step, state.error?.asString(), c::confirmPersonal, c::backToWatcher)
             }
         }
     }
 }
 
+/** Spec §12: a running check shows a thin bar, a spinner in the button and, after 3 s, a hint with Cancel. */
 @Composable
-private fun ColumnScope.WatcherStep(step: SetupStep.Watcher, intro: Boolean, error: String?, c: MoneroSetupController) {
+private fun CheckProgress(slow: Boolean, onCancel: (() -> Unit)?, progressTag: String, hintTag: String, cancelTag: String) {
+    LinearProgressIndicator(Modifier.fillMaxWidth().testTag(progressTag))
+    if (slow) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(stringResource(R.string.setup_slow_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f).testTag(hintTag))
+            if (onCancel != null) TextButton(onClick = onCancel, modifier = Modifier.testTag(cancelTag)) { Text(stringResource(R.string.setup_cancel_check)) }
+        }
+    }
+}
+
+/** The button content while busy: a small spinner and [text]. */
+@Composable
+private fun BusyLabel(text: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+        Text(text)
+    }
+}
+
+@Composable
+internal fun ColumnScope.WatcherStep(
+    step: SetupStep.Watcher, intro: Boolean, error: String?,
+    onUrl: (String) -> Unit, onLoad: () -> Unit, onCancel: () -> Unit, onPersonal: () -> Unit, onSkip: () -> Unit,
+) {
     if (intro) {
         Text(stringResource(R.string.setup_intro_text), style = MaterialTheme.typography.bodyMedium)
         Text(stringResource(R.string.setup_intro_wallet_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -138,20 +167,28 @@ private fun ColumnScope.WatcherStep(step: SetupStep.Watcher, intro: Boolean, err
     Text(stringResource(R.string.setup_watcher_heading), style = MaterialTheme.typography.titleMedium)
     Text(stringResource(R.string.setup_watcher_text), style = MaterialTheme.typography.bodySmall)
     OutlinedTextField(
-        value = step.url, onValueChange = c::setWatcherUrl, singleLine = true, label = { Text(stringResource(R.string.setup_watcher_url)) },
+        value = step.url, onValueChange = onUrl, singleLine = true, label = { Text(stringResource(R.string.setup_watcher_url)) },
         isError = error != null, supportingText = { error?.let { Text(it) } }, enabled = !step.loading,
         modifier = Modifier.fillMaxWidth().testTag("setup-watcher-url"),
     )
+    // the start phase (stored settings, announced address) shows progress too, but "Loading…" and no Cancel
+    if (step.loading) CheckProgress(step.slow, onCancel.takeIf { step.checking }, "setup-progress", "setup-slow-hint", "setup-cancel-check")
     Spacer(Modifier.height(8.dp))
-    Button(onClick = c::loadWatcher, enabled = !step.loading, modifier = Modifier.fillMaxWidth().testTag("setup-load")) { Text(stringResource(if (step.loading) R.string.state_loading else R.string.setup_load_watcher)) }
+    Button(onClick = onLoad, enabled = !step.loading, modifier = Modifier.fillMaxWidth().testTag("setup-load")) {
+        when {
+            step.checking -> BusyLabel(stringResource(R.string.setup_checking))
+            step.loading -> BusyLabel(stringResource(R.string.state_loading))
+            else -> Text(stringResource(if (step.retry) R.string.setup_try_again else R.string.setup_load_watcher))
+        }
+    }
     Spacer(Modifier.height(8.dp))
-    OutlinedButton(onClick = c::startPersonal, enabled = !step.loading, modifier = Modifier.fillMaxWidth().testTag("setup-personal")) { Text(stringResource(R.string.setup_personal_watcher)) }
+    OutlinedButton(onClick = onPersonal, enabled = !step.loading, modifier = Modifier.fillMaxWidth().testTag("setup-personal")) { Text(stringResource(R.string.setup_personal_watcher)) }
     Text(stringResource(R.string.setup_personal_watcher_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    if (intro) TextButton(onClick = c::skip, modifier = Modifier.align(Alignment.End).testTag("setup-skip")) { Text(stringResource(R.string.setup_skip)) }
+    if (intro) TextButton(onClick = onSkip, modifier = Modifier.align(Alignment.End).testTag("setup-skip")) { Text(stringResource(R.string.setup_skip)) }
 }
 
 @Composable
-internal fun PersonalStep(step: SetupStep.Personal, error: String?, onInput: (String) -> Unit, onRelay: (String) -> Unit, onLoad: () -> Unit, onBack: () -> Unit) {
+internal fun PersonalStep(step: SetupStep.Personal, error: String?, onInput: (String) -> Unit, onRelay: (String) -> Unit, onLoad: () -> Unit, onBack: () -> Unit, onCancel: () -> Unit = {}) {
     Text(stringResource(R.string.setup_personal_title), style = MaterialTheme.typography.titleMedium)
     Text(stringResource(R.string.setup_personal_text), style = MaterialTheme.typography.bodySmall)
     OutlinedTextField(
@@ -164,8 +201,12 @@ internal fun PersonalStep(step: SetupStep.Personal, error: String?, onInput: (St
         placeholder = { Text(stringResource(R.string.setup_personal_relay_hint)) }, enabled = !step.loading,
         modifier = Modifier.fillMaxWidth().testTag("setup-personal-relay"),
     )
+    if (step.loading) CheckProgress(step.slow, onCancel, "setup-personal-progress", "setup-personal-slow-hint", "setup-personal-cancel-check")
     Spacer(Modifier.height(8.dp))
-    Button(onClick = onLoad, enabled = !step.loading, modifier = Modifier.fillMaxWidth().testTag("setup-personal-load")) { Text(stringResource(if (step.loading) R.string.state_loading else R.string.setup_personal_load)) }
+    Button(onClick = onLoad, enabled = !step.loading, modifier = Modifier.fillMaxWidth().testTag("setup-personal-load")) {
+        if (step.loading) BusyLabel(stringResource(R.string.setup_checking))
+        else Text(stringResource(if (step.retry) R.string.setup_try_again else R.string.setup_personal_load))
+    }
     TextButton(onClick = onBack, enabled = !step.loading, modifier = Modifier.testTag("setup-personal-back")) { Text(stringResource(R.string.action_back)) }
 }
 

@@ -9,7 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -46,6 +46,8 @@ import com.monostr.app.ui.common.LoadingScreen
 import com.monostr.app.ui.common.MessageSnackbar
 import com.monostr.app.ui.common.NoteActions
 import com.monostr.app.ui.common.NoteCard
+import com.monostr.app.ui.common.ShowRepliesRow
+import com.monostr.app.ui.common.UnavailableRow
 import com.monostr.app.ui.common.NoteDeletions
 import com.monostr.app.ui.common.Message
 import com.monostr.app.ui.common.MuteActions
@@ -63,6 +65,8 @@ import com.monostr.app.ui.tips.TipSheetFactory
 import com.monostr.app.ui.tips.TipSheetHost
 import com.monostr.app.ui.tips.TippersDialog
 import com.monostr.nostr.model.Note
+import com.monostr.nostr.model.Strands
+import com.monostr.nostr.repo.Slot
 import com.monostr.nostr.repo.CountsRepository
 import com.monostr.nostr.repo.MuteRepository
 import com.monostr.nostr.repo.ProfileRepository
@@ -81,7 +85,50 @@ import javax.inject.Inject
 data class ThreadUiState(val items: List<NoteUi> = emptyList(), val focusedId: String? = null, val loading: Boolean = true, val notFound: Boolean = false, val message: Message? = null,
     /** The focused note was deleted (spec 4.2): the screen closes. */
     val closed: Boolean = false,
+    /** The page's layout, top to bottom (spec 2026-10-16 §4.2); each row's note is looked up in [items]. */
+    val rows: List<ThreadRow> = emptyList(),
 )
+
+/** One row of the thread page (spec 2026-10-16 §4.2), top to bottom. [id] keys the LazyColumn. */
+sealed interface ThreadRow {
+    val id: String
+
+    /** A note above the focused one; its NoteUi comes from items, else it shows as unavailable. */
+    data class Ancestor(override val id: String, val lineAbove: Boolean) : ThreadRow
+    data class Focused(override val id: String, val lineAbove: Boolean) : ThreadRow
+
+    /**
+     * A direct reply; hidden, it stays as an unavailable row only while its child is shown (so the strand keeps its head), else it leaves with its More row.
+     * [orphan]: its parent is not the focused note (focused = root, parent unknown), so it keeps "Replying to @name" (spec 2026-10-16 §4.1).
+     */
+    data class Reply(override val id: String, val lineBelow: Boolean, val keepWhenHidden: Boolean, val orphan: Boolean) : ThreadRow
+
+    /** The one reply shown under a strand's head; always joined to it by a line. */
+    data class Child(override val id: String) : ThreadRow
+
+    /** "Show replies": opens [open], the strand's head; id = "more-$open". */
+    data class More(override val id: String, val open: String) : ThreadRow
+}
+
+/**
+ * The rows the screen shows, given the ids of the notes in items (spec 2026-10-16 §4.2): a hidden ancestor stays as
+ * unavailable; a hidden child leaves; a hidden reply stays as unavailable only when it has a shown child, else it
+ * leaves together with its child row and its "Show replies".
+ */
+internal fun visibleRows(rows: List<ThreadRow>, shown: Set<String>): List<ThreadRow> {
+    val dropped = HashSet<String>()
+    rows.forEachIndexed { i, row ->
+        when (row) {
+            is ThreadRow.Child -> if (row.id !in shown) dropped += row.id
+            is ThreadRow.Reply -> if (row.id !in shown) {
+                val child = rows.getOrNull(i + 1) as? ThreadRow.Child
+                if (!row.keepWhenHidden || child == null || child.id !in shown) dropped += row.id
+            }
+            else -> Unit
+        }
+    }
+    return rows.filterNot { it.id in dropped || (it is ThreadRow.More && it.open in dropped) }
+}
 
 class ThreadController(
     private val noteId: String,
@@ -137,12 +184,26 @@ class ThreadController(
                         _state.update { it.copy(items = emptyList(), loading = false, notFound = true) }
                         return@collect
                     }
-                    val ordered = listOfNotNull(view.root) + view.replies.filter { it.id != view.root?.id }
-                    val withFocused = if (ordered.none { it.id == view.focused.id }) ordered + view.focused else ordered
+                    // spec 2026-10-16 §4: the ancestor chain, the focused note, then each direct reply with at most one child
+                    val strands = Strands.build(view.focused, view.replies)
+                    // spec 2026-10-16 §4.1: the root stays on top even when the walk did not reach it (or failed)
+                    val ancestors = view.root?.takeIf { r -> r.id != view.focused.id && view.ancestors.none { it.id == r.id } }
+                        ?.let { listOf(Slot.Shown(it)) + view.ancestors } ?: view.ancestors
+                    val shownAncestors = ancestors.filterIsInstance<Slot.Shown>().map { it.note }
+                    val withFocused = (shownAncestors + view.focused + strands.flatMap { listOfNotNull(it.reply, it.child) }).distinctBy { it.id }
+                    val rows = buildList {
+                        ancestors.forEachIndexed { i, a -> add(ThreadRow.Ancestor(a.id, lineAbove = i > 0)) }
+                        add(ThreadRow.Focused(view.focused.id, lineAbove = ancestors.isNotEmpty()))
+                        for (s in strands) {
+                            add(ThreadRow.Reply(s.reply.id, lineBelow = s.child != null, keepWhenHidden = s.child != null, orphan = s.reply.replyToId != view.focused.id))
+                            s.child?.let { add(ThreadRow.Child(it.id)) }
+                            if (s.hidden > 0) add(ThreadRow.More("more-${s.reply.id}", open = s.reply.id))
+                        }
+                    }
                     profiles.prefetch(withFocused.map { it.author })
                     all = withFocused.map { n -> NoteUi(n, profiles.get(n.author), profiles.get(n.author)) }
                     val items = visibility.visible(all.map(::fresh), keep = view.focused.id)
-                    _state.update { it.copy(items = items, focusedId = view.focused.id, loading = false) }
+                    _state.update { it.copy(items = items, rows = rows, focusedId = view.focused.id, loading = false) }
                     decorations.track(withFocused)
                 }
                 if (!seen) _state.update { it.copy(loading = false, notFound = true) }
@@ -242,40 +303,61 @@ fun ThreadScreen(
             state.notFound -> Text(stringResource(R.string.thread_not_found), Modifier.padding(padding).padding(16.dp))
             else -> Box(Modifier.padding(padding).fillMaxSize()) {
                 val listState = rememberLazyListState()
+                val byId = state.items.associateBy { it.note.id }
+                val rows = remember(state.rows, byId.keys) { visibleRows(state.rows, byId.keys) }
                 // spec 11.5 §4: the thread opens with the focused note in view, like X's detail view — once;
-                // coming back from a profile or a rotation keeps the position the user scrolled to
+                // coming back from a profile or a rotation keeps the position the user scrolled to.
+                // The ancestors arrive after the first view (spec 2026-10-16 §4): wait for them unless the user scrolls first
                 var scrolled by rememberSaveable(state.focusedId) { mutableStateOf(false) }
-                LaunchedEffect(state.focusedId, state.items.isNotEmpty()) {
-                    if (scrolled || state.items.isEmpty()) return@LaunchedEffect
-                    val index = state.items.indexOfFirst { it.note.id == state.focusedId }
-                    if (index > 0) listState.scrollToItem(index)
+                val focusedIndex = rows.indexOfFirst { it is ThreadRow.Focused }
+                LaunchedEffect(state.focusedId, focusedIndex) {
+                    if (scrolled || focusedIndex <= 0) return@LaunchedEffect
+                    listState.scrollToItem(focusedIndex)
                     scrolled = true
                 }
+                LaunchedEffect(listState.isScrollInProgress) { if (listState.isScrollInProgress) scrolled = true }
                 LazyColumn(state = listState, modifier = Modifier.fillMaxSize().testTag("thread-list")) {
-                    items(state.items, key = { it.note.id }) { n ->
-                        NoteCard(
-                            note = n,
-                            replyContext = false,
-                            onOpen = { if (n.note.id != state.focusedId) onOpenThread(n.note.id) },
-                            onOpenProfile = onOpenProfile,
-                            onReply = { onReply(n.note.id) },
-                            onLike = { vm.controller.like(n.target) },
-                            onReact = { e -> vm.controller.react(n.target, e) },
-                            onRepost = { vm.controller.repost(n.target) },
-                            onQuote = { onQuote(n.target.id) },
-                            onTip = { vm.tipSheet.open(n.target) },
-                            onShowTippers = { tippersFor = n.target },
-                            onHashtag = onHashtag,
-                            onOpenNote = onOpenThread,
-                            onBookmark = { vm.controller.bookmark(n.target) },
-                            onOpenMedia = onOpenMedia,
-                            onOpenVideo = onOpenVideo,
-                            names = names,
-                            menu = vm.menu,
-                            collapsed = n.note.id != state.focusedId,
-                            detail = n.note.id == state.focusedId,
-                        )
-                        HorizontalDivider()
+                    itemsIndexed(rows, key = { _, row -> row.id }) { i, row ->
+                        val next = rows.getOrNull(i + 1)
+                        when (row) {
+                            is ThreadRow.More -> ShowRepliesRow(onClick = { onOpenThread(row.open) })
+                            else -> {
+                                val lineAbove = when (row) {
+                                    is ThreadRow.Ancestor -> row.lineAbove
+                                    is ThreadRow.Focused -> row.lineAbove
+                                    else -> row is ThreadRow.Child
+                                }
+                                // the chain runs on into the focused note; a strand's head joins its child only when that child is shown
+                                val lineBelow = row is ThreadRow.Ancestor || (row is ThreadRow.Reply && row.lineBelow && next is ThreadRow.Child)
+                                val n = byId[row.id]
+                                if (n == null) UnavailableRow(lineAbove, lineBelow) else NoteCard(
+                                    note = n,
+                                    replyContext = row is ThreadRow.Reply && row.orphan,
+                                    onOpen = { if (n.note.id != state.focusedId) onOpenThread(n.note.id) },
+                                    onOpenProfile = onOpenProfile,
+                                    onReply = { onReply(n.note.id) },
+                                    onLike = { vm.controller.like(n.target) },
+                                    onReact = { e -> vm.controller.react(n.target, e) },
+                                    onRepost = { vm.controller.repost(n.target) },
+                                    onQuote = { onQuote(n.target.id) },
+                                    onTip = { vm.tipSheet.open(n.target) },
+                                    onShowTippers = { tippersFor = n.target },
+                                    onHashtag = onHashtag,
+                                    onOpenNote = onOpenThread,
+                                    onBookmark = { vm.controller.bookmark(n.target) },
+                                    onOpenMedia = onOpenMedia,
+                                    onOpenVideo = onOpenVideo,
+                                    names = names,
+                                    menu = vm.menu,
+                                    collapsed = n.note.id != state.focusedId,
+                                    detail = n.note.id == state.focusedId,
+                                    lineAbove = lineAbove,
+                                    lineBelow = lineBelow,
+                                )
+                            }
+                        }
+                        // one divider below the focused note and after each strand, none inside a strand or the ancestor chain
+                        if (row is ThreadRow.Focused || next is ThreadRow.Reply || next == null) HorizontalDivider()
                     }
                 }
                 VisibleNotes(listState, vm.controller::visible)

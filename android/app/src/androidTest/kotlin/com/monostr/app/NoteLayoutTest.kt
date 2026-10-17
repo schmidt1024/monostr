@@ -2,7 +2,6 @@ package com.monostr.app
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasTestTag
-import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -120,7 +119,8 @@ class NoteLayoutTest {
         val reply = EventBuilder.textNoteReply("a reply", long, null, null).signWithKeys(alice)
         seedAndShow(long, reply)
         rule.waitUntil(30_000) { nodes("note-more-${id8(long)}").isNotEmpty() } // collapsed in the feed
-        rule.onNodeWithTag("note-text-${id8(long)}").performClick() // opens the thread, focused = long
+        // 0.19.0: the reply is in the feed with `long` as its ancestor, so the tag can exist twice; either opens the thread of `long`
+        rule.onAllNodes(hasTestTag("note-text-${id8(long)}"))[0].performClick() // opens the thread, focused = long
         rule.waitUntil(15_000) { nodes("note-time-${id8(long)}").isNotEmpty() }
         assertTrue(nodes("note-more-${id8(long)}").isEmpty()) // whole, never collapsed
         val focused = rule.onNodeWithTag("note-text-${id8(long)}").fetchSemanticsNode().boundsInRoot
@@ -143,9 +143,9 @@ class NoteLayoutTest {
         val last = replies.last()
         seedAndShow(root, *replies.toTypedArray())
         rule.waitUntil(30_000) { rule.onAllNodesWithText("root ", substring = true).fetchSemanticsNodes().isNotEmpty() }
-        // spec "feed without replies" (0.11.8): the feed shows the root alone; the replies wait in the thread
-        assertTrue(rule.onAllNodes(hasText("reply ", substring = true)).fetchSemanticsNodes().isEmpty())
-        rule.onNodeWithTag("note-text-${id8(root)}").performClick()
+        // 0.19.0 (spec conversations-x-style §2): replies of followed accounts are in the feed, each with its
+        // ancestor above, so the root's text can appear more than once; any of them opens the root's thread
+        rule.onAllNodes(hasTestTag("note-text-${id8(root)}"))[0].performClick()
         rule.waitUntil(15_000) { nodes("note-time-${id8(root)}").isNotEmpty() }
         rule.onNodeWithTag("thread-list").performScrollToNode(hasTestTag("note-text-${id8(last)}"))
         rule.onNodeWithTag("note-text-${id8(last)}").performClick()

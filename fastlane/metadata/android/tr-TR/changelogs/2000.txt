@@ -1,0 +1,7 @@
+• Alt çubuk, üst başlık gibi kaydırırken gizlenir
+• Görseli doğrudan metin alanına yapıştırın
+• Açık bir notta metni seçip kopyalayın
+• Boyut bilgisi olmayan görseller ve videolar artık şeritsiz görünür
+• Görüntüleyiciden görseli kaydedin veya paylaşın (uzun basma)
+• Gönderilmemiş notlar görselleriyle birlikte taslak olarak kalır
+• Bahşiş kurulumunda watcher kontrolü sırasında ilerleme görünür

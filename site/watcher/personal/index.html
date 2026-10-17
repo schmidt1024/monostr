@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Run a personal watcher - monostr</title>
+<meta name="description" content="Confirm your Monero tips on Nostr with your own watcher: a Raspberry Pi, NAS or small server, no node, no domain. Your view key stays with you.">
+<meta property="og:title" content="Run a personal watcher - monostr">
+<meta property="og:description" content="Confirm your Monero tips with your own watcher. No node, no domain, the view key stays with you.">
+<meta property="og:image" content="https://monostr.com/assets/monostr-banner.png">
+<meta property="og:url" content="https://monostr.com/watcher/personal/">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e0e0e" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/style.css">
+</head>
+
+<body>
+<main>
+    <header class="page-head">
+        <p class="crumb"><a href="/">monostr</a> / Watcher</p>
+        <h1>Run a personal watcher</h1>
+        <p class="lead">A watcher confirms your Monero tips on Nostr. With a personal watcher, your private view key stays on your own machine: no node to sync, no domain, no open port.</p>
+    </header>
+
+    <section>
+        <h2>What it does</h2>
+        <p>When someone tips you in monostr, their wallet pays your address directly. A watcher needs your private view key to see that the payment arrived; it then publishes a signed receipt on Nostr, and the tip shows under the note. The view key can only see incoming payments, never spend them.</p>
+        <p>The default watcher, watcher.monostr.com, does this for anyone. A personal watcher does it only for you, on a machine you control. Nobody else sees your view key or your incoming payments.</p>
+        <p>It scans through public Monero nodes, so there is no blockchain to download, and it only connects outward. It works behind a home router.</p>
+    </section>
+
+    <section>
+        <h2>What you need</h2>
+        <ul>
+            <li>A small machine that is always on: a Raspberry Pi 4 or 5, a NAS that runs Docker, or any VPS</li>
+            <li><a href="https://docs.docker.com/engine/install/">Docker</a> with the Compose plugin, and Git</li>
+            <li>About 1 GB of disk and 1.5 GB of RAM</li>
+            <li>monostr 0.17 or newer on your phone</li>
+            <li>A Monero wallet only for tips (next step)</li>
+        </ul>
+    </section>
+
+    <section>
+        <h2>1. A wallet for tips</h2>
+        <p>The view key shows the watcher every incoming payment of the wallet, not only tips. Create a new wallet just for tips, in Cake Wallet, Monerujo, monfluo or any other Monero wallet.</p>
+        <p>You need two values from it:</p>
+        <ul>
+            <li>the <strong>primary address</strong>, which starts with <code>4</code> (not a subaddress starting with <code>8</code>)</li>
+            <li>the <strong>private view key</strong>, 64 hex characters</li>
+        </ul>
+        <p>Where the wallet shows them:</p>
+        <ul>
+            <li><strong>Cake Wallet:</strong> Settings → Recovery &amp; Keys</li>
+            <li><strong>Monerujo:</strong> in the wallet, Settings → Show Secrets!</li>
+            <li><strong>monfluo:</strong> tap the wallet name, then Display wallet secrets</li>
+        </ul>
+        <p>Never use the <em>spend</em> key or the seed; the watcher does not need them.</p>
+    </section>
+
+    <section>
+        <h2>2. Install</h2>
+        <p>On the machine, in a terminal:</p>
+<pre><code>git clone https://github.com/schmidt1024/monostr.git
+cd monostr/watcher
+cp .env.personal.example .env
+chmod 600 .env
+sed -i "s/^WATCHER_SECRET_KEY=.*/WATCHER_SECRET_KEY=$(openssl rand -hex 32)/" .env</code></pre>
+        <p>The last line creates the watcher's own Nostr key. It signs the receipts; you never need it in the app.</p>
+        <p>Open <code>.env</code> in an editor (for example <code>nano .env</code>) and fill in:</p>
+        <dl>
+            <dt><code>WATCHER_RECIPIENT</code></dt>
+            <dd>your npub, the account that receives the tips</dd>
+            <dt><code>WATCHER_ADDRESS</code></dt>
+            <dd>the primary address of the tip wallet</dd>
+            <dt><code>WATCHER_VIEW_KEY</code></dt>
+            <dd>its private view key</dd>
+        </dl>
+        <p>The rest can stay as it is. <code>WATCHER_RELAYS</code> lists the relays where senders post their tips and the watcher posts the receipts; the default works.</p>
+    </section>
+
+    <section>
+        <h2>3. Start</h2>
+<pre><code>docker compose -f compose.personal.yml up -d --build
+docker compose -f compose.personal.yml logs watcher | grep nprofile</code></pre>
+        <p>The first start builds the watcher and takes a few minutes. The log line contains the watcher's address on Nostr, a long value that starts with <code>nprofile1</code>. Copy it.</p>
+    </section>
+
+    <section>
+        <h2>4. Connect the app</h2>
+        <p>In monostr: <strong>Settings → Monero tips → Switch watcher → Personal watcher</strong>. If you have not set up tips yet, the entry is <strong>Set up receiving Monero tips</strong>.</p>
+        <p>Paste the <code>nprofile1…</code> and tap <strong>Check watcher</strong>. The app checks that the watcher is online and set up for your account, and shows the address it watches. Compare it with your tip wallet, then tap <strong>Use this watcher</strong>. The app announces the watcher in your profile, so senders post their tips to it.</p>
+        <div class="steps-shots">
+            <figure>
+                <img src="/assets/watcher-switch.webp" alt="The watcher step with the Personal watcher button" width="540" height="750" loading="lazy">
+                <figcaption>Tap Personal watcher</figcaption>
+            </figure>
+            <figure>
+                <img src="/assets/watcher-paste.webp" alt="The nprofile of the watcher pasted into the field" width="540" height="750" loading="lazy">
+                <figcaption>Paste the nprofile, then Check watcher</figcaption>
+            </figure>
+        </div>
+    </section>
+
+    <section>
+        <h2>5. Check that it runs</h2>
+        <p>Under Settings → Monero tips the app shows <em>Personal watcher … · online</em>. The watcher publishes a status every five minutes; if none arrived for 15 minutes, the app shows it as offline.</p>
+        <p>On the machine, the log shows what the watcher is doing:</p>
+<pre><code>docker compose -f compose.personal.yml logs -f watcher</code></pre>
+    </section>
+
+    <section class="note">
+        <p><strong>How it stays honest:</strong> the watcher runs two copies of your view-only wallet, each syncing through a different public node. A tip counts only when both see the payment with the same amount, so a single lying node cannot invent tips. A node could still hide a payment; the money then arrives in your wallet anyway, only without a receipt.</p>
+    </section>
+
+    <section>
+        <h2>Good to know</h2>
+        <h3>Hide your IP address (Tor)</h3>
+        <p>In <code>.env</code>, remove the <code>#</code> in front of the two lines under <code>Tor (optional)</code>, then start again:</p>
+<pre><code>docker compose -f compose.personal.yml up -d</code></pre>
+        <p>Relays and nodes then no longer see the machine's IP address.</p>
+        <h3>When the machine is off</h3>
+        <p>Tips still arrive in your wallet; the receipts follow when the watcher is back: it reads the tips it missed from the relays. Keep the outage short, though; a relay that deletes old events after some time takes the missed tips with it, and those never get a receipt.</p>
+        <h3>Updates</h3>
+<pre><code>cd monostr && git pull
+cd watcher && docker compose -f compose.personal.yml up -d --build</code></pre>
+        <h3>Backup</h3>
+        <p>Back up <code>.env</code>: it holds the watcher's key. With the same key a new machine continues as the same watcher, and the app needs no change.</p>
+        <h3>Back to the default watcher</h3>
+        <p>Settings → Monero tips → Switch watcher, keep <code>https://watcher.monostr.com</code> as the watcher URL and register your tip wallet there. Then stop the personal watcher:</p>
+<pre><code>docker compose -f compose.personal.yml down</code></pre>
+    </section>
+
+    <section>
+        <h2>More</h2>
+        <p>Want to host a watcher for others, with your own Monero node and domain? See <a href="/watcher/self-host/">Host a watcher</a>. The technical reference is <a href="https://github.com/schmidt1024/monostr/blob/main/watcher/SELFHOST.md">SELFHOST.md</a> in the repository. Questions or problems: open an <a href="https://github.com/schmidt1024/monostr/issues">issue</a> or mention monostr on Nostr.</p>
+    </section>
+
+    <footer>
+        <p><a href="/">monostr.com</a> · Source code: <a href="https://github.com/schmidt1024/monostr">github.com/schmidt1024/monostr</a> (AGPL-3.0-or-later)</p>
+    </footer>
+</main>
+
+<script>
+(function () {
+    let saved = null;
+    try { saved = localStorage.getItem("theme"); } catch (e) {}
+    if (saved === "dark" || saved === "light") {
+        document.documentElement.setAttribute("data-theme", saved);
+    }
+})();
+</script>
+</body>
+</html>

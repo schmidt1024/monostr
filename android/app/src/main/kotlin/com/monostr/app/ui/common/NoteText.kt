@@ -3,6 +3,7 @@ package com.monostr.app.ui.common
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -49,6 +50,8 @@ fun NoteText(
     stateKey: String = content,
     /** Spec 11.5 §3: the focused note of a thread reads larger. */
     style: TextStyle = MaterialTheme.typography.bodyMedium,
+    /** Spec 2026-10-16 §4: the opened note — long press selects (Copy in the system toolbar); a tap opens nothing, links still work. */
+    selectable: Boolean = false,
 ) {
     val spans = remember(content) { NoteLinks.annotate(content) }
     val uriHandler = LocalUriHandler.current
@@ -76,11 +79,15 @@ fun NoteText(
         else -> COLLAPSE_ABOVE
     }
     Column {
-        Text(
-            text, style = style, maxLines = lines, overflow = TextOverflow.Ellipsis,
-            onTextLayout = { if (collapsible && !expanded && !overflowing && it.hasVisualOverflow) overflowing = true },
-            modifier = modifier.clickable(onClick = onOpen),
-        )
+        val body: @Composable () -> Unit = {
+            Text(
+                text, style = style, maxLines = lines, overflow = TextOverflow.Ellipsis,
+                onTextLayout = { if (collapsible && !expanded && !overflowing && it.hasVisualOverflow) overflowing = true },
+                // nothing competes with the selection gestures in the opened note
+                modifier = if (selectable) modifier else modifier.clickable(onClick = onOpen),
+            )
+        }
+        if (selectable) SelectionContainer { body() } else body()
         if (collapsible && overflowing && !expanded) {
             // its own node with the role Button; only it expands, the text still opens the thread
             // no inner padding: the label starts flush with the text above it (user 2026-10-08)

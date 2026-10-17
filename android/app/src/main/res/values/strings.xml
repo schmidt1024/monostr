@@ -75,6 +75,12 @@
     <string name="media_viewer_position" translatable="false">%1$d/%2$d</string>
     <string name="media_copy_link">Copy link</string>
     <string name="media_open_browser">Open in browser</string>
+    <string name="media_save">Save picture</string>
+    <string name="media_share">Share picture</string>
+    <string name="media_saved">Picture saved</string>
+    <string name="media_save_failed">Could not save the picture</string>
+    <string name="media_share_title">Share picture</string>
+    <string name="media_share_failed">Could not share the picture</string>
     <string name="profile_extra_relays">Notes also from %1$s</string>
     <!-- profile header: "12 Following · 3,373 Followers"; the numbers are formatted apart -->
     <string name="profile_following_label">Following</string>
@@ -116,8 +122,6 @@
     <string name="feed_settings">Settings</string>
     <string name="feed_new_note">New note</string>
     <string name="feed_empty">No notes yet. Follow someone or write the first one.</string>
-    <string name="feed_tab_posts">Posts</string>
-    <string name="feed_tab_replies">Replies</string>
     <string name="feed_error_load">Feed could not be loaded</string>
     <string name="feed_error_more">More notes could not be loaded</string>
 
@@ -190,6 +194,11 @@
     <string name="setup_watcher_text">The watcher detects incoming payments and publishes the receipts on Nostr.</string>
     <string name="setup_watcher_url">Watcher URL</string>
     <string name="setup_load_watcher">Check watcher</string>
+    <string name="setup_checking">Checking watcher…</string>
+    <string name="setup_slow_hint">This can take a few seconds</string>
+    <string name="setup_cancel_check">Cancel</string>
+    <string name="setup_err_timeout">Watcher not reachable</string>
+    <string name="setup_try_again">Try again</string>
     <string name="setup_skip">Later</string>
     <string name="setup_watcher_info">Watcher %1$s · %2$s · height %3$d</string>
     <string name="setup_privacy">The watcher sees every incoming payment of this wallet. That is why you should use a separate wallet just for tips.</string>
@@ -492,7 +501,6 @@
     <string name="upload_error_failed">Upload failed</string>
     <string name="compose_error_uploads">Wait until the pictures are uploaded, or remove the failed ones</string>
     <string name="compose_attach">Add pictures</string>
-    <string name="compose_paste_image">Paste picture from clipboard</string>
     <string name="compose_attachment_remove">Remove picture</string>
     <string name="upload_retry">Try again</string>
     <string name="compose_sensitive">Sensitive content</string>
@@ -525,4 +533,6 @@
     <string name="amounts_prompt_text">Receipts would show only that you were tipped, not how much. Your wallet still shows the amounts.</string>
     <string name="amounts_prompt_yes">Hide amounts</string>
     <string name="amounts_prompt_no">Keep public</string>
+    <string name="conversation_show_replies">Show replies</string>
+    <string name="conversation_unavailable">This note is unavailable</string>
 </resources>

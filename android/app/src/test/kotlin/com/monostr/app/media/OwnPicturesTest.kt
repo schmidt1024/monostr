@@ -6,7 +6,9 @@ import com.monostr.nostr.model.NoteMedia
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 class OwnPicturesTest {
@@ -21,11 +23,14 @@ class OwnPicturesTest {
         notes: suspend () -> List<Note> = { emptyList() },
         profile: suspend () -> Map<String, String>? = { emptyMap() },
         val fail: Set<String> = emptySet(),
+        drafts: suspend () -> Collection<String> = { emptyList() },
+        stored: suspend () -> Collection<String> = { emptyList() },
     ) {
         val deleted = ArrayList<Pair<String, String>>()
         val pictures = OwnPictures(
             MutableStateFlow("https://media.monostr.com"), notes, profile,
             delete = { s, h -> if (h in fail) throw UploadException.Unavailable() else deleted += s to h },
+            draftPictures = drafts, storedProfile = stored,
         )
     }
 
@@ -91,5 +96,27 @@ class OwnPicturesTest {
         val r = Rig(notes = { listOf(withPictures('2', "$server/${a.uppercase()}.png")) })
         r.pictures.remove(r.pictures.candidates(n), exceptNoteId = n.id)
         assertEquals(emptyList<Pair<String, String>>(), r.deleted)
+    }
+
+    @Test
+    fun `a picture a stored draft still shows stays, and unreadable drafts protect every picture`() = runTest {
+        val n = withPictures('1', url(a), url(b))
+        val r = Rig(drafts = { listOf(a) })
+        assertEquals(0, r.pictures.remove(r.pictures.candidates(n), exceptNoteId = n.id))
+        assertEquals(listOf(server to b), r.deleted)
+        val broken = Rig(drafts = { throw java.io.IOException("disk") })
+        assertEquals(2, broken.pictures.remove(broken.pictures.candidates(n), exceptNoteId = n.id))
+        assertEquals(emptyList<Pair<String, String>>(), broken.deleted)
+    }
+
+    @Test
+    fun `published asks the own notes and the stored profile, and a failed lookup counts as shown`() = runTest {
+        val r = Rig(notes = { listOf(withPictures('2', url(a))) }, profile = { error("no network lookup before a discard") }, stored = { listOf(url(b).uppercase()) })
+        assertTrue(r.pictures.published(a))
+        assertTrue(r.pictures.published(b))
+        assertFalse(r.pictures.published("c".repeat(64)))
+        assertFalse(Rig(profile = { null }).pictures.published("c".repeat(64)), "no stored kind 0: no profile pictures")
+        assertTrue(Rig(notes = { throw IllegalStateException("db") }).pictures.published("c".repeat(64)))
+        assertTrue(Rig(stored = { throw IllegalStateException("db") }).pictures.published("c".repeat(64)))
     }
 }

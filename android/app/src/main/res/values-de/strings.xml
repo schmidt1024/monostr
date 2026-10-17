@@ -73,6 +73,12 @@
     <string name="media_viewer_close">Schließen</string>
     <string name="media_copy_link">Link kopieren</string>
     <string name="media_open_browser">Im Browser öffnen</string>
+    <string name="media_save">Bild speichern</string>
+    <string name="media_share">Bild teilen</string>
+    <string name="media_saved">Bild gespeichert</string>
+    <string name="media_save_failed">Das Bild konnte nicht gespeichert werden</string>
+    <string name="media_share_title">Bild teilen</string>
+    <string name="media_share_failed">Das Bild konnte nicht geteilt werden</string>
     <string name="profile_extra_relays">Notes auch von %1$s</string>
     <!-- profile header: "12 Following · 3,373 Followers"; the numbers are formatted apart -->
     <string name="profile_following_label">Folge ich</string>
@@ -113,8 +119,6 @@
     <string name="feed_settings">Einstellungen</string>
     <string name="feed_new_note">Neue Note</string>
     <string name="feed_empty">Noch keine Notes. Folge jemandem oder schreib die erste.</string>
-    <string name="feed_tab_posts">Posts</string>
-    <string name="feed_tab_replies">Antworten</string>
     <string name="feed_error_load">Feed konnte nicht geladen werden</string>
     <string name="feed_error_more">Weitere Notes konnten nicht geladen werden</string>
 
@@ -187,6 +191,11 @@
     <string name="setup_watcher_text">Der Watcher erkennt eingehende Zahlungen und veröffentlicht die Quittungen auf Nostr.</string>
     <string name="setup_watcher_url">Watcher-URL</string>
     <string name="setup_load_watcher">Watcher prüfen</string>
+    <string name="setup_checking">Watcher wird geprüft…</string>
+    <string name="setup_slow_hint">Das kann ein paar Sekunden dauern</string>
+    <string name="setup_cancel_check">Abbrechen</string>
+    <string name="setup_err_timeout">Watcher nicht erreichbar</string>
+    <string name="setup_try_again">Erneut versuchen</string>
     <string name="setup_skip">Später</string>
     <string name="setup_watcher_info">Watcher %1$s · %2$s · Höhe %3$d</string>
     <string name="setup_privacy">Der Watcher sieht alle Eingänge dieser Wallet. Darum eine eigene nur für Tips.</string>
@@ -487,7 +496,6 @@
     <string name="upload_error_failed">Upload fehlgeschlagen</string>
     <string name="compose_error_uploads">Warte, bis die Bilder hochgeladen sind, oder entferne die fehlgeschlagenen</string>
     <string name="compose_attach">Bilder hinzufügen</string>
-    <string name="compose_paste_image">Bild aus der Zwischenablage einfügen</string>
     <string name="compose_attachment_remove">Bild entfernen</string>
     <string name="upload_retry">Erneut</string>
     <string name="compose_sensitive">Sensibler Inhalt</string>
@@ -520,4 +528,6 @@
     <string name="amounts_prompt_text">Quittungen zeigen dann nur, dass du einen Tip bekommen hast, nicht wie viel. Deine Wallet zeigt die Beträge weiter.</string>
     <string name="amounts_prompt_yes">Beträge verbergen</string>
     <string name="amounts_prompt_no">Öffentlich lassen</string>
+    <string name="conversation_show_replies">Antworten anzeigen</string>
+    <string name="conversation_unavailable">Diese Note ist nicht verfügbar</string>
 </resources>

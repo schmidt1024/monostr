@@ -1,0 +1,7 @@
+• La barre du bas se masque pendant le défilement, comme l’en-tête
+• Collez une image directement dans le champ de texte
+• Sélectionnez et copiez le texte d’une note ouverte
+• Les images et vidéos sans taille indiquée n’affichent plus de bandes
+• Enregistrez ou partagez une image depuis la visionneuse (appui long)
+• Les notes non envoyées restent en brouillon, images comprises
+• Pendant la configuration des pourboires, la vérification du watcher est visible

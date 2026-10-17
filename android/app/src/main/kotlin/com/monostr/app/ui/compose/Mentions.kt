@@ -1,9 +1,9 @@
 package com.monostr.app.ui.compose
 
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.input.OffsetMapping
-import androidx.compose.ui.text.input.TransformedText
-import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.foundation.text.input.InputTransformation
+import androidx.compose.foundation.text.input.OutputTransformation
+import androidx.compose.foundation.text.input.TextFieldBuffer
+import androidx.compose.ui.text.TextRange
 import com.monostr.nostr.Npub
 import com.monostr.nostr.model.MentionTags
 import com.monostr.nostr.model.Profile
@@ -81,6 +81,73 @@ object MentionQuery {
         return Edit(old.removeRange(from, to), from)
     }
 
+    /**
+     * Spec 8, for the state-based field: the keyboard sees the shown `@name`, never the raw token, so it may
+     * rewrite it (composing text "Alin" after a backspace, autocorrect). [new] is [old] after one edit. Deletions
+     * go through [cutToken]; typing at a shown token's outer edges is left alone. An edit that replaces text
+     * reaching into a shown token, or inserts inside it, is judged by what took the token's place: the shown
+     * name again, maybe followed by a space or punctuation, keeps the token (and what follows); a shortening or
+     * a near-copy of the name ("Alin", "Aline", "Alinas") removes the whole token and leaves nothing; other text
+     * stays as typed. Null when [new] is left as it is.
+     */
+    fun editToken(old: String, new: String, names: Map<String, String>): Edit? {
+        if (names.isEmpty() || old == new) return null
+        val min = minOf(old.length, new.length)
+        var start = 0
+        while (start < min && old[start] == new[start]) start++
+        var tail = 0
+        while (tail < min - start && old[old.length - 1 - tail] == new[new.length - 1 - tail]) tail++
+        val end = old.length - tail // [start, end) of old became [start, new.length - tail) of new
+        if (new.length < old.length && old.removeRange(start, end) == new) return cutToken(old, new, names)
+        val tokens = MentionTags.TOKEN.findAll(old)
+            .filter { m -> MentionTags.pubkey(m.value)?.let { it in names } == true }
+            .map { it.range }.toList()
+        if (start == end) {
+            // a pure insertion can sit anywhere in a run of equal characters; one place outside every token is enough
+            val k = new.length - old.length
+            var p = start
+            while (p >= 0 && old.regionMatches(p, new, p + k, old.length - p)) {
+                if (tokens.none { it.first < p && p <= it.last }) return null
+                p--
+            }
+            val t = tokens.first { it.first < start && start <= it.last }
+            val typed = new.substring(start, start + k)
+            return Edit(old.replaceRange(t, typed), t.first + typed.length)
+        }
+        val hit = tokens.filter { it.first < end && start <= it.last }
+        if (hit.isEmpty()) return null
+        val from = minOf(start, hit.first().first)
+        val to = maxOf(end, hit.last().last + 1)
+        // what took the place of [from, to): the field maps an edit of a shown @name to the whole raw token
+        val typed = new.substring(from, new.length - (old.length - to))
+        val shown = shown(old.substring(from, to), names)
+        val bare = shown.removePrefix("@")
+        // the name committed again, maybe with a space or punctuation behind it ("Alina ", "@Alina!"): the token
+        // stays and the rest follows it; a glued letter or digit would run into the token, so that is not kept
+        val rest = when {
+            typed.startsWith(shown) -> typed.substring(shown.length)
+            typed.startsWith(bare) -> typed.substring(bare.length)
+            else -> null
+        }
+        return when {
+            rest != null && (rest.isEmpty() || !rest[0].isLetterOrDigit()) ->
+                Edit(old.replaceRange(from, to, old.substring(from, to) + rest), to + rest.length)
+            // a shortening ("Alin") or a near-copy ("Aline", "Alinas" from autocorrect): the whole token goes, nothing stays
+            shown.startsWith(typed) || typed.removePrefix("@").commonPrefixWith(bare).isNotEmpty() ->
+                Edit(old.removeRange(from, to), from)
+            else -> null // the token is already gone, replaced by what was typed
+        }
+    }
+
+    /** The `nostr:npub…` tokens in [raw] whose person has a name in [names], each with the `@name` it shows as, in text order. */
+    fun shownTokens(raw: String, names: Map<String, String>): List<Pair<IntRange, String>> =
+        if (names.isEmpty()) emptyList()
+        else MentionTags.TOKEN.findAll(raw).mapNotNull { m -> MentionTags.pubkey(m.value)?.let(names::get)?.let { m.range to "@$it" } }.toList()
+
+    /** [raw] as the composer field shows it. */
+    fun shown(raw: String, names: Map<String, String>): String =
+        shownTokens(raw, names).asReversed().fold(raw) { text, (range, label) -> text.replaceRange(range, label) }
+
     private fun isNameChar(c: Char) = c.isLetterOrDigit() || c == '_' || c == '.' || c == '-'
     private fun fields(p: Profile) = listOfNotNull(p.name, p.displayName, p.nip05).map { it.lowercase() }
 }
@@ -106,67 +173,22 @@ class MentionSuggester(
 
 /**
  * Spec 4.2: `nostr:npub…` tokens whose name is known show as `@name`; the stored text never changes.
- * A token is one unit for the cursor: an offset inside it maps to its end.
+ * The field keeps the cursor out of a replaced token (it lands at one of its ends).
  */
-class MentionDisplay(raw: String, names: Map<String, String>) {
-    private data class Seg(val rawStart: Int, val rawEnd: Int, val shownStart: Int, val shownEnd: Int, val token: Boolean)
-
-    val shown: String
-    private val segs: List<Seg>
-
-    init {
-        val out = StringBuilder()
-        val list = ArrayList<Seg>()
-        var last = 0
-        for (m in MentionTags.TOKEN.findAll(raw)) {
-            val pubkey = MentionTags.pubkey(m.value) ?: continue
-            val name = names[pubkey] ?: continue
-            if (m.range.first > last) {
-                list += Seg(last, m.range.first, out.length, out.length + (m.range.first - last), token = false)
-                out.append(raw, last, m.range.first)
-            }
-            val label = "@$name"
-            list += Seg(m.range.first, m.range.last + 1, out.length, out.length + label.length, token = true)
-            out.append(label)
-            last = m.range.last + 1
-        }
-        if (last < raw.length) {
-            list += Seg(last, raw.length, out.length, out.length + (raw.length - last), token = false)
-            out.append(raw, last, raw.length)
-        }
-        shown = out.toString()
-        segs = list
-    }
-
-    fun toShown(offset: Int): Int {
-        val s = segs.firstOrNull { offset < it.rawEnd } ?: return shown.length
-        return when {
-            !s.token -> s.shownStart + (offset - s.rawStart)
-            offset <= s.rawStart -> s.shownStart
-            else -> s.shownEnd
-        }
-    }
-
-    fun toRaw(offset: Int): Int {
-        val s = segs.firstOrNull { offset < it.shownEnd } ?: return segs.lastOrNull()?.rawEnd ?: offset
-        return when {
-            !s.token -> s.rawStart + (offset - s.shownStart)
-            offset <= s.shownStart -> s.rawStart
-            else -> s.rawEnd
+class MentionOutput(private val names: Map<String, String>) : OutputTransformation {
+    override fun TextFieldBuffer.transformOutput() {
+        // from the back, so the ranges in front stay where they are
+        for ((range, label) in MentionQuery.shownTokens(asCharSequence().toString(), names).asReversed()) {
+            replace(range.first, range.last + 1, label)
         }
     }
 }
 
-class MentionTransformation(private val names: Map<String, String>) : VisualTransformation {
-    override fun filter(text: AnnotatedString): TransformedText {
-        if (names.isEmpty()) return TransformedText(text, OffsetMapping.Identity)
-        val display = MentionDisplay(text.text, names)
-        return TransformedText(
-            AnnotatedString(display.shown),
-            object : OffsetMapping {
-                override fun originalToTransformed(offset: Int) = display.toShown(offset)
-                override fun transformedToOriginal(offset: Int) = display.toRaw(offset)
-            },
-        )
+/** Spec 8 (10c backlog): a backspace, cut or keyboard rewrite of a shown `@name` removes the whole token ([MentionQuery.editToken]). */
+class MentionInput(private val names: Map<String, String>) : InputTransformation {
+    override fun TextFieldBuffer.transformInput() {
+        val cut = MentionQuery.editToken(originalText.toString(), asCharSequence().toString(), names) ?: return
+        replace(0, length, cut.text)
+        selection = TextRange(cut.cursor)
     }
 }

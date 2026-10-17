@@ -1,6 +1,5 @@
 package com.monostr.app.ui
 
-import com.monostr.app.ui.compose.MentionDisplay
 import com.monostr.app.ui.compose.MentionQuery
 import com.monostr.nostr.Npub
 import com.monostr.nostr.model.Profile
@@ -45,21 +44,17 @@ class MentionQueryTest {
     }
 
     @Test
-    fun `known npubs show as at-names and offsets map both ways`() {
-        val npub = Npub.encode(alina)
-        val raw = "hi nostr:$npub there"
-        val tokenEnd = 3 + "nostr:$npub".length
-        val d = MentionDisplay(raw, mapOf(alina to "Alina"))
-        assertEquals("hi @Alina there", d.shown)
-        assertEquals(3, d.toShown(3))
-        assertEquals(9, d.toShown(10))
-        assertEquals(9, d.toShown(tokenEnd))
-        assertEquals(15, d.toShown(raw.length))
-        assertEquals(3, d.toRaw(3))
-        assertEquals(tokenEnd, d.toRaw(5))
-        assertEquals(tokenEnd + 1, d.toRaw(10))
-        assertEquals(raw.length, d.toRaw(15))
-        assertEquals(raw, MentionDisplay(raw, emptyMap()).shown)
+    fun `known npubs show as at-names, unknown ones stay raw, several in one text`() {
+        val bob = Keys.parse("0000000000000000000000000000000000000000000000000000000000000003").publicKey().toHex()
+        val a = "nostr:" + Npub.encode(alina)
+        val b = "nostr:" + Npub.encode(bob)
+        val raw = "hi $a and $b there"
+        val names = mapOf(alina to "Alina", bob to "Bob")
+        assertEquals(listOf((3 until 3 + a.length) to "@Alina", (3 + a.length + 5 until 3 + a.length + 5 + b.length) to "@Bob"), MentionQuery.shownTokens(raw, names))
+        assertEquals("hi @Alina and @Bob there", MentionQuery.shown(raw, names))
+        assertEquals("hi @Alina and $b there", MentionQuery.shown(raw, mapOf(alina to "Alina")))
+        assertEquals(raw, MentionQuery.shown(raw, emptyMap()))
+        assertTrue(MentionQuery.shownTokens(raw, emptyMap()).isEmpty())
     }
 
     @Test

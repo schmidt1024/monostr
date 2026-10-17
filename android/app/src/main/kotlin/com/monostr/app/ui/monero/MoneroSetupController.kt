@@ -29,7 +29,12 @@ import com.monostr.tips.watcher.WatcherException
 import com.monostr.tips.watcher.WatcherInfo
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -37,7 +42,10 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import java.io.IOException
 import java.security.SecureRandom
 import java.time.Instant
 import java.time.ZoneId
@@ -46,7 +54,12 @@ import java.time.format.FormatStyle
 import java.util.Random
 
 sealed class SetupStep {
-    data class Watcher(val url: String, val loading: Boolean = false) : SetupStep()
+    /**
+     * [loading]: inputs are locked, at first while the stored settings are read, then while a check runs.
+     * [checking]: the user started a check (spec §12: progress, "Checking watcher…").
+     * [slow]: that check runs for 3 s already (hint + Cancel). [retry]: the last check timed out or hit a network error.
+     */
+    data class Watcher(val url: String, val loading: Boolean = false, val checking: Boolean = false, val slow: Boolean = false, val retry: Boolean = false) : SetupStep()
     /** [canReuse]: a stored address + view key for the same network can be moved to this watcher (spec 6.5). */
     data class Choose(val info: WatcherInfo, val canReuse: Boolean) : SetupStep()
     data class Seed(val words: List<String>, val restoreHeight: Long) : SetupStep()
@@ -60,7 +73,8 @@ sealed class SetupStep {
     /** [amountsHidden]: the watcher speaks protocol 0.5, so the payment info will hide tip amounts. */
     data class Confirm(val address: String, val restoreHeight: Long?, val amountsHidden: Boolean = false) : SetupStep()
     /** Spec 0.4 §4.3: the watcher's nprofile (or npub/hex plus [relay]). */
-    data class Personal(val input: String, val relay: String, val loading: Boolean = false) : SetupStep()
+    /** [slow] and [retry] as in [Watcher] (spec §12). */
+    data class Personal(val input: String, val relay: String, val loading: Boolean = false, val slow: Boolean = false, val retry: Boolean = false) : SetupStep()
     /** A fresh status of a personal watcher for this account; confirming announces it in pubkey form. */
     data class PersonalConfirm(val status: WatcherStatus, val relays: List<String>) : SetupStep()
     data object Registering : SetupStep()
@@ -99,6 +113,8 @@ class MoneroSetupController(
     private val now: () -> Long = { System.currentTimeMillis() / 1000 },
     /** Epoch seconds as a localized short date-time, for "offline since". */
     private val formatTime: (Long) -> String = ::localTime,
+    /** Debug-only timing of the `/v1/info` calls (spec §12); the ViewModel passes a logcat writer in debug builds. */
+    private val log: (String) -> Unit = {},
 ) {
     private val _state = MutableStateFlow(SetupState(intro = intro))
     val state: StateFlow<SetupState> = _state.asStateFlow()
@@ -114,22 +130,83 @@ class MoneroSetupController(
     private var pendingViewKey: ByteArray? = null
     private var personalProfile: WatcherProfile? = null
     private var personalStatus: WatcherStatus? = null
+    /** Spec §12: `/v1/info` of [prefetchUrl], started when the watcher step appears; used once by [loadWatcher]. */
+    private var prefetch: Deferred<Result<WatcherInfo>>? = null
+    private var prefetchUrl: String? = null
+    /** The check the user started (watcher or personal); [cancelCheck] stops it. */
+    private var check: Job? = null
+    /** The start phase; "Later" stops it, so no watcher step and no prefetch follow. */
+    private var starting: Job? = null
+    private var infoLogged = false
 
     fun start() {
-        scope.launch {
-            existing = settings.setup.first()
-            // a personal setup has no URL: switching to HTTP starts at the default watcher
-            url = existing?.watcherUrl?.takeIf { it.isNotEmpty() } ?: Presets.DEFAULT_WATCHER
-            // set up on another device or before a reinstall: the intro must not offer to replace a working tip address
-            val announced = if (existing != null) null else announcedAddress()
-            if (announced != null && _state.value.intro) return@launch skip()
-            _state.update { it.copy(step = SetupStep.Watcher(url), announced = announced) }
+        starting = scope.launch {
+            // spec §12: the start phase gets the same slow hint (no Cancel: "Later" and back stay available)
+            val slow = markSlowLater { (it as? SetupStep.Watcher)?.takeIf { w -> w.loading && !w.checking }?.copy(slow = true) }
+            try {
+                existing = settings.setup.first()
+                // a personal setup has no URL: switching to HTTP starts at the default watcher
+                url = existing?.watcherUrl?.takeIf { it.isNotEmpty() } ?: Presets.DEFAULT_WATCHER
+                // set up on another device or before a reinstall: the intro must not offer to replace a working tip address
+                val asked = System.nanoTime()
+                val announced = if (existing != null) null else announcedAddress()
+                if (existing == null) log("announced tip address (relays): ${(System.nanoTime() - asked) / 1_000_000} ms")
+                if (announced != null && _state.value.intro) return@launch skip()
+                _state.update { it.copy(step = SetupStep.Watcher(url), announced = announced) }
+                prefetch()
+            } finally {
+                slow.cancel()
+            }
         }
     }
 
-    /** A forced relay fetch: on a fresh install nothing is cached yet. Unreachable relays count as nothing announced. */
+    /** Spec §12: a valid https (or loopback http) URL, normalized as the check uses it; null otherwise. */
+    private fun checkedUrl(input: String): String? {
+        val parsed = input.toHttpUrlOrNull() ?: return null
+        val allowed = parsed.scheme == "https" || (parsed.scheme == "http" && parsed.host in LOOPBACK)
+        return if (allowed) parsed.toString().trimEnd('/') else null
+    }
+
+    /** Spec §12: starts `/v1/info` in the background for the shown URL; its failure stays silent until the user taps. */
+    private fun prefetch() {
+        val target = checkedUrl(url) ?: return
+        if (prefetchUrl == target && prefetch != null) return
+        dropPrefetch()
+        prefetchUrl = target
+        prefetch = scope.async {
+            try {
+                Result.success(timedInfo(target, "prefetch"))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+    }
+
+    private fun dropPrefetch() {
+        prefetch?.cancel()
+        prefetch = null
+        prefetchUrl = null
+    }
+
+    private suspend fun timedInfo(target: String, what: String): WatcherInfo {
+        val started = System.nanoTime()
+        try {
+            return gateway.info(target)
+        } finally {
+            val first = !infoLogged
+            infoLogged = true
+            log("/v1/info $what $target: ${(System.nanoTime() - started) / 1_000_000} ms${if (first) " (first since the setup opened)" else ""}")
+        }
+    }
+
+    /**
+     * A forced relay fetch: on a fresh install nothing is cached yet. Unreachable relays count as nothing announced,
+     * and so does a lookup that takes longer than 5 s (spec §12).
+     */
     private suspend fun announcedAddress(): String? = try {
-        (tips.paymentInfo(selfPubkey, maxAgeSeconds = 0) as? PaymentInfo.Enabled)?.address?.encode()
+        (withTimeoutOrNull(ANNOUNCED_TIMEOUT_MS) { tips.paymentInfo(selfPubkey, maxAgeSeconds = 0) } as? PaymentInfo.Enabled)?.address?.encode()
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
@@ -138,22 +215,57 @@ class MoneroSetupController(
 
     fun setWatcherUrl(input: String) {
         url = input.trim()
+        // spec §12: an edited URL invalidates the prefetched result
+        if (prefetchUrl != null && checkedUrl(url) != prefetchUrl) dropPrefetch()
         _state.update { it.copy(step = SetupStep.Watcher(url), error = null) }
     }
 
-    /** Spec 6.1: loads `/v1/info`, shows the watcher's key, network and height. */
+    /** Spec §12: stops the check the user started and returns to the editable step without an error. */
+    fun cancelCheck() {
+        check?.cancel()
+        check = null
+        _state.update { s ->
+            when (val step = s.step) {
+                is SetupStep.Watcher -> if (step.checking) s.copy(step = SetupStep.Watcher(step.url), error = null) else s
+                is SetupStep.Personal -> if (step.loading) s.copy(step = SetupStep.Personal(step.input, step.relay), error = null) else s
+                else -> s
+            }
+        }
+    }
+
+    /** Spec §12: after 3 s of a running check, the hint and Cancel appear. */
+    private fun CoroutineScope.markSlowLater(slow: (SetupStep) -> SetupStep?) = launch {
+        delay(SLOW_MS)
+        _state.update { s -> slow(s.step)?.let { s.copy(step = it) } ?: s }
+    }
+
+    /**
+     * Spec 6.1: loads `/v1/info`, shows the watcher's key, network and height.
+     * Spec §12: uses the prefetched result (or joins it), shows progress and gives up after 15 s.
+     */
     fun loadWatcher() {
-        val parsed = url.toHttpUrlOrNull()
-        val allowed = parsed != null && (parsed.scheme == "https" || (parsed.scheme == "http" && parsed.host in LOOPBACK))
-        if (!allowed) {
+        val target = checkedUrl(url)
+        if (target == null) {
             _state.update { it.copy(step = SetupStep.Watcher(url), error = ERR_URL) }
             return
         }
-        url = parsed.toString().trimEnd('/')
-        _state.update { it.copy(step = SetupStep.Watcher(url, loading = true), error = null) }
-        scope.launch {
+        if ((_state.value.step as? SetupStep.Watcher)?.checking == true) return
+        url = target
+        // a prefetch is used once: a later check asks the watcher again
+        val prefetched = prefetch?.takeIf { prefetchUrl == target }
+        prefetch = null
+        prefetchUrl = null
+        _state.update { it.copy(step = SetupStep.Watcher(url, loading = true, checking = true), error = null) }
+        check?.cancel()
+        check = scope.launch {
+            val slow = markSlowLater { (it as? SetupStep.Watcher)?.takeIf { w -> w.checking }?.copy(slow = true) }
+            val started = System.nanoTime()
             try {
-                val loaded = gateway.info(url)
+                var reused = false
+                val loaded = withTimeout(TIMEOUT_MS) {
+                    prefetched?.await()?.getOrNull()?.also { reused = true } ?: timedInfo(target, "check")
+                }
+                log("check $target: ${(System.nanoTime() - started) / 1_000_000} ms after the tap${if (reused) " (prefetch used)" else ""}")
                 val net = NetworkTag.parse(loaded.network) ?: throw SetupFailure(ERR_WATCHER_NETWORK)
                 if (!isHex64(loaded.pubkey)) throw WatcherException.Protocol("watcher pubkey")
                 info = loaded
@@ -162,12 +274,18 @@ class MoneroSetupController(
                 // a personal setup's address does not belong to the stored view key (D5)
                 val canReuse = stored != null && !stored.isPersonal && stored.network == loaded.network && secrets.get(KeystoreSecretStore.SECRET_VIEW_KEY) != null
                 _state.update { it.copy(step = SetupStep.Choose(loaded, canReuse), error = null) }
+            } catch (e: TimeoutCancellationException) {
+                prefetched?.cancel()
+                _state.update { it.copy(step = SetupStep.Watcher(url, retry = true), error = ERR_TIMEOUT) }
             } catch (e: CancellationException) {
+                prefetched?.cancel()
                 throw e
             } catch (e: SetupFailure) {
                 _state.update { it.copy(step = SetupStep.Watcher(url), error = e.text) }
             } catch (e: Exception) {
-                _state.update { it.copy(step = SetupStep.Watcher(url), error = e.userMessage()) }
+                _state.update { it.copy(step = SetupStep.Watcher(url, retry = e.isNetwork()), error = e.userMessage()) }
+            } finally {
+                slow.cancel()
             }
         }
     }
@@ -254,13 +372,16 @@ class MoneroSetupController(
     }
 
     fun setPersonalInput(input: String) =
-        _state.update { s -> s.copy(step = (s.step as? SetupStep.Personal)?.copy(input = input) ?: s.step, error = null) }
+        _state.update { s -> s.copy(step = (s.step as? SetupStep.Personal)?.copy(input = input, retry = false) ?: s.step, error = null) }
 
     fun setPersonalRelay(input: String) =
-        _state.update { s -> s.copy(step = (s.step as? SetupStep.Personal)?.copy(relay = input) ?: s.step, error = null) }
+        _state.update { s -> s.copy(step = (s.step as? SetupStep.Personal)?.copy(relay = input, retry = false) ?: s.step, error = null) }
 
     fun backToWatcher() {
+        check?.cancel()
+        check = null
         _state.update { it.copy(step = SetupStep.Watcher(url), error = null) }
+        prefetch()
     }
 
     /**
@@ -277,25 +398,33 @@ class MoneroSetupController(
         if (profile.relays.isEmpty()) return _state.update { it.copy(step = back, error = ERR_PERSONAL_RELAY) }
         val started = back.copy(loading = true)
         _state.update { it.copy(step = started, error = null) }
-        scope.launch {
+        // the step counts as unchanged when only the slow hint was added
+        fun current(s: SetupState) = (s.step as? SetupStep.Personal)?.copy(slow = false) == started
+        check?.cancel()
+        check = scope.launch {
+            val slow = markSlowLater { step -> (step as? SetupStep.Personal)?.takeIf { it.copy(slow = false) == started }?.copy(slow = true) }
             try {
-                val status = tips.watcherStatus(profile.pubkey, profile.relays) ?: throw SetupFailure(ERR_PERSONAL_NOT_FOUND)
+                val status = withTimeout(TIMEOUT_MS) { tips.watcherStatus(profile.pubkey, profile.relays) } ?: throw SetupFailure(ERR_PERSONAL_NOT_FOUND)
                 if (status.recipient != selfPubkey) throw SetupFailure(ERR_PERSONAL_OTHER_ACCOUNT)
                 val net = status.network
                 if (net == null || net != status.address.network) throw SetupFailure(ERR_PERSONAL_NETWORK)
                 if (!status.isOnline(now())) throw SetupFailure(uiText(R.string.setup_personal_err_offline, formatTime(status.createdAt)))
                 // the user may have left this step (back) while the status was on its way: then it is no longer wanted
-                if (_state.value.step != started) return@launch
+                if (!current(_state.value)) return@launch
                 personalProfile = profile
                 personalStatus = status
                 network = net
                 _state.update { it.copy(step = SetupStep.PersonalConfirm(status, profile.relays), error = null) }
+            } catch (e: TimeoutCancellationException) {
+                _state.update { if (current(it)) it.copy(step = back.copy(retry = true), error = ERR_TIMEOUT) else it }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: SetupFailure) {
-                _state.update { if (it.step == started) it.copy(step = back, error = e.text) else it }
+                _state.update { if (current(it)) it.copy(step = back, error = e.text) else it }
             } catch (e: Exception) {
-                _state.update { if (it.step == started) it.copy(step = back, error = e.userMessage()) else it }
+                _state.update { if (current(it)) it.copy(step = back.copy(retry = e.isNetwork()), error = e.userMessage()) else it }
+            } finally {
+                slow.cancel()
             }
         }
     }
@@ -349,6 +478,11 @@ class MoneroSetupController(
     fun confirm() = register(restoreHeight = (_state.value.step as? SetupStep.Confirm)?.restoreHeight)
 
     fun skip() {
+        starting?.cancel()
+        starting = null
+        dropPrefetch()
+        check?.cancel()
+        check = null
         scope.launch {
             runCatching { settings.setOnboardingSeen() }
             _state.update { it.copy(finished = true) }
@@ -463,6 +597,9 @@ class MoneroSetupController(
 
     private fun fail(text: UiText) = _state.update { it.copy(error = text) }
 
+    /** Spec §12: only an unreachable watcher or relay turns the button into "Try again". */
+    private fun Exception.isNetwork() = this is WatcherException.Network || this is IOException
+
     private class SetupFailure(val text: UiText) : Exception()
 
     companion object {
@@ -480,6 +617,12 @@ class MoneroSetupController(
         val ERR_PERSONAL_NOT_FOUND = uiText(R.string.setup_personal_err_not_found)
         val ERR_PERSONAL_OTHER_ACCOUNT = uiText(R.string.setup_personal_err_other_account)
         val ERR_PERSONAL_NETWORK = uiText(R.string.setup_personal_err_network)
+        val ERR_TIMEOUT = uiText(R.string.setup_err_timeout)
+        /** Spec §12: the slow hint after 3 s, the timeout after 15 s per check. */
+        const val SLOW_MS = 3_000L
+        const val TIMEOUT_MS = 15_000L
+        /** Spec §12: the start phase does not wait longer than this for the announced tip address. */
+        const val ANNOUNCED_TIMEOUT_MS = 5_000L
         private val LOOPBACK = setOf("127.0.0.1", "localhost", "10.0.2.2", "::1")
     }
 }

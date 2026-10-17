@@ -1,0 +1,2 @@
+• Home-Feed wie bei X: ein Feed mit Antworten, die unter der Note stehen, auf die sie antworten
+• Threads zeigen Antworten als Stränge, eine Antwort auf eine Antwort steht darunter

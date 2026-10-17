@@ -1,0 +1,7 @@
+• Die untere Leiste verschwindet beim Scrollen, wie die Kopfzeile
+• Bilder direkt ins Textfeld einfügen
+• Text in einer geöffneten Note markieren und kopieren
+• Bilder und Videos ohne Grössenangabe erscheinen ohne Balken
+• Bilder im Viewer speichern oder teilen (lange drücken)
+• Nicht gesendete Notes bleiben als Entwurf erhalten, samt Bildern
+• Beim Einrichten der Tips ist sichtbar, dass der Watcher geprüft wird

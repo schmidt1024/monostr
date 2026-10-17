@@ -73,6 +73,12 @@
     <string name="media_viewer_close">Cerrar</string>
     <string name="media_copy_link">Copiar enlace</string>
     <string name="media_open_browser">Abrir en el navegador</string>
+    <string name="media_save">Guardar imagen</string>
+    <string name="media_share">Compartir imagen</string>
+    <string name="media_saved">Imagen guardada</string>
+    <string name="media_save_failed">No se pudo guardar la imagen</string>
+    <string name="media_share_title">Compartir imagen</string>
+    <string name="media_share_failed">No se pudo compartir la imagen</string>
     <string name="profile_extra_relays">Notas también de %1$s</string>
     <!-- profile header: "12 Following · 3,373 Followers"; the numbers are formatted apart -->
     <string name="profile_following_label">Siguiendo</string>
@@ -113,8 +119,6 @@
     <string name="feed_settings">Ajustes</string>
     <string name="feed_new_note">Nueva nota</string>
     <string name="feed_empty">Aún no hay notas. Sigue a alguien o escribe la primera.</string>
-    <string name="feed_tab_posts">Publicaciones</string>
-    <string name="feed_tab_replies">Respuestas</string>
     <string name="feed_error_load">No se pudo cargar el feed</string>
     <string name="feed_error_more">No se pudieron cargar más notas</string>
 
@@ -188,6 +192,11 @@
     <string name="setup_watcher_text">El watcher detecta los pagos entrantes y publica los recibos en Nostr.</string>
     <string name="setup_watcher_url">URL del watcher</string>
     <string name="setup_load_watcher">Comprobar watcher</string>
+    <string name="setup_checking">Comprobando el watcher…</string>
+    <string name="setup_slow_hint">Esto puede tardar unos segundos</string>
+    <string name="setup_cancel_check">Cancelar</string>
+    <string name="setup_err_timeout">Watcher no accesible</string>
+    <string name="setup_try_again">Reintentar</string>
     <string name="setup_skip">Más tarde</string>
     <string name="setup_watcher_info">Watcher %1$s · %2$s · altura %3$d</string>
     <string name="setup_privacy">El watcher ve todos los pagos entrantes de esta wallet. Por eso conviene usar una wallet aparte solo para propinas.</string>
@@ -492,7 +501,6 @@
     <string name="upload_error_failed">La subida falló</string>
     <string name="compose_error_uploads">Espera a que se suban las imágenes o quita las que fallaron</string>
     <string name="compose_attach">Añadir imágenes</string>
-    <string name="compose_paste_image">Pegar imagen del portapapeles</string>
     <string name="compose_attachment_remove">Quitar imagen</string>
     <string name="upload_retry">Reintentar</string>
     <string name="compose_sensitive">Contenido sensible</string>
@@ -526,4 +534,6 @@
     <string name="amounts_prompt_text">Los recibos solo mostrarían que recibiste una propina, no cuánto. Tu wallet sigue mostrando los importes.</string>
     <string name="amounts_prompt_yes">Ocultar importes</string>
     <string name="amounts_prompt_no">Dejar públicos</string>
+    <string name="conversation_show_replies">Mostrar respuestas</string>
+    <string name="conversation_unavailable">Esta nota no está disponible</string>
 </resources>

@@ -1,0 +1,2 @@
+• Inicio como en X: un solo feed con respuestas, debajo de la nota a la que responden
+• Los hilos muestran las respuestas en ramas, una respuesta a una respuesta aparece debajo

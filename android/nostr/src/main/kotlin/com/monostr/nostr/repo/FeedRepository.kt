@@ -30,11 +30,11 @@ interface FeedRepository {
      */
     val contactsFetchedAt: Long? get() = null
     fun markContactsFetched(at: Long) {}
-    /** The home feed: root notes ("Posts" tab), or with [replies] the replies alone ("Replies" tab), like the profile's tabs. */
-    suspend fun notes(limit: Int = 50, until: Long? = null, replies: Boolean = false): List<Note>
+    /** The home feed: notes, reposts and replies of the followed accounts, newest first (spec 2026-10-16 §2.1). */
+    suspend fun notes(limit: Int = 50, until: Long? = null): List<Note>
     suspend fun refresh(limit: Int = 50)
-    suspend fun loadMore(before: Long, limit: Int = 50, replies: Boolean = false): List<Note>
-    fun live(limit: Int = 50, replies: Boolean = false): Flow<List<Note>>
+    suspend fun loadMore(before: Long, limit: Int = 50): List<Note>
+    fun live(limit: Int = 50): Flow<List<Note>>
     /** Kind 1 and 6 by one author, newest first; fetches from relays when [fetch] is set. */
     suspend fun notesBy(author: String, limit: Int = 50, fetch: Boolean = true): List<Note>
     /** The newest [limit] notes of one profile tab ([section]), newest first; fetches the author's latest page from relays when [fetch] is set. */
@@ -59,7 +59,7 @@ enum class ProfileSection(internal val kinds: List<Int>) {
 /** The home feed's kinds: notes and reposts. */
 private val FEED_KINDS = listOf(1, 6)
 
-/** Spec "feed without replies": a reply, or a repost of one, belongs to its thread and not to the feed. */
+/** A root note: neither a reply nor a repost of one (the profile's "Posts" section). */
 internal fun isRoot(note: Note): Boolean = !(note.isReply || note.repostOf?.isReply == true)
 
 /** Runs a best-effort relay call: failures are ignored, cancellation still propagates. */
@@ -147,15 +147,8 @@ class NostrFeedRepository(
     /** The home feed's authors: the follows without [excluded]. */
     private suspend fun feedAuthors(): List<String> = follows() - excluded()
 
-    /**
-     * Latest [limit] root notes before [until] from the local database (spec "feed without replies": a reply, or a
-     * repost of one, belongs to its thread and not to the feed). Relays cannot leave replies out, so a page may be
-     * all replies: the read goes on below it, up to [LOCAL_ROUNDS] pages, until [limit] notes are together or the
-     * database has nothing older. Main-safe: the mapping runs on [Dispatchers.IO].
-     */
-    override suspend fun notes(limit: Int, until: Long?, replies: Boolean): List<Note> = localPage(feedAuthors(), keep(replies), limit, until)
-
-    private fun keep(replies: Boolean): (Note) -> Boolean = if (replies) ProfileSection.REPLIES::keeps else ::isRoot
+    /** Latest [limit] notes before [until] from the local database, replies included. Main-safe: the mapping runs on [Dispatchers.IO]. */
+    override suspend fun notes(limit: Int, until: Long?): List<Note> = localPage(feedAuthors(), { true }, limit, until)
 
     /** The local read behind [notes] and [profileNotes]: pages of [authors]' notes, [keep] applied, until [limit] are together. */
     private suspend fun localPage(authors: List<String>, keep: (Note) -> Boolean, limit: Int, until: Long?, kinds: List<Int> = FEED_KINDS): List<Note> = withContext(Dispatchers.IO) {
@@ -181,12 +174,8 @@ class NostrFeedRepository(
         fetchPage(feedAuthors(), limit)
     }
 
-    /**
-     * Older page: fetches from relays, then returns local root notes before [before]. A relay page made of replies
-     * alone yields nothing; then the next page below the oldest event fetched is asked for, up to [RELAY_ROUNDS]
-     * times, so the list does not stick to the same page.
-     */
-    override suspend fun loadMore(before: Long, limit: Int, replies: Boolean): List<Note> = relayPage(feedAuthors(), keep(replies), before, limit)
+    /** Older page: fetches from relays, then returns the local notes before [before]. */
+    override suspend fun loadMore(before: Long, limit: Int): List<Note> = relayPage(feedAuthors(), { true }, before, limit)
 
     /** The relay paging behind [loadMore] and [moreProfileNotes]. */
     private suspend fun relayPage(authors: List<String>, keep: (Note) -> Boolean, before: Long, limit: Int, kinds: List<Int> = FEED_KINDS): List<Note> {
@@ -207,10 +196,10 @@ class NostrFeedRepository(
      * events (e.g. a relay refresh running in parallel) is conflated into one re-query, and the
      * work runs on [Dispatchers.IO] so collectors on the main thread are never starved.
      */
-    override fun live(limit: Int, replies: Boolean): Flow<List<Note>> = flow {
+    override fun live(limit: Int): Flow<List<Note>> = flow {
         // read once per start: a mute during the session takes effect when the caller restarts the flow
         val authors = feedAuthors()
-        emit(notes(limit, replies = replies))
+        emit(notes(limit))
         // best-effort: without relays (or on a relay error) the local list stays and no live updates arrive
         val subId = try {
             engine.subscribe(liveFilter(authors).since(Timestamp.fromSecs(now().toULong())))
@@ -226,7 +215,7 @@ class NostrFeedRepository(
                     (kind == 1 || kind == 6 || kind == 5) && ev.author().toHex() in authors
                 }
                 .conflate()
-                .collect { emit(notes(limit, replies = replies)) }
+                .collect { emit(notes(limit)) }
         } finally {
             if (subId != null) withContext(NonCancellable) { quietly { engine.unsubscribe(subId) } }
         }

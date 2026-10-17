@@ -73,6 +73,12 @@
     <string name="media_viewer_close">Fermer</string>
     <string name="media_copy_link">Copier le lien</string>
     <string name="media_open_browser">Ouvrir dans le navigateur</string>
+    <string name="media_save">Enregistrer l\'image</string>
+    <string name="media_share">Partager l\'image</string>
+    <string name="media_saved">Image enregistrée</string>
+    <string name="media_save_failed">Impossible d\'enregistrer l\'image</string>
+    <string name="media_share_title">Partager l\'image</string>
+    <string name="media_share_failed">Impossible de partager l\'image</string>
     <string name="profile_extra_relays">Notes aussi depuis %1$s</string>
     <!-- profile header: "12 Following · 3,373 Followers"; the numbers are formatted apart -->
     <string name="profile_following_label">Abonnements</string>
@@ -113,8 +119,6 @@
     <string name="feed_settings">Paramètres</string>
     <string name="feed_new_note">Nouvelle note</string>
     <string name="feed_empty">Pas encore de notes. Suivez quelqu\'un ou écrivez la première.</string>
-    <string name="feed_tab_posts">Publications</string>
-    <string name="feed_tab_replies">Réponses</string>
     <string name="feed_error_load">Impossible de charger le fil</string>
     <string name="feed_error_more">Impossible de charger plus de notes</string>
 
@@ -188,6 +192,11 @@
     <string name="setup_watcher_text">Le watcher détecte les paiements entrants et publie les reçus sur Nostr.</string>
     <string name="setup_watcher_url">URL du watcher</string>
     <string name="setup_load_watcher">Vérifier le watcher</string>
+    <string name="setup_checking">Vérification du watcher…</string>
+    <string name="setup_slow_hint">Cela peut prendre quelques secondes</string>
+    <string name="setup_cancel_check">Annuler</string>
+    <string name="setup_err_timeout">Watcher injoignable</string>
+    <string name="setup_try_again">Réessayer</string>
     <string name="setup_skip">Plus tard</string>
     <string name="setup_watcher_info">Watcher %1$s · %2$s · hauteur %3$d</string>
     <string name="setup_privacy">Le watcher voit tous les paiements entrants de ce portefeuille. Utilisez donc un portefeuille séparé, réservé aux pourboires.</string>
@@ -492,7 +501,6 @@
     <string name="upload_error_failed">Échec de l\'envoi</string>
     <string name="compose_error_uploads">Attendez la fin de l\'envoi des images ou retirez celles qui ont échoué</string>
     <string name="compose_attach">Ajouter des images</string>
-    <string name="compose_paste_image">Coller l\'image du presse-papiers</string>
     <string name="compose_attachment_remove">Retirer l\'image</string>
     <string name="upload_retry">Réessayer</string>
     <string name="compose_sensitive">Contenu sensible</string>
@@ -526,4 +534,6 @@
     <string name="amounts_prompt_text">Les reçus indiqueraient seulement que vous avez reçu un pourboire, pas le montant. Votre portefeuille affiche toujours les montants.</string>
     <string name="amounts_prompt_yes">Masquer les montants</string>
     <string name="amounts_prompt_no">Laisser public</string>
+    <string name="conversation_show_replies">Afficher les réponses</string>
+    <string name="conversation_unavailable">Cette note n’est pas disponible</string>
 </resources>

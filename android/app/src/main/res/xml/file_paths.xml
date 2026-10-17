@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- spec 2026-10-16 §7: only the shared picture of the viewer is exposed, nothing else of the cache -->
+<paths>
+    <cache-path name="shared" path="shared/" />
+</paths>

@@ -2,6 +2,8 @@ package com.monostr.app.ui
 
 import com.monostr.app.data.Accent
 import com.monostr.app.data.DmSettingsStore
+import com.monostr.app.data.Draft
+import com.monostr.app.data.DraftStore
 import com.monostr.app.data.MediaServer
 import com.monostr.app.data.RecentSearchesStore
 import com.monostr.app.data.MoneroSetup
@@ -88,6 +90,18 @@ fun note(id: Char, author: String = "a".repeat(64), createdAt: Long = 1000, cont
 fun repostOf(original: Note, by: String, createdAt: Long) =
     Note("f".repeat(63) + createdAt.toString().last(), by, "", createdAt, 6, null, null, original, emptyList())
 
+class FakeConversations(var chains: Map<String, com.monostr.nostr.repo.Chain> = emptyMap()) : com.monostr.nostr.repo.ConversationRepository {
+    val calls = ArrayList<List<String>>()
+    /** When set, `chains` suspends here after recording the call, to test that nothing waits for it. */
+    var gate: CompletableDeferred<Unit>? = null
+    override suspend fun chains(notes: List<Note>): Map<String, com.monostr.nostr.repo.Chain> {
+        calls += notes.map { it.id }
+        gate?.await()
+        return chains.filterKeys { k -> notes.any { it.id == k } }
+    }
+    override suspend fun ancestors(note: Note): List<com.monostr.nostr.repo.Slot> = emptyList()
+}
+
 class FakeFeed : FeedRepository {
     var current: List<Note> = emptyList()
     var older: List<Note> = emptyList()
@@ -104,15 +118,12 @@ class FakeFeed : FeedRepository {
     var followList: List<String> = listOf("a".repeat(64))
     override suspend fun follows() = followList
     override suspend fun followsLocal() = followList
-    /** The `replies` flag of every notes/loadMore/live call, in order. */
-    val repliesCalls = ArrayList<Boolean>()
-    override suspend fun notes(limit: Int, until: Long?, replies: Boolean) = current.also { repliesCalls += replies }
+    override suspend fun notes(limit: Int, until: Long?) = current
     override suspend fun refresh(limit: Int) {
         refreshCalls++
         refreshGate?.await()
     }
-    override suspend fun loadMore(before: Long, limit: Int, replies: Boolean): List<Note> {
-        repliesCalls += replies
+    override suspend fun loadMore(before: Long, limit: Int): List<Note> {
         loadMoreCalls++
         loadMoreGate?.await()
         loadMoreError?.let { throw it }
@@ -120,7 +131,7 @@ class FakeFeed : FeedRepository {
     }
     /** How often [live] was started (each restart counts). */
     var liveCalls = 0
-    override fun live(limit: Int, replies: Boolean): Flow<List<Note>> = flow { liveCalls++; repliesCalls += replies; emit(current); liveUpdates.collect { emit(it) } }
+    override fun live(limit: Int): Flow<List<Note>> = flow { liveCalls++; emit(current); liveUpdates.collect { emit(it) } }
     /** The `fetch` flag of every notesBy call, in order. */
     val notesByCalls = ArrayList<Boolean>()
     override suspend fun notesBy(author: String, limit: Int, fetch: Boolean): List<Note> {
@@ -437,7 +448,19 @@ class FakeWatcherGateway(
     val registered = ArrayList<Triple<String, Address, String>>()
     val unregistered = ArrayList<String>()
     var infoCalls = 0
-    override suspend fun info(url: String): WatcherInfo { infoCalls++; infoError?.let { throw it }; return info ?: throw WatcherException.Protocol("no info") }
+    val infoUrls = ArrayList<String>()
+    /** When set, info suspends until it completes (a never-completed gate = a watcher that never answers). */
+    var infoGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+    var infoCancelled = 0
+    override suspend fun info(url: String): WatcherInfo {
+        infoCalls++; infoUrls += url
+        try {
+            infoGate?.await()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            infoCancelled++; throw e
+        }
+        infoError?.let { throw it }; return info ?: throw WatcherException.Protocol("no info")
+    }
     override suspend fun register(url: String, address: Address, viewSecret: ByteArray): String {
         registerError?.let { throw it }
         registered += Triple(url, address, viewSecret.toHex())
@@ -484,9 +507,6 @@ class FakeUiSettings : UiSettingsStore {
     val primalStatsState = MutableStateFlow(false)
     override val primalStats: Flow<Boolean> = primalStatsState
     override suspend fun setPrimalStats(on: Boolean) { primalStatsState.value = on }
-    val feedWithRepliesState = MutableStateFlow(false)
-    override val feedWithReplies: Flow<Boolean> = feedWithRepliesState
-    override suspend fun setFeedWithReplies(on: Boolean) { feedWithRepliesState.value = on }
     val quickReactionsState = MutableStateFlow(com.monostr.app.ui.common.Reactions.QUICK)
     override val quickReactions: Flow<List<String>> = quickReactionsState
     val powBitsState = MutableStateFlow(0)
@@ -707,6 +727,40 @@ class FakeRecentSearches : RecentSearchesStore {
     }
     override suspend fun remove(query: String) { state.value = state.value.filterNot { it.equals(query.trim(), ignoreCase = true) } }
     override suspend fun clear() { state.value = emptyList() }
+}
+
+/** In-memory [DraftStore] with the real store's rules; [fail] makes every call throw, [loadGate] holds loads back. */
+class FakeDraftStore : DraftStore {
+    private val drafts = HashMap<Pair<String, String>, Draft>()
+    /** Every draft written, in order (empty ones too). */
+    val saves = ArrayList<Draft>()
+    var fail = false
+    var loadGate: CompletableDeferred<Unit>? = null
+
+    fun put(pubkey: String, target: String, draft: Draft) { drafts[pubkey to target] = draft }
+    fun stored(pubkey: String, target: String): Draft? = drafts[pubkey to target]
+    private fun failIfAsked() { if (fail) throw java.io.IOException("disk full") }
+
+    override suspend fun load(pubkey: String, target: String): Draft? { loadGate?.await(); failIfAsked(); return drafts[pubkey to target] }
+    override suspend fun save(pubkey: String, target: String, draft: Draft) {
+        failIfAsked()
+        saves += draft
+        if (draft.isEmpty) drafts.remove(pubkey to target) else drafts[pubkey to target] = draft
+    }
+    override suspend fun remove(pubkey: String, target: String) { failIfAsked(); drafts.remove(pubkey to target) }
+    override suspend fun expire(pubkey: String, now: Long, maxAgeSeconds: Long): List<Draft> {
+        failIfAsked()
+        val gone = drafts.filter { (k, d) -> k.first == pubkey && now - d.updatedAt >= maxAgeSeconds }
+        gone.keys.forEach { drafts.remove(it) }
+        return gone.values.toList()
+    }
+    override suspend fun all(pubkey: String): List<Draft> { failIfAsked(); return drafts.filterKeys { it.first == pubkey }.values.toList() }
+    override suspend fun removeAll(pubkey: String): List<Draft> {
+        failIfAsked()
+        val gone = drafts.filterKeys { it.first == pubkey }
+        gone.keys.forEach { drafts.remove(it) }
+        return gone.values.toList()
+    }
 }
 
 class FakeFollowCounts(private val counts: Map<String, List<FollowCounts>> = emptyMap(), private val fail: Boolean = false) : FollowCountsRepository {

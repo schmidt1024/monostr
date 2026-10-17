@@ -1,0 +1,7 @@
+• La barra inferior se oculta al desplazarte, como la cabecera
+• Pega una imagen directamente en el campo de texto
+• Selecciona y copia texto en una nota abierta
+• Imágenes y vídeos sin tamaño indicado ya no muestran barras
+• Guarda o comparte una imagen desde el visor (pulsación larga)
+• Las notas sin enviar se guardan como borradores, con sus imágenes
+• Al configurar las propinas se ve el progreso mientras se comprueba el watcher

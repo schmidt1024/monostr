@@ -50,6 +50,11 @@ import com.monostr.app.ui.common.MessageSnackbar
 import com.monostr.app.ui.common.NoteActions
 import com.monostr.app.ui.common.BottomTab
 import com.monostr.app.ui.common.MonostrBottomBar
+import com.monostr.app.ui.common.HideOnScrollFooter
+import com.monostr.app.ui.common.ShowBarsWhenStuck
+import com.monostr.app.ui.common.rememberHideOnScroll
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import com.monostr.app.ui.common.NoteCard
 import com.monostr.app.ui.common.NoteDeletions
 import com.monostr.app.ui.common.Message
@@ -259,17 +264,20 @@ fun BookmarksScreen(
     var tippersFor by remember { mutableStateOf<Note?>(null) }
     MessageSnackbar(state.message, snackbar, onUnmute = vm.controller::unmute, onShown = vm.controller::clearMessage)
     DeletionMessages(vm.deletions, snackbar)
+    val hide = rememberHideOnScroll()
+    val listState = rememberLazyListState()
+    ShowBarsWhenStuck(hide, listState, hasList = !state.loading && state.entries.isNotEmpty())
     Scaffold(
+        modifier = Modifier.nestedScroll(hide.connection),
         topBar = { TopAppBar(title = { Text(stringResource(R.string.bookmarks_title)) }) },
         // spec 11.1: a tab like search and notifications, not a sub-screen with a back arrow
-        bottomBar = { MonostrBottomBar(BottomTab.BOOKMARKS, unread = 0, dmUnread = dmUnread, onFeed = onFeed, onSearch = onSearch, onBookmarks = {}, onMessages = onMessages, onNotifications = onNotifications) },
+        bottomBar = { HideOnScrollFooter(hide) { MonostrBottomBar(BottomTab.BOOKMARKS, unread = 0, dmUnread = dmUnread, onFeed = onFeed, onSearch = onSearch, onBookmarks = hide::show, onMessages = onMessages, onNotifications = onNotifications, windowInsets = WindowInsets(0)) } },
         snackbarHost = { SnackbarHost(snackbar, Modifier.muteUndoTag(state.message)) },
     ) { padding ->
         when {
             state.loading -> LoadingScreen()
             state.entries.isEmpty() -> Box(Modifier.padding(padding).fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) { Text(stringResource(R.string.bookmarks_empty), textAlign = TextAlign.Center) }
             else -> {
-                val listState = rememberLazyListState()
                 LazyColumn(state = listState, modifier = Modifier.padding(padding).fillMaxSize().testTag("bookmarks-list")) {
                     items(state.entries, key = { it.id }) { e ->
                         val n = e.note

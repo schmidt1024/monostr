@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Host a watcher - monostr</title>
+<meta name="description" content="Host a monostr watcher with your own Monero node and domain: Docker Compose with monerod, monero-lws, the watcher and Caddy.">
+<meta property="og:title" content="Host a watcher - monostr">
+<meta property="og:description" content="Run a monostr watcher with your own Monero node and domain, for yourself or for others.">
+<meta property="og:image" content="https://monostr.com/assets/monostr-banner.png">
+<meta property="og:url" content="https://monostr.com/watcher/self-host/">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e0e0e" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/style.css">
+</head>
+
+<body>
+<main>
+    <header class="page-head">
+        <p class="crumb"><a href="/">monostr</a> / Watcher</p>
+        <h1>Host a watcher</h1>
+        <p class="lead">Run a watcher like watcher.monostr.com on your own server: with your own Monero node, under your own domain, for yourself or for others.</p>
+    </header>
+
+    <section class="note">
+        <p><strong>Only for yourself?</strong> A <a href="/watcher/personal/">personal watcher</a> is much simpler: no node, no domain, no open port, and it runs on a Raspberry Pi.</p>
+    </section>
+
+    <section>
+        <h2>What it does</h2>
+        <p>The watcher holds the private view keys of the tip wallets registered with it, detects incoming tips and publishes signed receipts on Nostr. Everything runs on one host with Docker Compose: a pruned Monero node (<code>monerod</code>), the scanner <code>monero-lws</code>, the watcher, and Caddy for HTTPS.</p>
+    </section>
+
+    <section>
+        <h2>What you need</h2>
+        <ul>
+            <li>A Linux server with <a href="https://docs.docker.com/engine/install/">Docker</a>, the Compose plugin and Git, reachable from the internet on ports 80 and 443 (18080 for Monero P2P is recommended)</li>
+            <li><strong>Disk:</strong> about 110 GB for the pruned blockchain today; plan for 150 GB. An SSD makes the first sync much faster.</li>
+            <li><strong>RAM:</strong> 4 GB (2 GB plus swap works, slower)</li>
+            <li>A domain or subdomain whose DNS record (A/AAAA) points to the server, for example <code>watcher.example.com</code></li>
+            <li>Time: the first blockchain sync takes from several hours to a few days</li>
+        </ul>
+        <p>Already running a Monero node? See <a href="#existing-node">Using an existing node</a>.</p>
+    </section>
+
+    <section>
+        <h2>1. Install</h2>
+<pre><code>git clone https://github.com/schmidt1024/monostr.git
+cd monostr/watcher
+cp .env.selfhost.example .env
+chmod 600 .env
+sed -i "s/^WATCHER_SECRET_KEY=.*/WATCHER_SECRET_KEY=$(openssl rand -hex 32)/" .env</code></pre>
+        <p>Open <code>.env</code> in an editor and fill in:</p>
+        <dl>
+            <dt><code>WATCHER_DOMAIN</code></dt>
+            <dd>your domain, for example <code>watcher.example.com</code></dd>
+            <dt><code>WATCHER_ALLOWED_PUBKEYS</code></dt>
+            <dd>your npub (several separated by commas). Only these accounts can register a wallet. Leave it empty only if you want to offer the watcher to everyone.</dd>
+            <dt><code>WATCHER_RELAYS</code></dt>
+            <dd>optional: the relays the watcher reads tip intents from and publishes receipts to. The default is fine.</dd>
+        </dl>
+    </section>
+
+    <section>
+        <h2>2. Start</h2>
+<pre><code>docker compose -f compose.selfhost.yml up -d --build
+curl https://watcher.example.com/v1/info</code></pre>
+        <p><code>/v1/info</code> answers right away with the watcher's pubkey, network and <code>height</code>. Keep the secret key in <code>.env</code> safe: it is the watcher's identity, and the receipts are signed with it.</p>
+    </section>
+
+    <section>
+        <h2>3. Wait for the sync</h2>
+<pre><code>docker compose -f compose.selfhost.yml logs -f monerod</code></pre>
+        <p>monerod is done when it logs <code>You are now synchronized with the network</code>. Then <code>height</code> in <code>/v1/info</code> is close to the current block height (compare with any block explorer). Connect the app only after that.</p>
+    </section>
+
+    <section>
+        <h2>4. Connect the app</h2>
+        <p>In monostr: <strong>Settings → Monero tips → Switch watcher</strong> (or <strong>Set up receiving Monero tips</strong> if you have not set up tips yet). Enter <code>https://watcher.example.com</code> as the watcher URL, tap <strong>Check watcher</strong> and register your tip wallet: its primary address and private view key.</p>
+        <p>The app removes your account from the previous watcher and announces the new one in your profile, so senders use it from then on.</p>
+        <p>Use a wallet only for tips: the view key shows the watcher every incoming payment of that wallet, not only tips. It can never spend anything.</p>
+    </section>
+
+    <section>
+        <h2>Updates</h2>
+<pre><code>cd monostr && git pull
+cd watcher && docker compose -f compose.selfhost.yml up -d --build</code></pre>
+        <p>The images of monerod, monero-lws and Caddy are pinned by digest in <code>compose.selfhost.yml</code>; a <code>git pull</code> brings tested new versions.</p>
+    </section>
+
+    <section>
+        <h2>Backup</h2>
+        <p>Back up <code>.env</code>: it holds the secret key. The watcher database lives in the volume <code>monostr-watcher_watcher-data</code> (<code>watcher.db</code>, SQLite) and holds open tips and receipts.</p>
+        <p>Losing it is not fatal: on the next start the watcher reads the last day's tip intents from the relays again and takes over the receipts it had already published instead of publishing them twice. Tips older than a day that were still open are lost. Wallets registered in monero-lws are added again the next time the app registers. The blockchain does not need a backup.</p>
+    </section>
+
+    <section id="existing-node">
+        <h2>Using an existing node</h2>
+        <p>monero-lws needs monerod's ZMQ interface, which public nodes do not offer. If you run monerod yourself, start it with:</p>
+<pre><code>--zmq-rpc-bind-ip=0.0.0.0 --zmq-rpc-bind-port=18082 --confirm-zmq-rpc-external-bind
+--zmq-pub=tcp://0.0.0.0:18083</code></pre>
+        <p>Never publish these ports to the internet. Then remove the <code>monerod</code> service and the <code>monerod-data</code> volume from your copy of <code>compose.selfhost.yml</code>, and point <code>--daemon</code>, <code>--sub</code> (monero-lws) and <code>MONEROD_RPC_URL</code> (watcher, restricted RPC) at your node, for example by attaching its Docker network.</p>
+    </section>
+
+    <section>
+        <h2>Troubleshooting</h2>
+        <h3><code>/v1/info</code> does not answer</h3>
+        <p>Check the DNS record and that ports 80 and 443 are open. The Caddy log shows certificate errors:</p>
+<pre><code>docker compose -f compose.selfhost.yml logs caddy</code></pre>
+        <h3>"this watcher only accepts accounts of its operator"</h3>
+        <p>Your npub is not in <code>WATCHER_ALLOWED_PUBKEYS</code>. After changing <code>.env</code>, apply it:</p>
+<pre><code>docker compose -f compose.selfhost.yml up -d</code></pre>
+        <h3>Tips stay unconfirmed</h3>
+        <p>monerod or monero-lws is still syncing; check the logs of both.</p>
+    </section>
+
+    <section>
+        <h2>More</h2>
+        <p>The technical reference is <a href="https://github.com/schmidt1024/monostr/blob/main/watcher/SELFHOST.md">SELFHOST.md</a> in the repository. Questions or problems: open an <a href="https://github.com/schmidt1024/monostr/issues">issue</a> or mention monostr on Nostr.</p>
+    </section>
+
+    <footer>
+        <p><a href="/">monostr.com</a> · Source code: <a href="https://github.com/schmidt1024/monostr">github.com/schmidt1024/monostr</a> (AGPL-3.0-or-later)</p>
+    </footer>
+</main>
+
+<script>
+(function () {
+    let saved = null;
+    try { saved = localStorage.getItem("theme"); } catch (e) {}
+    if (saved === "dark" || saved === "light") {
+        document.documentElement.setAttribute("data-theme", saved);
+    }
+})();
+</script>
+</body>
+</html>

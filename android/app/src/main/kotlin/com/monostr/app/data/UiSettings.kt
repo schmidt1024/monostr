@@ -55,8 +55,6 @@ interface UiSettingsStore {
     val clientTag: Flow<Boolean>
     /** Follower numbers from Primal's cache (a proprietary service); off by default (0.18), then only the relays' NIP-45 COUNTs. */
     val primalStats: Flow<Boolean>
-    /** The home feed shows the "Replies" tab (replies alone); off by default ("Posts"). */
-    val feedWithReplies: Flow<Boolean>
     /** The quick reactions of the long press on the heart, in the user's order; the default until edited. */
     val quickReactions: Flow<List<String>>
     /** NIP-13 proof of work for own notes, in bits: 0 (off, the default), 16, 20 or 24. */
@@ -72,7 +70,6 @@ interface UiSettingsStore {
     suspend fun setCustomHue(hue: Float)
     suspend fun setClientTag(on: Boolean)
     suspend fun setPrimalStats(on: Boolean)
-    suspend fun setFeedWithReplies(on: Boolean)
     /** An empty list restores the default. */
     suspend fun setQuickReactions(list: List<String>)
 }
@@ -89,7 +86,6 @@ class PrefsUiSettingsStore(private val store: DataStore<Preferences>) : UiSettin
     override val mediaServer: Flow<String> = data.map { it[MEDIA_SERVER]?.takeIf { v -> v.isNotBlank() } ?: MediaServer.DEFAULT }
     override val clientTag: Flow<Boolean> = data.map { it[CLIENT_TAG] ?: false }
     override val primalStats: Flow<Boolean> = data.map { it[PRIMAL_STATS] ?: false }
-    override val feedWithReplies: Flow<Boolean> = data.map { it[FEED_WITH_REPLIES] ?: false }
     override val quickReactions: Flow<List<String>> = data.map { Reactions.decode(it[QUICK_REACTIONS]) }
     override val powBits: Flow<Int> = data.map { p -> p[POW_BITS]?.let { powChoice(it) } ?: POW_DEFAULT }
     override suspend fun setPowBits(bits: Int) { store.edit { it[POW_BITS] = powChoice(bits) } }
@@ -105,7 +101,6 @@ class PrefsUiSettingsStore(private val store: DataStore<Preferences>) : UiSettin
     override suspend fun setMediaServer(url: String) { store.edit { it[MEDIA_SERVER] = url } }
     override suspend fun setClientTag(on: Boolean) { store.edit { it[CLIENT_TAG] = on } }
     override suspend fun setPrimalStats(on: Boolean) { store.edit { it[PRIMAL_STATS] = on } }
-    override suspend fun setFeedWithReplies(on: Boolean) { store.edit { it[FEED_WITH_REPLIES] = on } }
     override suspend fun setQuickReactions(list: List<String>) {
         store.edit { if (list.isEmpty()) it.remove(QUICK_REACTIONS) else it[QUICK_REACTIONS] = Reactions.encode(list) }
     }
@@ -116,7 +111,6 @@ class PrefsUiSettingsStore(private val store: DataStore<Preferences>) : UiSettin
         val CUSTOM_HUE = floatPreferencesKey("ui.custom_hue")
         val CLIENT_TAG = booleanPreferencesKey("ui.client_tag")
         val PRIMAL_STATS = booleanPreferencesKey("ui.primal_stats")
-        val FEED_WITH_REPLIES = booleanPreferencesKey("ui.feed_with_replies")
         val QUICK_REACTIONS = stringPreferencesKey("ui.quick_reactions")
         val POW_BITS = intPreferencesKey("ui.pow_bits")
         val BLUR_SENSITIVE = booleanPreferencesKey("ui.blur_sensitive")

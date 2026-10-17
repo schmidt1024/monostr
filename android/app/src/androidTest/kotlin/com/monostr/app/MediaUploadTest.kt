@@ -3,6 +3,7 @@ package com.monostr.app
 import android.app.Activity
 import android.app.Instrumentation
 import android.content.ClipData
+import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.ContentValues
 import android.content.Intent
@@ -11,6 +12,8 @@ import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.net.Uri
 import android.provider.MediaStore
+import android.view.inputmethod.EditorInfo
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -19,12 +22,16 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
+import androidx.core.view.inputmethod.InputConnectionCompat
+import androidx.core.view.inputmethod.InputContentInfoCompat
 import androidx.test.espresso.intent.Intents
 import androidx.test.espresso.intent.Intents.intending
 import androidx.test.espresso.intent.matcher.IntentMatchers.hasAction
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.monostr.app.data.DraftTargets
 import com.monostr.app.data.MediaServer
 import com.monostr.app.data.PrefsRelayStore
 import com.monostr.app.session.NostrSessionEntryPoint
@@ -43,6 +50,7 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import rust.nostr.sdk.Keys
 import java.io.File
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
@@ -112,7 +120,9 @@ class MediaUploadTest {
         base = server.url("/").toString().trimEnd('/')
         relay = LoopbackRelay()
         picture = File(ctx.cacheDir, "upload-test-${System.nanoTime()}.jpg")
-        val bitmap = Bitmap.createBitmap(640, 480, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.rgb(200, 120, 40)) }
+        // a picture of its own per test: an own note sent by an earlier test (the account's database outlives the
+        // logout) would otherwise show the same blob, and a discard rightly leaves it on the server (spec 2026-10-16 §8)
+        val bitmap = Bitmap.createBitmap(640, 480, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.rgb(200, 120, 40)); setPixel(0, 0, java.util.Random().nextInt() or 0xFF000000.toInt()) }
         picture.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it) }
 
         // the system photo picker, whichever action this Android version uses for it
@@ -185,6 +195,8 @@ class MediaUploadTest {
             entry.session().applyRelays(listOf(relay.url))
             entry.uiSettings().setMediaServer(base)
         }
+        // drafts of earlier tests (left composers) must not show up here
+        runBlocking { entry.drafts().expire(Keys.parse(secret).publicKey().toHex(), now = Long.MAX_VALUE) }
     }
 
     private fun attachAndAwaitUpload() {
@@ -193,15 +205,11 @@ class MediaUploadTest {
         rule.waitUntil(30_000) { nodes("compose-attachment-progress-0").isEmpty() }
     }
 
-    @Test
-    fun aCopiedPictureIsPastedThroughTheButtonAndUploaded() {
-        reachComposer()
-        // nothing on the clipboard that is a picture: no button
-        val clipboard = ctx.getSystemService(ClipboardManager::class.java)
-        rule.runOnUiThread { clipboard.setPrimaryClip(ClipData.newPlainText("t", "just text")) }
-        rule.waitForIdle()
-        assertTrue(nodes("compose-paste-image").isEmpty())
-        // the clipboard takes content:// only (a file:// URI may not leave the process): a MediaStore copy, removed below
+    /** The pictures received by paste or keyboard are copied here (spec 2026-10-16 §3). */
+    private fun received(): List<File> = File(ctx.cacheDir, "received").listFiles()?.toList().orEmpty()
+
+    /** Another app's picture: a MediaStore copy (the clipboard takes content:// only), removed afterwards. */
+    private fun withSharedPicture(block: (Uri) -> Unit) {
         val values = ContentValues().apply {
             put(MediaStore.Images.Media.DISPLAY_NAME, "monostr-paste-test-${System.nanoTime()}.jpg")
             put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
@@ -209,17 +217,63 @@ class MediaUploadTest {
         val shared = ctx.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)!!
         try {
             ctx.contentResolver.openOutputStream(shared)!!.use { out -> picture.inputStream().use { it.copyTo(out) } }
-            rule.runOnUiThread { clipboard.setPrimaryClip(ClipData.newUri(ctx.contentResolver, "picture", shared)) }
-            rule.waitUntil(5_000) { nodes("compose-paste-image").isNotEmpty() }
-            rule.onNodeWithTag("compose-paste-image").performScrollTo().performClick()
+            block(shared)
+        } finally {
+            ctx.contentResolver.delete(shared, null, null)
+        }
+    }
+
+    @Test
+    fun aCopiedPictureIsPastedIntoTheTextFieldAndUploaded() {
+        reachComposer()
+        assertTrue(nodes("compose-paste-image").isEmpty()) // spec 2026-10-16 §3: no paste chip any more
+        val clipboard = ctx.getSystemService(ClipboardManager::class.java)
+        withSharedPicture { shared ->
+            try {
+                rule.runOnUiThread { clipboard.setPrimaryClip(ClipData.newUri(ctx.contentResolver, "picture", shared)) }
+                rule.onNodeWithTag("compose-text").performSemanticsAction(SemanticsActions.PasteText)
+                rule.waitUntil(15_000) { nodes("compose-attachment-0").isNotEmpty() }
+                rule.waitUntil(30_000) { nodes("compose-attachment-progress-0").isEmpty() }
+                assertTrue(nodes("compose-attachment-error-0").isEmpty())
+                assertEquals(1, stored.size)
+                assertEquals("", fieldText("compose-text")) // the picture's URI is not pasted as text
+                // the attachment is a copy of its own, and it goes with the tile
+                assertEquals(1, received().size)
+                rule.onNodeWithTag("compose-attachment-remove-0").performScrollTo().performClick()
+                rule.waitUntil(5_000) { received().isEmpty() }
+            } finally {
+                rule.runOnUiThread { clipboard.clearPrimaryClip() }
+            }
+        }
+    }
+
+    @Test
+    fun aPictureFromTheKeyboardIsCopiedAndUploaded() {
+        reachComposer()
+        rule.onNodeWithTag("compose-text").performClick()
+        rule.waitForIdle()
+        withSharedPicture { shared ->
+            // what a keyboard does for a sticker or GIF: commitContent on the field's input connection
+            var committed = false
+            rule.runOnUiThread {
+                val view = rule.activity.window.decorView.findFocus()!!
+                val info = EditorInfo()
+                val connection = view.onCreateInputConnection(info)!!
+                val content = InputContentInfoCompat(shared, ClipDescription("sticker", arrayOf("image/jpeg")), null)
+                committed = InputConnectionCompat.commitContent(connection, info, content, InputConnectionCompat.INPUT_CONTENT_GRANT_READ_URI_PERMISSION, null)
+            }
+            assertTrue(committed)
+            // a copy, taken before commitContent returned: the keyboard's grant may end right after
+            assertEquals(1, received().size)
             rule.waitUntil(15_000) { nodes("compose-attachment-0").isNotEmpty() }
             rule.waitUntil(30_000) { nodes("compose-attachment-progress-0").isEmpty() }
             assertTrue(nodes("compose-attachment-error-0").isEmpty())
             assertEquals(1, stored.size)
-        } finally {
-            rule.runOnUiThread { clipboard.clearPrimaryClip() }
-            ctx.contentResolver.delete(shared, null, null)
+            assertEquals("", fieldText("compose-text"))
         }
+        // leaving the composer takes the copy with it
+        rule.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        rule.waitUntil(10_000) { received().isEmpty() }
     }
 
     @Test
@@ -268,14 +322,25 @@ class MediaUploadTest {
     }
 
     @Test
-    fun leavingTheComposerDeletesTheUpload() {
+    fun leavingTheComposerKeepsTextAndPictureAsADraft() {
         reachComposer()
         attachAndAwaitUpload()
         val hash = stored.keys.single()
+        rule.onNodeWithTag("compose-text").performTextInput("kept for later")
         rule.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
         rule.waitUntil(15_000) { nodes("fab-compose").isNotEmpty() }
-        rule.waitUntil(15_000) { deleted.contains(hash) }
+        val me = Keys.parse(secret).publicKey().toHex()
+        rule.waitUntil(10_000) { runBlocking { entry.drafts().load(me, DraftTargets.NOTE) }?.attachments?.size == 1 }
+
+        rule.onNodeWithTag("fab-compose").performClick()
+        rule.waitUntil(15_000) { nodes("compose-attachment-0").isNotEmpty() }
+        rule.waitUntil(5_000) { fieldText("compose-text") == "kept for later" }
+        assertTrue(deleted.isEmpty())
         assertTrue(relay.events.none { it.contains(hash) })
+
+        // removing the restored picture deletes it at the server, as with any tile
+        rule.onNodeWithTag("compose-attachment-remove-0").performScrollTo().performClick()
+        rule.waitUntil(15_000) { deleted.contains(hash) }
     }
 
     @Test

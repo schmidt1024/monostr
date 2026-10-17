@@ -1,0 +1,7 @@
+• La barra in basso si nasconde durante lo scorrimento, come l’intestazione
+• Incolla un’immagine direttamente nel campo di testo
+• Seleziona e copia il testo di una nota aperta
+• Immagini e video senza dimensioni indicate non mostrano più bande
+• Salva o condividi un’immagine dal visualizzatore (pressione lunga)
+• Le note non inviate restano come bozze, immagini comprese
+• Durante la configurazione delle mance si vede il controllo del watcher

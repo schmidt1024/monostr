@@ -73,6 +73,12 @@
     <string name="media_viewer_close">Fechar</string>
     <string name="media_copy_link">Copiar link</string>
     <string name="media_open_browser">Abrir no navegador</string>
+    <string name="media_save">Salvar imagem</string>
+    <string name="media_share">Compartilhar imagem</string>
+    <string name="media_saved">Imagem salva</string>
+    <string name="media_save_failed">Não foi possível salvar a imagem</string>
+    <string name="media_share_title">Compartilhar imagem</string>
+    <string name="media_share_failed">Não foi possível compartilhar a imagem</string>
     <string name="profile_extra_relays">Notas também de %1$s</string>
     <!-- profile header: "12 Following · 3,373 Followers"; the numbers are formatted apart -->
     <string name="profile_following_label">Seguindo</string>
@@ -113,8 +119,6 @@
     <string name="feed_settings">Configurações</string>
     <string name="feed_new_note">Nova nota</string>
     <string name="feed_empty">Ainda não há notas. Siga alguém ou escreva a primeira.</string>
-    <string name="feed_tab_posts">Publicações</string>
-    <string name="feed_tab_replies">Respostas</string>
     <string name="feed_error_load">Não foi possível carregar o feed</string>
     <string name="feed_error_more">Não foi possível carregar mais notas</string>
 
@@ -188,6 +192,11 @@
     <string name="setup_watcher_text">O watcher detecta pagamentos recebidos e publica os recibos no Nostr.</string>
     <string name="setup_watcher_url">URL do watcher</string>
     <string name="setup_load_watcher">Verificar watcher</string>
+    <string name="setup_checking">Verificando o watcher…</string>
+    <string name="setup_slow_hint">Isso pode levar alguns segundos</string>
+    <string name="setup_cancel_check">Cancelar</string>
+    <string name="setup_err_timeout">Watcher inacessível</string>
+    <string name="setup_try_again">Tentar novamente</string>
     <string name="setup_skip">Mais tarde</string>
     <string name="setup_watcher_info">Watcher %1$s · %2$s · altura %3$d</string>
     <string name="setup_privacy">O watcher vê todos os pagamentos recebidos desta carteira. Por isso, use uma carteira separada só para gorjetas.</string>
@@ -492,7 +501,6 @@
     <string name="upload_error_failed">Falha no envio</string>
     <string name="compose_error_uploads">Aguarde o envio das imagens ou remova as que falharam</string>
     <string name="compose_attach">Adicionar imagens</string>
-    <string name="compose_paste_image">Colar imagem da área de transferência</string>
     <string name="compose_attachment_remove">Remover imagem</string>
     <string name="upload_retry">Tentar de novo</string>
     <string name="compose_sensitive">Conteúdo sensível</string>
@@ -526,4 +534,6 @@
     <string name="amounts_prompt_text">Os recibos mostrariam apenas que você recebeu uma gorjeta, não quanto. Sua carteira continua mostrando os valores.</string>
     <string name="amounts_prompt_yes">Ocultar valores</string>
     <string name="amounts_prompt_no">Manter públicos</string>
+    <string name="conversation_show_replies">Mostrar respostas</string>
+    <string name="conversation_unavailable">Esta nota não está disponível</string>
 </resources>

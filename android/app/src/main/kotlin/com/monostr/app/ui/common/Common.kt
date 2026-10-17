@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -35,6 +36,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarDefaults
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Text
@@ -45,6 +47,11 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.luminance
@@ -171,13 +178,17 @@ fun NoteCard(
     detail: Boolean = false,
     /** "Replying to @name" on a reply; off in a thread, where the parent stands right above. */
     replyContext: Boolean = true,
+    /** Conversation block (spec 2026-10-16 §3): the thread line from the card's top edge down to the avatar; the detail card too (§4, the chain above the focused note). */
+    lineAbove: Boolean = false,
+    /** Conversation block: the thread line from below the avatar down to the card's bottom edge; list cards only. */
+    lineBelow: Boolean = false,
     /** A long press on the heart: react with this emoji (NIP-25). */
     onReact: (String) -> Unit = {},
 ) {
     if (detail) {
-        DetailNoteCard(note, onOpen, onOpenProfile, onReply, onLike, onRepost, onQuote, onTip, onShowTippers, onBookmark, onHashtag, onOpenNote, onOpenMedia, onOpenVideo, names, menu, showActions, onReact)
+        DetailNoteCard(note, onOpen, onOpenProfile, onReply, onLike, onRepost, onQuote, onTip, onShowTippers, onBookmark, onHashtag, onOpenNote, onOpenMedia, onOpenVideo, names, menu, showActions, lineAbove, onReact)
     } else {
-        ListNoteCard(note, onOpen, onOpenProfile, onReply, onLike, onRepost, onQuote, onTip, onShowTippers, onBookmark, onHashtag, onOpenNote, onOpenMedia, onOpenVideo, names, menu, showActions, collapsed, replyContext, onReact)
+        ListNoteCard(note, onOpen, onOpenProfile, onReply, onLike, onRepost, onQuote, onTip, onShowTippers, onBookmark, onHashtag, onOpenNote, onOpenMedia, onOpenVideo, names, menu, showActions, collapsed, replyContext, lineAbove, lineBelow, onReact)
     }
 }
 
@@ -203,6 +214,8 @@ private fun ListNoteCard(
     showActions: Boolean,
     collapsed: Boolean,
     replyContext: Boolean,
+    lineAbove: Boolean,
+    lineBelow: Boolean,
     onReact: (String) -> Unit,
 ) {
     val shown = note.note.repostOf ?: note.note
@@ -210,7 +223,27 @@ private fun ListNoteCard(
     val id8 = shown.id.take(8)
     // the 48 dp action targets carry 13 dp of air around their 22 dp glyphs; 4 dp on top of that above the row and
     // a 4 dp card bottom give the row the same 17 dp to the text and to the divider
-    Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = if (showActions) 4.dp else 10.dp)) {
+    val lineColor = MaterialTheme.colorScheme.outlineVariant
+    // the card's and the avatar's placement, for the thread line (spec 2026-10-16 §3); read when drawing, after both are placed
+    val placed = remember { ThreadLinePlacement() }
+    val threaded = lineAbove || lineBelow
+    Column(
+        Modifier.fillMaxWidth()
+            .then(if (threaded) Modifier.onPlaced { placed.card = it }.testTag("thread-line-$id8") else Modifier)
+            .drawBehind {
+                if (!threaded) return@drawBehind
+                val card = placed.card?.takeIf { it.isAttached } ?: return@drawBehind
+                val avatar = placed.avatar?.takeIf { it.isAttached } ?: return@drawBehind
+                val avatarTop = card.localPositionOf(avatar, Offset.Zero).y
+                val avatarBottom = avatarTop + avatar.size.height
+                val x = 16.dp.toPx() + LIST_AVATAR.toPx() / 2
+                val w = 2.dp.toPx()
+                val gap = 4.dp.toPx()
+                if (lineAbove) drawLine(lineColor, Offset(x, 0f), Offset(x, avatarTop - gap), w)
+                if (lineBelow) drawLine(lineColor, Offset(x, avatarBottom + gap), Offset(x, size.height), w)
+            }
+            .padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = if (showActions) 4.dp else 10.dp),
+    ) {
         if (note.note.isRepost) {
             // X puts the repost line above the card, flush with the text column
             Row(Modifier.padding(start = LIST_AVATAR + LIST_GAP), verticalAlignment = Alignment.CenterVertically) {
@@ -222,7 +255,8 @@ private fun ListNoteCard(
         }
         Row(Modifier.fillMaxWidth()) {
             val openProfile = stringResource(R.string.note_open_profile)
-            IconButton(onClick = { onOpenProfile(shown.author) }, modifier = Modifier.size(LIST_AVATAR).semantics { contentDescription = openProfile }.testTag("note-avatar-$id8")) {
+            val avatarPlaced = if (threaded) Modifier.onPlaced { placed.avatar = it } else Modifier
+            IconButton(onClick = { onOpenProfile(shown.author) }, modifier = Modifier.size(LIST_AVATAR).then(avatarPlaced).semantics { contentDescription = openProfile }.testTag("note-avatar-$id8")) {
                 Avatar(shownAuthor.picture, size = LIST_AVATAR)
             }
             Spacer(Modifier.width(LIST_GAP))
@@ -249,6 +283,12 @@ private fun ListNoteCard(
     }
 }
 
+/** Where the card and its avatar sit, so the thread line meets the avatar whatever stands above it (a repost line). */
+private class ThreadLinePlacement {
+    var card: LayoutCoordinates? = null
+    var avatar: LayoutCoordinates? = null
+}
+
 /** Spec 11.5 §2: avatar 44 dp, 12 dp to the column (X: 40–48 dp). */
 private val LIST_AVATAR = 44.dp
 private val LIST_GAP = 12.dp
@@ -273,16 +313,33 @@ private fun DetailNoteCard(
     names: Map<String, String>,
     menu: NoteMenu?,
     showActions: Boolean,
+    lineAbove: Boolean,
     onReact: (String) -> Unit,
 ) {
     val shown = note.note.repostOf ?: note.note
     val id8 = shown.id.take(8)
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-        NoteDetailHeader(note, onOpenProfile = onOpenProfile, menu = menu.takeIf { showActions })
+    val lineColor = MaterialTheme.colorScheme.outlineVariant
+    // spec 2026-10-16 §4: the ancestor chain's line runs on into the focused note, down to its avatar; placements read when drawing
+    val placed = remember { ThreadLinePlacement() }
+    Column(
+        Modifier.fillMaxWidth()
+            .then(if (lineAbove) Modifier.onPlaced { placed.card = it }.testTag("thread-line-$id8") else Modifier)
+            .drawBehind {
+                if (!lineAbove) return@drawBehind
+                val card = placed.card?.takeIf { it.isAttached } ?: return@drawBehind
+                val avatar = placed.avatar?.takeIf { it.isAttached } ?: return@drawBehind
+                val avatarTop = card.localPositionOf(avatar, Offset.Zero).y
+                // the list cards' x, so the line meets the one of the ancestor above without a jog
+                val x = 16.dp.toPx() + LIST_AVATAR.toPx() / 2
+                drawLine(lineColor, Offset(x, 0f), Offset(x, avatarTop - 4.dp.toPx()), 2.dp.toPx())
+            }
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
+        NoteDetailHeader(note, onOpenProfile = onOpenProfile, menu = menu.takeIf { showActions }, avatarModifier = if (lineAbove) Modifier.onPlaced { placed.avatar = it } else Modifier)
         Spacer(Modifier.height(12.dp))
         if (shown.displayContent.isNotBlank()) {
-            // the focused note is already open: its text opens nothing (onOpen is a no-op here, like the thread screen passes it)
-            NoteText(shown.displayContent, onOpen = onOpen, onHashtag = onHashtag, onOpenProfile = onOpenProfile, onOpenNote = onOpenNote, names = names, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.fillMaxWidth().testTag("note-text-$id8"))
+            // spec 2026-10-16 §4: the focused note is already open; its text selects instead of opening anything
+            NoteText(shown.displayContent, onOpen = onOpen, onHashtag = onHashtag, onOpenProfile = onOpenProfile, onOpenNote = onOpenNote, names = names, style = MaterialTheme.typography.bodyLarge, selectable = true, modifier = Modifier.fillMaxWidth().testTag("note-text-$id8"))
         }
         shown.quotedId?.let { qid ->
             QuoteCard(qid, shown.quoteRelays, names, onOpenNote = onOpenNote, onOpenProfile = onOpenProfile, onHashtag = onHashtag, modifier = Modifier.padding(top = 8.dp))
@@ -310,43 +367,49 @@ fun MonostrBottomBar(
     onBookmarks: () -> Unit,
     onMessages: () -> Unit,
     onNotifications: () -> Unit,
+    /** Inside [HideOnScrollFooter]: `WindowInsets(0)`, the footer pads the navigation bar itself. */
+    windowInsets: WindowInsets = NavigationBarDefaults.windowInsets,
 ) {
-    NavigationBar(containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 0.dp) {
-        NavigationBarItem(
-            selected = current == BottomTab.FEED, onClick = onFeed,
-            icon = { Icon(if (current == BottomTab.FEED) Icons.Filled.Home else Icons.Outlined.Home, contentDescription = stringResource(R.string.tab_feed), modifier = Modifier.size(TAB_ICON)) }, modifier = Modifier.testTag("tab-feed"),
-            colors = NavigationBarItemDefaults.colors(indicatorColor = MaterialTheme.colorScheme.primaryContainer),
-        )
-        NavigationBarItem(
-            selected = current == BottomTab.SEARCH, onClick = onSearch,
-            icon = { Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.tab_search), modifier = Modifier.size(TAB_ICON)) }, modifier = Modifier.testTag("tab-search"),
-            colors = NavigationBarItemDefaults.colors(indicatorColor = MaterialTheme.colorScheme.primaryContainer),
-        )
-        NavigationBarItem(
-            selected = current == BottomTab.BOOKMARKS, onClick = onBookmarks,
-            icon = { Icon(if (current == BottomTab.BOOKMARKS) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder, contentDescription = stringResource(R.string.bookmarks_title), modifier = Modifier.size(TAB_ICON)) }, modifier = Modifier.testTag("tab-bookmarks"),
-            colors = NavigationBarItemDefaults.colors(indicatorColor = MaterialTheme.colorScheme.primaryContainer),
-        )
-        NavigationBarItem(
-            selected = current == BottomTab.NOTIFICATIONS, onClick = onNotifications,
-            icon = {
-                BadgedBox(badge = { CountBadge(unread) }) {
-                    Icon(if (current == BottomTab.NOTIFICATIONS) Icons.Filled.Notifications else Icons.Outlined.Notifications, contentDescription = stringResource(R.string.tab_notifications), modifier = Modifier.size(TAB_ICON))
-                }
-            },
-            modifier = Modifier.testTag("tab-notifications"),
-            colors = NavigationBarItemDefaults.colors(indicatorColor = MaterialTheme.colorScheme.primaryContainer),
-        )
-        NavigationBarItem(
-            selected = current == BottomTab.MESSAGES, onClick = onMessages,
-            icon = {
-                BadgedBox(badge = { CountBadge(dmUnread) }) {
-                    Icon(if (current == BottomTab.MESSAGES) Icons.Filled.ChatBubble else Icons.Outlined.ChatBubbleOutline, contentDescription = stringResource(R.string.tab_messages), modifier = Modifier.size(TAB_ICON))
-                }
-            },
-            modifier = Modifier.testTag("tab-messages"),
-            colors = NavigationBarItemDefaults.colors(indicatorColor = MaterialTheme.colorScheme.primaryContainer),
-        )
+    // Spec 2026-10-16 §2 (user ruling): a thin line like the one between notes sets the bar off from the content; it slides with the bar
+    Column {
+        HorizontalDivider(Modifier.testTag("bottom-bar-divider"))
+        NavigationBar(containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 0.dp, windowInsets = windowInsets) {
+            NavigationBarItem(
+                selected = current == BottomTab.FEED, onClick = onFeed,
+                icon = { Icon(if (current == BottomTab.FEED) Icons.Filled.Home else Icons.Outlined.Home, contentDescription = stringResource(R.string.tab_feed), modifier = Modifier.size(TAB_ICON)) }, modifier = Modifier.testTag("tab-feed"),
+                colors = NavigationBarItemDefaults.colors(indicatorColor = MaterialTheme.colorScheme.primaryContainer),
+            )
+            NavigationBarItem(
+                selected = current == BottomTab.SEARCH, onClick = onSearch,
+                icon = { Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.tab_search), modifier = Modifier.size(TAB_ICON)) }, modifier = Modifier.testTag("tab-search"),
+                colors = NavigationBarItemDefaults.colors(indicatorColor = MaterialTheme.colorScheme.primaryContainer),
+            )
+            NavigationBarItem(
+                selected = current == BottomTab.BOOKMARKS, onClick = onBookmarks,
+                icon = { Icon(if (current == BottomTab.BOOKMARKS) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder, contentDescription = stringResource(R.string.bookmarks_title), modifier = Modifier.size(TAB_ICON)) }, modifier = Modifier.testTag("tab-bookmarks"),
+                colors = NavigationBarItemDefaults.colors(indicatorColor = MaterialTheme.colorScheme.primaryContainer),
+            )
+            NavigationBarItem(
+                selected = current == BottomTab.NOTIFICATIONS, onClick = onNotifications,
+                icon = {
+                    BadgedBox(badge = { CountBadge(unread) }) {
+                        Icon(if (current == BottomTab.NOTIFICATIONS) Icons.Filled.Notifications else Icons.Outlined.Notifications, contentDescription = stringResource(R.string.tab_notifications), modifier = Modifier.size(TAB_ICON))
+                    }
+                },
+                modifier = Modifier.testTag("tab-notifications"),
+                colors = NavigationBarItemDefaults.colors(indicatorColor = MaterialTheme.colorScheme.primaryContainer),
+            )
+            NavigationBarItem(
+                selected = current == BottomTab.MESSAGES, onClick = onMessages,
+                icon = {
+                    BadgedBox(badge = { CountBadge(dmUnread) }) {
+                        Icon(if (current == BottomTab.MESSAGES) Icons.Filled.ChatBubble else Icons.Outlined.ChatBubbleOutline, contentDescription = stringResource(R.string.tab_messages), modifier = Modifier.size(TAB_ICON))
+                    }
+                },
+                modifier = Modifier.testTag("tab-messages"),
+                colors = NavigationBarItemDefaults.colors(indicatorColor = MaterialTheme.colorScheme.primaryContainer),
+            )
+        }
     }
 }
 

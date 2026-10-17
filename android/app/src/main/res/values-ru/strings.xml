@@ -73,6 +73,12 @@
     <string name="media_viewer_close">Закрыть</string>
     <string name="media_copy_link">Копировать ссылку</string>
     <string name="media_open_browser">Открыть в браузере</string>
+    <string name="media_save">Сохранить изображение</string>
+    <string name="media_share">Поделиться изображением</string>
+    <string name="media_saved">Изображение сохранено</string>
+    <string name="media_save_failed">Не удалось сохранить изображение</string>
+    <string name="media_share_title">Поделиться изображением</string>
+    <string name="media_share_failed">Не удалось поделиться изображением</string>
     <string name="profile_extra_relays">Заметки также с %1$s</string>
     <!-- profile header: "12 Following · 3,373 Followers"; the numbers are formatted apart -->
     <string name="profile_following_label">Подписки</string>
@@ -115,8 +121,6 @@
     <string name="feed_settings">Настройки</string>
     <string name="feed_new_note">Новая заметка</string>
     <string name="feed_empty">Заметок пока нет. Подпишитесь на кого-нибудь или напишите первую.</string>
-    <string name="feed_tab_posts">Посты</string>
-    <string name="feed_tab_replies">Ответы</string>
     <string name="feed_error_load">Не удалось загрузить ленту</string>
     <string name="feed_error_more">Не удалось загрузить больше заметок</string>
 
@@ -191,6 +195,11 @@
     <string name="setup_watcher_text">Watcher отслеживает входящие платежи и публикует квитанции в Nostr.</string>
     <string name="setup_watcher_url">URL watcher</string>
     <string name="setup_load_watcher">Проверить watcher</string>
+    <string name="setup_checking">Проверка watcher…</string>
+    <string name="setup_slow_hint">Это может занять несколько секунд</string>
+    <string name="setup_cancel_check">Отмена</string>
+    <string name="setup_err_timeout">Watcher недоступен</string>
+    <string name="setup_try_again">Повторить</string>
     <string name="setup_skip">Позже</string>
     <string name="setup_watcher_info">Watcher %1$s · %2$s · высота %3$d</string>
     <string name="setup_privacy">Watcher видит все входящие платежи этого кошелька. Поэтому используйте отдельный кошелёк только для чаевых.</string>
@@ -503,7 +512,6 @@
     <string name="upload_error_failed">Не удалось загрузить</string>
     <string name="compose_error_uploads">Дождитесь загрузки изображений или уберите те, что не загрузились</string>
     <string name="compose_attach">Добавить изображения</string>
-    <string name="compose_paste_image">Вставить изображение из буфера обмена</string>
     <string name="compose_attachment_remove">Убрать изображение</string>
     <string name="upload_retry">Повторить</string>
     <string name="compose_sensitive">Деликатный контент</string>
@@ -538,4 +546,6 @@
     <string name="amounts_prompt_text">Квитанции будут показывать только, что вы получили чаевые, но не сколько. Ваш кошелёк по-прежнему показывает суммы.</string>
     <string name="amounts_prompt_yes">Скрыть суммы</string>
     <string name="amounts_prompt_no">Оставить публичными</string>
+    <string name="conversation_show_replies">Показать ответы</string>
+    <string name="conversation_unavailable">Эта заметка недоступна</string>
 </resources>

@@ -54,12 +54,12 @@ class NoteMenu(
 
 /** Spec 11.5 §3: avatar, name and handle of the focused note; the menu at the right. */
 @Composable
-fun NoteDetailHeader(note: NoteUi, onOpenProfile: (String) -> Unit, menu: NoteMenu?) {
+fun NoteDetailHeader(note: NoteUi, onOpenProfile: (String) -> Unit, menu: NoteMenu?, avatarModifier: Modifier = Modifier) {
     val shown = note.target
     val author = if (note.note.isRepost) note.repostedAuthor else note.author
     Row(verticalAlignment = Alignment.CenterVertically) {
         val openProfile = stringResource(R.string.note_open_profile)
-        IconButton(onClick = { onOpenProfile(shown.author) }, modifier = Modifier.size(48.dp).semantics { contentDescription = openProfile }.testTag("note-avatar-${shown.id.take(8)}")) {
+        IconButton(onClick = { onOpenProfile(shown.author) }, modifier = Modifier.size(48.dp).then(avatarModifier).semantics { contentDescription = openProfile }.testTag("note-avatar-${shown.id.take(8)}")) {
             Avatar(author.picture, size = 48.dp)
         }
         Spacer(Modifier.width(12.dp))

@@ -1,6 +1,5 @@
 package com.monostr.app.ui.feed
 
-import com.monostr.app.data.UiSettingsStore
 import kotlinx.coroutines.flow.first
 import com.monostr.nostr.repo.OwnReactions
 import com.monostr.nostr.repo.MemoryOwnReactions
@@ -36,7 +35,10 @@ import com.monostr.app.ui.tips.TipSheetFactory
 import com.monostr.nostr.model.Note
 import com.monostr.nostr.model.NoteCounts
 import com.monostr.nostr.model.Profile
+import com.monostr.nostr.repo.Chain
+import com.monostr.nostr.repo.ConversationRepository
 import com.monostr.nostr.repo.CountsRepository
+import com.monostr.nostr.repo.Slot
 import com.monostr.nostr.repo.FeedRepository
 import com.monostr.nostr.repo.MuteRepository
 import com.monostr.nostr.repo.ProfileRepository
@@ -83,15 +85,25 @@ data class NoteUi(
     val deleting: Boolean = false,
 )
 
+/** The block above a reply in the feed (spec 2026-10-16 §2.3): ancestor ids root first; [cut]: a "Show replies" row after the first. Key = the entry's `NoteUi.note.id`. */
+data class ChainUi(val ancestors: List<String>, val cut: Boolean)
+
+/** No conversations: for tests and callers that do not care. */
+object NoConversations : ConversationRepository {
+    override suspend fun chains(notes: List<Note>): Map<String, Chain> = emptyMap()
+    override suspend fun ancestors(note: Note): List<Slot> = emptyList()
+}
+
 data class FeedUiState(
     val notes: List<NoteUi> = emptyList(),
+    val chains: Map<String, ChainUi> = emptyMap(),
+    /** Decorated ancestor notes by id; an id of a chain that is missing here is shown as "unavailable" (not found, withdrawn, muted, deleted). */
+    val ancestors: Map<String, NoteUi> = emptyMap(),
     val loading: Boolean = true,
     val refreshing: Boolean = false,
     val loadingMore: Boolean = false,
     /** The snackbar's message; after a mute it offers to unmute the account (spec 9.4). */
     val message: Message? = null,
-    /** The "Replies" tab is open, replies alone (launch feedback 2026-10-09); else "Posts", root notes only. */
-    val withReplies: Boolean = false,
 )
 
 /** Feed logic shared by the Hilt ViewModel and the JVM tests. */
@@ -103,6 +115,7 @@ class FeedController(
     private val bookmarks: BookmarkActions,
     private val counts: CountsRepository,
     private val scope: CoroutineScope,
+    private val conversations: ConversationRepository = NoConversations,
     private val mentions: MentionResolver = MentionResolver(profiles, scope),
     /** Spec 2: emits after an own follow/unfollow; the author list of [FeedRepository.live] is read once per start (a mute change restarts it too). */
     private val followChanges: Flow<Unit> = emptyFlow(),
@@ -126,18 +139,17 @@ class FeedController(
      * Local notes first: the live collector emits the database window immediately, while the
      * relay refresh runs separately. `loading` ends on whichever finishes first.
      */
-    fun start(withReplies: Boolean = false) {
-        _state.update { it.copy(withReplies = withReplies) }
-        mentions.follow(_state.map { s -> s.notes.map { it.note } })
+    fun start() {
+        mentions.follow(_state.map { s -> s.notes.map { it.note } + s.ancestors.values.map { it.note } })
         bookmarks.ensureLoaded()
-        scope.launch { bookmarks.changes.collect { _state.update { s -> s.copy(notes = s.notes.map(bookmarks::flags)) } } }
-        scope.launch { actions.changes.collect { _state.update { s -> s.copy(notes = s.notes.map(actions::flags)) } } }
-        scope.launch { visibility.changes.collect { _state.update { s -> s.copy(notes = visibility.visible(s.notes)) } } }
+        scope.launch { bookmarks.changes.collect { _state.update { s -> s.mapAll(bookmarks::flags) } } }
+        scope.launch { actions.changes.collect { _state.update { s -> s.mapAll(actions::flags) } } }
+        scope.launch { visibility.changes.collect { _state.update { s -> s.copy(notes = visibility.visible(s.notes), ancestors = visibleAncestors()) } } }
         // a request started on another screen greys the entry here too, and frees it again when it failed
-        scope.launch { deletions.pending.collect { _state.update { s -> s.copy(notes = s.notes.map(actions::flags)) } } }
+        scope.launch { deletions.pending.collect { _state.update { s -> s.mapAll(actions::flags) } } }
         decorations.start()
-        scope.launch { decorations.changes.collect { setNotes { s -> s.notes.map(decorations::decorate) } } }
-        scope.launch { counts.counts.collect { _state.update { s -> s.copy(notes = s.notes.map(::withCounts)) } } }
+        scope.launch { decorations.changes.collect { _state.update { s -> s.mapAll(decorations::decorate) } } }
+        scope.launch { counts.counts.collect { _state.update { s -> s.mapAll(::withCounts) } } }
         startLive()
         // the repository leaves muted accounts out at the query (read once per start), so a mute or an unmute,
         // also one reverted after a failed publish, restarts the list like a follow change does
@@ -145,8 +157,9 @@ class FeedController(
         scope.launch {
             try {
                 feed.refresh()
-                val decorated = decorate(feed.notes(replies = replies))
+                val decorated = decorate(feed.notes())
                 setNotes(loading = false) { s -> merge(decorated, s.notes) }
+                chainsFor(decorated)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -158,23 +171,14 @@ class FeedController(
 
     private var liveJob: Job? = null
 
-    private val replies: Boolean get() = _state.value.withReplies
-
-    /** Switches between "Posts" and "Replies": the list starts over from the database, then the relays. */
-    fun setWithReplies(on: Boolean) {
-        if (on == _state.value.withReplies) return
-        _state.update { it.copy(withReplies = on, notes = emptyList(), loading = true) }
-        startLive()
-        refresh()
-    }
-
     private fun startLive() {
         liveJob?.cancel()
         liveJob = scope.launch {
             try {
-                feed.live(replies = replies).collect { notes ->
+                feed.live().collect { notes ->
                     val decorated = decorate(notes)
                     setNotes(loading = false) { s -> merge(decorated, s.notes) }
+                    chainsFor(decorated)
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -189,8 +193,10 @@ class FeedController(
             _state.update { it.copy(refreshing = true) }
             try {
                 feed.refresh()
-                val decorated = decorate(feed.notes(replies = replies))
+                val decorated = decorate(feed.notes())
                 setNotes(loading = false, refreshing = false) { s -> merge(decorated, s.notes) }
+                chainsFor(decorated)
+                retryUnavailable()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -207,9 +213,10 @@ class FeedController(
         _state.update { it.copy(loadingMore = true) }
         scope.launch {
             try {
-                val older = feed.loadMore(oldest, replies = replies)
+                val older = feed.loadMore(oldest)
                 val decorated = decorate(older)
                 setNotes { s -> (s.notes + decorated).distinctBy { it.note.id } }
+                chainsFor(decorated)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -220,10 +227,72 @@ class FeedController(
         }
     }
 
+    /** Every ancestor note as loaded, before [visibility]: a muted account unmuted again comes back from here. */
+    private val allAncestors = HashMap<String, NoteUi>()
+
+    /** Entry ids whose chain a running job is resolving: a second job does not walk them again. */
+    private val resolving = HashSet<String>()
+
+    private fun chainsFor(page: List<NoteUi>) = resolveChains(page.filter { it.note.id !in _state.value.chains })
+
+    /** Spec 2026-10-16 §2.2 Timeouts, §6: a refresh tries the chains again that had unavailable notes (muted ones are loaded, so they stay). */
+    private fun retryUnavailable() {
+        val s = _state.value
+        resolveChains(s.notes.filter { n -> s.chains[n.note.id]?.ancestors?.any { it !in allAncestors } == true })
+    }
+
+    /**
+     * Resolves the chains of [page] in its own job, so the list, live updates and paging never wait for it, and stores
+     * them with their decorated ancestors (spec 2026-10-16 §2.3). Entries already in flight are left out.
+     */
+    private fun resolveChains(page: List<NoteUi>) {
+        val todo = page.filter { (it.note.repostOf ?: it.note).isReply && it.note.id !in resolving }
+        if (todo.isEmpty()) return
+        val ids = todo.map { it.note.id }
+        resolving += ids
+        scope.launch {
+            try {
+                storeChains(conversations.chains(todo.map { it.note }))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // best-effort: the replies stay single; a later refresh tries again
+            } finally {
+                resolving -= ids.toSet()
+            }
+        }
+    }
+
+    private suspend fun storeChains(found: Map<String, Chain>) {
+        if (found.isEmpty()) return
+        val shown = found.values.flatMap { c -> c.ancestors.filterIsInstance<Slot.Shown>().map { it.note } }.distinctBy { it.id }
+        decorate(shown).forEach { allAncestors[it.note.id] = it }
+        _state.update { s ->
+            s.copy(
+                chains = s.chains + found.mapValues { (_, c) -> ChainUi(c.ancestors.map { it.id }, c.cut) },
+                ancestors = visibleAncestors(),
+            )
+        }
+        trackShown()
+    }
+
+    /** Keeps the receipt subscription on everything shown: the entries and their ancestors (track replaces the set). */
+    private fun trackShown() {
+        val s = _state.value
+        decorations.track((s.notes.map { it.note } + s.ancestors.values.map { it.note }).distinctBy { it.id })
+    }
+
+    /** The stored ancestors with the current flags, counts and tips, minus what [visibility] hides. */
+    private fun visibleAncestors(): Map<String, NoteUi> =
+        visibility.visible(allAncestors.values.map { withCounts(actions.flags(bookmarks.flags(decorations.decorate(it)))) }).associateBy { it.note.id }
+
+    /** Applies [f] to every shown note: the entries and the ancestors (flags, counts, tips). */
+    private fun FeedUiState.mapAll(f: (NoteUi) -> NoteUi) = copy(notes = notes.map(f), ancestors = ancestors.mapValues { (_, n) -> f(n) })
+
     /** Sets the note list and keeps the receipt subscription in step with what is shown. */
     private fun setNotes(loading: Boolean? = null, refreshing: Boolean? = null, f: (FeedUiState) -> List<NoteUi>) {
         _state.update { s -> s.copy(notes = visibility.visible(f(s)), loading = loading ?: s.loading, refreshing = refreshing ?: s.refreshing) }
-        decorations.track(_state.value.notes.map { it.note })
+        trackShown()
     }
 
     /**
@@ -243,7 +312,7 @@ class FeedController(
     fun react(note: Note, emoji: String) = actions.react(note, emoji, ::onActionResult)
     fun delete(note: Note) = actions.delete(note)
     fun repost(note: Note) = actions.repost(note, ::onActionResult)
-    fun bookmark(note: NoteUi) = bookmarks.toggle(note.target) { m -> _state.update { s -> s.copy(notes = s.notes.map(bookmarks::flags), message = m?.asMessage() ?: s.message) } }
+    fun bookmark(note: NoteUi) = bookmarks.toggle(note.target) { m -> _state.update { s -> s.mapAll(bookmarks::flags).copy(message = m?.asMessage() ?: s.message) } }
     fun clearMessage() = _state.update { it.copy(message = null) }
 
     /** Spec 9.4: mutes the note's author at once; the publish runs behind it, a failure brings the account back with the usual message. */
@@ -259,12 +328,14 @@ class FeedController(
     /** Visible note ids from the list; counts are requested for their targets (spec 4.2). */
     fun visible(noteIds: List<String>) {
         val wanted = noteIds.toSet()
-        val targets = _state.value.notes.filter { it.note.id in wanted }.map { it.target.id }
+        // the feed reports entries only; the notes above each reply get their counts through it (spec 2026-10-16 §3)
+        val withAncestors = wanted + wanted.flatMap { _state.value.chains[it]?.ancestors ?: emptyList() }
+        val targets = (_state.value.notes + _state.value.ancestors.values).filter { it.note.id in withAncestors }.map { it.target.id }.distinct()
         if (targets.isNotEmpty()) { counts.request(targets); actions.check(targets) }
     }
 
     private fun onActionResult(message: UiText) {
-        _state.update { s -> s.copy(notes = s.notes.map(actions::flags), message = message.asMessage()) }
+        _state.update { s -> s.mapAll(actions::flags).copy(message = message.asMessage()) }
     }
 
     /** [ui] with its current count, so a list rebuild (live/refresh/loadMore) never drops a count the collector already had (spec 4.2). */
@@ -284,11 +355,11 @@ class FeedController(
 val NoteUi.target: Note get() = note.repostOf ?: note
 
 @HiltViewModel
-class FeedViewModel @Inject constructor(session: NostrSession, factory: TipSheetFactory, settings: TipSettingsStore, private val hints: HintStore, private val uiSettings: UiSettingsStore) : ViewModel() {
+class FeedViewModel @Inject constructor(session: NostrSession, factory: TipSheetFactory, settings: TipSettingsStore, private val hints: HintStore) : ViewModel() {
     private val ready = session.requireReady()
     val decorations = factory.decorations(viewModelScope)
     val bookmarks = BookmarkActions(ready.bookmarks, viewModelScope, background = ready.engine.backgroundScope)
-    val controller = FeedController(ready.feed, ready.profiles, ready.publish, decorations, bookmarks, ready.counts, viewModelScope, mentions = MentionResolver(ready.profiles, viewModelScope, Dispatchers.Default), followChanges = ready.follows.changes, deletions = ready.deletions, visibility = ready.visibility, afterDelete = ready.afterNoteDelete, own = ready.ownReactions, mute = ready.mute, muteScope = ready.engine.backgroundScope)
+    val controller = FeedController(ready.feed, ready.profiles, ready.publish, decorations, bookmarks, ready.counts, viewModelScope, conversations = ready.conversations, mentions = MentionResolver(ready.profiles, viewModelScope, Dispatchers.Default), followChanges = ready.follows.changes, deletions = ready.deletions, visibility = ready.visibility, afterDelete = ready.afterNoteDelete, own = ready.ownReactions, mute = ready.mute, muteScope = ready.engine.backgroundScope)
     val deletions = ready.deletions
     val menu = ready.noteMenu(delete = controller::delete, mute = controller::mute)
     val tipSheet = factory.tipSheet(viewModelScope)
@@ -329,15 +400,9 @@ class FeedViewModel @Inject constructor(session: NostrSession, factory: TipSheet
         viewModelScope.launch { runCatching { amountsPromptLogic.answer(hide) } }
     }
 
-    /** The tab choice is kept per device; the controller starts with it. */
-    fun setWithReplies(on: Boolean) {
-        controller.setWithReplies(on)
-        viewModelScope.launch { runCatching { uiSettings.setFeedWithReplies(on) } }
-    }
-
     init {
         viewModelScope.launch {
-            controller.start(runCatching { uiSettings.feedWithReplies.first() }.getOrDefault(false))
+            controller.start()
             controller.state.first { !it.loading }
             _amountsPrompt.value = amountsPromptLogic.shouldAsk()
         }

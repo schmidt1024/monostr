@@ -39,4 +39,22 @@ class MediaBoxTest {
         assertEquals(MediaBox(MediaBoxes.FALLBACK_RATIO, crop = false), MediaBoxes.single(null, widthDp = 360f))
         assertEquals(MediaBox(MediaBoxes.FALLBACK_RATIO, crop = false), MediaBoxes.single(0 to 10, widthDp = 360f))
     }
+
+    @Test
+    fun `a video without dimensions is a 16 to 9 box, cropped, never 4 to 3`() {
+        assertEquals(MediaBox(MediaBoxes.VIDEO_FALLBACK_RATIO, crop = true), MediaBoxes.single(null, widthDp = 360f, video = true))
+    }
+
+    @Test
+    fun `a video with dimensions follows the picture rules but its poster always fills the box`() {
+        assertEquals(MediaBox(1600f / 900f, crop = true), MediaBoxes.single(1600 to 900, widthDp = 360f, video = true))
+        assertEquals(MediaBox(360f / MediaBoxes.MAX_HEIGHT_DP, crop = true), MediaBoxes.single(1080 to 1920, widthDp = 360f, video = true))
+    }
+
+    @Test
+    fun `a remembered size is used exactly like a dim`() {
+        val cache = com.monostr.app.ui.media.MediaRatioCache()
+        cache.put("https://x/a.jpg", 1000, 500)
+        assertEquals(MediaBoxes.single(1000 to 500, widthDp = 360f), MediaBoxes.single(cache["https://x/a.jpg"], widthDp = 360f))
+    }
 }

@@ -181,9 +181,9 @@ class ImagePreparer(private val resolver: ContentResolver) : PicturePreparer {
 
     private fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
 
-    private companion object {
-        const val JPEG_QUALITY = 85
-        const val BLURHASH_EDGE = 32
+    internal companion object {
+        private const val JPEG_QUALITY = 85
+        private const val BLURHASH_EDGE = 32
         /** Larger sources are refused unread: decoding them would not fit into the app's memory anyway. */
         const val MAX_SOURCE_BYTES = 40 * 1024 * 1024
     }

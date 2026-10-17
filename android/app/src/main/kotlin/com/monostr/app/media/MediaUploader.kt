@@ -9,9 +9,11 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.Serializable
 import java.util.concurrent.ConcurrentHashMap
 
 /** A picture that sits on a media server, ready to be named in a note or a profile. */
+@Serializable
 data class UploadedMedia(
     /** The server it was uploaded to; a later delete goes there, whatever the setting says by then. */
     val server: String,
@@ -39,6 +41,9 @@ interface MediaUploader {
 
     /** Asks the server to delete an upload that will not be used after all: in the background, best effort, never throws (spec 5.2). */
     fun discard(media: UploadedMedia)
+
+    /** Like [discard], but returns once the delete is done or failed (logout: before the signer goes). Never throws. */
+    suspend fun discardNow(media: UploadedMedia) = discard(media)
 }
 
 class BlossomMediaUploader(
@@ -47,6 +52,11 @@ class BlossomMediaUploader(
     private val settings: UiSettingsStore,
     /** Outlives the screens: a delete started while leaving the composer must still go out. */
     private val background: CoroutineScope,
+    /**
+     * Spec 2026-10-16 §8: true while a published own note or the profile shows the blob ([OwnPictures.published]).
+     * A draft's fresh upload may be named there too, uploaded again (not fresh) after the draft was saved.
+     */
+    private val inUse: suspend (sha256: String) -> Boolean = { false },
 ) : MediaUploader {
     /** One lock per sha256, kept for the life of the session (a handful of pictures). */
     private val locks = ConcurrentHashMap<String, Mutex>()
@@ -75,14 +85,17 @@ class BlossomMediaUploader(
     override fun discard(media: UploadedMedia) {
         if (!media.fresh) return // another note may use this blob
         // undispatched: the delete queues for the blob's lock before discard returns, ahead of any later upload of it
-        background.launch(start = CoroutineStart.UNDISPATCHED) {
-            try {
-                lockFor(media.sha256).withLock { client.delete(media.server, media.sha256) }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                // spec 5.2: an effort, not a guarantee; the picture then stays on the server
-            }
+        background.launch(start = CoroutineStart.UNDISPATCHED) { discardNow(media) }
+    }
+
+    override suspend fun discardNow(media: UploadedMedia) {
+        if (!media.fresh) return
+        try {
+            lockFor(media.sha256).withLock { if (!inUse(media.sha256)) client.delete(media.server, media.sha256) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // spec 5.2: an effort, not a guarantee; the picture then stays on the server
         }
     }
 }

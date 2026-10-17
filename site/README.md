@@ -1,7 +1,8 @@
 # monostr.com
 
 The static website: `index.html` (light/dark by `prefers-color-scheme`, no external resources),
-`assets/` (lockups, banner and avatar of the project account, two app screenshots), favicons, and
+the watcher tutorials `watcher/personal/` and `watcher/self-host/` (both follow `watcher/SELFHOST.md`;
+change them together), the shared `style.css`, `assets/` (lockups, banner and avatar of the project account, two app screenshots), favicons, and
 `.well-known/nostr.json` (NIP-05 `monostr@monostr.com` → the project account).
 
 Hosted as a Hestia web domain; the docroot is `public_html/` of the domain. Deploy = copy the files
@@ -11,3 +12,6 @@ directory); after changing it, `nginx -t` and reload.
 
 The screenshots come from `fastlane/metadata/android/en-US/images/phoneScreenshots/` (1 and 3),
 scaled to 540×1200 WebP.
+
+The watcher screenshots (`assets/watcher-*.webp`) are the app's setup screens on the emulator with a
+throwaway account, cropped to the top 1080×1500 and scaled to 540×750 WebP.

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.KeyboardActions
@@ -65,6 +66,11 @@ import com.monostr.app.ui.common.BottomTab
 import com.monostr.app.ui.common.DeletionMessages
 import com.monostr.app.ui.common.MessageSnackbar
 import com.monostr.app.ui.common.MonostrBottomBar
+import com.monostr.app.ui.common.HideOnScrollFooter
+import com.monostr.app.ui.common.ShowBarsWhenStuck
+import com.monostr.app.ui.common.rememberHideOnScroll
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import com.monostr.app.ui.common.NoteCard
 import com.monostr.app.ui.common.noteMenu
 import com.monostr.app.ui.common.asString
@@ -125,7 +131,11 @@ fun SearchScreen(
     MessageSnackbar(state.message, snackbar, onUnmute = vm.controller::unmute, onShown = vm.controller::clearMessage)
     DeletionMessages(vm.deletions, snackbar)
     val hashtag: (String) -> Unit = { vm.controller.onQueryChange("#$it"); vm.controller.submit() }
+    val hide = rememberHideOnScroll()
+    val listState = rememberLazyListState()
+    ShowBarsWhenStuck(hide, listState, contentKey = state.mode) // a new search mode replaces the results
     Scaffold(
+        modifier = Modifier.nestedScroll(hide.connection),
         topBar = {
             // deviation from the brief: an OutlinedTextField inside TopAppBar(title = …) clips
             // against the app bar's fixed height; a plain Row keeps the same field and tags.
@@ -144,10 +154,10 @@ fun SearchScreen(
                 )
             }
         },
-        bottomBar = { MonostrBottomBar(BottomTab.SEARCH, unread = 0, dmUnread = dmUnread, onFeed = onFeed, onSearch = {}, onBookmarks = onBookmarks, onMessages = onMessages, onNotifications = onNotifications) },
+        bottomBar = { HideOnScrollFooter(hide) { MonostrBottomBar(BottomTab.SEARCH, unread = 0, dmUnread = dmUnread, onFeed = onFeed, onSearch = hide::show, onBookmarks = onBookmarks, onMessages = onMessages, onNotifications = onNotifications, windowInsets = WindowInsets(0)) } },
         snackbarHost = { SnackbarHost(snackbar, Modifier.muteUndoTag(state.message)) },
     ) { padding ->
-        LazyColumn(Modifier.padding(padding).fillMaxSize().testTag("search-list")) {
+        LazyColumn(state = listState, modifier = Modifier.padding(padding).fillMaxSize().testTag("search-list")) {
             if (state.noSearchRelays && state.mode == SearchMode.TEXT) {
                 item {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {

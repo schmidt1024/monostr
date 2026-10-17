@@ -1,7 +1,5 @@
 package com.monostr.app.ui.feed
 
-import androidx.compose.material3.PrimaryTabRow
-import androidx.compose.material3.Tab
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -74,8 +72,12 @@ import com.monostr.app.ui.theme.FeatherGlyph
 import com.monostr.app.ui.common.DeletionMessages
 import com.monostr.app.ui.common.MessageSnackbar
 import com.monostr.app.ui.common.MonostrBottomBar
+import com.monostr.app.ui.common.HideOnScrollFooter
+import com.monostr.app.ui.common.ShowBarsWhenStuck
 import com.monostr.app.ui.common.NoteCard
 import com.monostr.app.ui.common.RelayDot
+import com.monostr.app.ui.common.ShowRepliesRow
+import com.monostr.app.ui.common.UnavailableRow
 import com.monostr.app.ui.common.VisibleNotes
 import com.monostr.app.ui.common.muteUndoTag
 import com.monostr.app.ui.tips.TipSheetHost
@@ -115,6 +117,7 @@ fun FeedScreen(
     val scope = rememberCoroutineScope()
     // spec 7: up to 30 entries away the list scrolls, beyond that it jumps (a long animation over hundreds of cards stutters and loads pictures for nothing)
     val hide = rememberHideOnScroll()
+    ShowBarsWhenStuck(hide, listState, hasList = !state.loading && state.notes.isNotEmpty())
     val toTop: () -> Unit = {
         hide.show()
         scope.launch {
@@ -167,13 +170,6 @@ fun FeedScreen(
                     }
                 },
             )
-            // launch feedback: posts and replies apart, as tabs like the profile; they hide with the bar (X)
-            PrimaryTabRow(selectedTabIndex = if (state.withReplies) 1 else 0, modifier = Modifier.testTag("feed-tabs")) {
-                Tab(selected = !state.withReplies, onClick = { hide.show(); vm.setWithReplies(false) }, text = { Text(stringResource(R.string.feed_tab_posts)) },
-                    unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("feed-tab-posts"))
-                Tab(selected = state.withReplies, onClick = { hide.show(); vm.setWithReplies(true) }, text = { Text(stringResource(R.string.feed_tab_replies)) },
-                    unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("feed-tab-replies"))
-            }
         } } },
         floatingActionButton = {
             FloatingActionButton(
@@ -185,7 +181,7 @@ fun FeedScreen(
                 modifier = Modifier.testTag("fab-compose"),
             ) { Icon(FeatherGlyph, contentDescription = stringResource(R.string.feed_new_note)) }
         },
-        bottomBar = { MonostrBottomBar(BottomTab.FEED, unread = unread, dmUnread = dmUnread, onFeed = toTop, onSearch = onSearch, onBookmarks = onBookmarks, onMessages = onMessages, onNotifications = onNotifications) },
+        bottomBar = { HideOnScrollFooter(hide) { MonostrBottomBar(BottomTab.FEED, unread = unread, dmUnread = dmUnread, onFeed = toTop, onSearch = onSearch, onBookmarks = onBookmarks, onMessages = onMessages, onNotifications = onNotifications, windowInsets = WindowInsets(0)) } },
         snackbarHost = { SnackbarHost(snackbar, Modifier.muteUndoTag(state.message)) },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
@@ -203,25 +199,59 @@ fun FeedScreen(
                         }
                     }
                     items(state.notes, key = { it.note.id }) { n ->
-                        NoteCard(
-                            note = n,
-                            onOpen = { onOpenThread(n.target.id) },
-                            onOpenProfile = onOpenProfile,
-                            onReply = { onReply(n.target.id) },
-                            onLike = { vm.controller.like(n) },
-                            onReact = { e -> vm.controller.react(n.target, e) },
-                            onRepost = { vm.controller.repost(n) },
-                            onQuote = { onQuote(n.target.id) },
-                            onTip = { vm.tipSheet.open(n.target) },
-                            onShowTippers = { tippersFor = n.target },
-                            onBookmark = { vm.controller.bookmark(n) },
-                            onHashtag = onHashtag,
-                            onOpenNote = onOpenThread,
-                            onOpenMedia = onOpenMedia,
-                            onOpenVideo = onOpenVideo,
-                            names = names,
-                            menu = vm.menu,
-                        )
+                        // spec 2026-10-16 §3: a reply stands under the notes above it, joined by the thread line (X's conversation block)
+                        val chain = state.chains[n.note.id]
+                        Column(Modifier.testTag(if (chain != null) "conversation-${n.note.id.take(8)}" else "entry-${n.note.id.take(8)}")) {
+                            chain?.ancestors?.forEachIndexed { i, id ->
+                                val above = i > 0
+                                val a = state.ancestors[id]
+                                if (a == null) UnavailableRow(lineAbove = above, lineBelow = true)
+                                else NoteCard(
+                                    note = a,
+                                    onOpen = { onOpenThread(a.target.id) },
+                                    onOpenProfile = onOpenProfile,
+                                    onReply = { onReply(a.target.id) },
+                                    onLike = { vm.controller.like(a) },
+                                    onReact = { e -> vm.controller.react(a.target, e) },
+                                    onRepost = { vm.controller.repost(a) },
+                                    onQuote = { onQuote(a.target.id) },
+                                    onTip = { vm.tipSheet.open(a.target) },
+                                    onShowTippers = { tippersFor = a.target },
+                                    onBookmark = { vm.controller.bookmark(a) },
+                                    onHashtag = onHashtag,
+                                    onOpenNote = onOpenThread,
+                                    onOpenMedia = onOpenMedia,
+                                    onOpenVideo = onOpenVideo,
+                                    names = names,
+                                    menu = vm.menu,
+                                    replyContext = false,
+                                    lineAbove = above,
+                                    lineBelow = true,
+                                )
+                                if (i == 0 && chain.cut) ShowRepliesRow(onClick = { onOpenThread(n.target.id) })
+                            }
+                            NoteCard(
+                                note = n,
+                                onOpen = { onOpenThread(n.target.id) },
+                                onOpenProfile = onOpenProfile,
+                                onReply = { onReply(n.target.id) },
+                                onLike = { vm.controller.like(n) },
+                                onReact = { e -> vm.controller.react(n.target, e) },
+                                onRepost = { vm.controller.repost(n) },
+                                onQuote = { onQuote(n.target.id) },
+                                onTip = { vm.tipSheet.open(n.target) },
+                                onShowTippers = { tippersFor = n.target },
+                                onBookmark = { vm.controller.bookmark(n) },
+                                onHashtag = onHashtag,
+                                onOpenNote = onOpenThread,
+                                onOpenMedia = onOpenMedia,
+                                onOpenVideo = onOpenVideo,
+                                names = names,
+                                menu = vm.menu,
+                                replyContext = chain == null,
+                                lineAbove = chain != null,
+                            )
+                        }
                         HorizontalDivider()
                     }
                     item { LaunchedEffect(state.notes.size) { vm.controller.loadMore() } }

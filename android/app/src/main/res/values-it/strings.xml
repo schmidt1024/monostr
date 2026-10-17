@@ -73,6 +73,12 @@
     <string name="media_viewer_close">Chiudi</string>
     <string name="media_copy_link">Copia link</string>
     <string name="media_open_browser">Apri nel browser</string>
+    <string name="media_save">Salva immagine</string>
+    <string name="media_share">Condividi immagine</string>
+    <string name="media_saved">Immagine salvata</string>
+    <string name="media_save_failed">Impossibile salvare l\'immagine</string>
+    <string name="media_share_title">Condividi immagine</string>
+    <string name="media_share_failed">Impossibile condividere l\'immagine</string>
     <string name="profile_extra_relays">Note anche da %1$s</string>
     <!-- profile header: "12 Following · 3,373 Followers"; the numbers are formatted apart -->
     <string name="profile_following_label">Seguiti</string>
@@ -113,8 +119,6 @@
     <string name="feed_settings">Impostazioni</string>
     <string name="feed_new_note">Nuova nota</string>
     <string name="feed_empty">Ancora nessuna nota. Segui qualcuno o scrivi la prima.</string>
-    <string name="feed_tab_posts">Post</string>
-    <string name="feed_tab_replies">Risposte</string>
     <string name="feed_error_load">Impossibile caricare il feed</string>
     <string name="feed_error_more">Impossibile caricare altre note</string>
 
@@ -188,6 +192,11 @@
     <string name="setup_watcher_text">Il watcher rileva i pagamenti in arrivo e pubblica le ricevute su Nostr.</string>
     <string name="setup_watcher_url">URL del watcher</string>
     <string name="setup_load_watcher">Verifica watcher</string>
+    <string name="setup_checking">Verifica del watcher…</string>
+    <string name="setup_slow_hint">Può richiedere qualche secondo</string>
+    <string name="setup_cancel_check">Annulla</string>
+    <string name="setup_err_timeout">Watcher non raggiungibile</string>
+    <string name="setup_try_again">Riprova</string>
     <string name="setup_skip">Più tardi</string>
     <string name="setup_watcher_info">Watcher %1$s · %2$s · altezza %3$d</string>
     <string name="setup_privacy">Il watcher vede ogni pagamento in arrivo di questo portafoglio. Per questo conviene usarne uno separato solo per le mance.</string>
@@ -492,7 +501,6 @@
     <string name="upload_error_failed">Caricamento non riuscito</string>
     <string name="compose_error_uploads">Attendi il caricamento delle immagini o rimuovi quelle non riuscite</string>
     <string name="compose_attach">Aggiungi immagini</string>
-    <string name="compose_paste_image">Incolla immagine dagli appunti</string>
     <string name="compose_attachment_remove">Rimuovi immagine</string>
     <string name="upload_retry">Riprova</string>
     <string name="compose_sensitive">Contenuto sensibile</string>
@@ -526,4 +534,6 @@
     <string name="amounts_prompt_text">Le ricevute mostrerebbero solo che hai ricevuto una mancia, non quanto. Il tuo portafoglio mostra comunque gli importi.</string>
     <string name="amounts_prompt_yes">Nascondi importi</string>
     <string name="amounts_prompt_no">Lascia pubblici</string>
+    <string name="conversation_show_replies">Mostra risposte</string>
+    <string name="conversation_unavailable">Questa nota non è disponibile</string>
 </resources>

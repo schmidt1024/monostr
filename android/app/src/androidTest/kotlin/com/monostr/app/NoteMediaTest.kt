@@ -4,6 +4,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.getBoundsInRoot
+import com.monostr.app.ui.media.MediaRatios
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -120,5 +122,32 @@ class NoteMediaTest {
         set(note(sensitive = false, onlyMedia = false), onVideo = { url = it })
         rule.onNodeWithTag("note-media-$id8-1").performClick()
         assertEquals("https://v.example/c.mp4", url)
+    }
+
+    private fun single(media: NoteMedia) = Note(
+        id, "a".repeat(64), media.url, 1000, 1, null, null, null, emptyList(), media = listOf(media), displayContent = "",
+    )
+
+    @Test
+    fun single_picture_without_dim_takes_its_remembered_ratio() {
+        val url = "https://192.0.2.1/wide-${System.nanoTime()}.jpg"
+        MediaRatios.put(url, 1600, 800)
+        set(single(NoteMedia(url, NoteMedia.Kind.IMAGE)))
+        val b = rule.onNodeWithTag("note-media-$id8-0").getBoundsInRoot()
+        assertEquals(2f, (b.right - b.left) / (b.bottom - b.top), 0.05f)
+    }
+
+    @Test
+    fun single_video_without_dim_and_poster_is_16_to_9() {
+        set(single(NoteMedia("https://v.example/c-${System.nanoTime()}.mp4", NoteMedia.Kind.VIDEO)))
+        val b = rule.onNodeWithTag("note-media-$id8-0").getBoundsInRoot()
+        assertEquals(16f / 9f, (b.right - b.left) / (b.bottom - b.top), 0.05f)
+    }
+
+    @Test
+    fun single_picture_without_dim_and_unknown_size_keeps_the_4_to_3_box() {
+        set(single(NoteMedia("https://192.0.2.1/unknown-${System.nanoTime()}.jpg", NoteMedia.Kind.IMAGE)))
+        val b = rule.onNodeWithTag("note-media-$id8-0").getBoundsInRoot()
+        assertEquals(4f / 3f, (b.right - b.left) / (b.bottom - b.top), 0.05f)
     }
 }

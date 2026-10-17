@@ -218,6 +218,21 @@ class BlossomMediaUploaderTest {
     }
 
     @Test
+    fun `a fresh upload that a published note or the profile shows is not deleted, nor when the lookup fails`() = runTest {
+        serve(has = false)
+        val scope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher(testScheduler))
+        val asked = ArrayList<String>()
+        val media = UploadedMedia(base, "$base/$hash.jpg", "image/jpeg", hash, 3, 400, 300, null, fresh = true)
+        // spec 2026-10-16 §8: a draft kept the fresh upload, a sent note names the same blob uploaded again
+        BlossomMediaUploader(preparer, BlossomClient(OkHttpClient(), signer) { 1000L }, settings, scope, inUse = { asked += it; true }).discardNow(media)
+        BlossomMediaUploader(preparer, BlossomClient(OkHttpClient(), signer) { 1000L }, settings, scope, inUse = { throw IllegalStateException("db closed") }).discardNow(media)
+        assertEquals(listOf(hash), asked)
+        assertEquals(emptyList<String>(), methods())
+        BlossomMediaUploader(preparer, BlossomClient(OkHttpClient(), signer) { 1000L }, settings, scope, inUse = { false }).discardNow(media)
+        assertEquals(listOf("DELETE"), methods(), "nothing shows it: it goes")
+    }
+
+    @Test
     fun `a blob the server already had is not fresh and is never deleted`() = runTest {
         serve(has = true)
         val scope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher(testScheduler))

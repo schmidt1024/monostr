@@ -31,6 +31,7 @@ object AppModule {
     @Provides @Singleton fun uiSettings(@ApplicationContext ctx: Context): UiSettingsStore = PrefsUiSettingsStore(ctx.monostrPrefs)
     @Provides @Singleton fun dmSettings(@ApplicationContext ctx: Context): DmSettingsStore = PrefsDmSettingsStore(ctx.monostrPrefs)
     @Provides @Singleton fun hints(@ApplicationContext ctx: Context): HintStore = PrefsHintStore(ctx.monostrPrefs)
+    @Provides @Singleton fun drafts(@ApplicationContext ctx: Context): DraftStore = PrefsDraftStore(ctx.monostrPrefs)
     /** One client for all watchers; no logging interceptor (the register body carries the view key). */
     @Provides @Singleton fun okHttp(): OkHttpClient = OkHttpClient.Builder().connectTimeout(10, TimeUnit.SECONDS).readTimeout(15, TimeUnit.SECONDS).build()
     /** Spec link previews 3.4: one cache for the app; the fetcher shares the app's OkHttp pool but has its own limits. */

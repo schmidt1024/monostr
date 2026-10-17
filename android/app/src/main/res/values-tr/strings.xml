@@ -73,6 +73,12 @@
     <string name="media_viewer_close">Kapat</string>
     <string name="media_copy_link">Bağlantıyı kopyala</string>
     <string name="media_open_browser">Tarayıcıda aç</string>
+    <string name="media_save">Görseli kaydet</string>
+    <string name="media_share">Görseli paylaş</string>
+    <string name="media_saved">Görsel kaydedildi</string>
+    <string name="media_save_failed">Görsel kaydedilemedi</string>
+    <string name="media_share_title">Görseli paylaş</string>
+    <string name="media_share_failed">Görseli paylaşılamadı</string>
     <string name="profile_extra_relays">Notlar ayrıca %1$s üzerinden</string>
     <!-- profile header: "12 Following · 3,373 Followers"; the numbers are formatted apart -->
     <string name="profile_following_label">Takip edilen</string>
@@ -113,8 +119,6 @@
     <string name="feed_settings">Ayarlar</string>
     <string name="feed_new_note">Yeni not</string>
     <string name="feed_empty">Henüz not yok. Birini takip et ya da ilkini yaz.</string>
-    <string name="feed_tab_posts">Gönderiler</string>
-    <string name="feed_tab_replies">Yanıtlar</string>
     <string name="feed_error_load">Akış yüklenemedi</string>
     <string name="feed_error_more">Daha fazla not yüklenemedi</string>
 
@@ -187,6 +191,11 @@
     <string name="setup_watcher_text">Watcher gelen ödemeleri algılar ve makbuzları Nostr\'da yayınlar.</string>
     <string name="setup_watcher_url">Watcher URL\'si</string>
     <string name="setup_load_watcher">Watcher\'ı kontrol et</string>
+    <string name="setup_checking">Watcher kontrol ediliyor…</string>
+    <string name="setup_slow_hint">Bu birkaç saniye sürebilir</string>
+    <string name="setup_cancel_check">İptal</string>
+    <string name="setup_err_timeout">Watcher\'a ulaşılamıyor</string>
+    <string name="setup_try_again">Tekrar dene</string>
     <string name="setup_skip">Daha sonra</string>
     <string name="setup_watcher_info">Watcher %1$s · %2$s · yükseklik %3$d</string>
     <string name="setup_privacy">Watcher bu cüzdana gelen her ödemeyi görür. Bu yüzden yalnızca bahşişler için ayrı bir cüzdan kullan.</string>
@@ -487,7 +496,6 @@
     <string name="upload_error_failed">Yükleme başarısız</string>
     <string name="compose_error_uploads">Resimlerin yüklenmesini bekle veya yüklenemeyenleri kaldır</string>
     <string name="compose_attach">Resim ekle</string>
-    <string name="compose_paste_image">Panodaki görseli yapıştır</string>
     <string name="compose_attachment_remove">Resmi kaldır</string>
     <string name="upload_retry">Yeniden dene</string>
     <string name="compose_sensitive">Hassas içerik</string>
@@ -520,4 +528,6 @@
     <string name="amounts_prompt_text">Makbuzlar yalnızca bahşiş aldığını gösterir, ne kadar olduğunu göstermez. Cüzdanın tutarları göstermeye devam eder.</string>
     <string name="amounts_prompt_yes">Tutarları gizle</string>
     <string name="amounts_prompt_no">Herkese açık kalsın</string>
+    <string name="conversation_show_replies">Yanıtları göster</string>
+    <string name="conversation_unavailable">Bu not kullanılamıyor</string>
 </resources>

@@ -26,6 +26,25 @@ class ComposeAttachmentsTest {
         ComposeController(replyTo, threads, publish, eager(), quoteId = quote, uploader = uploader)
 
     @Test
+    fun `a source the note does not hold any more is released, and so is one it never took`() = runTest {
+        val released = ArrayList<String>()
+        val c = ComposeController(null, FakeThreads(emptyMap()), FakePublish(), eager(), uploader = FakeMediaUploader(), release = { released += it })
+        c.attach(listOf("file:///r/1", "file:///r/2", "file:///r/3", "file:///r/4", "file:///r/5"))
+        advanceUntilIdle()
+        assertEquals(listOf("file:///r/5"), released) // no room for the fifth
+        c.attach(listOf("file:///r/1")) // already on the note: kept, not released
+        assertEquals(listOf("file:///r/5"), released)
+        c.removeAttachment(c.state.value.attachments[0].id)
+        assertEquals(listOf("file:///r/5", "file:///r/1"), released)
+        c.releaseSources()
+        assertEquals(listOf("file:///r/5", "file:///r/1", "file:///r/2", "file:///r/3", "file:///r/4"), released)
+
+        val bare = ComposeController(null, FakeThreads(emptyMap()), FakePublish(), eager(), release = { released += it })
+        bare.attach(listOf("file:///r/6"))
+        assertEquals("file:///r/6", released.last())
+    }
+
+    @Test
     fun `picked pictures upload at once and go out with the note, in order`() = runTest {
         val publish = FakePublish()
         val uploader = FakeMediaUploader()

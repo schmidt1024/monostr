@@ -1,0 +1,7 @@
+• A barra inferior se esconde ao rolar, como o cabeçalho
+• Cole uma imagem direto no campo de texto
+• Selecione e copie o texto de uma nota aberta
+• Imagens e vídeos sem tamanho informado não mostram mais faixas
+• Salve ou compartilhe uma imagem pelo visualizador (toque longo)
+• Notas não enviadas ficam como rascunho, com as imagens
+• Ao configurar as gorjetas, o progresso da verificação do watcher fica visível

@@ -1,0 +1,7 @@
+• The bottom bar hides while you scroll, like the header
+• Paste a picture straight into the text field
+• Select and copy text in an opened note
+• Pictures and videos without size info no longer show bars
+• Save or share a picture from the viewer (long press)
+• Unsent notes stay as drafts, pictures included
+• Setting up tips shows progress while the watcher is checked

@@ -6,6 +6,10 @@
 
 monostr is in beta.
 
+[<img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png" alt="Get it on F-Droid" height="80">](https://f-droid.org/packages/com.monostr.app/)
+
+Also on [Zapstore](https://zapstore.dev/apps/com.monostr.app) and as APK in the [GitHub releases](https://github.com/schmidt1024/monostr/releases/latest) (Obtainium works too).
+
 ## What it does
 
 - Feed, threads, profiles with Posts and Replies tabs; like, repost, quote, reply

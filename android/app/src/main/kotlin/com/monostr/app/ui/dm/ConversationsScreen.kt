@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -59,6 +60,11 @@ import com.monostr.app.session.NostrSession
 import com.monostr.app.ui.common.Avatar
 import com.monostr.app.ui.common.BottomTab
 import com.monostr.app.ui.common.MonostrBottomBar
+import com.monostr.app.ui.common.HideOnScrollFooter
+import com.monostr.app.ui.common.ShowBarsWhenStuck
+import com.monostr.app.ui.common.rememberHideOnScroll
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import com.monostr.app.ui.common.asString
 import com.monostr.app.ui.common.relativeTime
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -108,9 +114,13 @@ fun ConversationsScreen(
     }
     val message = state.message?.asString()
     LaunchedEffect(message) { message?.let { snackbar.showSnackbar(it); vm.controller.clearMessage() } }
+    val hide = rememberHideOnScroll()
+    val listState = rememberLazyListState()
+    ShowBarsWhenStuck(hide, listState, hasList = !state.loading)
     Scaffold(
+        modifier = Modifier.nestedScroll(hide.connection),
         topBar = { TopAppBar(title = { Text(stringResource(R.string.messages_title)) }) },
-        bottomBar = { MonostrBottomBar(BottomTab.MESSAGES, unread = 0, dmUnread = dmUnread, onFeed = onFeed, onSearch = onSearch, onBookmarks = onBookmarks, onMessages = {}, onNotifications = onNotifications) },
+        bottomBar = { HideOnScrollFooter(hide) { MonostrBottomBar(BottomTab.MESSAGES, unread = 0, dmUnread = dmUnread, onFeed = onFeed, onSearch = onSearch, onBookmarks = onBookmarks, onMessages = hide::show, onNotifications = onNotifications, windowInsets = WindowInsets(0)) } },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = vm.controller::refresh, modifier = Modifier.padding(padding).fillMaxSize()) {
@@ -118,7 +128,7 @@ fun ConversationsScreen(
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             } else {
                 // always a LazyColumn, so pull-to-refresh also works on the empty state
-                LazyColumn(Modifier.fillMaxSize().testTag("messages-list")) {
+                LazyColumn(state = listState, modifier = Modifier.fillMaxSize().testTag("messages-list")) {
                     items(state.authFailed.sorted(), key = { "auth-$it" }) { relay ->
                         Text(
                             stringResource(R.string.messages_auth_failed, relay), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error,

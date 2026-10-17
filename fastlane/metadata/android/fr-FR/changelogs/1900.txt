@@ -1,0 +1,2 @@
+• Accueil comme sur X : un seul fil avec les réponses, sous la note à laquelle elles répondent
+• Les fils montrent les réponses en branches, une réponse à une réponse s’affiche dessous
