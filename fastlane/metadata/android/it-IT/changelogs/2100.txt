@@ -1,0 +1,4 @@
+• Crea un account Nostr direttamente nell’app, con backup della chiave e account da seguire
+• Impostazioni: mostra la tua chiave (solo con accesso tramite chiave)
+• Le tue mance appaiono nel colore d’accento, come i tuoi mi piace
+• Le notifiche restano lette quando accedi di nuovo

@@ -8,6 +8,7 @@ import com.monostr.app.MainActivity
 import com.monostr.app.R
 import com.monostr.app.data.DmSettingsStore
 import com.monostr.app.data.DraftStore
+import com.monostr.app.data.PendingSetupStore
 import com.monostr.app.data.expireDrafts
 import com.monostr.app.data.removeDrafts
 import com.monostr.app.data.HintStore
@@ -47,6 +48,9 @@ import com.monostr.nostr.LocalSigner
 import com.monostr.nostr.NostrEngine
 import com.monostr.nostr.Signer
 import com.monostr.nostr.model.Note
+import rust.nostr.sdk.Filter
+import rust.nostr.sdk.Kind
+import rust.nostr.sdk.PublicKey
 import com.monostr.nostr.model.ProfileJson
 import com.monostr.nostr.nip55.AmberSigner
 import com.monostr.nostr.nip55.Nip55
@@ -89,7 +93,9 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -106,6 +112,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import okhttp3.OkHttpClient
 import java.io.File
+import java.time.Duration
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -167,6 +174,8 @@ interface NostrSessionEntryPoint {
     fun searchRelays(): SearchRelayStore
     fun uiSettings(): UiSettingsStore
     fun drafts(): DraftStore
+    fun pendingSetup(): PendingSetupStore
+    fun sessions(): SessionStore
 }
 
 /** Spec 6: outcome of re-requesting Amber's permissions. */
@@ -203,6 +212,7 @@ class NostrSession @Inject constructor(
     private val uiSettings: UiSettingsStore,
     private val linkPreviews: LinkPreviews,
     private val drafts: DraftStore,
+    private val pendingSetup: PendingSetupStore,
 ) {
     private val _state = MutableStateFlow<SessionState>(SessionState.Loading)
     val state: StateFlow<SessionState> = _state.asStateFlow()
@@ -212,6 +222,8 @@ class NostrSession @Inject constructor(
         val RESTORE_FAILED: UiText = uiText(R.string.session_restore_failed)
         /** Logout waits at most this long for the drafts' pictures to leave the server. */
         private const val DRAFT_CLEANUP_MS = 5_000L
+        /** Spec 2026-10-17 §7: a pending setup that did not go out completely is tried once more after this long. */
+        private const val SETUP_RETRY_MS = 30_000L
 
         fun renewOutcome(sessionPubkey: String, ok: Boolean, response: Nip55.Response?): RenewResult = when (val o = Nip55.parsePubkeyResponse(ok, response)) {
             is Nip55.Outcome.Pubkey -> if (o.pubkey == sessionPubkey) RenewResult.Updated else RenewResult.WrongKey
@@ -238,8 +250,10 @@ class NostrSession @Inject constructor(
                 clearStaleSession(info.pubkey)
                 return@withLock
             }
-            _state.value = SessionState.Active(start(signer))
+            val ready = start(signer)
+            _state.value = SessionState.Active(ready)
             markFirstLogin(signer.pubkey)
+            resumeSetupLater(ready)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -256,24 +270,83 @@ class NostrSession @Inject constructor(
         _state.value = SessionState.Loading
     }
 
-    /** Starts the engine first; the secret and session are persisted only once it runs. */
+    /**
+     * Starts the engine first; the secret and session are persisted only once it runs. A pending setup
+     * record of this key is an orphan of an interrupted "Let's go" and is dropped (spec 2026-10-17 §7):
+     * a pasted key is an existing account, whose profile and follows must never be overwritten.
+     */
     suspend fun loginLocal(signer: LocalSigner) = mutex.withLock {
+        bestEffort { pendingSetup.remove(signer.pubkey) }
+        loginLocalLocked(signer, setup = null)
+    }
+
+    /**
+     * Spec 2026-10-17 §4: "Let's go". The session starts like the key login; the pending setup record is
+     * written with the secret and session, and published in the background once those are stored. A
+     * failed login leaves no record.
+     */
+    suspend fun createAccount(key: NewKey, setup: PendingSetup) = mutex.withLock {
+        try {
+            loginLocalLocked(LocalSigner(key.secretHex), setup)
+        } catch (e: Exception) {
+            // also on cancellation (rethrown below): no record without a session
+            withContext(NonCancellable) { bestEffort { pendingSetup.remove(key.pubkey) } }
+            throw e
+        }
+    }
+
+    /** [setup] non-null: a new account, its record is persisted right before the secret (spec 2026-10-17 §7). */
+    private suspend fun loginLocalLocked(signer: LocalSigner, setup: PendingSetup?) {
+        clearOtherAccount(signer.pubkey)
+        restoreReadMarks(signer.pubkey)
         val ready = start(signer)
         persistOrClose(ready) {
+            if (setup != null) pendingSetup.save(signer.pubkey, setup)
             secrets.put(KeystoreSecretStore.SECRET_NSEC, signer.secretHex)
             sessions.save(SessionInfo(signer.pubkey, SignerType.LOCAL, null))
         }
-        _state.value = SessionState.Active(ready)
-        markFirstLogin(ready.pubkey)
-        bestEffort { DmCheckWorker.schedule(context) } // logout cancelled it
+        activate(ready)
     }
 
+    /** Like [loginLocal], an orphan pending setup record of [pubkey] is dropped first. */
     suspend fun loginAmber(pubkey: String, packageName: String) = mutex.withLock {
+        bestEffort { pendingSetup.remove(pubkey) }
+        clearOtherAccount(pubkey)
+        restoreReadMarks(pubkey)
         val ready = start(AmberSigner(context, packageName, pubkey, bridge))
         persistOrClose(ready) { sessions.save(SessionInfo(pubkey, SignerType.AMBER, packageName)) }
+        activate(ready)
+    }
+
+    /** The read marks [pubkey] had at its last logout on this device, or "now" for an account new here. */
+    private suspend fun restoreReadMarks(pubkey: String) = bestEffort { tipSettings.restoreReadMarks(pubkey, System.currentTimeMillis() / 1000) }
+
+    /** The persisted session runs: shown, scheduled, and its pending setup (if any) goes out. */
+    private suspend fun activate(ready: Ready) {
         _state.value = SessionState.Active(ready)
         markFirstLogin(ready.pubkey)
         bestEffort { DmCheckWorker.schedule(context) } // logout cancelled it
+        resumeSetupLater(ready)
+    }
+
+    /**
+     * A session kept after a failed restore belongs to another account than the one logging in now: its
+     * secret, session and per-account state (Monero, DM settings, drafts, pending setup, DM database) go
+     * first, as at logout, so the new account inherits nothing.
+     */
+    private suspend fun clearOtherAccount(pubkey: String) {
+        val old = sessions.session.first() ?: return
+        if (old.pubkey == pubkey) return
+        bestEffort { DmDatabase.delete(context, old.pubkey) }
+        clearStaleSession(old.pubkey)
+    }
+
+    /**
+     * Spec 2026-10-17 §7: a new account's open parts go out at every session start, off the start path;
+     * only for a session already persisted, so no record is published for a key that is not stored.
+     */
+    private fun resumeSetupLater(ready: Ready) {
+        ready.engine.backgroundScope.launch { bestEffort { resumeSetup(ready.engine, ready.pubkey, ready.publish, ready.follows) } }
     }
 
     /** Runs [persist]; if it fails, DM sync, engine and DM database of the fresh session are closed before rethrowing. */
@@ -341,16 +414,20 @@ class NostrSession @Inject constructor(
      * Drops the persisted session and secret and moves to [SessionState.LoggedOut]. The Monero
      * state (view key, setup, pending tips, notification watermarks) belongs to the account and
      * is cleared too, best effort: one failing step does not stop the others. So are the drafts of
-     * [pubkey] (spec 2026-10-16 §8; without a signer their pictures stay on the server).
+     * [pubkey] (spec 2026-10-16 §8; without a signer their pictures stay on the server) and its
+     * pending setup record (spec 2026-10-17 §7).
      */
     private suspend fun clearStaleSession(pubkey: String?) {
         secrets.remove(KeystoreSecretStore.SECRET_NSEC)
         sessions.clear()
         if (pubkey != null) bestEffort { drafts.removeAll(pubkey) }
+        if (pubkey != null) bestEffort { pendingSetup.remove(pubkey) }
         bestEffort { secrets.remove(KeystoreSecretStore.SECRET_VIEW_KEY) }
         bestEffort { tipSettings.setSetup(null) }
         bestEffort { pendingTips.clear() }
         bestEffort { tipSettings.setAnonymous(true) }
+        // the read marks stay with the account: logging in again must not make every notification unread
+        if (pubkey != null) bestEffort { tipSettings.keepReadMarks(pubkey) }
         bestEffort { tipSettings.setNotificationsReadAt(0) }
         bestEffort { tipSettings.setLastTipNotifiedAt(0) }
         // The next account must not publish this one's inbox relays as its own kind 10050, and
@@ -371,6 +448,14 @@ class NostrSession @Inject constructor(
         } catch (e: Exception) {
             // leftover state is overwritten by the next setup; logout must still complete
         }
+    }
+
+    /**
+     * Spec 2026-10-17 §6: the key of a key login for Settings → "Show key"; null for Amber or when the stored
+     * key is missing or unreadable. A parse error is dropped unseen: its message may echo the key.
+     */
+    suspend fun ownKey(): NewKey? = withContext(Dispatchers.IO) {
+        NewKeys.ofSession(sessions.session.first()) { secrets.get(KeystoreSecretStore.SECRET_NSEC) }
     }
 
     fun requireReady(): Ready = (_state.value as? SessionState.Active)?.ready ?: error("not logged in")
@@ -472,6 +557,32 @@ class NostrSession @Inject constructor(
             SessionCleanup.closeAll({ dmStore.close() }, { engine.close() })
             throw e
         }
+    }
+
+    /**
+     * Spec 2026-10-17 §7: publishes the open parts of [pubkey]'s pending setup, and once more after
+     * [SETUP_RETRY_MS] when some part failed. A part counts as done when an event of its kind by the
+     * account is stored locally or found by one fetch from the session's relays (§11).
+     */
+    private suspend fun resumeSetup(engine: NostrEngine, pubkey: String, publish: PublishRepository, follows: FollowRepository) {
+        if (pendingSetup.load(pubkey) == null) return
+        val author = PublicKey.parse(pubkey)
+        val publisher = PendingSetupPublisher(pendingSetup, pubkey, publish, follows, dmSettings, exists = { kind ->
+            val f = Filter().kind(Kind(kind.toUShort())).author(author).limit(1u)
+            engine.query(f).isNotEmpty() || run {
+                try {
+                    engine.fetch(f, Duration.ofSeconds(5))
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // no answer: only the local store decides
+                }
+                engine.query(f).isNotEmpty()
+            }
+        })
+        if (publisher.run()) return
+        delay(SETUP_RETRY_MS)
+        publisher.run()
     }
 
     /**

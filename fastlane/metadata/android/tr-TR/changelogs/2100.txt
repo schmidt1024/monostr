@@ -1,0 +1,4 @@
+• Uygulamanın içinden bir Nostr hesabı oluşturun; anahtar yedeği ve takip edilecek hesaplarla
+• Ayarlar: anahtarınızı gösterin (yalnızca anahtarla girişte)
+• Kendi bahşişleriniz, beğenileriniz gibi vurgu renginde görünür
+• Yeniden giriş yaptığınızda bildirimler okunmuş kalır

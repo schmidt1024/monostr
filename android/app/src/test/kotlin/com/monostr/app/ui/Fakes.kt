@@ -192,11 +192,13 @@ class FakePublish(var relaysOk: Boolean = true, private val fail: Boolean = fals
     private var counter = 0
     /** When set, every publish suspends here first, to test optimistic UI before the relay answers. */
     var gate: CompletableDeferred<Unit>? = null
+    /** Kinds no relay accepts, while [relaysOk] holds for the others. */
+    val refusedKinds = HashSet<Int>()
     private suspend fun result(kind: Int, id: String? = null): PublishResult {
         gate?.await()
         if (fail) throw IllegalStateException("boom")
         counter++
-        return PublishResult(id ?: counter.toString().padStart(64, '0'), kind, if (relaysOk) listOf("wss://r") else emptyList(), emptyMap())
+        return PublishResult(id ?: counter.toString().padStart(64, '0'), kind, if (relaysOk && kind !in refusedKinds) listOf("wss://r") else emptyList(), emptyMap())
     }
     /** The attachments and the sensitive flag of the latest post, reply or quote. */
     var lastAttachments: List<NoteAttachment> = emptyList()
@@ -226,6 +228,7 @@ class FakePublish(var relaysOk: Boolean = true, private val fail: Boolean = fals
     override suspend fun relayList(relays: List<String>) = result(10002).also { calls += "relays:${relays.size}" }
     override suspend fun publishRelayList(relays: List<String>) = result(10002).also { calls += "relaylist:${relays.size}" }
     override suspend fun dmRelayList(relays: List<String>) = result(10050).also { calls += "dmrelays:${relays.size}" }
+    override suspend fun initialRelayList(relays: List<String>) = result(10002).also { calls += "initialrelays:${relays.size}" }
 }
 
 class FakeThreads(private val views: Map<String, ThreadView>, private val notes: Map<String, Note> = emptyMap()) : ThreadRepository {
@@ -420,6 +423,12 @@ class FakeTipSettings(
     override suspend fun setNotificationsReadAt(at: Long) { readAtState.value = at }
     override suspend fun lastTipNotifiedAt() = lastNotified
     override suspend fun setLastTipNotifiedAt(at: Long) { lastNotified = at }
+    val kept = mutableMapOf<String, Pair<Long, Long>>()
+    override suspend fun keepReadMarks(pubkey: String) { kept[pubkey] = readAtState.value to lastNotified }
+    override suspend fun restoreReadMarks(pubkey: String, now: Long) {
+        val (read, tip) = kept[pubkey] ?: (now to now)
+        readAtState.value = read; lastNotified = tip
+    }
     var notifiedIds: Set<String> = emptySet()
     override suspend fun notifiedReceiptIds() = notifiedIds
     override suspend fun setNotifiedReceiptIds(ids: Set<String>) { notifiedIds = ids }
@@ -676,6 +685,12 @@ class FakeFollows(initial: Map<String, FollowState> = emptyMap()) : FollowReposi
     override fun state(pubkey: String): Flow<FollowState> = states.map { it[pubkey] ?: FollowState.Unknown }
     override suspend fun follow(pubkey: String) = write(pubkey, FollowState.Following, "follow")
     override suspend fun unfollow(pubkey: String) = write(pubkey, FollowState.NotFollowing, "unfollow")
+    override suspend fun setInitial(pubkeys: List<String>) {
+        calls += "initial:${pubkeys.size}"
+        error?.let { throw it }
+        states.update { it + pubkeys.associateWith { FollowState.Following } }
+        _changes.tryEmit(Unit)
+    }
     private suspend fun write(pubkey: String, to: FollowState, label: String) {
         calls += "$label:${pubkey.take(4)}"
         gate?.await()

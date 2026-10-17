@@ -1,0 +1,4 @@
+• Crie uma conta Nostr direto no app, com backup da chave e contas para seguir
+• Configurações: mostra sua chave (somente no login por chave)
+• Suas gorjetas aparecem na cor de destaque, como suas curtidas
+• As notificações continuam lidas quando você entra de novo

@@ -14,6 +14,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.foundation.Image
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.res.painterResource
@@ -64,7 +65,7 @@ class LoginViewModel @Inject constructor(
 }
 
 @Composable
-fun LoginScreen(vm: LoginViewModel = hiltViewModel()) {
+fun LoginScreen(onCreate: () -> Unit = {}, vm: LoginViewModel = hiltViewModel()) {
     val state by vm.controller.state.collectAsStateWithLifecycle()
     var secret by remember { mutableStateOf("") }
     Column(Modifier.fillMaxSize().safeDrawingPadding().padding(24.dp), verticalArrangement = Arrangement.Center) {
@@ -105,5 +106,8 @@ fun LoginScreen(vm: LoginViewModel = hiltViewModel()) {
         )
         Spacer(Modifier.height(8.dp))
         OutlinedButton(onClick = { vm.loginWithSecret(secret) }, enabled = !state.busy && secret.isNotBlank(), modifier = Modifier.fillMaxWidth().testTag("login-secret-button")) { Text(stringResource(R.string.login_button)) }
+        Spacer(Modifier.height(16.dp))
+        // spec 2026-10-17 §2: the way in for someone without a key
+        TextButton(onClick = onCreate, enabled = !state.busy, modifier = Modifier.fillMaxWidth().testTag("login-create")) { Text(stringResource(R.string.login_create)) }
     }
 }

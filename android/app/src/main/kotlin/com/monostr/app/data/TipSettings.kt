@@ -97,6 +97,10 @@ interface TipSettingsStore {
     /** Watermark of the background worker: tips up to this instant were already notified. */
     suspend fun lastTipNotifiedAt(): Long
     suspend fun setLastTipNotifiedAt(at: Long)
+    /** Logout: the read marks ([notificationsReadAt], [lastTipNotifiedAt]) of [pubkey] are kept for its next login. */
+    suspend fun keepReadMarks(pubkey: String)
+    /** Login: the kept read marks of [pubkey] come back; an account new on this device starts at [now] (nothing older is unread or pushed). */
+    suspend fun restoreReadMarks(pubkey: String, now: Long)
     /** Receipt ids the worker already notified (spec 5.7; same-second receipts are refetched, see TipChecker). */
     suspend fun notifiedReceiptIds(): Set<String>
     suspend fun setNotifiedReceiptIds(ids: Set<String>)
@@ -154,6 +158,20 @@ class PrefsTipSettingsStore(private val store: DataStore<Preferences>) : TipSett
     override suspend fun setAnonymous(value: Boolean) { store.edit { it[ANONYMOUS] = value } }
     override suspend fun lastTipNotifiedAt(): Long = data.first()[LAST_TIP_NOTIFIED_AT] ?: 0L
     override suspend fun setLastTipNotifiedAt(at: Long) { store.edit { it[LAST_TIP_NOTIFIED_AT] = at } }
+    override suspend fun keepReadMarks(pubkey: String) {
+        store.edit { p ->
+            p[keptReadAt(pubkey)] = p[NOTIFICATIONS_READ_AT] ?: 0L
+            p[keptTipNotifiedAt(pubkey)] = p[LAST_TIP_NOTIFIED_AT] ?: 0L
+        }
+    }
+    override suspend fun restoreReadMarks(pubkey: String, now: Long) {
+        store.edit { p ->
+            p[NOTIFICATIONS_READ_AT] = p[keptReadAt(pubkey)] ?: now
+            p[LAST_TIP_NOTIFIED_AT] = p[keptTipNotifiedAt(pubkey)] ?: now
+        }
+    }
+    private fun keptReadAt(pubkey: String) = longPreferencesKey("notifications.read_at.$pubkey")
+    private fun keptTipNotifiedAt(pubkey: String) = longPreferencesKey("notifications.last_tip_notified_at.$pubkey")
     override suspend fun notifiedReceiptIds(): Set<String> = data.first()[NOTIFIED_RECEIPTS] ?: emptySet()
     override suspend fun setNotifiedReceiptIds(ids: Set<String>) { store.edit { it[NOTIFIED_RECEIPTS] = ids } }
 

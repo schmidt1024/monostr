@@ -83,7 +83,7 @@ class ActionRowScaleTest {
         }
         val tip = rule.onNodeWithTag("note-tip-$id8").getBoundsInRoot()
         val chip = rule.onNodeWithTag("note-tips-$id8").getBoundsInRoot()
-        assertTrue("counter must sit right of the tip icon in the same row", chip.left >= tip.right - 1.dp && chip.top < tip.bottom)
+        assertTrue("counter must start after the Monero glyph in the same row", chip.left > tip.left + 13.dp && chip.right > tip.right && chip.top < tip.bottom)
 
         // The card is wide enough that the chip must NOT have collapsed to the count-only fallback:
         // it stays on a single line (well under the 48 dp touch target, and under 2x a one-line
@@ -121,7 +121,7 @@ class ActionRowScaleTest {
         }
         val tip = rule.onNodeWithTag("note-tip-$id8").getBoundsInRoot()
         val chip = rule.onNodeWithTag("note-tips-$id8").getBoundsInRoot()
-        assertTrue("counter must sit right of the tip icon in the same row", chip.left >= tip.right - 1.dp && chip.top < tip.bottom)
+        assertTrue("counter must start after the Monero glyph in the same row", chip.left > tip.left + 13.dp && chip.right > tip.right && chip.top < tip.bottom)
         rule.onNodeWithTag("note-tips-$id8").assertTextEquals(count.toString())
     }
 

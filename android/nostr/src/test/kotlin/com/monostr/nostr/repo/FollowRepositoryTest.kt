@@ -6,6 +6,8 @@ import com.monostr.nostr.PublishResult
 import com.monostr.nostr.SilentWsRelay
 import com.monostr.nostr.SigningRejectedException
 import com.monostr.nostr.awaitTrue
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -57,6 +59,35 @@ class FollowRepositoryTest {
 
     /** A feed whose kind 3 was fetched from a relay [ago] seconds before [now]. */
     private fun feed(e: NostrEngine, now: Long, ago: Long?) = NostrFeedRepository(e).also { f -> if (ago != null) f.markContactsFetched(now - ago) }
+
+    @Test
+    fun `setInitial writes one kind 3 with the p tags in order and empty content`() = runTest {
+        val e = engine()
+        val repo = NostrFollowRepository(e, NostrFeedRepository(e), now = { 3_000 }, send = okSend(e))
+        val emitted = async(start = CoroutineStart.UNDISPATCHED) { repo.changes.first() }
+        repo.setInitial(listOf(carol, bob))
+        assertEquals(1, sends)
+        val list = newest(e)!!
+        assertEquals(listOf(listOf("p", carol), listOf("p", bob)), list.tagList())
+        assertEquals("", list.content())
+        assertEquals(3_000L, list.createdAt().asSecs().toLong())
+        emitted.await()
+        assertEquals(FollowState.Following, repo.state(bob).first())
+        assertTrue(failure { repo.setInitial(emptyList()) } is IllegalArgumentException)
+        assertEquals(1, sends)
+        e.close()
+    }
+
+    @Test
+    fun `setInitial throws NotAccepted when no relay takes it`() = runTest {
+        val e = engine()
+        val refused: suspend (EventBuilder) -> PublishResult = { b -> sends++; PublishResult(b.signWithKeys(me).id().toHex(), 3, emptyList(), mapOf("wss://r" to "blocked")) }
+        val repo = NostrFollowRepository(e, NostrFeedRepository(e), now = { 3_000 }, send = refused)
+        assertTrue(failure { repo.setInitial(listOf(bob)) } is FollowError.NotAccepted)
+        assertEquals(1, sends)
+        assertNull(newest(e))
+        e.close()
+    }
 
     @Test
     fun `a foreign kind 3 keeps its content and every other tag byte for byte`() = runTest {

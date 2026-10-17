@@ -54,6 +54,12 @@ interface PublishRepository {
     suspend fun publishRelayList(relays: List<String>): PublishResult
     /** Publishes the user's NIP-17 DM inbox relay list (kind 10050). */
     suspend fun dmRelayList(relays: List<String>): PublishResult
+    /**
+     * Spec 2026-10-17 §11: the first NIP-65 relay list (kind 10002) of a new account, same tags as
+     * [relayList]. Sent only to the session's relays (no indexers) and kept locally only once a relay
+     * accepted it, so a stored list means "already published".
+     */
+    suspend fun initialRelayList(relays: List<String>): PublishResult
 }
 
 class NostrPublishRepository(
@@ -152,6 +158,8 @@ class NostrPublishRepository(
         val more = engine.sendTo(index, own.eventId)
         return PublishResult(own.eventId, own.kind, (own.successRelays + more.successRelays).distinct(), own.failedRelays + more.failedRelays)
     }
+
+    override suspend fun initialRelayList(relays: List<String>): PublishResult = engine.signAndPublish(relayListBuilder(relays))
 
     /** `r` tags without a marker: every relay is for reading and writing. */
     private fun relayListBuilder(relays: List<String>): EventBuilder =

@@ -45,6 +45,11 @@ interface FollowRepository {
     val changes: SharedFlow<Unit>
     suspend fun follow(pubkey: String)
     suspend fun unfollow(pubkey: String)
+    /**
+     * Spec 2026-10-17 §4: the first kind 3 of a new account, one `p` per entry of [pubkeys] in order,
+     * empty content; never empty. Throws [FollowError.NotAccepted] when no relay took it.
+     */
+    suspend fun setInitial(pubkeys: List<String>)
 }
 
 /**
@@ -93,6 +98,19 @@ class NostrFollowRepository(
     override suspend fun follow(pubkey: String) = write(pubkey, add = true)
 
     override suspend fun unfollow(pubkey: String) = write(pubkey, add = false)
+
+    // no fetch: a brand-new account has no list to build on (spec 2026-10-17 §7 checks for one before)
+    override suspend fun setInitial(pubkeys: List<String>) {
+        require(pubkeys.isNotEmpty()) { "an initial contact list is never empty" }
+        mutex.withLock {
+            val builder = EventBuilder(Kind(3u), "")
+                .tags(pubkeys.map { Tag.parse(listOf("p", it)) })
+                .customCreatedAt(Timestamp.fromSecs(now().toULong()))
+            if (!send(builder).sentToAny) throw FollowError.NotAccepted()
+            engine.query(filter()).firstOrNull()?.let { snapshot.value = snapshotOf(it) }
+        }
+        _changes.tryEmit(Unit)
+    }
 
     private class Fetch(val found: Boolean, val completed: Boolean)
 

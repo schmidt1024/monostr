@@ -79,7 +79,7 @@ class TipDecorations(
     }
 
     fun decorate(note: NoteUi): NoteUi =
-        note.copy(tips = _summaries.value[note.target.id], pendingTip = note.target.id in _pendingNotes.value, canTip = note.target.author != selfPubkey, isOwn = note.target.author == selfPubkey)
+        note.copy(tips = _summaries.value[note.target.id], tipped = selfPubkey != null && _summaries.value[note.target.id]?.receipts?.any { it.senderPubkey == selfPubkey } == true, pendingTip = note.target.id in _pendingNotes.value, canTip = note.target.author != selfPubkey, isOwn = note.target.author == selfPubkey)
 
     /** Tippers of the note's target with sender names, newest first. */
     suspend fun tippers(note: Note): List<TipperUi> {

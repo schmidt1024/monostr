@@ -97,6 +97,25 @@ class TipDecorationsTest {
     }
 
     @Test
+    fun `a note the user tipped is marked tipped, an anonymous or foreign tip is not`() = runTest {
+        val tips = FakeTips()
+        val d = TipDecorations(tips, FakePendingTips(), profiles, FakePublish(), eager(), selfPubkey = bob) { 5_000 }
+        d.start()
+        val n = note('1', alice, 1000)
+        d.track(listOf(n))
+        val ui = NoteUi(n, Profile.empty(alice), Profile.empty(alice))
+        tips.receipts.value = mapOf(n.id to TipSummary(5, 1, listOf(receipt(n.id, "e".repeat(64), 5, 4_500).copy(senderPubkey = null))))
+        advanceUntilIdle()
+        assertFalse(d.decorate(ui).tipped, "an anonymous tip names no sender")
+        tips.receipts.value = mapOf(n.id to TipSummary(5, 1, listOf(receipt(n.id, "e".repeat(64), 5, 4_500)))) // sender bob = self
+        advanceUntilIdle()
+        assertTrue(d.decorate(ui).tipped)
+        val other = TipDecorations(tips, FakePendingTips(), profiles, FakePublish(), eager(), selfPubkey = watcher) { 5_000 }
+        other.start(); other.track(listOf(n)); advanceUntilIdle()
+        assertFalse(other.decorate(ui).tipped, "someone else's tip")
+    }
+
+    @Test
     fun `own notes cannot be tipped`() = runTest {
         val d = TipDecorations(FakeTips(), FakePendingTips(), profiles, FakePublish(), eager(), selfPubkey = alice) { 5_000 }
         val own = NoteUi(note('1', alice), Profile.empty(alice), Profile.empty(alice))

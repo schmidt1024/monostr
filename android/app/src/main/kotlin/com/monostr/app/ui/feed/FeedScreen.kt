@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import coil3.compose.AsyncImage
 import androidx.compose.foundation.lazy.LazyColumn
@@ -172,13 +173,15 @@ fun FeedScreen(
             )
         } } },
         floatingActionButton = {
+            // like X: the compose button turns see-through as the bars slide away on scrolling down, stays so while
+            // the feed rests, and is solid again once scrolling up brings the bars back (tappable throughout)
             FloatingActionButton(
                 onClick = onCompose,
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
                 elevation = FloatingActionButtonDefaults.elevation(0.dp, 0.dp, 0.dp, 0.dp),
                 shape = CircleShape, // round with a quill, like X's compose button (0.11.10)
-                modifier = Modifier.testTag("fab-compose"),
+                modifier = Modifier.graphicsLayer { alpha = 1f - (1f - FAB_SCROLL_ALPHA) * hide.hiddenFraction }.testTag("fab-compose"),
             ) { Icon(FeatherGlyph, contentDescription = stringResource(R.string.feed_new_note)) }
         },
         bottomBar = { HideOnScrollFooter(hide) { MonostrBottomBar(BottomTab.FEED, unread = unread, dmUnread = dmUnread, onFeed = toTop, onSearch = onSearch, onBookmarks = onBookmarks, onMessages = onMessages, onNotifications = onNotifications, windowInsets = WindowInsets(0)) } },
@@ -288,3 +291,6 @@ private fun SupportHintCard(onSupport: () -> Unit, onDismiss: () -> Unit) {
         }
     }
 }
+
+/** How see-through the compose button is while the bars are hidden. */
+private const val FAB_SCROLL_ALPHA = 0.45f

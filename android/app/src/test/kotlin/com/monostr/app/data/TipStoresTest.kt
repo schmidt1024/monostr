@@ -171,4 +171,32 @@ class TipStoresTest {
         assertFalse(settings.setup.first()!!.amountsHidden)
         scope.cancel()
     }
+
+    @Test
+    fun `read marks are kept per account across logout and start at now for a new account`() = runTest {
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val store = PreferenceDataStoreFactory.create(scope = scope) { dir.resolve("marks.preferences_pb").toFile() }
+        val settings = PrefsTipSettingsStore(store)
+        val alice = "a".repeat(64)
+        val bob = "b".repeat(64)
+
+        settings.restoreReadMarks(alice, now = 1_000)
+        assertEquals(1_000L, settings.notificationsReadAt.first(), "first login on this device: everything older counts as read")
+        assertEquals(1_000L, settings.lastTipNotifiedAt(), "and no push for old tips")
+
+        settings.setNotificationsReadAt(1_500)
+        settings.setLastTipNotifiedAt(1_400)
+        settings.keepReadMarks(alice) // logout
+        settings.setNotificationsReadAt(0)
+        settings.setLastTipNotifiedAt(0)
+
+        settings.restoreReadMarks(bob, now = 2_000)
+        assertEquals(2_000L, settings.notificationsReadAt.first())
+        settings.keepReadMarks(bob)
+
+        settings.restoreReadMarks(alice, now = 3_000)
+        assertEquals(1_500L, settings.notificationsReadAt.first(), "the same account again: as left")
+        assertEquals(1_400L, settings.lastTipNotifiedAt())
+        scope.cancel()
+    }
 }

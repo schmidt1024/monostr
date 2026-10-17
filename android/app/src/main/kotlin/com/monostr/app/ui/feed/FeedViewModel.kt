@@ -71,6 +71,8 @@ data class NoteUi(
     val tips: TipSummary? = null,
     /** An own tip intent without receipt yet (spec 5.5 step 5). */
     val pendingTip: Boolean = false,
+    /** A receipt names the user as sender: the tip icon and its count take the accent colour, like an own like. */
+    val tipped: Boolean = false,
     /** False for the user's own notes: tipping oneself only moves money in a circle. */
     val canTip: Boolean = true,
     /** Whether [note]'s target is in the private bookmark list (spec 4.3). */

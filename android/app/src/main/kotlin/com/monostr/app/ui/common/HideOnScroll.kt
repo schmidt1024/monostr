@@ -49,6 +49,9 @@ class HideOnScrollState {
         }
     }
 
+    /** 0 = bottom bar fully shown … 1 = hidden; follows the finger like the bar (the feed's compose button fades with it). */
+    val hiddenFraction: Float get() = if (bottomHeightPx > 0f) bottomOffsetPx / bottomHeightPx else 0f
+
     /** Brings header and bottom bar back, e.g. when the list jumps to the top or the current tab is tapped. */
     fun show() {
         offsetPx = 0f

@@ -36,6 +36,7 @@ import com.monostr.app.ui.compose.ComposeScreen
 import com.monostr.app.ui.dm.ChatScreen
 import com.monostr.app.ui.dm.ConversationsScreen
 import com.monostr.app.ui.feed.FeedScreen
+import com.monostr.app.ui.login.CreateAccountScreen
 import com.monostr.app.ui.login.LoginScreen
 import com.monostr.app.ui.media.LocalMediaSettings
 import com.monostr.app.ui.media.MediaSettings
@@ -49,6 +50,7 @@ import com.monostr.app.ui.search.SearchScreen
 import com.monostr.app.ui.settings.AboutScreen
 import com.monostr.app.ui.settings.MutedScreen
 import com.monostr.app.ui.settings.SettingsScreen
+import com.monostr.app.ui.settings.ShowKeyScreen
 import com.monostr.app.ui.settings.SupportScreen
 import com.monostr.app.ui.thread.ThreadScreen
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -71,6 +73,7 @@ object Routes {
     const val SUPPORT = "support"
     const val ABOUT = "about"
     const val MUTED = "muted"
+    const val SHOW_KEY = "show-key"
     fun thread(id: String) = "thread/$id"
     fun profile(pubkey: String) = "profile/$pubkey"
     fun dm(pubkey: String) = "dm/$pubkey"
@@ -109,7 +112,11 @@ fun MonostrNavHost(session: NostrSession) {
     LaunchedEffect(state) { if (state is SessionState.Loading) session.restore() }
     when (val s = state) {
         SessionState.Loading -> StartScreen()
-        is SessionState.LoggedOut -> LoginScreen()
+        is SessionState.LoggedOut -> {
+            // spec 2026-10-17 §11: login is not a nav route; a saved flag switches to the create flow
+            var creating by rememberSaveable { mutableStateOf(false) }
+            if (creating) CreateAccountScreen(onLeave = { creating = false }) else LoginScreen(onCreate = { creating = true })
+        }
         is SessionState.Active -> LoggedInNavHost(s.ready)
     }
 }
@@ -290,8 +297,11 @@ private fun LoggedInNavHost(ready: Ready, gate: OnboardingGateViewModel = hiltVi
                     onSupport = { nav.navigate(Routes.SUPPORT) },
                     onAbout = { nav.navigate(Routes.ABOUT) },
                     onMuted = { nav.navigate(Routes.MUTED) },
+                    onShowKey = { nav.navigate(Routes.SHOW_KEY) },
                 )
             }
+            // pops only this route: "no key" and ON_STOP may both close it
+            composable(Routes.SHOW_KEY) { ShowKeyScreen(onBack = { nav.popBackStack(Routes.SHOW_KEY, inclusive = true) }) }
             composable(Routes.SUPPORT) { SupportScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.MUTED) { MutedScreen(onBack = { nav.popBackStack() }, onOpenProfile = { nav.navigate(Routes.profile(it)) }) }
             composable(Routes.ABOUT) { AboutScreen(onBack = { nav.popBackStack() }, onOpenProfile = { nav.navigate(Routes.profile(it)) }) }

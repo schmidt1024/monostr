@@ -1,0 +1,4 @@
+• Nostr-Konto direkt in der App erstellen, mit Schlüssel-Backup und Konten zum Folgen
+• Einstellungen: Schlüssel anzeigen (nur bei Schlüssel-Login)
+• Eigene Tips erscheinen in der Akzentfarbe, wie eigene Likes
+• Benachrichtigungen bleiben gelesen, wenn du dich erneut anmeldest

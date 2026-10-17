@@ -1,0 +1,4 @@
+• Créez un compte Nostr directement dans l’app, avec sauvegarde de la clé et comptes à suivre
+• Paramètres : afficher votre clé (connexion par clé uniquement)
+• Vos propres pourboires s’affichent dans la couleur d’accent, comme vos j’aime
+• Les notifications restent lues quand vous vous reconnectez

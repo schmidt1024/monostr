@@ -1,0 +1,4 @@
+• Crea una cuenta de Nostr directamente en la app, con copia de seguridad de la clave y cuentas que seguir
+• Ajustes: muestra tu clave (solo con inicio de sesión por clave)
+• Tus propias propinas se muestran en el color de acento, como tus me gusta
+• Las notificaciones siguen leídas al volver a iniciar sesión

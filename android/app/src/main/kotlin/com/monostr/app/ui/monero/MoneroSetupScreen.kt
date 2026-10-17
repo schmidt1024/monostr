@@ -3,8 +3,6 @@ package com.monostr.app.ui.monero
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
-import android.view.WindowManager
-import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -36,11 +34,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.activity.compose.BackHandler
+import com.monostr.app.ui.common.SecureWindow
 import com.monostr.nostr.Npub
 import com.monostr.tips.NetworkTag
 import com.monostr.tips.ProtocolVersion
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -90,16 +88,6 @@ class MoneroSetupViewModel @Inject constructor(session: NostrSession, settings: 
     }
 
     override fun onCleared() = controller.clear()
-}
-
-/** Blocks screenshots and recents thumbnails while the seed is on screen (spec 6.2 step 3). */
-@Composable
-private fun SecureWindow() {
-    val activity = LocalActivity.current
-    DisposableEffect(activity) {
-        activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
-        onDispose { activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE) }
-    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

@@ -1,0 +1,4 @@
+• Create a Nostr account right in the app, with key backup and accounts to follow
+• Settings: show your key (key login only)
+• Your own tips show in the accent colour, like your likes
+• Notifications stay read when you log in again

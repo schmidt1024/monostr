@@ -42,9 +42,9 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -55,6 +55,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -134,19 +135,30 @@ fun NoteActionRow(
             ActionIcon(
                 icon = MoneroGlyph, description = stringResource(R.string.note_tip), selected = false,
                 stateDescription = if (note.pendingTip) pendingLabel else null,
-                tint = if (note.pendingTip) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = if (note.pendingTip || note.tipped) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 onClick = onTip, tag = "note-tip-${shown.id.take(8)}", enabled = note.canTip,
             )
             note.tips?.takeIf { it.count > 0 }?.let { t ->
                 val openTippers = stringResource(R.string.note_tips_open)
                 var compact by remember(t) { mutableStateOf(false) }
+                // The tips text is its own 48 dp target (it opens the tippers). minimumInteractiveComponentSize()
+                // centres a short count in it, which put a lone "1" ~30 dp off the Monero glyph; the text is
+                // shifted left by that centring plus TIP_COUNT_PULL, so it starts 4 dp after the glyph like a count.
+                val density = LocalDensity.current
+                var centring by remember(t) { mutableStateOf(0.dp) }
                 Text(
                     text = if (compact || !t.amountsKnown) t.count.toString() else stringResource(R.string.note_tips_chip, Presets.withUnit(t.total, LocalAmountUnit.current), t.count),
-                    style = MaterialTheme.typography.labelSmall, fontFamily = MonostrFonts.mono, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelSmall, fontFamily = MonostrFonts.mono,
+                    color = if (note.tipped) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis,
-                    onTextLayout = { if (it.hasVisualOverflow && !compact) compact = true },
+                    onTextLayout = {
+                        if (it.hasVisualOverflow && !compact) compact = true
+                        val width = with(density) { it.size.width.toDp() }
+                        centring = ((48.dp - width - 12.dp) / 2).coerceAtLeast(0.dp)
+                    },
                     modifier = Modifier
                         .then(if (spread) Modifier else Modifier.weight(1f, fill = false))
+                        .offset(x = -(TIP_COUNT_PULL + centring))
                         .minimumInteractiveComponentSize()
                         .clip(CircleShape)
                         .clickable(onClick = onShowTippers, onClickLabel = openTippers)
@@ -172,6 +184,9 @@ fun NoteActionRow(
             )
         }
 }
+
+/** The tip icon's target ends 13 dp after the glyph and the tips text has 6 dp of padding: pulled by 15 dp it starts 4 dp after the glyph, like a count. */
+private val TIP_COUNT_PULL = 15.dp
 
 /** Where the glyph starts inside its 48 dp target: (48 − 22) / 2. */
 private val GLYPH_START = 13.dp

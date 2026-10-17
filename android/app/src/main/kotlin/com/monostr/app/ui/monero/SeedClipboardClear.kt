@@ -11,7 +11,7 @@ import kotlinx.coroutines.launch
 
 /** What the auto-clear needs from the system clipboard, small enough to fake on the JVM. */
 interface ClipboardPort {
-    /** true: our seed clip is on the clipboard; false: something else is; null: unreadable (Android 10+ hides it from a background app). */
+    /** true: our clip is on the clipboard; false: something else is; null: unreadable (Android 10+ hides it from a background app). */
     fun ownClipPresent(): Boolean?
     fun clear()
 }
@@ -36,11 +36,12 @@ object SeedClipboardClear {
 }
 
 internal const val SEED_CLIP_LABEL = "seed"
+internal const val NSEC_CLIP_LABEL = "nsec"
 
-class AndroidClipboardPort(context: Context) : ClipboardPort {
+class AndroidClipboardPort(context: Context, private val label: String = SEED_CLIP_LABEL) : ClipboardPort {
     private val manager = context.applicationContext.getSystemService(ClipboardManager::class.java)
 
-    override fun ownClipPresent(): Boolean? = manager.primaryClipDescription?.let { it.label == SEED_CLIP_LABEL }
+    override fun ownClipPresent(): Boolean? = manager.primaryClipDescription?.let { it.label == label }
 
     override fun clear() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) manager.clearPrimaryClip() else manager.setPrimaryClip(ClipData.newPlainText("", ""))

@@ -319,7 +319,7 @@ class SettingsViewModel @Inject constructor(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(onBack: () -> Unit, onMoneroSetup: () -> Unit, onSupport: () -> Unit = {}, onAbout: () -> Unit = {}, onMuted: () -> Unit = {}, vm: SettingsViewModel = hiltViewModel()) {
+fun SettingsScreen(onBack: () -> Unit, onMoneroSetup: () -> Unit, onSupport: () -> Unit = {}, onAbout: () -> Unit = {}, onMuted: () -> Unit = {}, onShowKey: () -> Unit = {}, vm: SettingsViewModel = hiltViewModel()) {
     val state by vm.controller.state.collectAsStateWithLifecycle()
     val monero by vm.monero.state.collectAsStateWithLifecycle()
     val live by vm.relayStates.collectAsStateWithLifecycle(initialValue = emptyList<RelayInfo>())
@@ -342,6 +342,7 @@ fun SettingsScreen(onBack: () -> Unit, onMoneroSetup: () -> Unit, onSupport: () 
                 val renewBusy by vm.renewBusy.collectAsStateWithLifecycle()
                 OutlinedButton(onClick = vm::renewAmber, enabled = !renewBusy, modifier = Modifier.fillMaxWidth().testTag("settings-amber-renew")) { Text(stringResource(R.string.settings_amber_renew)) }
             }
+            if (!vm.isAmber) ShowKeyButton(onShowKey)
             Spacer(Modifier.height(16.dp))
             val mode by vm.themeMode.collectAsStateWithLifecycle()
             val accent by vm.accent.collectAsStateWithLifecycle()
@@ -667,5 +668,31 @@ private fun InboxHintCard(text: String, tag: String, onDismiss: () -> Unit, dism
                 TextButton(onClick = onDismiss, modifier = Modifier.testTag(dismissTag)) { Text(stringResource(R.string.dm_relay_hint_dismiss)) }
             }
         }
+    }
+}
+
+/**
+ * Settings → "Show key" for a key login (spec 2026-10-17 §6/§11): the warning alone opens the key screen.
+ * No screen-lock prompt (user decision 2026-10-17: the old confirm-credential screen often offers only the
+ * PIN, which locked people out of their own key).
+ */
+@Composable
+private fun ShowKeyButton(onShowKey: () -> Unit) {
+    var warn by rememberSaveable { mutableStateOf(false) }
+    OutlinedButton(onClick = { warn = true }, modifier = Modifier.fillMaxWidth().testTag("settings-show-key")) { Text(stringResource(R.string.settings_show_key)) }
+    if (warn) {
+        AlertDialog(
+            onDismissRequest = { warn = false },
+            text = { Text(stringResource(R.string.settings_show_key_warning)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    warn = false
+                    ShowKeyGate.grant()
+                    onShowKey()
+                }, modifier = Modifier.testTag("show-key-confirm")) { Text(stringResource(R.string.settings_show_key_confirm)) }
+            },
+            dismissButton = { TextButton(onClick = { warn = false }) { Text(stringResource(R.string.settings_show_key_cancel)) } },
+            modifier = Modifier.testTag("show-key-warning"),
+        )
     }
 }
