@@ -1,0 +1,2 @@
+• Refreshing the feed is a bit faster again: deleted notes are only checked since the last refresh
+• A search you send is kept in recent searches even when you clear the field right away

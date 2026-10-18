@@ -170,21 +170,29 @@ class SearchController(
     /** [remember]: spec 11.4 §2 keeps only SENT searches — a typing pause runs the search but does not save partial words. */
     private fun run(q: SearchQuery, remember: Boolean = true) {
         running?.cancel()
+        // remembered when sent, on its own: clearing the field right away cancels the search, not the entry (spec 11.4 §2)
+        if (remember) {
+            val entry = when (q) {
+                is SearchQuery.Text -> q.text.takeUnless { RecentSearchesStore.isSecret(it) }
+                is SearchQuery.Hashtag -> "#${q.tag}"
+                else -> null
+            }
+            if (entry != null) scope.launch { recentSearches?.add(entry) }
+        }
         when (q) {
             SearchQuery.Empty -> _state.update { it.copy(mode = SearchMode.IDLE, people = emptyList(), notes = emptyList(), hashtag = null, loading = false, error = null, searched = false) }
             is SearchQuery.Profile -> { _nav.tryEmit(SearchNav.Profile(q.pubkey)); _state.update { it.copy(query = "") } }
             is SearchQuery.Thread -> { _nav.tryEmit(SearchNav.Thread(q.noteId)); _state.update { it.copy(query = "") } }
-            is SearchQuery.Hashtag -> running = scope.launch { hashtag(q.tag, remember = remember) }
-            is SearchQuery.Text -> running = scope.launch { text(q.text, remember) }
+            is SearchQuery.Hashtag -> running = scope.launch { hashtag(q.tag) }
+            is SearchQuery.Text -> running = scope.launch { text(q.text) }
         }
     }
 
     /** [SearchRepository] calls that are not wrapped in the repository's own try (e.g. a local-database read) must not crash the screen; a failure here keeps the local people already shown and reports [SearchUiState.error]. */
-    private suspend fun text(q: String, remember: Boolean) {
+    private suspend fun text(q: String) {
         val relays = searchRelays.first()
         val local = try { search.profilesLocal(q) } catch (e: CancellationException) { throw e } catch (e: Exception) { emptyList() }
         _state.update { it.copy(mode = SearchMode.TEXT, hashtag = null, people = local, notes = emptyList(), loading = true, error = null, noSearchRelays = relays.isEmpty(), searched = false) }
-        if (remember && !RecentSearchesStore.isSecret(q)) recentSearches?.add(q) // the search runs, whatever it finds (spec 11.4 §2)
         try {
             coroutineScope {
                 val people = async { search.profiles(q, relays) }
@@ -202,9 +210,8 @@ class SearchController(
         }
     }
 
-    private suspend fun hashtag(tag: String, until: Long? = null, remember: Boolean = false) {
+    private suspend fun hashtag(tag: String, until: Long? = null) {
         if (until == null) _state.update { it.copy(mode = SearchMode.HASHTAG, hashtag = tag, people = emptyList(), notes = emptyList(), loading = true, error = null, searched = false) }
-        if (until == null && remember) recentSearches?.add("#$tag")
         try {
             val out = search.hashtag(tag, until)
             val decorated = decorate(out.items)

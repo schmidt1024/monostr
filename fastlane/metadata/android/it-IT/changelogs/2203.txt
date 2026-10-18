@@ -1,0 +1,2 @@
+• L’aggiornamento del feed è di nuovo un po’ più veloce: le note eliminate vengono controllate solo dall’ultimo aggiornamento
+• Una ricerca inviata resta tra le recenti anche se svuoti subito il campo

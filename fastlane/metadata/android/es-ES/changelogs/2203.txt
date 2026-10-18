@@ -1,0 +1,2 @@
+• Actualizar el feed es otra vez algo más rápido: las notas borradas solo se comprueban desde la última actualización
+• Una búsqueda enviada se guarda en las recientes aunque vacíes el campo enseguida

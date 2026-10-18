@@ -110,6 +110,8 @@ class SearchTest {
     fun recentSearchesListTheLastQueriesAndCanBeRemoved() {
         reachFeed()
         runBlocking {
+            // the list persists: earlier tests and runs on the same shared account leave entries behind
+            entry.recentSearches().clear()
             entry.searchRelays().set(listOf("ws://127.0.0.1:9"))
             entry.session().applyRelays(listOf("ws://127.0.0.1:9"))
         }

@@ -1,0 +1,2 @@
+• L’actualisation du fil est encore un peu plus rapide : les notes supprimées ne sont vérifiées que depuis la dernière actualisation
+• Une recherche envoyée reste dans les recherches récentes, même si vous videz le champ aussitôt

@@ -1,0 +1,2 @@
+• Atualizar o feed ficou mais um pouco rápido: notas apagadas só são verificadas desde a última atualização
+• Uma busca enviada fica nas buscas recentes mesmo se você limpar o campo logo em seguida

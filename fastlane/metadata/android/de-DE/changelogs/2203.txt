@@ -1,0 +1,2 @@
+• Der Feed aktualisiert sich nochmals etwas schneller: Gelöschte Notes werden nur seit dem letzten Aktualisieren geprüft
+• Eine abgeschickte Suche bleibt in den letzten Suchen, auch wenn du das Feld gleich wieder leerst

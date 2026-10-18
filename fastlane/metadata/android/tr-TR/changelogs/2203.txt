@@ -1,0 +1,2 @@
+• Akış yenilemesi biraz daha hızlı: silinen notlar yalnızca son yenilemeden beri kontrol ediliyor
+• Gönderdiğin arama, alanı hemen temizlesen de son aramalarda kalıyor

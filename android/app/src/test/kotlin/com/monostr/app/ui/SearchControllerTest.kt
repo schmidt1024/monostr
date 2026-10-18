@@ -81,6 +81,19 @@ class SearchControllerTest {
     }
 
     @Test
+    fun `a sent search is remembered even when the field is cleared before it ran`() = runTest {
+        val recent = FakeRecentSearches()
+        val search = FakeSearch().apply { localGate = CompletableDeferred() }
+        val c = controller(search, recentSearches = recent)
+        c.start()
+        c.onQueryChange("monero"); c.submit()
+        c.onQueryChange(""); advanceUntilIdle() // cleared right away: the search is cancelled before its first read returns
+        c.onQueryChange("#nostr"); c.submit()
+        c.onQueryChange(""); advanceUntilIdle()
+        assertEquals(listOf("#nostr", "monero"), recent.state.value)
+    }
+
+    @Test
     fun `text and hashtag searches are remembered, a search that found nothing is still remembered, links are not`() = runTest {
         val recent = FakeRecentSearches()
         val search = FakeSearch()

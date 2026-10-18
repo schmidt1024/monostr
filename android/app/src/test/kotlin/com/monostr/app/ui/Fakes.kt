@@ -385,7 +385,9 @@ class FakeSearch : SearchRepository {
     val calls = ArrayList<String>()
     /** When set, `notes` suspends here before returning — models an in-flight relay round trip for tests that cancel mid-search. */
     var notesGate: CompletableDeferred<Unit>? = null
-    override suspend fun profilesLocal(query: String, limit: Int) = local.also { calls += "local:$query" }
+    /** When set, `profilesLocal` suspends here first (a slow database read). */
+    var localGate: CompletableDeferred<Unit>? = null
+    override suspend fun profilesLocal(query: String, limit: Int): List<Profile> { localGate?.await(); return local.also { calls += "local:$query" } }
     override suspend fun profiles(query: String, relays: List<String>, limit: Int): SearchOutcome<Profile> {
         calls += "people:$query:${relays.size}"
         return SearchOutcome((local + remotePeople).distinctBy { it.pubkey }, error)

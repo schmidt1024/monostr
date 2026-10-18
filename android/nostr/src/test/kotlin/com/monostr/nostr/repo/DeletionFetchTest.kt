@@ -116,4 +116,43 @@ class DeletionFetchTest {
             e.close()
         }
     }
+
+    /** The kind 5 filters the relay received since request [from]. */
+    private fun deletionFilters(relay: SilentWsRelay, from: Int): List<kotlinx.serialization.json.JsonObject> =
+        relay.requests.drop(from).flatMap { req -> kotlinx.serialization.json.Json.parseToJsonElement(req).let { it as kotlinx.serialization.json.JsonArray }.drop(2) }
+            .map { it as kotlinx.serialization.json.JsonObject }
+            .filter { f -> f["kinds"]?.toString() == "[5]" && f["authors"] != null }
+
+    @Test
+    fun `a refresh asks only for deletion requests since the last one, a new follow or an older page asks for all`() = runTest {
+        SilentWsRelay(answerEose = true).use { relay ->
+            val e = engine(relay)
+            var clock = 10_000L
+            val repo = NostrFeedRepository(e, now = { clock })
+            fun since(f: kotlinx.serialization.json.JsonObject) = f["since"]?.toString()?.toLong()
+
+            var from = relay.requests.size
+            repo.refresh()
+            assertEquals(listOf<Long?>(null), deletionFilters(relay, from).map(::since)) // the first one asks for all
+
+            clock = 10_500L
+            from = relay.requests.size
+            repo.refresh()
+            // the same authors again: only what came since the last answer, with a margin for clocks that run ahead
+            assertEquals(listOf<Long?>(10_000L - 600), deletionFilters(relay, from).map(::since))
+
+            from = relay.requests.size
+            repo.loadMore(before = 9_000)
+            assertTrue(deletionFilters(relay, from).all { since(it) == null }, "an older page needs the older requests")
+
+            // a new follow changes the author set: its old requests are asked for once
+            val carol = Keys.generate()
+            e.save(EventBuilder.contactList(listOf(Contact(alice.publicKey(), null, null), Contact(bob.publicKey(), null, null), Contact(carol.publicKey(), null, null)))
+                .customCreatedAt(rust.nostr.sdk.Timestamp.fromSecs((System.currentTimeMillis() / 1000 + 5).toULong())).signWithKeys(me))
+            from = relay.requests.size
+            repo.refresh()
+            assertEquals(listOf<Long?>(null), deletionFilters(relay, from).map(::since))
+            e.close()
+        }
+    }
 }

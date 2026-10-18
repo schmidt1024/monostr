@@ -182,6 +182,7 @@ class Ready(
 interface NostrSessionEntryPoint {
     fun session(): NostrSession
     fun searchRelays(): SearchRelayStore
+    fun recentSearches(): com.monostr.app.data.RecentSearchesStore
     fun uiSettings(): UiSettingsStore
     fun drafts(): DraftStore
     fun pendingSetup(): PendingSetupStore

@@ -114,6 +114,8 @@ class NostrFeedRepository(
     private val excluded: () -> Set<String> = { emptySet() },
 ) : FeedRepository {
     private val pubkey = requireNotNull(engine.pubkey) { "feed needs a logged-in user" }
+    /** When the deletion requests of an author set (sorted, joined) were last fetched for the newest page; this process only. */
+    private val deletionsAnswered = java.util.concurrent.ConcurrentHashMap<String, Long>()
     @Volatile private var fetchedAt: Long? = null
     override val contactsFetchedAt: Long? get() = fetchedAt
     override fun markContactsFetched(at: Long) { fetchedAt = at }
@@ -165,9 +167,18 @@ class NostrFeedRepository(
                         notes = notes.until(untilTs)
                         requests = requests.until(untilTs)
                     }
+                    // the newest page asks only for what came since the last answer for the same authors: the relays
+                    // otherwise send the same few hundred requests every time, and taking them in costs seconds on a phone
+                    val key = if (untilTs == null) chunk.sorted().joinToString(",") else null
+                    val since = key?.let { deletionsAnswered[it] }
+                    if (since != null) requests = requests.since(Timestamp.fromSecs((since - DELETION_SKEW).coerceAtLeast(0).toULong()))
+                    val askedAt = now()
                     // side by side: each waits for the slowest relay, one after the other they added up
                     val n = async { quietly { engine.fetch(notes) } }
-                    quietly { engine.fetch(requests) }
+                    quietly {
+                        engine.fetch(requests)
+                        if (key != null) deletionsAnswered[key] = askedAt
+                    }
                     n.await()
                 }
             }.awaitAll()
@@ -339,3 +350,6 @@ internal object NoteLoader {
 
 /** Deletion requests fetched with a page of notes, under their own limit. */
 private const val DELETION_LIMIT = 200uL
+
+/** Margin for [NostrFeedRepository]'s incremental deletion fetch: a request signed by a clock a bit behind still comes. */
+private const val DELETION_SKEW = 600L
