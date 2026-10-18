@@ -1,5 +1,6 @@
 package com.monostr.app.ui.search
 
+import com.monostr.nostr.repo.getAll
 import com.monostr.nostr.repo.OwnReactions
 import com.monostr.nostr.repo.MemoryOwnReactions
 import kotlinx.coroutines.flow.map
@@ -263,9 +264,11 @@ class SearchController(
     private fun flagged(ui: NoteUi): NoteUi = actions.flags(bookmarks.flags(decorations.decorate(ui)))
 
     private suspend fun decorate(notes: List<Note>): List<NoteUi> {
-        profiles.prefetch(notes.flatMap { listOfNotNull(it.author, it.repostOf?.author) })
+        val pubkeys = notes.flatMap { listOfNotNull(it.author, it.repostOf?.author) }
+        profiles.prefetch(pubkeys)
+        val byKey = profiles.getAll(pubkeys)
         return notes.map { n ->
-            NoteUi(n, profiles.get(n.author), n.repostOf?.let { profiles.get(it.author) } ?: profiles.get(n.author))
+            NoteUi(n, byKey.getValue(n.author), n.repostOf?.let { byKey.getValue(it.author) } ?: byKey.getValue(n.author))
         }
     }
 }

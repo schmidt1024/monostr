@@ -1,5 +1,6 @@
 package com.monostr.app.ui.profile
 
+import com.monostr.nostr.repo.getAll
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.ui.platform.LocalContext
 import com.monostr.app.ui.common.copyToClipboard
@@ -342,7 +343,8 @@ class ProfileController(
     /** [notes] with their authors' profiles; the flags follow inside the state update ([flagged]), read when the list is written. */
     private suspend fun decorate(notes: List<Note>, profile: Profile): List<NoteUi> {
         profiles.prefetch(notes.mapNotNull { it.repostOf?.author })
-        return notes.map { n -> NoteUi(n, profile, n.repostOf?.let { r -> profiles.get(r.author) } ?: profile) }
+        val byKey = profiles.getAll(notes.mapNotNull { it.repostOf?.author })
+        return notes.map { n -> NoteUi(n, profile, n.repostOf?.let { r -> byKey.getValue(r.author) } ?: profile) }
     }
 
     /** [ui] with the current tips, flags and counts; applied inside `_state.update`, so a change during a slow lookup is not undone. */

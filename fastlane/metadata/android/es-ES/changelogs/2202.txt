@@ -1,0 +1,2 @@
+• Más rápido: actualizar el feed tarda una cuarta parte del tiempo, y los hilos, perfiles y la búsqueda también cargan antes
+• Un solo indicador de carga al abrir el feed por primera vez

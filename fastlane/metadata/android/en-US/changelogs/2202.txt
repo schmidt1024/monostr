@@ -1,0 +1,2 @@
+• Faster: refreshing the feed takes about a quarter of the time, threads, profiles and search load quicker too
+• Only one spinner while the feed loads for the first time

@@ -1,5 +1,6 @@
 package com.monostr.app.ui.bookmarks
 
+import com.monostr.nostr.repo.getAll
 import com.monostr.nostr.repo.OwnReactions
 import com.monostr.nostr.repo.MemoryOwnReactions
 import kotlinx.coroutines.Dispatchers
@@ -160,8 +161,9 @@ class BookmarksController(
         try {
             val entries = bookmarks.entries()
             profiles.prefetch(entries.mapNotNull { it.note?.author })
+            val byKey = profiles.getAll(entries.flatMap { e -> listOfNotNull(e.note?.author, e.note?.repostOf?.author) })
             fresh = entries.map { e ->
-                BookmarkUi(e.id, e.note?.let { n -> NoteUi(n, profiles.get(n.author), n.repostOf?.let { profiles.get(it.author) } ?: profiles.get(n.author)) })
+                BookmarkUi(e.id, e.note?.let { n -> NoteUi(n, byKey.getValue(n.author), n.repostOf?.let { byKey.getValue(it.author) } ?: byKey.getValue(n.author)) })
             }
             _state.update { it.copy(entries = keepPending(it.entries, fresh.map(::current), pendingRemoval.value, ids), loading = false) }
             decorations.track(entries.mapNotNull { it.note })

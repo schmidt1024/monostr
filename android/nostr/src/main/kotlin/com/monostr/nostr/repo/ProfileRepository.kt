@@ -31,6 +31,9 @@ interface ProfileRepository {
     suspend fun invalidate(pubkey: String): Profile
 }
 
+/** [get] once per distinct pubkey: a list of notes names the same authors many times, and every lookup reads the database. */
+suspend fun ProfileRepository.getAll(pubkeys: Collection<String>): Map<String, Profile> = pubkeys.distinct().associateWith { get(it) }
+
 /**
  * Profiles (kind 0) from the local database, fetched from relays when missing or stale. A profile
  * the user's relays do not have is looked up once on [indexRelays] (relays that collect profiles

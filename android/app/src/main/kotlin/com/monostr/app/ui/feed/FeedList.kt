@@ -68,7 +68,8 @@ internal fun FeedList(
     val names by feed.names.collectAsStateWithLifecycle()
     MessageSnackbar(state.message, snackbar, onUnmute = feed::unmute, onShown = feed::clearMessage)
     ShowBarsWhenStuck(hide, listState, hasList = !state.loading && state.entries.isNotEmpty())
-    PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = feed::refresh, modifier = Modifier.fillMaxSize().testTag("feed-refresh")) {
+    // the first load already shows the large spinner; the refresh it starts must not add the small one on top
+    PullToRefreshBox(isRefreshing = state.refreshing && !state.loading, onRefresh = feed::refresh, modifier = Modifier.fillMaxSize().testTag("feed-refresh")) {
         if (state.loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         } else if (state.entries.isEmpty()) {

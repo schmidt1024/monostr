@@ -1,0 +1,2 @@
+• Plus rapide : actualiser le fil prend environ un quart du temps, les fils, profils et la recherche chargent aussi plus vite
+• Un seul indicateur de chargement au premier chargement du fil

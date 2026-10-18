@@ -165,8 +165,10 @@ class NostrFeedRepository(
                         notes = notes.until(untilTs)
                         requests = requests.until(untilTs)
                     }
-                    quietly { engine.fetch(notes) }
+                    // side by side: each waits for the slowest relay, one after the other they added up
+                    val n = async { quietly { engine.fetch(notes) } }
                     quietly { engine.fetch(requests) }
+                    n.await()
                 }
             }.awaitAll()
         }
@@ -313,16 +315,21 @@ internal object NoteLoader {
         val events = Withdrawn.filter(engine, all)
         val referenced = HashMap<String, rust.nostr.sdk.Event?>()
         val withdrawn = HashSet<String>()
-        for (ev in events) {
-            if (ev.kind().asU16().toInt() != 6) continue
+        for (ev in events.map { NoteMapper.decoded(it) }) {
+            if (ev.kind != 6) continue
             val embedded = NoteMapper.verifiedEmbedded(ev)
             if (embedded != null) {
-                quietly { engine.save(embedded) }
+                // a write costs about 100 ms on a phone: the copy is saved only the first time, a stored original is just read
+                val id = embedded.id().toHex()
+                var stored = runCatching { engine.eventById(id) }
+                if (stored.isSuccess && stored.getOrNull() == null) {
+                    quietly { engine.save(embedded) }
+                    stored = runCatching { engine.eventById(id) }
+                }
                 // the copy in the repost's content must not bring back what its author withdrew; a failing read keeps the repost
-                val stored = runCatching { engine.eventById(embedded.id().toHex()) }
-                if (stored.isSuccess && stored.getOrNull() == null) withdrawn += ev.id().toHex()
+                if (stored.isSuccess && stored.getOrNull() == null) withdrawn += ev.id
             } else {
-                val id = ev.tags().toVec().map { it.asVec() }.firstOrNull { it.size >= 2 && it[0] == "e" }?.get(1) ?: continue
+                val id = ev.firstTagValue("e") ?: continue
                 if (id !in referenced) referenced[id] = runCatching { engine.eventById(id) }.getOrNull()
             }
         }

@@ -1,0 +1,2 @@
+• Daha hızlı: akışı yenilemek eskisinin yaklaşık dörtte biri kadar sürüyor, konular, profiller ve arama da daha hızlı yükleniyor
+• Akış ilk kez yüklenirken yalnızca tek bir yükleme göstergesi

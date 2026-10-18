@@ -287,11 +287,9 @@ class NostrEngine private constructor(
         if (attach) attachTemporary(relays)
         val targets = relays.toRelayUrls()
         if (targets.isEmpty()) return emptyList()
-        return ffi {
-            val events = client.fetchEventsFrom(targets, filter, timeout).toVec()
-            events.forEach { runCatching { client.database().saveEvent(it) } }
-            events
-        }
+        // the client stores every event it receives in the database already (rust-nostr); saving them again here
+        // cost a few milliseconds per event on a phone, seconds per refresh (hundreds of known deletion requests)
+        return ffi { client.fetchEventsFrom(targets, filter, timeout).toVec() }
     }
 
     /**
@@ -496,11 +494,8 @@ class NostrEngine private constructor(
     suspend fun fetch(filter: Filter, timeout: Duration = Duration.ofSeconds(8)): List<Event> {
         val targets = relayUrls().toRelayUrls()
         if (targets.isEmpty()) return emptyList()
-        return ffi {
-            val events = client.fetchEventsFrom(targets, filter, timeout).toVec()
-            events.forEach { runCatching { client.database().saveEvent(it) } }
-            events
-        }
+        // stored by the client on receipt, see fetchFrom
+        return ffi { client.fetchEventsFrom(targets, filter, timeout).toVec() }
     }
 
     /**

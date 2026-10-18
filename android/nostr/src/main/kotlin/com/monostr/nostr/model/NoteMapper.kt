@@ -1,20 +1,28 @@
 package com.monostr.nostr.model
 
+import com.monostr.tips.event.EventJson
 import rust.nostr.sdk.Event
 import rust.nostr.sdk.Metadata
+import com.monostr.tips.event.Event as JsonEvent
 
 /** Maps rust-nostr events to the app's [Note] / [Profile] models. */
 object NoteMapper {
-    fun note(event: Event, withQuote: Boolean = true, resolveRepost: (String) -> Event? = { null }): Note? {
-        val kind = event.kind().asU16().toInt()
-        val tags = event.tags().toVec().map { it.asVec() }
-        return when (kind) {
+    /**
+     * The event crosses the FFI once, as JSON, and is read in Kotlin: reading kind, tags (one call per tag), content,
+     * id and author one by one cost about 20 ms per note on a phone, a second per page.
+     */
+    fun note(event: Event, withQuote: Boolean = true, resolveRepost: (String) -> Event? = { null }): Note? =
+        note(EventJson.decode(event.asJson()), withQuote, resolveRepost)
+
+    private fun note(event: JsonEvent, withQuote: Boolean, resolveRepost: (String) -> Event?): Note? {
+        val tags = event.tags
+        return when (event.kind) {
             1 -> {
                 val refs = Nip10.parse(tags)
-                val parsed = NoteMedia.parse(event.content(), tags, withQuote)
+                val parsed = NoteMedia.parse(event.content, tags, withQuote)
                 Note(
-                    id = event.id().toHex(), author = event.author().toHex(), content = event.content(),
-                    createdAt = event.createdAt().asSecs().toLong(), kind = 1,
+                    id = event.id, author = event.pubkey, content = event.content,
+                    createdAt = event.createdAt, kind = 1,
                     rootId = refs.rootId, replyToId = refs.replyToId, repostOf = null,
                     mentionedPubkeys = tags.filter { it.size >= 2 && it[0] == "p" }.map { it[1] },
                     media = parsed.media,
@@ -28,10 +36,10 @@ object NoteMapper {
             }
             6 -> {
                 val referencedId = tags.firstOrNull { it.size >= 2 && it[0] == "e" }?.get(1)
-                val original = verifiedEmbedded(event) ?: referencedId?.let(resolveRepost)
+                val original = verifiedEmbedded(event.content, referencedId) ?: referencedId?.let(resolveRepost)
                 Note(
-                    id = event.id().toHex(), author = event.author().toHex(), content = "",
-                    createdAt = event.createdAt().asSecs().toLong(), kind = 6,
+                    id = event.id, author = event.pubkey, content = "",
+                    createdAt = event.createdAt, kind = 6,
                     rootId = null, replyToId = null,
                     repostOf = original?.let { note(it) },
                     mentionedPubkeys = emptyList(),
@@ -51,10 +59,19 @@ object NoteMapper {
      * has an `e` tag, the tag points at that same id. Anything else could be forged by the
      * reposter and is ignored.
      */
-    fun verifiedEmbedded(repost: Event): Event? {
-        val embedded = repost.content().takeIf { it.isNotBlank() }?.let { runCatching { Event.fromJson(it) }.getOrNull() } ?: return null
+    fun verifiedEmbedded(repost: Event): Event? =
+        verifiedEmbedded(repost.content(), repost.tags().toVec().map { it.asVec() }.firstOrNull { it.size >= 2 && it[0] == "e" }?.get(1))
+
+    /** [verifiedEmbedded] for an event already read in Kotlin. */
+    internal fun verifiedEmbedded(repost: JsonEvent): Event? = verifiedEmbedded(repost.content, repost.firstTagValue("e"))
+
+    /** [event] read in Kotlin: one FFI call instead of one per field and tag. */
+    fun decoded(event: Event): JsonEvent = EventJson.decode(event.asJson())
+
+    /** [verifiedEmbedded] for a repost's [content] and the id its first `e` tag names ([referencedId]). */
+    internal fun verifiedEmbedded(content: String, referencedId: String?): Event? {
+        val embedded = content.takeIf { it.isNotBlank() }?.let { runCatching { Event.fromJson(it) }.getOrNull() } ?: return null
         if (!runCatching { embedded.verify() }.getOrDefault(false)) return null
-        val referencedId = repost.tags().toVec().map { it.asVec() }.firstOrNull { it.size >= 2 && it[0] == "e" }?.get(1)
         if (referencedId != null && referencedId != embedded.id().toHex()) return null
         return embedded
     }

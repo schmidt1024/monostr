@@ -1,5 +1,6 @@
 package com.monostr.app.ui.feed
 
+import com.monostr.nostr.repo.getAll
 import kotlinx.coroutines.flow.first
 import com.monostr.nostr.repo.OwnReactions
 import com.monostr.nostr.repo.MemoryOwnReactions
@@ -385,8 +386,10 @@ class FeedController(
     private suspend fun decorate(notes: List<Note>): List<NoteUi> {
         val pubkeys = notes.flatMap { listOfNotNull(it.author, it.repostOf?.author) }
         profiles.prefetch(pubkeys)
+        val byKey = profiles.getAll(pubkeys)
         return notes.map { n ->
-            NoteUi(n, profiles.get(n.author), n.repostOf?.let { profiles.get(it.author) } ?: profiles.get(n.author))
+            val author = byKey.getValue(n.author)
+            NoteUi(n, author, n.repostOf?.let { byKey.getValue(it.author) } ?: author)
         }
     }
 }

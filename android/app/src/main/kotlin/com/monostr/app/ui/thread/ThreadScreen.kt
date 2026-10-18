@@ -1,5 +1,6 @@
 package com.monostr.app.ui.thread
 
+import com.monostr.nostr.repo.getAll
 import com.monostr.nostr.repo.OwnReactions
 import com.monostr.nostr.repo.MemoryOwnReactions
 import kotlinx.coroutines.Dispatchers
@@ -201,7 +202,8 @@ class ThreadController(
                         }
                     }
                     profiles.prefetch(withFocused.map { it.author })
-                    all = withFocused.map { n -> NoteUi(n, profiles.get(n.author), profiles.get(n.author)) }
+                    val byKey = profiles.getAll(withFocused.map { it.author })
+                    all = withFocused.map { n -> NoteUi(n, byKey.getValue(n.author), byKey.getValue(n.author)) }
                     val items = visibility.visible(all.map(::fresh), keep = view.focused.id)
                     _state.update { it.copy(items = items, rows = rows, focusedId = view.focused.id, loading = false) }
                     decorations.track(withFocused)

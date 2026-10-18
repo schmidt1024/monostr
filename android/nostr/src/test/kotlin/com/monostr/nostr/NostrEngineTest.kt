@@ -403,6 +403,26 @@ class NostrEngineTest {
         engine.close()
     }
 
+    @Test
+    fun `fetched events land in the database without a second save, from session and temporary relays`() = runTest {
+        val author = rust.nostr.sdk.Keys.generate()
+        val a = rust.nostr.sdk.EventBuilder.textNote("from the session relay").signWithKeys(author)
+        val b = rust.nostr.sdk.EventBuilder.textNote("from a temporary relay").signWithKeys(author)
+        SilentWsRelay(serve = listOf(a.asJson()), answerEose = true).use { session ->
+            SilentWsRelay(serve = listOf(b.asJson()), answerEose = true).use { temporary ->
+                val engine = NostrEngine.create(dir.resolve("lmdb").toString(), null, listOf(session.url))
+                engine.connect()
+                assertTrue(awaitTrue { engine.connectedNormalRelayUrls().isNotEmpty() })
+                assertEquals(1, engine.fetch(Filter().kind(Kind(1u))).size)
+                assertEquals(1, engine.fetchFrom(listOf(temporary.url), Filter().kind(Kind(1u))).size)
+                // the client stores what it receives (rust-nostr), the engine does not save it again
+                assertTrue(engine.eventById(a.id().toHex()) != null)
+                assertTrue(engine.eventById(b.id().toHex()) != null)
+                engine.close()
+            }
+        }
+    }
+
     @org.junit.jupiter.api.Disabled("network probe, run with MONOSTR_NET=1")
     @Test
     fun `net probe - fetchFrom with read false reaches a live search relay`() = runTest {

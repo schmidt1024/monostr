@@ -1,0 +1,2 @@
+• Schneller: Der Feed aktualisiert sich in etwa einem Viertel der Zeit, auch Threads, Profile und Suche laden schneller
+• Beim ersten Laden des Feeds nur noch ein Ladesymbol

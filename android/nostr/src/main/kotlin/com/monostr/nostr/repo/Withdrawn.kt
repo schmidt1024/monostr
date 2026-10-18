@@ -18,27 +18,26 @@ object Withdrawn {
     private val WITHDRAWABLE = setOf(1, 6, 7)
 
     suspend fun filter(engine: NostrEngine, events: List<Event>): List<Event> {
+        // read in Kotlin: one FFI call per event instead of one per field and tag (slow on a phone)
+        val decoded = events.map { NoteMapper.decoded(it) }
         // a repost points at its original: the verified embedded copy, else the stored event its `e` tag names
-        val originalOf = HashMap<String, Event>()
-        for (ev in events) {
-            if (ev.kind().asU16().toInt() != 6) continue
-            val original = NoteMapper.verifiedEmbedded(ev) ?: run {
-                val id = ev.tags().toVec().map { it.asVec() }.firstOrNull { it.size >= 2 && it[0] == "e" }?.get(1)
-                id?.let { stored(engine, it) }
-            }
-            if (original != null) originalOf[ev.id().toHex()] = original
+        val originalOf = HashMap<String, Pair<String, String>>() // repost id -> (original id, original author)
+        for (ev in decoded) {
+            if (ev.kind != 6) continue
+            val original = NoteMapper.verifiedEmbedded(ev) ?: ev.firstTagValue("e")?.let { stored(engine, it) }
+            if (original != null) originalOf[ev.id] = original.id().toHex() to original.author().toHex()
         }
         // notes, and reposts and reactions themselves (an un-repost or un-like is a kind 5 naming them)
-        val candidates = events.filter { it.kind().asU16().toInt() in WITHDRAWABLE } + originalOf.values
+        val candidates = decoded.filter { it.kind in WITHDRAWABLE }.associate { it.id to it.pubkey } + originalOf.values
         if (candidates.isEmpty()) return events
         val gone = requested(engine, candidates)
         if (gone.isEmpty()) return events
-        return events.filter { ev ->
-            if (ev.id().toHex() in gone) return@filter false
+        return events.zip(decoded).filter { (_, ev) ->
+            if (ev.id in gone) return@filter false
             // a repost whose original is withdrawn goes with it
-            val original = originalOf[ev.id().toHex()]?.id()?.toHex()
+            val original = originalOf[ev.id]?.first
             original == null || original !in gone
-        }
+        }.map { it.first }
     }
 
     /** The stored event [id], null when it is missing or the read fails; cancellation still propagates. */
@@ -52,9 +51,8 @@ object Withdrawn {
 
     suspend fun isWithdrawn(engine: NostrEngine, event: Event): Boolean = filter(engine, listOf(event)).isEmpty()
 
-    /** Ids among [notes] that a stored kind 5 of the same author names. One query per call, chunked by 100 ids. */
-    private suspend fun requested(engine: NostrEngine, notes: List<Event>): Set<String> {
-        val authorOf = notes.associate { it.id().toHex() to it.author().toHex() }
+    /** Ids among [authorOf] (note id -> author) that a stored kind 5 of the same author names. One query per call, chunked by 100 ids. */
+    private suspend fun requested(engine: NostrEngine, authorOf: Map<String, String>): Set<String> {
         val gone = HashSet<String>()
         for (chunk in authorOf.keys.chunked(100)) {
             val requests = engine.query(Filter().kind(Kind(5u)).events(chunk.map { EventId.parse(it) }))

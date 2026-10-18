@@ -123,7 +123,7 @@ fun ConversationsScreen(
         bottomBar = { HideOnScrollFooter(hide) { MonostrBottomBar(BottomTab.MESSAGES, unread = 0, dmUnread = dmUnread, onFeed = onFeed, onSearch = onSearch, onBookmarks = onBookmarks, onMessages = hide::show, onNotifications = onNotifications, windowInsets = WindowInsets(0)) } },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
-        PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = vm.controller::refresh, modifier = Modifier.padding(padding).fillMaxSize()) {
+        PullToRefreshBox(isRefreshing = state.refreshing && !state.loading, onRefresh = vm.controller::refresh, modifier = Modifier.padding(padding).fillMaxSize()) {
             if (state.loading) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             } else {

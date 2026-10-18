@@ -1,0 +1,2 @@
+• Mais rápido: atualizar o feed leva cerca de um quarto do tempo, e threads, perfis e busca também carregam mais rápido
+• Só um indicador de carregamento ao abrir o feed pela primeira vez
