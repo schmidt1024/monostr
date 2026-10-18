@@ -1,0 +1,4 @@
+• Listeler: hesapları listelerde topla, her birini ayrı bir akış olarak oku
+• En fazla 5 listeyi ana akışın üstüne sekme olarak sabitle, gizli senkronize edilir
+• Listeler varsayılan olarak gizlidir; başkalarının herkese açık listelerini profillerinden aç ve sabitle
+• Amber ile: listeler sorusuz kaydedilsin diye bir kez Ayarlar → “Amber izinlerini yenile”ye dokunun

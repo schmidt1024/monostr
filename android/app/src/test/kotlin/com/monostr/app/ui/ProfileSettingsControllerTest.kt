@@ -10,6 +10,7 @@ import com.monostr.app.ui.tips.TipDecorations
 import com.monostr.nostr.model.Note
 import com.monostr.nostr.model.Profile
 import com.monostr.nostr.repo.FeedRepository
+import com.monostr.nostr.repo.FeedSource
 import com.monostr.nostr.repo.ProfileSection
 import com.monostr.nostr.repo.FollowCounts
 import kotlinx.coroutines.CoroutineScope
@@ -151,10 +152,10 @@ class ProfileSettingsControllerTest {
 private class FailingFeed : FeedRepository {
     override suspend fun follows(): List<String> = emptyList()
     override suspend fun followsLocal(): List<String> = emptyList()
-    override suspend fun notes(limit: Int, until: Long?): List<Note> = emptyList()
-    override suspend fun refresh(limit: Int) {}
-    override suspend fun loadMore(before: Long, limit: Int): List<Note> = emptyList()
-    override fun live(limit: Int): Flow<List<Note>> = throw NotImplementedError()
+    override suspend fun notes(source: FeedSource, limit: Int, until: Long?): List<Note> = emptyList()
+    override suspend fun refresh(source: FeedSource, limit: Int) {}
+    override suspend fun loadMore(source: FeedSource, before: Long, limit: Int): List<Note> = emptyList()
+    override fun live(source: FeedSource, limit: Int): Flow<List<Note>> = throw NotImplementedError()
     override suspend fun notesBy(author: String, limit: Int, fetch: Boolean): List<Note> = throw IllegalStateException("boom")
     override suspend fun profileNotes(author: String, section: ProfileSection, limit: Int, fetch: Boolean): List<Note> = throw IllegalStateException("boom")
     override suspend fun moreProfileNotes(author: String, section: ProfileSection, before: Long, limit: Int): List<Note> = throw IllegalStateException("boom")

@@ -1,0 +1,4 @@
+• Lists: group accounts into lists and read each one as its own feed
+• Pin up to 5 lists as tabs at the top of the home feed, synced privately
+• Lists are private by default; open and pin other people's public lists from their profile
+• Amber users: tap Settings → “Renew Amber permissions” once so lists save without extra prompts

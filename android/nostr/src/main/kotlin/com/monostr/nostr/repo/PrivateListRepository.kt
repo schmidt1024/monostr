@@ -7,19 +7,12 @@ import com.monostr.nostr.Signer
 import com.monostr.nostr.SigningRejectedException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonPrimitive
 import rust.nostr.sdk.Event
 import rust.nostr.sdk.EventBuilder
 import rust.nostr.sdk.Filter
@@ -68,7 +61,7 @@ class NostrPrivateList(
     private val _state = MutableStateFlow(ListState())
     val state: StateFlow<ListState> = _state.asStateFlow()
     private val mutex = Mutex()
-    private val json = Json
+    private val privateTags = PrivateTags(signer)
 
     /** The parts of the list we preserve verbatim; only privateIds is ours to edit. */
     private var publicTags: List<List<String>> = emptyList()
@@ -214,24 +207,11 @@ class NostrPrivateList(
         privateIds = emptyList(); privateOther = emptyList()
         val content = event.content()
         if (content.isBlank()) return Decrypt.OK
-        val tags = try {
-            withContext(Dispatchers.Default) {
-                // NIP-51: older clients wrote the private part with NIP-04 ("…?iv=…"); it is read, and written back as NIP-44
-                val legacy = NIP04.containsMatchIn(content)
-                val text = when {
-                    legacy && interactive -> signer.nip04Decrypt(signer.pubkey, content)
-                    legacy -> signer.nip04DecryptSilent(signer.pubkey, content)
-                    interactive -> signer.nip44Decrypt(signer.pubkey, content)
-                    else -> signer.nip44DecryptSilent(signer.pubkey, content)
-                } ?: return@withContext null
-                parseTags(text)
-            } ?: return Decrypt.NO_SILENT_ANSWER
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: SigningRejectedException) {
-            return Decrypt.REJECTED
-        } catch (e: Exception) {
-            return Decrypt.UNREADABLE
+        val tags = when (val r = privateTags.decrypt(content, interactive)) {
+            is Decrypted.Ok -> r.value
+            Decrypted.NoSilentAnswer -> return Decrypt.NO_SILENT_ANSWER
+            Decrypted.Rejected -> return Decrypt.REJECTED
+            Decrypted.Unreadable -> return Decrypt.UNREADABLE
         }
         privateIds = tags.filter { it.size >= 2 && it[0] == tag }.map { it[1] }
         privateOther = tags.filter { it.size < 2 || it[0] != tag }
@@ -320,9 +300,7 @@ class NostrPrivateList(
             val ts = maxOf(now(), lastCreatedAt + 1)
             lastCreatedAt = ts
             val outcome = try {
-                val content = withContext(Dispatchers.Default) {
-                    signer.nip44Encrypt(signer.pubkey, encodeTags(privateOther + privateIds.map { listOf(tag, it) }))
-                }
+                val content = privateTags.encrypt(privateOther + privateIds.map { listOf(tag, it) })
                 val builder = EventBuilder(Kind(kind.toUShort()), content).tags(publicTags.map { Tag.parse(it) }).customCreatedAt(Timestamp.fromSecs(ts.toULong()))
                 if (send(builder).sentToAny) ListOutcome.Ok else ListOutcome.PublishFailed
             } catch (e: CancellationException) {
@@ -362,13 +340,4 @@ class NostrPrivateList(
         _state.value = state
         onState(state)
     }
-
-    private fun parseTags(text: String): List<List<String>> =
-        json.parseToJsonElement(text).jsonArray.map { t -> t.jsonArray.map { it.jsonPrimitive.content } }
-
-    private fun encodeTags(tags: List<List<String>>): String =
-        JsonArray(tags.map { t -> JsonArray(t.map { JsonPrimitive(it) }) }).toString()
 }
-
-/** A NIP-04 payload: base64 ciphertext, "?iv=", base64 IV. NIP-44 payloads are plain base64. */
-private val NIP04 = Regex("\\?iv=[A-Za-z0-9+/=]+$") // regex

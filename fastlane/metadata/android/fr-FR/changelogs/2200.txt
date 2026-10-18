@@ -1,0 +1,4 @@
+• Listes : regroupez des comptes en listes et lisez chacune comme un fil à part
+• Épinglez jusqu’à 5 listes en onglets en haut du fil, synchronisées en privé
+• Les listes sont privées par défaut ; ouvrez et épinglez les listes publiques des autres depuis leur profil
+• Avec Amber : touchez une fois Réglages → « Renouveler les autorisations Amber » pour enregistrer les listes sans invites

@@ -14,6 +14,13 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.runtime.saveable.rememberSaveable
+import com.monostr.app.ui.lists.AddToListController
+import com.monostr.app.ui.lists.AddToListSheet
+import com.monostr.app.ui.lists.ListRow
+import com.monostr.app.ui.lists.ProfileListsController
+import com.monostr.nostr.model.ListAddress
 import androidx.compose.material3.Tab
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -498,6 +505,10 @@ class ProfileViewModel @Inject constructor(
     val tipSheet = factory.tipSheet(viewModelScope)
     /** The user's own pending profile tips to this person; idle on the own profile (no tip button there). */
     val tipWatch = factory.profileTipWatch(pubkey, viewModelScope)
+    /** The Lists tab (spec 2026-10-18 §2.2); pin writes run on the background scope so leaving does not cancel them. */
+    val lists = ProfileListsController(pubkey, ready.pubkey, ready.lists, ready.feedTabs, viewModelScope, writeScope = ready.engine.backgroundScope)
+    /** The "Add to list" sheet; started when it opens, so other profiles do not load the own lists for nothing. */
+    val addToList = AddToListController(pubkey, ready.lists, viewModelScope, writeScope = ready.engine.backgroundScope)
     init {
         controller.start()
         if (pubkey != ready.pubkey) tipWatch.start()
@@ -518,13 +529,26 @@ fun ProfileScreen(
     onMessage: (String) -> Unit = {},
     onEditProfile: () -> Unit = {},
     onQuote: (String) -> Unit = {},
+    onOpenList: (ListAddress) -> Unit = {},
+    onCreateList: () -> Unit = {},
+    onNewListWith: (String) -> Unit = {},
     vm: ProfileViewModel = hiltViewModel(),
 ) {
     val state by vm.controller.state.collectAsStateWithLifecycle()
     val names by vm.controller.names.collectAsStateWithLifecycle()
+    val listsState by vm.lists.state.collectAsStateWithLifecycle()
+    var listsTab by rememberSaveable { mutableStateOf(false) }
+    // restored as true after process death: the new view model must read the lists again (open() is idempotent)
+    LaunchedEffect(listsTab) { if (listsTab) vm.lists.open() }
+    val addState by vm.addToList.state.collectAsStateWithLifecycle()
+    var addToListOpen by rememberSaveable { mutableStateOf(false) }
+    // restored as true after a configuration change or process death: the sheet must load its rows again (start() is idempotent)
+    LaunchedEffect(addToListOpen) { if (addToListOpen) vm.addToList.start() }
     val snackbar = remember { SnackbarHostState() }
     var tippersFor by remember { mutableStateOf<Note?>(null) }
     MessageSnackbar(state.message, snackbar, onUnmute = vm.controller::unmute, onShown = vm.controller::clearMessage)
+    MessageSnackbar(listsState.message, snackbar, onUnmute = {}, onShown = vm.lists::clearMessage)
+    MessageSnackbar(addState.message, snackbar, onUnmute = {}, onShown = vm.addToList::clearMessage)
     DeletionMessages(vm.deletions, snackbar)
     val pendingTip by vm.tipWatch.pendingTip.collectAsStateWithLifecycle()
     val arrivedText = stringResource(R.string.tip_arrived)
@@ -540,18 +564,26 @@ fun ProfileScreen(
     val hide = rememberHideOnScroll()
     Scaffold(modifier = Modifier.nestedScroll(hide.connection), topBar = { HideOnScrollHeader(hide) {
         TopAppBar(windowInsets = WindowInsets(0), title = { Text(if (state.isSelf) stringResource(R.string.profile_title_self) else state.profile.shownName) }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back)) } }, actions = {
-            if (!state.isSelf && (state.isMuted || state.canMute)) {
+            if (!state.isSelf) {
                 var open by remember { mutableStateOf(false) }
                 Box {
                     IconButton(onClick = { open = true }, modifier = Modifier.testTag("profile-menu")) {
                         Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.note_menu))
                     }
                     DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                        // spec 2026-10-18 §2.5
                         DropdownMenuItem(
-                            text = { Text(if (state.isMuted) stringResource(R.string.unmute_account) else stringResource(R.string.mute_account, state.profile.shownName)) },
-                            onClick = { open = false; if (state.isMuted) vm.controller.unmute() else vm.controller.mute() },
-                            modifier = Modifier.testTag("profile-menu-mute"),
+                            text = { Text(stringResource(R.string.profile_menu_lists)) },
+                            onClick = { open = false; addToListOpen = true },
+                            modifier = Modifier.testTag("profile-menu-lists"),
                         )
+                        if (state.isMuted || state.canMute) {
+                            DropdownMenuItem(
+                                text = { Text(if (state.isMuted) stringResource(R.string.unmute_account) else stringResource(R.string.mute_account, state.profile.shownName)) },
+                                onClick = { open = false; if (state.isMuted) vm.controller.unmute() else vm.controller.mute() },
+                                modifier = Modifier.testTag("profile-menu-mute"),
+                            )
+                        }
                     }
                 }
             }
@@ -614,16 +646,20 @@ fun ProfileScreen(
                 }
             }
             stickyHeader(key = "profile-tabs") {
-                PrimaryTabRow(selectedTabIndex = state.tab.ordinal, modifier = Modifier.testTag("profile-tabs")) {
+                PrimaryTabRow(selectedTabIndex = if (listsTab) ProfileSection.entries.size else state.tab.ordinal, modifier = Modifier.testTag("profile-tabs")) {
+                    // X: tabs stuck at the top stay there and the new tab starts right below them;
+                    // otherwise the swap of the list's items would send the list back to the profile's top
+                    fun keepTabsAtTop() {
+                        val tabs = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == "profile-tabs" }
+                        if (tabs != null && tabs.offset <= 0) scope.launch { listState.scrollToItem(tabs.index) }
+                    }
                     ProfileSection.entries.forEach { section ->
                         Tab(
-                            selected = state.tab == section,
+                            selected = !listsTab && state.tab == section,
                             onClick = {
-                                // X: tabs stuck at the top stay there and the new tab starts right below them;
-                                // otherwise the swap of the list's items would send the list back to the profile's top
-                                val tabs = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == "profile-tabs" }
+                                listsTab = false
                                 vm.controller.selectTab(section)
-                                if (tabs != null && tabs.offset <= 0) scope.launch { listState.scrollToItem(tabs.index) }
+                                keepTabsAtTop()
                             },
                             // M3 colours an unselected tab like the selected one unless told otherwise; X greys it
                             unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -631,50 +667,94 @@ fun ProfileScreen(
                             modifier = Modifier.testTag("profile-tab-${section.name.lowercase()}"),
                         )
                     }
-                }
-            }
-            items(state.shown, key = { it.note.id }) { n ->
-                NoteCard(
-                    note = n,
-                    onOpen = { onOpenThread(n.target.id) },
-                    onOpenProfile = onOpenProfile,
-                    onReply = { onReply(n.target.id) },
-                    onLike = { vm.controller.like(n.target) },
-                    onReact = { e -> vm.controller.react(n.target, e) },
-                    onRepost = { vm.controller.repost(n.target) },
-                    onQuote = { onQuote(n.target.id) },
-                    onTip = { vm.tipSheet.open(n.target) },
-                    onShowTippers = { tippersFor = n.target },
-                    onHashtag = onHashtag,
-                    onOpenNote = onOpenThread,
-                    onBookmark = { vm.controller.bookmark(n.target) },
-                    onOpenMedia = onOpenMedia,
-                    onOpenVideo = onOpenVideo,
-                    names = names,
-                    menu = vm.menu,
-                )
-                HorizontalDivider()
-            }
-            when {
-                state.shownLoading -> item(key = "profile-loading") { ListSpinner() }
-                state.shown.isEmpty() -> item(key = "profile-empty") {
-                    Text(
-                        stringResource(state.tab.empty),
-                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.fillMaxWidth().padding(24.dp).testTag("profile-empty"),
+                    // spec 2026-10-18 §2.2
+                    Tab(
+                        selected = listsTab,
+                        onClick = {
+                            listsTab = true
+                            keepTabsAtTop()
+                        },
+                        unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        text = { Text(stringResource(R.string.profile_tab_lists)) },
+                        modifier = Modifier.testTag("profile-tab-lists"),
                     )
                 }
-                state.tab !in state.ended -> item(key = "profile-more-${state.tab}") {
-                    LaunchedEffect(state.tab, state.shown.size) { vm.controller.loadMore() }
-                    if (state.loadingMore) ListSpinner()
-                }
             }
-            // X: a short tab leaves room below, so the tabs can stay stuck at the top when it opens there
-            if (state.shown.size < SHORT_TAB) item(key = "profile-tab-room") { Spacer(Modifier.fillParentMaxHeight()) }
+            if (!listsTab) {
+                items(state.shown, key = { it.note.id }) { n ->
+                    NoteCard(
+                        note = n,
+                        onOpen = { onOpenThread(n.target.id) },
+                        onOpenProfile = onOpenProfile,
+                        onReply = { onReply(n.target.id) },
+                        onLike = { vm.controller.like(n.target) },
+                        onReact = { e -> vm.controller.react(n.target, e) },
+                        onRepost = { vm.controller.repost(n.target) },
+                        onQuote = { onQuote(n.target.id) },
+                        onTip = { vm.tipSheet.open(n.target) },
+                        onShowTippers = { tippersFor = n.target },
+                        onHashtag = onHashtag,
+                        onOpenNote = onOpenThread,
+                        onBookmark = { vm.controller.bookmark(n.target) },
+                        onOpenMedia = onOpenMedia,
+                        onOpenVideo = onOpenVideo,
+                        names = names,
+                        menu = vm.menu,
+                    )
+                    HorizontalDivider()
+                }
+                when {
+                    state.shownLoading -> item(key = "profile-loading") { ListSpinner() }
+                    state.shown.isEmpty() -> item(key = "profile-empty") {
+                        Text(
+                            stringResource(state.tab.empty),
+                            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.fillMaxWidth().padding(24.dp).testTag("profile-empty"),
+                        )
+                    }
+                    state.tab !in state.ended -> item(key = "profile-more-${state.tab}") {
+                        LaunchedEffect(state.tab, state.shown.size) { vm.controller.loadMore() }
+                        if (state.loadingMore) ListSpinner()
+                    }
+                }
+                // X: a short tab leaves room below, so the tabs can stay stuck at the top when it opens there
+                if (state.shown.size < SHORT_TAB) item(key = "profile-tab-room") { Spacer(Modifier.fillParentMaxHeight()) }
+            } else {
+                if (vm.lists.isSelf) item(key = "list-create") {
+                    OutlinedButton(onClick = onCreateList, modifier = Modifier.padding(16.dp).testTag("list-create")) {
+                        Icon(Icons.Filled.Add, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.list_create))
+                    }
+                }
+                val shownLists = listsState.lists
+                when {
+                    shownLists == null -> item(key = "lists-loading") { ListSpinner() }
+                    shownLists.isEmpty() -> item(key = "lists-empty") {
+                        Text(
+                            stringResource(if (vm.lists.isSelf) R.string.lists_empty_own else R.string.lists_empty_other),
+                            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.fillMaxWidth().padding(24.dp).testTag("lists-empty"),
+                        )
+                    }
+                    else -> items(shownLists, key = { "list-" + it.address }) { set ->
+                        ListRow(set, pinned = set.address in listsState.pinned, onOpen = { onOpenList(set.address) }, onPin = { vm.lists.togglePin(set) })
+                        HorizontalDivider()
+                    }
+                }
+                if ((shownLists?.size ?: 0) < SHORT_TAB) item(key = "profile-tab-room") { Spacer(Modifier.fillParentMaxHeight()) }
+            }
         }
         VisibleNotes(listState, vm.controller::visible)
     }
     TipSheetHost(vm.tipSheet)
+    if (addToListOpen) {
+        AddToListSheet(
+            vm.addToList,
+            onNewList = { addToListOpen = false; onNewListWith(state.profile.pubkey) },
+            onDismiss = { addToListOpen = false },
+        )
+    }
     if (state.confirmUnfollow) {
         AlertDialog(
             onDismissRequest = vm.controller::dismissUnfollow,

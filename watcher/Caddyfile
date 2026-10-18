@@ -14,3 +14,9 @@
 	}
 	reverse_proxy stagenet-watcher:8080
 }
+
+# The public Monero node on this host: restricted RPC (monerod:18089) with a real certificate, for wallets
+# that refuse monerod's self-signed one (2026-10-17). Same RPC as node.xmr.rocks:18089, nothing more.
+{$NODE_DOMAIN:node.xmr.rocks} {
+	reverse_proxy monerod:18089
+}

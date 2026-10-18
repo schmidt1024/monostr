@@ -36,6 +36,8 @@ import com.monostr.app.ui.compose.ComposeScreen
 import com.monostr.app.ui.dm.ChatScreen
 import com.monostr.app.ui.dm.ConversationsScreen
 import com.monostr.app.ui.feed.FeedScreen
+import com.monostr.app.ui.lists.ListEditScreen
+import com.monostr.app.ui.lists.ListScreen
 import com.monostr.app.ui.login.CreateAccountScreen
 import com.monostr.app.ui.login.LoginScreen
 import com.monostr.app.ui.media.LocalMediaSettings
@@ -53,6 +55,7 @@ import com.monostr.app.ui.settings.SettingsScreen
 import com.monostr.app.ui.settings.ShowKeyScreen
 import com.monostr.app.ui.settings.SupportScreen
 import com.monostr.app.ui.thread.ThreadScreen
+import com.monostr.nostr.model.ListAddress
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -74,6 +77,14 @@ object Routes {
     const val ABOUT = "about"
     const val MUTED = "muted"
     const val SHOW_KEY = "show-key"
+    const val LIST = "list/{address}"
+    const val LIST_EDIT = "list-edit?address={address}&add={add}"
+    /** Spec 2026-10-18 §2.3: the address is URL-encoded (a foreign `d` may hold any character). */
+    fun list(address: ListAddress) = "list/" + android.net.Uri.encode(address.toString())
+    fun listEdit(address: ListAddress? = null, add: String? = null): String {
+        val params = listOfNotNull(address?.let { "address=" + android.net.Uri.encode(it.toString()) }, add?.let { "add=$it" })
+        return if (params.isEmpty()) "list-edit" else "list-edit?" + params.joinToString("&")
+    }
     fun thread(id: String) = "thread/$id"
     fun profile(pubkey: String) = "profile/$pubkey"
     fun dm(pubkey: String) = "dm/$pubkey"
@@ -175,6 +186,7 @@ private fun LoggedInNavHost(ready: Ready, gate: OnboardingGateViewModel = hiltVi
                     onBookmarks = onBookmarks,
                     onOpenMedia = onOpenMedia,
                     onOpenVideo = onOpenVideo,
+                    onOpenList = { nav.navigate(Routes.list(it)) },
                 )
             }
             composable(Routes.BOOKMARKS) {
@@ -260,7 +272,33 @@ private fun LoggedInNavHost(ready: Ready, gate: OnboardingGateViewModel = hiltVi
                     onOpenMedia = onOpenMedia,
                     onOpenVideo = onOpenVideo,
                     onMessage = { nav.navigate(Routes.dm(it)) },
+                    onOpenList = { nav.navigate(Routes.list(it)) },
+                    onCreateList = { nav.navigate(Routes.listEdit()) },
+                    onNewListWith = { nav.navigate(Routes.listEdit(add = it)) },
                 )
+            }
+            composable(Routes.LIST, arguments = listOf(navArgument("address") { type = NavType.StringType })) {
+                ListScreen(
+                    onBack = { nav.popBackStack() },
+                    onOpenProfile = { nav.navigate(Routes.profile(it)) },
+                    onEdit = { nav.navigate(Routes.listEdit(it)) },
+                    onOpenThread = { nav.navigate(Routes.thread(it)) },
+                    onReply = { nav.navigate(Routes.compose(it)) },
+                    onQuote = { nav.navigate(Routes.compose(quote = it)) },
+                    onHashtag = { nav.navigate(Routes.search("#$it")) },
+                    onOpenMedia = onOpenMedia,
+                    onOpenVideo = onOpenVideo,
+                )
+            }
+            composable(
+                Routes.LIST_EDIT,
+                arguments = listOf(
+                    navArgument("address") { type = NavType.StringType; nullable = true; defaultValue = null },
+                    navArgument("add") { type = NavType.StringType; nullable = true; defaultValue = null },
+                ),
+            ) {
+                // after a delete the list screen goes too (the edit screen is only opened from it for existing lists)
+                ListEditScreen(onDone = { deleted -> if (deleted) nav.popBackStack(Routes.LIST, inclusive = true) else nav.popBackStack() })
             }
             composable(
                 "compose?replyTo={replyTo}&quote={quote}",

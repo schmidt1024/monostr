@@ -111,6 +111,12 @@ class Nip55Test {
     }
 
     @Test
+    fun `follow sets and the feed tabs are among the default permissions`() {
+        assertTrue(Nip55.defaultPermissions.any { it.type == "sign_event" && it.kind == 30000 })
+        assertTrue(Nip55.defaultPermissions.any { it.type == "sign_event" && it.kind == 30078 })
+    }
+
+    @Test
     fun `default permissions include profile metadata`() {
         assertTrue(Nip55.defaultPermissions.any { it.type == "sign_event" && it.kind == 0 })
     }

@@ -1,0 +1,4 @@
+• Liste: raggruppa account in liste e leggi ognuna come un feed a sé
+• Fissa fino a 5 liste come schede in cima al feed, sincronizzate in privato
+• Le liste sono private per impostazione predefinita; apri e fissa le liste pubbliche degli altri dal loro profilo
+• Con Amber: tocca una volta Impostazioni → «Rinnova i permessi di Amber» per salvare le liste senza richieste

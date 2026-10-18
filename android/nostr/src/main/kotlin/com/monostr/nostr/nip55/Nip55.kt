@@ -29,6 +29,8 @@ object Nip55 {
         Permission("sign_event", 5),
         // NIP-51 mute list (Plan 11-B).
         Permission("sign_event", 10000),
+        // NIP-51 follow sets and the pinned feed tabs (lists, 0.22.0).
+        Permission("sign_event", 30000), Permission("sign_event", 30078),
     )
 
     fun permissionsJson(permissions: List<Permission> = defaultPermissions): String =

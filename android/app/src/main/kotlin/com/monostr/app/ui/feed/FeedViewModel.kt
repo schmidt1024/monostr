@@ -17,6 +17,8 @@ import com.monostr.app.data.HintStore
 import com.monostr.app.data.SupportHint
 import com.monostr.app.data.TipSettingsStore
 import com.monostr.app.session.NostrSession
+import com.monostr.app.session.Ready
+import com.monostr.app.ui.common.NoteMenu
 import com.monostr.app.ui.common.BookmarkActions
 import com.monostr.app.ui.common.NoteActions
 import com.monostr.app.ui.common.NoteDeletions
@@ -40,6 +42,7 @@ import com.monostr.nostr.repo.ConversationRepository
 import com.monostr.nostr.repo.CountsRepository
 import com.monostr.nostr.repo.Slot
 import com.monostr.nostr.repo.FeedRepository
+import com.monostr.nostr.repo.FeedSource
 import com.monostr.nostr.repo.MuteRepository
 import com.monostr.nostr.repo.ProfileRepository
 import com.monostr.nostr.repo.PublishRepository
@@ -140,6 +143,8 @@ class FeedController(
     mute: MuteRepository? = null,
     /** The scope mute writes run on, so they survive the screen that started them (session: the engine's background scope); null (tests) = [scope]. */
     muteScope: CoroutineScope? = null,
+    /** Whose notes this feed shows: the home feed, or a list's members (spec 2026-10-18 §4.3). */
+    private val source: FeedSource = FeedSource.Following,
 ) {
     val names: StateFlow<Map<String, String>> get() = mentions.names
     private val _state = MutableStateFlow(FeedUiState())
@@ -162,14 +167,14 @@ class FeedController(
         decorations.start()
         scope.launch { decorations.changes.collect { _state.update { s -> s.mapAll(decorations::decorate) } } }
         scope.launch { counts.counts.collect { _state.update { s -> s.mapAll(::withCounts) } } }
-        startLive()
+        if (liveOn) startLive()
         // the repository leaves muted accounts out at the query (read once per start), so a mute or an unmute,
         // also one reverted after a failed publish, restarts the list like a follow change does
-        scope.launch { merge(followChanges, visibility.muted.drop(1).map { }).collect { startLive(); refresh() } }
+        scope.launch { merge(followChanges, visibility.muted.drop(1).map { }).collect { if (liveOn) { startLive(); refresh() } } }
         scope.launch {
             try {
-                feed.refresh()
-                val decorated = decorate(feed.notes())
+                feed.refresh(source)
+                val decorated = decorate(feed.notes(source))
                 setNotes(loading = false) { s -> merge(decorated, s.notes) }
                 chainsFor(decorated)
             } catch (e: CancellationException) {
@@ -183,11 +188,27 @@ class FeedController(
 
     private var liveJob: Job? = null
 
+    /** Whether the live subscription runs; only the visible tab of the home feed is live (spec 2026-10-18 §4.3). */
+    private var liveOn = true
+
+    /** Off: the live subscription ends, the notes stay. On again: live restarts and the feed refreshes (spec §4.3). */
+    fun setLive(on: Boolean) {
+        if (on == liveOn) return
+        liveOn = on
+        if (on) {
+            startLive()
+            refresh()
+        } else {
+            liveJob?.cancel()
+            liveJob = null
+        }
+    }
+
     private fun startLive() {
         liveJob?.cancel()
         liveJob = scope.launch {
             try {
-                feed.live().collect { notes ->
+                feed.live(source).collect { notes ->
                     val decorated = decorate(notes)
                     setNotes(loading = false) { s -> merge(decorated, s.notes) }
                     chainsFor(decorated)
@@ -204,8 +225,8 @@ class FeedController(
         scope.launch {
             _state.update { it.copy(refreshing = true) }
             try {
-                feed.refresh()
-                val decorated = decorate(feed.notes())
+                feed.refresh(source)
+                val decorated = decorate(feed.notes(source))
                 setNotes(loading = false, refreshing = false) { s -> merge(decorated, s.notes) }
                 chainsFor(decorated)
                 retryUnavailable()
@@ -225,7 +246,7 @@ class FeedController(
         _state.update { it.copy(loadingMore = true) }
         scope.launch {
             try {
-                val older = feed.loadMore(oldest)
+                val older = feed.loadMore(source, before = oldest)
                 val decorated = decorate(older)
                 setNotes { s -> (s.notes + decorated).distinctBy { it.note.id } }
                 chainsFor(decorated)
@@ -366,14 +387,29 @@ class FeedController(
 /** The note a like/repost/reply/tip refers to: the original for reposts. */
 val NoteUi.target: Note get() = note.repostOf ?: note
 
+/** A list's feed (spec 2026-10-18 §4.3): the home feed's controller over [source], on its own [scope]. */
+fun Ready.listFeed(factory: TipSheetFactory, source: FeedSource.Authors, scope: CoroutineScope): FeedController = FeedController(
+    feed, profiles, publish, factory.decorations(scope),
+    BookmarkActions(bookmarks, scope, background = engine.backgroundScope), counts, scope,
+    conversations = conversations, mentions = MentionResolver(profiles, scope, Dispatchers.Default),
+    deletions = deletions, visibility = visibility, afterDelete = afterNoteDelete, own = ownReactions,
+    mute = mute, muteScope = engine.backgroundScope, source = source,
+)
+
 @HiltViewModel
-class FeedViewModel @Inject constructor(session: NostrSession, factory: TipSheetFactory, settings: TipSettingsStore, private val hints: HintStore) : ViewModel() {
+class FeedViewModel @Inject constructor(session: NostrSession, private val factory: TipSheetFactory, settings: TipSettingsStore, private val hints: HintStore) : ViewModel() {
     private val ready = session.requireReady()
     val decorations = factory.decorations(viewModelScope)
     val bookmarks = BookmarkActions(ready.bookmarks, viewModelScope, background = ready.engine.backgroundScope)
     val controller = FeedController(ready.feed, ready.profiles, ready.publish, decorations, bookmarks, ready.counts, viewModelScope, conversations = ready.conversations, mentions = MentionResolver(ready.profiles, viewModelScope, Dispatchers.Default), followChanges = ready.follows.changes, deletions = ready.deletions, visibility = ready.visibility, afterDelete = ready.afterNoteDelete, own = ready.ownReactions, mute = ready.mute, muteScope = ready.engine.backgroundScope)
     val deletions = ready.deletions
     val menu = ready.noteMenu(delete = controller::delete, mute = controller::mute)
+
+    /** Spec 2026-10-18 §4.3: Following plus one feed per pinned list. */
+    val tabs = HomeTabsController(ready.feedTabs, ready.lists, viewModelScope, ready.pubkey, controller) { source, scope -> ready.listFeed(factory, source, scope) }
+
+    /** The note menu of [feed]: delete and mute go through the tab's own controller. */
+    fun menuFor(feed: FeedController): NoteMenu = if (feed === controller) menu else ready.noteMenu(delete = feed::delete, mute = feed::mute)
     val tipSheet = factory.tipSheet(viewModelScope)
     val relayStates = ready.engine.relayStates()
 
@@ -413,6 +449,7 @@ class FeedViewModel @Inject constructor(session: NostrSession, factory: TipSheet
     }
 
     init {
+        tabs.start()
         viewModelScope.launch {
             controller.start()
             controller.state.first { !it.loading }

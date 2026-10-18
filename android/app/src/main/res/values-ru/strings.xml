@@ -590,4 +590,47 @@
     <string name="settings_show_key_warning">Любой, у кого есть этот ключ, управляет вашим аккаунтом. Показать?</string>
     <string name="settings_show_key_confirm">Показать</string>
     <string name="settings_show_key_cancel">Отмена</string>
+    <!-- lists -->
+    <string name="action_retry">Повторить</string>
+    <string name="list_save_failed">Не удалось сохранить, попробуйте ещё раз</string>
+    <string name="feed_tab_following">Подписки</string>
+    <string name="feed_tab_menu_open">Открыть список</string>
+    <string name="feed_tab_menu_left">Сдвинуть влево</string>
+    <string name="feed_tab_menu_right">Сдвинуть вправо</string>
+    <string name="list_unpin">Открепить</string>
+    <string name="list_unavailable">Список недоступен</string>
+    <string name="list_locked">Заблокирован — нажмите, чтобы открыть</string>
+    <string name="list_no_members">Пока нет участников</string>
+    <string name="list_feed_empty">Пока нет заметок из этого списка</string>
+    <string name="list_untitled">Список без названия</string>
+    <string name="profile_tab_lists">Списки</string>
+    <string name="list_create">Новый список</string>
+    <string name="lists_empty_own">Пока нет списков</string>
+    <string name="lists_empty_other">Нет публичных списков</string>
+    <string name="list_pin">Закрепить</string>
+    <string name="list_pin_limit">Можно закрепить не больше 5 списков</string>
+    <string name="list_private">Личный</string>
+    <plurals name="list_members">
+        <item quantity="one">%1$d участник</item>
+        <item quantity="few">%1$d участника</item>
+        <item quantity="many">%1$d участников</item>
+        <item quantity="other">%1$d участника</item>
+    </plurals>
+    <string name="list_edit">Изменить</string>
+    <string name="list_edit_title">Изменить список</string>
+    <string name="list_tab_notes">Заметки</string>
+    <string name="list_tab_members">Участники</string>
+    <string name="list_member_remove">Удалить %1$s</string>
+    <string name="list_by">автор: %1$s</string>
+    <string name="list_title_label">Название</string>
+    <string name="list_description_label">Описание (необязательно)</string>
+    <string name="list_private_hint">Только вы видите, кто в личном списке. При чтении релеи видят аккаунты из него, на которые вы не подписаны.</string>
+    <string name="list_save">Сохранить</string>
+    <string name="list_delete">Удалить список</string>
+    <string name="list_delete_text">Удалить этот список? Это нельзя отменить.</string>
+    <string name="list_delete_confirm">Удалить</string>
+    <string name="list_public_text">Все увидят, кто в этом списке.</string>
+    <string name="list_public_confirm">Сделать публичным</string>
+    <string name="profile_menu_lists">Добавить в список</string>
+    <string name="add_to_list_new">Новый список…</string>
 </resources>

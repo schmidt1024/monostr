@@ -26,18 +26,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import coil3.compose.AsyncImage
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -46,8 +40,10 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -56,7 +52,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -74,16 +69,15 @@ import com.monostr.app.ui.common.DeletionMessages
 import com.monostr.app.ui.common.MessageSnackbar
 import com.monostr.app.ui.common.MonostrBottomBar
 import com.monostr.app.ui.common.HideOnScrollFooter
-import com.monostr.app.ui.common.ShowBarsWhenStuck
-import com.monostr.app.ui.common.NoteCard
 import com.monostr.app.ui.common.RelayDot
-import com.monostr.app.ui.common.ShowRepliesRow
-import com.monostr.app.ui.common.UnavailableRow
-import com.monostr.app.ui.common.VisibleNotes
 import com.monostr.app.ui.common.muteUndoTag
 import com.monostr.app.ui.tips.TipSheetHost
 import com.monostr.app.ui.tips.TippersDialog
 import com.monostr.nostr.model.Note
+import com.monostr.nostr.model.ListAddress
+import androidx.compose.foundation.lazy.LazyListState
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -103,10 +97,10 @@ fun FeedScreen(
     onOpenVideo: (String) -> Unit = {},
     onQuote: (String) -> Unit = {},
     onSupport: () -> Unit = {},
+    onOpenList: (ListAddress) -> Unit = {},
     vm: FeedViewModel = hiltViewModel(),
 ) {
-    val state by vm.controller.state.collectAsStateWithLifecycle()
-    val names by vm.controller.names.collectAsStateWithLifecycle()
+    val tabs by vm.tabs.state.collectAsStateWithLifecycle()
     val relays by vm.relayStates.collectAsStateWithLifecycle(initialValue = emptyList())
     val unread by vm.unread.collectAsStateWithLifecycle()
     val dmUnread by vm.dmUnread.collectAsStateWithLifecycle()
@@ -114,20 +108,30 @@ fun FeedScreen(
     val supportHint by vm.supportHint.collectAsStateWithLifecycle()
     val amountsPrompt by vm.amountsPrompt.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
-    val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
-    // spec 7: up to 30 entries away the list scrolls, beyond that it jumps (a long animation over hundreds of cards stutters and loads pictures for nothing)
     val hide = rememberHideOnScroll()
-    ShowBarsWhenStuck(hide, listState, hasList = !state.loading && state.entries.isNotEmpty())
+    val current = tabs.current
+    // spec 2026-10-18 §2.1: every tab keeps its own scroll position
+    // (saveable: a thread opened from the feed and back, or a rotation, keeps the position like the single list did)
+    val stateHolder = rememberSaveableStateHolder()
+    var shownList by remember { mutableStateOf<LazyListState?>(null) }
+    val feed: FeedController? = if (current is HomeTab.Following) vm.controller else tabs.feeds[current.key]
+    // observed (not read once) so the "mute-undo" tag follows the shown feed's message
+    val feedMessage by remember(feed) { feed?.state?.map { it.message } ?: flowOf(null) }.collectAsStateWithLifecycle(initialValue = null)
+    var tippersFor by remember { mutableStateOf<Note?>(null) }
+    val nav = remember {
+        NoteNav(onOpenThread, onOpenProfile, onReply, onQuote, onHashtag, onOpenMedia, onOpenVideo, onTip = { vm.tipSheet.open(it) }, onShowTippers = { tippersFor = it })
+    }
+    // spec 7: up to 30 entries away the list scrolls, beyond that it jumps (a long animation over hundreds of cards stutters and loads pictures for nothing)
     val toTop: () -> Unit = {
         hide.show()
         scope.launch {
-            if (listState.firstVisibleItemIndex > 30) listState.scrollToItem(0) else listState.animateScrollToItem(0)
+            shownList?.let { ls -> if (ls.firstVisibleItemIndex > 30) ls.scrollToItem(0) else ls.animateScrollToItem(0) }
         }
-        if (!state.refreshing) vm.controller.refresh()
+        feed?.let { if (!it.state.value.refreshing) it.refresh() }
     }
-    var tippersFor by remember { mutableStateOf<Note?>(null) }
-    MessageSnackbar(state.message, snackbar, onUnmute = vm.controller::unmute, onShown = vm.controller::clearMessage)
+    LaunchedEffect(current.key) { hide.show() }
+    MessageSnackbar(tabs.message, snackbar, onUnmute = {}, onShown = vm.tabs::clearMessage)
     DeletionMessages(vm.deletions, snackbar)
     Scaffold(
         modifier = Modifier.nestedScroll(hide.connection),
@@ -171,6 +175,16 @@ fun FeedScreen(
                     }
                 },
             )
+            // spec 2026-10-18 §2.1: only with a pinned list; it hides and returns with the other bars
+            if (tabs.showRow) {
+                FeedTabRow(
+                    state = tabs,
+                    onSelect = { i -> if (i == tabs.selected) toTop() else vm.tabs.select(i) },
+                    onOpenList = onOpenList,
+                    onUnpin = vm.tabs::unpin,
+                    onMove = vm.tabs::move,
+                )
+            }
         } } },
         floatingActionButton = {
             // like X: the compose button turns see-through as the bars slide away on scrolling down, stays so while
@@ -185,83 +199,39 @@ fun FeedScreen(
             ) { Icon(FeatherGlyph, contentDescription = stringResource(R.string.feed_new_note)) }
         },
         bottomBar = { HideOnScrollFooter(hide) { MonostrBottomBar(BottomTab.FEED, unread = unread, dmUnread = dmUnread, onFeed = toTop, onSearch = onSearch, onBookmarks = onBookmarks, onMessages = onMessages, onNotifications = onNotifications, windowInsets = WindowInsets(0)) } },
-        snackbarHost = { SnackbarHost(snackbar, Modifier.muteUndoTag(state.message)) },
+        snackbarHost = { SnackbarHost(snackbar, Modifier.muteUndoTag(feedMessage)) },
     ) { padding ->
-        Column(Modifier.padding(padding).fillMaxSize()) {
-        PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = vm.controller::refresh, modifier = Modifier.fillMaxSize().testTag("feed-refresh")) {
-            if (state.loading) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-            } else if (state.entries.isEmpty()) {
-                // scrollable so pull-to-refresh works on the empty state too
-                Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(32.dp), contentAlignment = Alignment.Center) { Text(stringResource(R.string.feed_empty), textAlign = TextAlign.Center) }
-            } else {
-                LazyColumn(state = listState, modifier = Modifier.fillMaxSize().testTag("feed-list")) {
-                    if (supportHint) {
-                        item(key = "support-hint") {
-                            SupportHintCard(onSupport = { vm.dismissSupportHint(); onSupport() }, onDismiss = vm::dismissSupportHint)
-                        }
-                    }
-                    items(state.entries, key = { it.note.id }) { n ->
-                        // spec 2026-10-16 §3: a reply stands under the notes above it, joined by the thread line (X's conversation block)
-                        val chain = state.chains[n.note.id]
-                        Column(Modifier.testTag(if (chain != null) "conversation-${n.note.id.take(8)}" else "entry-${n.note.id.take(8)}")) {
-                            chain?.ancestors?.forEachIndexed { i, id ->
-                                val above = i > 0
-                                val a = state.ancestors[id]
-                                if (a == null) UnavailableRow(lineAbove = above, lineBelow = true)
-                                else NoteCard(
-                                    note = a,
-                                    onOpen = { onOpenThread(a.target.id) },
-                                    onOpenProfile = onOpenProfile,
-                                    onReply = { onReply(a.target.id) },
-                                    onLike = { vm.controller.like(a) },
-                                    onReact = { e -> vm.controller.react(a.target, e) },
-                                    onRepost = { vm.controller.repost(a) },
-                                    onQuote = { onQuote(a.target.id) },
-                                    onTip = { vm.tipSheet.open(a.target) },
-                                    onShowTippers = { tippersFor = a.target },
-                                    onBookmark = { vm.controller.bookmark(a) },
-                                    onHashtag = onHashtag,
-                                    onOpenNote = onOpenThread,
-                                    onOpenMedia = onOpenMedia,
-                                    onOpenVideo = onOpenVideo,
-                                    names = names,
-                                    menu = vm.menu,
-                                    replyContext = false,
-                                    lineAbove = above,
-                                    lineBelow = true,
-                                )
-                                if (i == 0 && chain.cut) ShowRepliesRow(onClick = { onOpenThread(n.target.id) })
+        Box(Modifier.padding(padding).fillMaxSize()) {
+          stateHolder.SaveableStateProvider(current.key) {
+            val listState = rememberLazyListState()
+            SideEffect { shownList = listState }
+            val pinned = current as? HomeTab.Pinned
+            when {
+                pinned?.status == ListStatus.UNAVAILABLE -> UnavailableTab(onUnpin = { vm.tabs.unpin(pinned.address) })
+                pinned?.status == ListStatus.LOCKED -> LockedTab(onUnlock = { vm.tabs.unlock(pinned.address) })
+                pinned?.status == ListStatus.EMPTY -> CenteredText(stringResource(R.string.list_no_members), Modifier.testTag("feed-tab-empty"))
+                feed == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                else -> {
+                    val menu = remember(feed) { vm.menuFor(feed) }
+                    FeedList(
+                        feed = feed,
+                        listState = listState,
+                        menu = menu,
+                        nav = nav,
+                        emptyText = stringResource(if (pinned == null) R.string.feed_empty else R.string.list_feed_empty),
+                        snackbar = snackbar,
+                        hide = hide,
+                        header = {
+                            if (pinned == null && supportHint) {
+                                item(key = "support-hint") {
+                                    SupportHintCard(onSupport = { vm.dismissSupportHint(); onSupport() }, onDismiss = vm::dismissSupportHint)
+                                }
                             }
-                            NoteCard(
-                                note = n,
-                                onOpen = { onOpenThread(n.target.id) },
-                                onOpenProfile = onOpenProfile,
-                                onReply = { onReply(n.target.id) },
-                                onLike = { vm.controller.like(n) },
-                                onReact = { e -> vm.controller.react(n.target, e) },
-                                onRepost = { vm.controller.repost(n) },
-                                onQuote = { onQuote(n.target.id) },
-                                onTip = { vm.tipSheet.open(n.target) },
-                                onShowTippers = { tippersFor = n.target },
-                                onBookmark = { vm.controller.bookmark(n) },
-                                onHashtag = onHashtag,
-                                onOpenNote = onOpenThread,
-                                onOpenMedia = onOpenMedia,
-                                onOpenVideo = onOpenVideo,
-                                names = names,
-                                menu = vm.menu,
-                                replyContext = chain == null,
-                                lineAbove = chain != null,
-                            )
-                        }
-                        HorizontalDivider()
-                    }
-                    item { LaunchedEffect(state.notes.size) { vm.controller.loadMore() } }
+                        },
+                    )
                 }
-                VisibleNotes(listState, vm.controller::visible)
             }
-        }
+          }
         }
     }
     TipSheetHost(vm.tipSheet)

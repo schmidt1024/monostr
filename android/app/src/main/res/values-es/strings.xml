@@ -578,4 +578,46 @@
     <string name="settings_show_key_warning">Quien tenga esta clave controla tu cuenta. ¿Mostrarla?</string>
     <string name="settings_show_key_confirm">Mostrar</string>
     <string name="settings_show_key_cancel">Cancelar</string>
+    <!-- lists -->
+    <string name="action_retry">Reintentar</string>
+    <string name="list_save_failed">No se pudo guardar, inténtalo de nuevo</string>
+    <string name="feed_tab_following">Siguiendo</string>
+    <string name="feed_tab_menu_open">Abrir lista</string>
+    <string name="feed_tab_menu_left">Mover a la izquierda</string>
+    <string name="feed_tab_menu_right">Mover a la derecha</string>
+    <string name="list_unpin">Desfijar</string>
+    <string name="list_unavailable">Lista no disponible</string>
+    <string name="list_locked">Bloqueada: toca para desbloquear</string>
+    <string name="list_no_members">Aún no hay miembros</string>
+    <string name="list_feed_empty">Aún no hay notas de esta lista</string>
+    <string name="list_untitled">Lista sin título</string>
+    <string name="profile_tab_lists">Listas</string>
+    <string name="list_create">Nueva lista</string>
+    <string name="lists_empty_own">Aún no hay listas</string>
+    <string name="lists_empty_other">No hay listas públicas</string>
+    <string name="list_pin">Fijar</string>
+    <string name="list_pin_limit">Puedes fijar hasta 5 listas</string>
+    <string name="list_private">Privada</string>
+    <plurals name="list_members">
+        <item quantity="one">%1$d miembro</item>
+        <item quantity="many">%1$d miembros</item>
+        <item quantity="other">%1$d miembros</item>
+    </plurals>
+    <string name="list_edit">Editar</string>
+    <string name="list_edit_title">Editar lista</string>
+    <string name="list_tab_notes">Notas</string>
+    <string name="list_tab_members">Miembros</string>
+    <string name="list_member_remove">Quitar a %1$s</string>
+    <string name="list_by">de %1$s</string>
+    <string name="list_title_label">Título</string>
+    <string name="list_description_label">Descripción (opcional)</string>
+    <string name="list_private_hint">Solo tú ves quién está en una lista privada. Al leerla, los relays ven las cuentas que no sigues.</string>
+    <string name="list_save">Guardar</string>
+    <string name="list_delete">Eliminar lista</string>
+    <string name="list_delete_text">¿Eliminar esta lista? No se puede deshacer.</string>
+    <string name="list_delete_confirm">Eliminar</string>
+    <string name="list_public_text">Todo el mundo verá quién está en esta lista.</string>
+    <string name="list_public_confirm">Hacer pública</string>
+    <string name="profile_menu_lists">Añadir a una lista</string>
+    <string name="add_to_list_new">Nueva lista…</string>
 </resources>

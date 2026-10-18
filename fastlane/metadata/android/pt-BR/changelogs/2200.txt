@@ -1,0 +1,4 @@
+• Listas: agrupe contas em listas e leia cada uma como um feed próprio
+• Fixe até 5 listas como abas no topo do feed, sincronizadas em privado
+• As listas são privadas por padrão; abra e fixe listas públicas de outras pessoas pelo perfil
+• Com Amber: toque uma vez em Configurações → “Renovar permissões do Amber” para salvar listas sem avisos

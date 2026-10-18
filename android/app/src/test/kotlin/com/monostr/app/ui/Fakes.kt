@@ -23,10 +23,15 @@ import com.monostr.app.media.UploadedMedia
 import com.monostr.monero.Address
 import com.monostr.monero.toHex
 import com.monostr.nostr.PublishResult
+import com.monostr.nostr.model.FollowSet
+import com.monostr.nostr.model.ListAddress
 import com.monostr.nostr.model.Note
 import com.monostr.nostr.model.NoteAttachment
 import com.monostr.nostr.model.NoteCounts
 import com.monostr.nostr.model.Profile
+import com.monostr.nostr.model.SaveResult
+import com.monostr.nostr.repo.FeedTabsRepository
+import com.monostr.nostr.repo.ListsRepository
 import com.monostr.nostr.repo.AnonymousIntent
 import com.monostr.nostr.repo.AuthorRelaysRepository
 import com.monostr.nostr.repo.FollowCounts
@@ -41,6 +46,7 @@ import com.monostr.nostr.repo.DmRelaysRepository
 import com.monostr.nostr.repo.DmRepository
 import com.monostr.nostr.repo.DmSendResult
 import com.monostr.nostr.repo.FeedRepository
+import com.monostr.nostr.repo.FeedSource
 import com.monostr.nostr.repo.ProfileSection
 import com.monostr.nostr.repo.FollowRepository
 import com.monostr.nostr.repo.FollowState
@@ -118,20 +124,34 @@ class FakeFeed : FeedRepository {
     var followList: List<String> = listOf("a".repeat(64))
     override suspend fun follows() = followList
     override suspend fun followsLocal() = followList
-    override suspend fun notes(limit: Int, until: Long?) = current
-    override suspend fun refresh(limit: Int) {
+    /** The source of every notes/refresh/loadMore/live call, in order. */
+    val seenSources = ArrayList<FeedSource>()
+    /** Like the repository: a list's feed holds its members' notes only. */
+    private fun of(source: FeedSource, notes: List<Note>) = if (source is FeedSource.Authors) notes.filter { it.author in source.pubkeys } else notes
+    override suspend fun notes(source: FeedSource, limit: Int, until: Long?): List<Note> {
+        seenSources += source
+        return of(source, current)
+    }
+    override suspend fun refresh(source: FeedSource, limit: Int) {
+        seenSources += source
         refreshCalls++
         refreshGate?.await()
     }
-    override suspend fun loadMore(before: Long, limit: Int): List<Note> {
+    override suspend fun loadMore(source: FeedSource, before: Long, limit: Int): List<Note> {
+        seenSources += source
         loadMoreCalls++
         loadMoreGate?.await()
         loadMoreError?.let { throw it }
-        return older
+        return of(source, older)
     }
     /** How often [live] was started (each restart counts). */
     var liveCalls = 0
-    override fun live(limit: Int): Flow<List<Note>> = flow { liveCalls++; emit(current); liveUpdates.collect { emit(it) } }
+    override fun live(source: FeedSource, limit: Int): Flow<List<Note>> = flow {
+        liveCalls++
+        seenSources += source
+        emit(of(source, current))
+        liveUpdates.collect { emit(of(source, it)) }
+    }
     /** The `fetch` flag of every notesBy call, in order. */
     val notesByCalls = ArrayList<Boolean>()
     override suspend fun notesBy(author: String, limit: Int, fetch: Boolean): List<Note> {
@@ -798,4 +818,86 @@ class FakeFollowCounts(private val counts: Map<String, List<FollowCounts>> = emp
     }
     var invalidated = 0
     override fun invalidateAll() { invalidated++ }
+}
+
+fun followSet(d: String, members: List<String>, author: String = "e".repeat(64), title: String = "List $d", private: Boolean = false, locked: Boolean = false) =
+    FollowSet(ListAddress(30000, author, d), title, null, members, private, author, 1000, locked)
+
+class FakeLists(initial: List<FollowSet> = emptyList()) : ListsRepository {
+    val ownState = MutableStateFlow(initial)
+    var foreign: Map<ListAddress, FollowSet> = emptyMap()
+    var byAuthor: Map<String, List<FollowSet>> = emptyMap()
+    var result: SaveResult = SaveResult.Ok
+    /** When set, `setMember` suspends here after recording the call. */
+    var gate: CompletableDeferred<Unit>? = null
+    /** What `unlock` turns the list into; null = it stays locked. */
+    var unlockTo: FollowSet? = null
+    val calls = ArrayList<String>()
+    override fun own(): Flow<List<FollowSet>> = ownState
+    override suspend fun of(author: String) = byAuthor[author] ?: emptyList()
+    /** When set, a lookup that fetches from relays throws (offline). */
+    var fetchFails = false
+    override suspend fun byAddress(address: ListAddress, fetch: Boolean): FollowSet? {
+        if (fetch && fetchFails) throw IllegalStateException("offline")
+        return ownState.value.firstOrNull { it.address == address } ?: foreign[address]
+    }
+    override suspend fun save(set: FollowSet): SaveResult {
+        calls += "save:${set.address.d}:${set.private}"
+        if (result == SaveResult.Ok) ownState.value = listOf(set) + ownState.value.filterNot { it.address == set.address }
+        return result
+    }
+    override suspend fun edit(address: ListAddress, title: String, description: String?, private: Boolean): SaveResult {
+        calls += "edit:${address.d}:$private"
+        val current = ownState.value.firstOrNull { it.address == address } ?: return SaveResult.Failed
+        if (result == SaveResult.Ok) ownState.value = listOf(current.copy(title = title, description = description, private = private)) + ownState.value.filterNot { it.address == address }
+        return result
+    }
+    override suspend fun setMember(address: ListAddress, pubkey: String, present: Boolean): SaveResult {
+        calls += "member:${address.d}:${pubkey.take(4)}:$present"
+        gate?.await()
+        if (result == SaveResult.Ok) ownState.value = ownState.value.map { s ->
+            if (s.address != address) s else s.copy(members = if (present) (s.members + pubkey).distinct() else s.members - pubkey)
+        }
+        return result
+    }
+    override suspend fun delete(set: FollowSet): SaveResult {
+        calls += "delete:${set.address.d}"
+        if (result == SaveResult.Ok) ownState.value = ownState.value.filterNot { it.address == set.address }
+        return result
+    }
+    override suspend fun unlock(address: ListAddress): Boolean {
+        calls += "unlock:${address.d}"
+        val open = unlockTo ?: return false
+        ownState.value = ownState.value.map { if (it.address == address) open else it }
+        return true
+    }
+    override fun newId() = "newid0000001"
+}
+
+class FakeFeedTabs(initial: List<ListAddress> = emptyList()) : FeedTabsRepository {
+    val state = MutableStateFlow(initial)
+    var result: SaveResult = SaveResult.Ok
+    val calls = ArrayList<String>()
+    override fun tabs(): Flow<List<ListAddress>> = state
+    override suspend fun pin(address: ListAddress): SaveResult {
+        calls += "pin:${address.d}"
+        if (address in state.value) return SaveResult.Ok
+        if (state.value.size >= 5) return SaveResult.TooMany
+        if (result == SaveResult.Ok) state.value = state.value + address
+        return result
+    }
+    override suspend fun unpin(address: ListAddress): SaveResult {
+        calls += "unpin:${address.d}"
+        if (result == SaveResult.Ok) state.value = state.value - address
+        return result
+    }
+    override suspend fun move(address: ListAddress, delta: Int): SaveResult {
+        calls += "move:${address.d}:$delta"
+        if (result != SaveResult.Ok) return result
+        val l = state.value.toMutableList()
+        val i = l.indexOf(address)
+        if (i >= 0) l.add((i + delta).coerceIn(0, l.lastIndex), l.removeAt(i))
+        state.value = l
+        return SaveResult.Ok
+    }
 }

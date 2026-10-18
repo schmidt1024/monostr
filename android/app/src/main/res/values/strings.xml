@@ -577,4 +577,45 @@
     <string name="settings_show_key_warning">Anyone with this key controls your account. Show it?</string>
     <string name="settings_show_key_confirm">Show</string>
     <string name="settings_show_key_cancel">Cancel</string>
+    <!-- lists -->
+    <string name="action_retry">Retry</string>
+    <string name="list_save_failed">Couldn\'t save, try again</string>
+    <string name="feed_tab_following">Following</string>
+    <string name="feed_tab_menu_open">Open list</string>
+    <string name="feed_tab_menu_left">Move left</string>
+    <string name="feed_tab_menu_right">Move right</string>
+    <string name="list_unpin">Unpin</string>
+    <string name="list_unavailable">List not available</string>
+    <string name="list_locked">Locked — tap to unlock</string>
+    <string name="list_no_members">No members yet</string>
+    <string name="list_feed_empty">No notes from this list yet</string>
+    <string name="list_untitled">Untitled list</string>
+    <string name="profile_tab_lists">Lists</string>
+    <string name="list_create">New list</string>
+    <string name="lists_empty_own">No lists yet</string>
+    <string name="lists_empty_other">No public lists</string>
+    <string name="list_pin">Pin</string>
+    <string name="list_pin_limit">You can pin up to 5 lists</string>
+    <string name="list_private">Private</string>
+    <plurals name="list_members">
+        <item quantity="one">%1$d member</item>
+        <item quantity="other">%1$d members</item>
+    </plurals>
+    <string name="list_edit">Edit</string>
+    <string name="list_edit_title">Edit list</string>
+    <string name="list_tab_notes">Notes</string>
+    <string name="list_tab_members">Members</string>
+    <string name="list_member_remove">Remove %1$s</string>
+    <string name="list_by">by %1$s</string>
+    <string name="list_title_label">Title</string>
+    <string name="list_description_label">Description (optional)</string>
+    <string name="list_private_hint">Only you see who is on a private list. When you read it, relays can see the accounts on it that you don\'t follow.</string>
+    <string name="list_save">Save</string>
+    <string name="list_delete">Delete list</string>
+    <string name="list_delete_text">Delete this list? This cannot be undone.</string>
+    <string name="list_delete_confirm">Delete</string>
+    <string name="list_public_text">Everyone will see who is on this list.</string>
+    <string name="list_public_confirm">Make public</string>
+    <string name="profile_menu_lists">Add to list</string>
+    <string name="add_to_list_new">New list…</string>
 </resources>

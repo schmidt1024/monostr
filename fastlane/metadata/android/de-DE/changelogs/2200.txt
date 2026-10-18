@@ -1,0 +1,4 @@
+• Listen: Accounts in Listen gruppieren und jede als eigenen Feed lesen
+• Bis zu 5 Listen als Tabs oben im Feed anheften, privat synchronisiert
+• Listen sind standardmässig privat; öffentliche Listen anderer im Profil öffnen und anheften
+• Mit Amber: einmal unter Einstellungen → «Amber-Berechtigungen erneuern» tippen, damit Listen ohne Rückfragen speichern

@@ -6,6 +6,9 @@ import com.monostr.nostr.model.NoteMapper
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.buffer
@@ -30,11 +33,11 @@ interface FeedRepository {
      */
     val contactsFetchedAt: Long? get() = null
     fun markContactsFetched(at: Long) {}
-    /** The home feed: notes, reposts and replies of the followed accounts, newest first (spec 2026-10-16 §2.1). */
-    suspend fun notes(limit: Int = 50, until: Long? = null): List<Note>
-    suspend fun refresh(limit: Int = 50)
-    suspend fun loadMore(before: Long, limit: Int = 50): List<Note>
-    fun live(limit: Int = 50): Flow<List<Note>>
+    /** The home feed ([FeedSource.Following]) or a list's feed ([FeedSource.Authors]): notes, reposts and replies, newest first (spec 2026-10-16 §2.1, 2026-10-18 §4.1). */
+    suspend fun notes(source: FeedSource = FeedSource.Following, limit: Int = 50, until: Long? = null): List<Note>
+    suspend fun refresh(source: FeedSource = FeedSource.Following, limit: Int = 50)
+    suspend fun loadMore(source: FeedSource = FeedSource.Following, before: Long, limit: Int = 50): List<Note>
+    fun live(source: FeedSource = FeedSource.Following, limit: Int = 50): Flow<List<Note>>
     /** Kind 1 and 6 by one author, newest first; fetches from relays when [fetch] is set. */
     suspend fun notesBy(author: String, limit: Int = 50, fetch: Boolean = true): List<Note>
     /** The newest [limit] notes of one profile tab ([section]), newest first; fetches the author's latest page from relays when [fetch] is set. */
@@ -55,6 +58,23 @@ enum class ProfileSection(internal val kinds: List<Int>) {
         REPOSTS -> note.repostOf != null
     }
 }
+
+/** Whose notes a feed shows (spec 2026-10-18 §4.1). */
+sealed interface FeedSource {
+    /** The home feed: the follows and the user. */
+    data object Following : FeedSource
+
+    /** A list's feed: its members (malformed entries are skipped). */
+    data class Authors(val pubkeys: List<String>) : FeedSource
+}
+
+/** Relays cap the authors of a filter: larger author sets go out as several filters (spec 2026-10-18 §4.1). */
+internal const val AUTHOR_CHUNK = 200
+
+/** The largest page a list feed asks for when its request also names the follows (relays cap limits near 500). */
+internal const val COVER_LIMIT = 500
+
+private val HEX64 = Regex("[0-9a-f]{64}")
 
 /** The home feed's kinds: notes and reposts. */
 private val FEED_KINDS = listOf(1, 6)
@@ -130,37 +150,66 @@ class NostrFeedRepository(
     /**
      * Fetches a page of notes and, apart from it, the same authors' deletion requests. Two requests and
      * not one filter: under one limit an account that withdrew many notes would fill the page with
-     * requests, and paging would stop there for good.
+     * requests, and paging would stop there for good. More than [AUTHOR_CHUNK] authors go out as
+     * several filters, side by side.
      */
     private suspend fun fetchPage(authors: List<String>, limit: Int, until: Long? = null, kinds: List<Int> = FEED_KINDS) {
+        if (authors.isEmpty()) return
         val untilTs = until?.let { Timestamp.fromSecs(it.toULong()) }
-        var notes = feedFilter(authors, kinds).limit(limit.toULong())
-        var requests = Filter().kind(Kind(5u)).authors(authors.map { PublicKey.parse(it) }).limit(DELETION_LIMIT)
-        if (untilTs != null) {
-            notes = notes.until(untilTs)
-            requests = requests.until(untilTs)
+        coroutineScope {
+            authors.chunked(AUTHOR_CHUNK).map { chunk ->
+                async {
+                    var notes = feedFilter(chunk, kinds).limit(limit.toULong())
+                    var requests = Filter().kind(Kind(5u)).authors(chunk.map { PublicKey.parse(it) }).limit(DELETION_LIMIT)
+                    if (untilTs != null) {
+                        notes = notes.until(untilTs)
+                        requests = requests.until(untilTs)
+                    }
+                    quietly { engine.fetch(notes) }
+                    quietly { engine.fetch(requests) }
+                }
+            }.awaitAll()
         }
-        quietly { engine.fetch(notes) }
-        quietly { engine.fetch(requests) }
     }
 
-    /** The home feed's authors: the follows without [excluded]. */
-    private suspend fun feedAuthors(): List<String> = follows() - excluded()
+    /** The authors of [source] without [excluded]. */
+    private suspend fun authorsOf(source: FeedSource): List<String> = when (source) {
+        FeedSource.Following -> follows()
+        is FeedSource.Authors -> source.pubkeys.filter { it.matches(HEX64) }.distinct()
+    } - excluded()
 
-    /** Latest [limit] notes before [until] from the local database, replies included. Main-safe: the mapping runs on [Dispatchers.IO]. */
-    override suspend fun notes(limit: Int, until: Long?): List<Note> = localPage(feedAuthors(), { true }, limit, until)
+    /**
+     * The authors a relay request for [source] names. A list's members alone would tell the relays who is on
+     * the list (a private list too), so a list asks for the home feed's authors plus the members it does not
+     * follow; members that are all followed give the same author set as the home feed (spec 2026-10-18 §4.2).
+     */
+    private suspend fun relayAuthorsOf(source: FeedSource, members: List<String>): List<String> = when (source) {
+        FeedSource.Following -> members
+        is FeedSource.Authors -> if (members.isEmpty()) members else ((follows() - excluded()) + members).distinct()
+    }
+
+    /** A page size for [cover] that still holds about [limit] notes of [members]. */
+    private fun coverLimit(limit: Int, members: List<String>, cover: List<String>): Int =
+        if (cover.size <= members.size) limit else minOf(COVER_LIMIT, limit * ((cover.size + members.size - 1) / members.size))
+
+    /** Latest [limit] notes of [source] before [until] from the local database, replies included. Main-safe: the mapping runs on [Dispatchers.IO]. */
+    override suspend fun notes(source: FeedSource, limit: Int, until: Long?): List<Note> = localPage(authorsOf(source), { true }, limit, until)
 
     /** The local read behind [notes] and [profileNotes]: pages of [authors]' notes, [keep] applied, until [limit] are together. */
-    private suspend fun localPage(authors: List<String>, keep: (Note) -> Boolean, limit: Int, until: Long?, kinds: List<Int> = FEED_KINDS): List<Note> = withContext(Dispatchers.IO) {
-        val kept = ArrayList<Note>()
-        var before = until
-        repeat(LOCAL_ROUNDS) {
-            val raw = engine.query(pageFilter(authors, limit, before, kinds))
-            kept += NoteLoader.notes(engine, raw).filter(keep)
-            if (kept.size >= limit || raw.size < limit) return@withContext kept.take(limit).sortedByDescending { it.createdAt }
-            before = raw.minOf { it.createdAt().asSecs().toLong() } - 1
+    private suspend fun localPage(authors: List<String>, keep: (Note) -> Boolean, limit: Int, until: Long?, kinds: List<Int> = FEED_KINDS): List<Note> {
+        // no authors must not become a filter without authors, which matches everybody
+        if (authors.isEmpty()) return emptyList()
+        return withContext(Dispatchers.IO) {
+            val kept = ArrayList<Note>()
+            var before = until
+            repeat(LOCAL_ROUNDS) {
+                val raw = engine.query(pageFilter(authors, limit, before, kinds))
+                kept += NoteLoader.notes(engine, raw).filter(keep)
+                if (kept.size >= limit || raw.size < limit) return@withContext kept.take(limit).sortedByDescending { it.createdAt }
+                before = raw.minOf { it.createdAt().asSecs().toLong() } - 1
+            }
+            kept.sortedByDescending { it.createdAt }
         }
-        kept.sortedByDescending { it.createdAt }
     }
 
     private fun pageFilter(authors: List<String>, limit: Int, until: Long?, kinds: List<Int> = FEED_KINDS): Filter {
@@ -169,22 +218,36 @@ class NostrFeedRepository(
         return filter
     }
 
-    /** Pulls the newest page from relays into the database. */
-    override suspend fun refresh(limit: Int) {
-        fetchPage(feedAuthors(), limit)
+    /** Pulls the newest page of [source] from relays into the database. */
+    override suspend fun refresh(source: FeedSource, limit: Int) {
+        val members = authorsOf(source)
+        val cover = relayAuthorsOf(source, members)
+        fetchPage(cover, coverLimit(limit, members, cover))
     }
 
     /** Older page: fetches from relays, then returns the local notes before [before]. */
-    override suspend fun loadMore(before: Long, limit: Int): List<Note> = relayPage(feedAuthors(), { true }, before, limit)
+    override suspend fun loadMore(source: FeedSource, before: Long, limit: Int): List<Note> {
+        val members = authorsOf(source)
+        return relayPage(members, { true }, before, limit, cover = relayAuthorsOf(source, members))
+    }
 
-    /** The relay paging behind [loadMore] and [moreProfileNotes]. */
-    private suspend fun relayPage(authors: List<String>, keep: (Note) -> Boolean, before: Long, limit: Int, kinds: List<Int> = FEED_KINDS): List<Note> {
+    /** The relay paging behind [loadMore] and [moreProfileNotes]: asks relays for [cover], returns [authors]' notes. */
+    private suspend fun relayPage(
+        authors: List<String>,
+        keep: (Note) -> Boolean,
+        before: Long,
+        limit: Int,
+        kinds: List<Int> = FEED_KINDS,
+        cover: List<String> = authors,
+    ): List<Note> {
+        if (authors.isEmpty()) return emptyList()
+        val fetchLimit = coverLimit(limit, authors, cover)
         var until = before
         repeat(RELAY_ROUNDS) {
-            fetchPage(authors, limit, until = until, kinds = kinds)
+            fetchPage(cover, fetchLimit, until = until, kinds = kinds)
             val page = localPage(authors, keep, limit, until, kinds)
             if (page.isNotEmpty()) return page
-            val raw = withContext(Dispatchers.IO) { engine.query(pageFilter(authors, limit, until, kinds)) }
+            val raw = withContext(Dispatchers.IO) { engine.query(pageFilter(cover, fetchLimit, until, kinds)) }
             if (raw.isEmpty()) return page
             until = raw.minOf { it.createdAt().asSecs().toLong() } - 1
         }
@@ -192,32 +255,37 @@ class NostrFeedRepository(
     }
 
     /**
-     * Live feed: subscribes for new notes and emits the refreshed list on arrival. A burst of
-     * events (e.g. a relay refresh running in parallel) is conflated into one re-query, and the
-     * work runs on [Dispatchers.IO] so collectors on the main thread are never starved.
+     * Live feed of [source]: subscribes for new notes (one subscription per [AUTHOR_CHUNK] authors asked for) and emits
+     * the refreshed list on arrival. A burst of events is conflated into one re-query, and the work runs on
+     * [Dispatchers.IO] so collectors on the main thread are never starved. No authors: one empty list, no subscription.
      */
-    override fun live(limit: Int): Flow<List<Note>> = flow {
+    override fun live(source: FeedSource, limit: Int): Flow<List<Note>> = flow {
         // read once per start: a mute during the session takes effect when the caller restarts the flow
-        val authors = feedAuthors()
-        emit(notes(limit))
+        val authors = authorsOf(source)
+        emit(notes(source, limit))
+        if (authors.isEmpty()) return@flow
+        val wanted = authors.toHashSet()
         // best-effort: without relays (or on a relay error) the local list stays and no live updates arrive
-        val subId = try {
-            engine.subscribe(liveFilter(authors).since(Timestamp.fromSecs(now().toULong())))
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            null
+        // the subscription names the cover, not the members (see relayAuthorsOf); only members' events re-query
+        val subIds = relayAuthorsOf(source, authors).chunked(AUTHOR_CHUNK).mapNotNull { chunk ->
+            try {
+                engine.subscribe(liveFilter(chunk).since(Timestamp.fromSecs(now().toULong())))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null
+            }
         }
         try {
             engine.events
                 .filter { ev ->
                     val kind = ev.kind().asU16().toInt()
-                    (kind == 1 || kind == 6 || kind == 5) && ev.author().toHex() in authors
+                    (kind == 1 || kind == 6 || kind == 5) && ev.author().toHex() in wanted
                 }
                 .conflate()
-                .collect { emit(notes(limit)) }
+                .collect { emit(notes(source, limit)) }
         } finally {
-            if (subId != null) withContext(NonCancellable) { quietly { engine.unsubscribe(subId) } }
+            if (subIds.isNotEmpty()) withContext(NonCancellable) { subIds.forEach { id -> quietly { engine.unsubscribe(id) } } }
         }
     }.buffer(Channel.RENDEZVOUS).flowOn(Dispatchers.IO) // rendezvous: each list is handed over before the producer moves on
 

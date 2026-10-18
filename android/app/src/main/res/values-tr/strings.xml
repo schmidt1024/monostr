@@ -572,4 +572,45 @@
     <string name="settings_show_key_warning">Bu anahtara sahip olan herkes hesabını kontrol eder. Gösterilsin mi?</string>
     <string name="settings_show_key_confirm">Göster</string>
     <string name="settings_show_key_cancel">İptal</string>
+    <!-- lists -->
+    <string name="action_retry">Yeniden dene</string>
+    <string name="list_save_failed">Kaydedilemedi, tekrar dene</string>
+    <string name="feed_tab_following">Takip edilenler</string>
+    <string name="feed_tab_menu_open">Listeyi aç</string>
+    <string name="feed_tab_menu_left">Sola taşı</string>
+    <string name="feed_tab_menu_right">Sağa taşı</string>
+    <string name="list_unpin">Sabitlemeyi kaldır</string>
+    <string name="list_unavailable">Liste kullanılamıyor</string>
+    <string name="list_locked">Kilitli — açmak için dokun</string>
+    <string name="list_no_members">Henüz üye yok</string>
+    <string name="list_feed_empty">Bu listeden henüz not yok</string>
+    <string name="list_untitled">Başlıksız liste</string>
+    <string name="profile_tab_lists">Listeler</string>
+    <string name="list_create">Yeni liste</string>
+    <string name="lists_empty_own">Henüz liste yok</string>
+    <string name="lists_empty_other">Herkese açık liste yok</string>
+    <string name="list_pin">Sabitle</string>
+    <string name="list_pin_limit">En fazla 5 liste sabitleyebilirsin</string>
+    <string name="list_private">Gizli</string>
+    <plurals name="list_members">
+        <item quantity="one">%1$d üye</item>
+        <item quantity="other">%1$d üye</item>
+    </plurals>
+    <string name="list_edit">Düzenle</string>
+    <string name="list_edit_title">Listeyi düzenle</string>
+    <string name="list_tab_notes">Notlar</string>
+    <string name="list_tab_members">Üyeler</string>
+    <string name="list_member_remove">%1$s listeden çıkar</string>
+    <string name="list_by">%1$s tarafından</string>
+    <string name="list_title_label">Başlık</string>
+    <string name="list_description_label">Açıklama (isteğe bağlı)</string>
+    <string name="list_private_hint">Gizli bir listede kimlerin olduğunu yalnızca sen görürsün. Okurken röleler, takip etmediğin hesapları görebilir.</string>
+    <string name="list_save">Kaydet</string>
+    <string name="list_delete">Listeyi sil</string>
+    <string name="list_delete_text">Bu liste silinsin mi? Bu geri alınamaz.</string>
+    <string name="list_delete_confirm">Sil</string>
+    <string name="list_public_text">Bu listede kimlerin olduğunu herkes görecek.</string>
+    <string name="list_public_confirm">Herkese aç</string>
+    <string name="profile_menu_lists">Listeye ekle</string>
+    <string name="add_to_list_new">Yeni liste…</string>
 </resources>

@@ -63,6 +63,12 @@ import com.monostr.nostr.repo.NostrFollowCountsRepository
 import com.monostr.nostr.repo.DmRelaysRepository
 import com.monostr.nostr.repo.FeedRepository
 import com.monostr.nostr.repo.FollowRepository
+import com.monostr.nostr.repo.FeedTabsCache
+import com.monostr.nostr.repo.FeedTabsRepository
+import com.monostr.nostr.repo.NostrFeedTabsRepository
+import com.monostr.nostr.repo.ListsRepository
+import com.monostr.nostr.repo.NostrListsRepository
+import com.monostr.app.data.PrefsRelayStore
 import com.monostr.nostr.repo.MuteRepository
 import com.monostr.nostr.repo.NostrFeedRepository
 import com.monostr.nostr.repo.NostrFollowRepository
@@ -152,6 +158,10 @@ class Ready(
     val mute: MuteRepository,
     /** v0.13.9: the user's own likes and reposts for the filled icons on every screen. */
     val ownReactions: OwnReactions,
+    /** Spec 2026-10-18: the NIP-51 follow sets (own and foreign). */
+    val lists: ListsRepository,
+    /** Spec 2026-10-18 §3.3: the lists pinned as home feed tabs. */
+    val feedTabs: FeedTabsRepository,
 ) {
     /** Pubkeys of the muted accounts; every note list filters against them (spec 9.3). */
     val muted: StateFlow<Set<String>> get() = mute.muted
@@ -175,6 +185,7 @@ interface NostrSessionEntryPoint {
     fun uiSettings(): UiSettingsStore
     fun drafts(): DraftStore
     fun pendingSetup(): PendingSetupStore
+    fun feedTabs(): FeedTabsCache
     fun sessions(): SessionStore
 }
 
@@ -213,6 +224,7 @@ class NostrSession @Inject constructor(
     private val linkPreviews: LinkPreviews,
     private val drafts: DraftStore,
     private val pendingSetup: PendingSetupStore,
+    private val feedTabsCache: FeedTabsCache,
 ) {
     private val _state = MutableStateFlow<SessionState>(SessionState.Loading)
     val state: StateFlow<SessionState> = _state.asStateFlow()
@@ -415,13 +427,14 @@ class NostrSession @Inject constructor(
      * state (view key, setup, pending tips, notification watermarks) belongs to the account and
      * is cleared too, best effort: one failing step does not stop the others. So are the drafts of
      * [pubkey] (spec 2026-10-16 §8; without a signer their pictures stay on the server) and its
-     * pending setup record (spec 2026-10-17 §7).
+     * pending setup record (spec 2026-10-17 §7) and its pinned tabs (spec 2026-10-18 §3.3).
      */
     private suspend fun clearStaleSession(pubkey: String?) {
         secrets.remove(KeystoreSecretStore.SECRET_NSEC)
         sessions.clear()
         if (pubkey != null) bestEffort { drafts.removeAll(pubkey) }
         if (pubkey != null) bestEffort { pendingSetup.remove(pubkey) }
+        if (pubkey != null) bestEffort { feedTabsCache.remove(pubkey) }
         bestEffort { secrets.remove(KeystoreSecretStore.SECRET_VIEW_KEY) }
         bestEffort { tipSettings.setSetup(null) }
         bestEffort { pendingTips.clear() }
@@ -479,6 +492,8 @@ class NostrSession @Inject constructor(
         try {
             val tips = NostrTipsRepository(engine)
             val authorRelays = NostrAuthorRelaysRepository(engine)
+            val lists = NostrListsRepository(engine, signer, authorRelays, defaultRelays = PrefsRelayStore.DEFAULT_RELAYS)
+            val feedTabs = NostrFeedTabsRepository(engine, signer, feedTabsCache, defaultRelays = PrefsRelayStore.DEFAULT_RELAYS, reconcileScope = engine.backgroundScope)
             // NIP-89 "via Monostr": read from the store at publish time (not a stateIn with a seed), so a
             // note published before the first emission cannot carry the tag against the user's choice
             val publish = NostrPublishRepository(engine, indexRelays = NostrAuthorRelaysRepository.INDEXERS, clientTag = { uiSettings.clientTag.first() }, powBits = { uiSettings.powBits.first() })
@@ -552,6 +567,8 @@ class NostrSession @Inject constructor(
                 },
                 mute = mute,
                 ownReactions = ownReactions,
+                lists = lists,
+                feedTabs = feedTabs,
             )
         } catch (e: Exception) {
             SessionCleanup.closeAll({ dmStore.close() }, { engine.close() })

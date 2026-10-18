@@ -34,6 +34,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import com.monostr.app.ui.common.NoteVisibility
 import com.monostr.nostr.repo.ListOutcome
+import com.monostr.nostr.repo.FeedSource
+import com.monostr.nostr.repo.Chain
+import com.monostr.nostr.repo.Slot
 import com.monostr.nostr.repo.MuteRepository
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -444,5 +447,42 @@ class FeedControllerTest {
         advanceUntilIdle()
         assertFalse(c.state.value.notes.single().deleting) // the menu entry is free again
         assertEquals(1, c.state.value.notes.size)
+    }
+
+    @Test
+    fun `a list feed reads its members only and builds conversation blocks like the home feed`() = runTest {
+        val root = note('r', alice, 900)
+        val reply = note('s', bob, 1000, replyTo = root.id, root = root.id)
+        val feed = FakeFeed().apply { current = listOf(reply, note('t', "c".repeat(64), 1100)) }
+        val conversations = FakeConversations(mapOf(reply.id to Chain(listOf(Slot.Shown(root)), cut = false)))
+        val source = FeedSource.Authors(listOf(bob))
+        val c = FeedController(feed, profiles, FakePublish(), decorations(), BookmarkActions(FakeBookmarks(), eager()), FakeCounts(), eager(), conversations = conversations, source = source)
+        c.start()
+        advanceUntilIdle()
+        assertEquals(listOf(reply.id), c.state.value.notes.map { it.note.id })
+        assertEquals(listOf(root.id), c.state.value.chains[reply.id]?.ancestors)
+        assertTrue(feed.seenSources.isNotEmpty() && feed.seenSources.all { it == source })
+    }
+
+    @Test
+    fun `a paused feed ignores live updates, a resumed one restarts live and refreshes`() = runTest {
+        val first = note('1', alice, 1000)
+        val feed = FakeFeed().apply { current = listOf(first) }
+        val c = FeedController(feed, profiles, FakePublish(), decorations(), BookmarkActions(FakeBookmarks(), eager()), FakeCounts(), eager())
+        c.start()
+        advanceUntilIdle()
+        val lives = feed.liveCalls
+        val refreshes = feed.refreshCalls
+        c.setLive(false)
+        feed.liveUpdates.emit(listOf(note('2', alice, 2000), first))
+        advanceUntilIdle()
+        assertEquals(listOf(first.id), c.state.value.notes.map { it.note.id })
+        c.setLive(true)
+        advanceUntilIdle()
+        assertEquals(lives + 1, feed.liveCalls)
+        assertEquals(refreshes + 1, feed.refreshCalls)
+        c.setLive(true)
+        advanceUntilIdle()
+        assertEquals(lives + 1, feed.liveCalls) // already live: nothing restarts
     }
 }
