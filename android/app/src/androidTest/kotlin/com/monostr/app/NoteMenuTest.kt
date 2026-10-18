@@ -157,7 +157,10 @@ class NoteMenuTest {
         rule.onNodeWithTag("feed-wordmark").assertIsDisplayed().performClick()
         rule.waitUntil(10_000) { rule.onAllNodes(hasTestTag("note-text-${long.id().toHex().take(8)}")).fetchSemanticsNodes().isNotEmpty() }
         rule.onNodeWithTag("feed-list").performScrollToNode(hasText("filler 15"))
-        rule.onNodeWithTag("tab-feed").performClick()
+        // scrolling down hid the bottom bar too (0.20); a short swipe up brings the feed tab back
+        rule.onNodeWithTag("feed-list").performTouchInput { swipeDown(startY = centerY, endY = centerY + 400f) }
+        rule.waitForIdle()
+        rule.onNodeWithTag("tab-feed").assertIsDisplayed().performClick()
         rule.waitUntil(10_000) { rule.onAllNodes(hasTestTag("note-text-${long.id().toHex().take(8)}")).fetchSemanticsNodes().isNotEmpty() }
     }
 }

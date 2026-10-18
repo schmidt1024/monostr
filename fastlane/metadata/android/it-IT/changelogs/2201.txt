@@ -1,0 +1,2 @@
+• Una mancia, un mi piace o un segnalibro aggiunto mentre il feed si carica non sparisce più dalla nota
+• Stessa correzione per profili, ricerca e segnalibri

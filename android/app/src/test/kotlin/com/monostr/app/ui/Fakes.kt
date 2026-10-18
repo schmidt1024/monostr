@@ -180,7 +180,12 @@ class FakeProfiles(known: Map<String, Profile> = emptyMap()) : ProfileRepository
     val current = MutableStateFlow(known)
     val prefetched = ArrayList<Collection<String>>()
     override fun observe(pubkey: String) = current.map { it[pubkey] ?: Profile.empty(pubkey) }
-    override suspend fun get(pubkey: String, maxAgeSeconds: Long) = current.value[pubkey] ?: Profile.empty(pubkey)
+    /** A lookup of a pubkey with a gate here suspends until the gate completes (a slow relay lookup). */
+    val getGates = HashMap<String, CompletableDeferred<Unit>>()
+    override suspend fun get(pubkey: String, maxAgeSeconds: Long): Profile {
+        getGates[pubkey]?.await()
+        return current.value[pubkey] ?: Profile.empty(pubkey)
+    }
     override suspend fun prefetch(pubkeys: Collection<String>) { prefetched += pubkeys }
     override suspend fun local(pubkeys: Collection<String>) = pubkeys.mapNotNull { current.value[it] }
     /** Raw kind 0 content per pubkey, as the database would hold it. */

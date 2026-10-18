@@ -1,0 +1,2 @@
+• A tip, like or bookmark you set while the feed was loading no longer disappears from the note again
+• Same fix for profiles, search and bookmarks

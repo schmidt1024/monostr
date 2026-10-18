@@ -330,6 +330,7 @@ class ProfileController(
     private suspend fun reload(section: ProfileSection, profile: Profile, fetch: Boolean) {
         val fresh = decorate(feed.profileNotes(pubkey, section, fetch = fetch), profile)
         _state.update { s ->
+            val fresh = fresh.map(::flagged)
             val oldest = fresh.minOfOrNull { it.note.createdAt }
             val ids = fresh.mapTo(HashSet()) { it.note.id }
             val kept = s.list(section).orEmpty().filter { it.note.id !in ids && (oldest == null || it.note.createdAt < oldest) }
@@ -338,10 +339,14 @@ class ProfileController(
         track()
     }
 
+    /** [notes] with their authors' profiles; the flags follow inside the state update ([flagged]), read when the list is written. */
     private suspend fun decorate(notes: List<Note>, profile: Profile): List<NoteUi> {
         profiles.prefetch(notes.mapNotNull { it.repostOf?.author })
-        return notes.map { n -> withCounts(actions.flags(bookmarks.flags(decorations.decorate(NoteUi(n, profile, n.repostOf?.let { r -> profiles.get(r.author) } ?: profile))))) }
+        return notes.map { n -> NoteUi(n, profile, n.repostOf?.let { r -> profiles.get(r.author) } ?: profile) }
     }
+
+    /** [ui] with the current tips, flags and counts; applied inside `_state.update`, so a change during a slow lookup is not undone. */
+    private fun flagged(ui: NoteUi): NoteUi = withCounts(actions.flags(bookmarks.flags(decorations.decorate(ui))))
 
     /** Tips are watched for the notes of all tabs. */
     private fun track() {
@@ -391,7 +396,7 @@ class ProfileController(
                 val older = decorate(feed.moreProfileNotes(pubkey, section, oldest), _state.value.profile)
                 _state.update { st ->
                     val current = st.list(section).orEmpty()
-                    val added = older.filter { o -> current.none { it.note.id == o.note.id } }
+                    val added = older.filter { o -> current.none { it.note.id == o.note.id } }.map(::flagged)
                     if (added.isEmpty()) st.copy(ended = st.ended + section)
                     else st.withList(section, deletions.visible(current + added))
                 }

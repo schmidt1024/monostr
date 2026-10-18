@@ -144,12 +144,16 @@ class BookmarksController(
         // removal just re-applies the kept rows, re-flagged so the icon shows the pending state.
         scope.launch { bookmarks.state.map { it.ids }.distinctUntilChanged().collect { ids -> rebuild(ids) } }
         scope.launch {
-            pendingRemoval.collect { pending -> _state.update { it.copy(entries = keepPending(it.entries, fresh, pending, bookmarks.state.value.ids)) } }
+            pendingRemoval.collect { pending -> _state.update { it.copy(entries = keepPending(it.entries, fresh.map(::current), pending, bookmarks.state.value.ids)) } }
         }
     }
 
-    /** The rows for the repository's current id list, as last resolved. */
+    /** The rows for the repository's current id list, as last resolved, with profiles only: [current] adds flags, tips, counts and visibility when they are written. */
     private var fresh: List<BookmarkUi> = emptyList()
+
+    /** [row] with the current flags, tips, counts and visibility; applied inside `_state.update`, so a change during a slow lookup is not undone. */
+    private fun current(row: BookmarkUi): BookmarkUi =
+        filtered(row.copy(note = row.note?.let { withCounts(noteActions.flags(actions.flags(decorations.decorate(it)))) }))
 
     /** Resolves the rows for [ids] from the repository. */
     private suspend fun rebuild(ids: List<String>) {
@@ -157,9 +161,9 @@ class BookmarksController(
             val entries = bookmarks.entries()
             profiles.prefetch(entries.mapNotNull { it.note?.author })
             fresh = entries.map { e ->
-                BookmarkUi(e.id, e.note?.let { n -> withCounts(noteActions.flags(actions.flags(decorations.decorate(NoteUi(n, profiles.get(n.author), n.repostOf?.let { profiles.get(it.author) } ?: profiles.get(n.author)))))) })
-            }.map(::filtered)
-            _state.update { it.copy(entries = keepPending(it.entries, fresh, pendingRemoval.value, ids), loading = false) }
+                BookmarkUi(e.id, e.note?.let { n -> NoteUi(n, profiles.get(n.author), n.repostOf?.let { profiles.get(it.author) } ?: profiles.get(n.author)) })
+            }
+            _state.update { it.copy(entries = keepPending(it.entries, fresh.map(::current), pendingRemoval.value, ids), loading = false) }
             decorations.track(entries.mapNotNull { it.note })
         } catch (e: CancellationException) {
             throw e

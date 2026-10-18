@@ -1,5 +1,7 @@
 package com.monostr.app.ui
 
+import com.monostr.nostr.repo.ProfileSection
+import com.monostr.app.data.PendingTip
 import com.monostr.app.ui.common.BookmarkActions
 import com.monostr.app.R
 import com.monostr.app.ui.common.uiText
@@ -40,6 +42,31 @@ class ProfileControllerTest {
 
     private fun TestScope.controller(feed: FakeFeed, relays: FakeAuthorRelays, enabled: Boolean, scope: CoroutineScope) =
         ProfileController(bob, "a".repeat(64), feed, FakeProfiles(), FakePublish(), decorations(), BookmarkActions(FakeBookmarks(), scope), FakeCounts(), relays, { enabled }, scope, refreshMs = 1_000)
+
+    @Test
+    fun `a pending tip set while the reposts are decorated is not taken back`() = runTest {
+        val carol = "c".repeat(64); val dave = "d".repeat(64)
+        val first = note('y', author = bob, createdAt = 2000).copy(repostOf = note('z', author = carol, createdAt = 1900))
+        val second = note('v', author = bob, createdAt = 1500).copy(repostOf = note('w', author = dave, createdAt = 1400))
+        val feed = FakeFeed().apply { byAuthor = mapOf(bob to listOf(first, second)) }
+        val profiles = FakeProfiles()
+        val pending = FakePendingTips()
+        val scope = eager()
+        val c = ProfileController(
+            bob, "a".repeat(64), feed, profiles, FakePublish(), TipDecorations(FakeTips(), pending, profiles, FakePublish(), eager()) { 5_000 },
+            BookmarkActions(FakeBookmarks(), scope), FakeCounts(), FakeAuthorRelays(), { false }, scope, refreshMs = 1_000,
+        )
+        c.start(); runCurrent()
+        val slow = CompletableDeferred<Unit>()
+        profiles.getGates[dave] = slow // the second reposted author's profile is slow
+        c.selectTab(ProfileSection.REPOSTS); runCurrent()
+        // the user tips the first reposted note meanwhile
+        pending.add(PendingTip("e".repeat(64), first.repostOf!!.id, 5, 4_000)); runCurrent()
+        slow.complete(Unit); runCurrent()
+        val reposts = c.state.value.list(ProfileSection.REPOSTS).orEmpty()
+        assertEquals(listOf(first.id, second.id), reposts.map { it.note.id })
+        assertTrue(reposts.first().pendingTip)
+    }
 
     @Test
     fun `the profile of a muted account keeps showing its notes, also when muted from its own note`() = runTest {

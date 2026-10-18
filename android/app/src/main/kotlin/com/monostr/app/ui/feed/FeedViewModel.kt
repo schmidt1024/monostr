@@ -317,16 +317,23 @@ class FeedController(
 
     /** The stored ancestors with the current flags, counts and tips, minus what [visibility] hides. */
     private fun visibleAncestors(): Map<String, NoteUi> =
-        visibility.visible(allAncestors.values.map { withCounts(actions.flags(bookmarks.flags(decorations.decorate(it)))) }).associateBy { it.note.id }
+        visibility.visible(allAncestors.values.map(::flagged)).associateBy { it.note.id }
 
     /** Applies [f] to every shown note: the entries and the ancestors (flags, counts, tips). */
     private fun FeedUiState.mapAll(f: (NoteUi) -> NoteUi) = copy(notes = notes.map(f), ancestors = ancestors.mapValues { (_, n) -> f(n) })
 
-    /** Sets the note list and keeps the receipt subscription in step with what is shown. */
+    /**
+     * Sets the note list and keeps the receipt subscription in step with what is shown. The flags are applied inside the
+     * update: a list decorated before a slow profile lookup would otherwise bring back flags a change collector had
+     * already replaced (a pending tip, a like, a bookmark), and no later change would correct them.
+     */
     private fun setNotes(loading: Boolean? = null, refreshing: Boolean? = null, f: (FeedUiState) -> List<NoteUi>) {
-        _state.update { s -> s.copy(notes = visibility.visible(f(s)), loading = loading ?: s.loading, refreshing = refreshing ?: s.refreshing) }
+        _state.update { s -> s.copy(notes = visibility.visible(f(s).map(::flagged)), loading = loading ?: s.loading, refreshing = refreshing ?: s.refreshing) }
         trackShown()
     }
+
+    /** [ui] with the current tips, flags and counts. */
+    private fun flagged(ui: NoteUi): NoteUi = withCounts(actions.flags(bookmarks.flags(decorations.decorate(ui))))
 
     /**
      * Combines a fresh [live] snapshot with [previous] state: the live list is the truth for
@@ -374,12 +381,12 @@ class FeedController(
     /** [ui] with its current count, so a list rebuild (live/refresh/loadMore) never drops a count the collector already had (spec 4.2). */
     private fun withCounts(ui: NoteUi): NoteUi = ui.copy(counts = counts.counts.value[ui.target.id])
 
+    /** [notes] with their authors' profiles; the flags follow in [setNotes] / [visibleAncestors], read at the moment of the update. */
     private suspend fun decorate(notes: List<Note>): List<NoteUi> {
         val pubkeys = notes.flatMap { listOfNotNull(it.author, it.repostOf?.author) }
         profiles.prefetch(pubkeys)
         return notes.map { n ->
-            val ui = NoteUi(n, profiles.get(n.author), n.repostOf?.let { profiles.get(it.author) } ?: profiles.get(n.author))
-            withCounts(actions.flags(bookmarks.flags(decorations.decorate(ui))))
+            NoteUi(n, profiles.get(n.author), n.repostOf?.let { profiles.get(it.author) } ?: profiles.get(n.author))
         }
     }
 }

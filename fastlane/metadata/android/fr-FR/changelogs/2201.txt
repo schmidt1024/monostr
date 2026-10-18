@@ -1,0 +1,2 @@
+• Un pourboire, un j’aime ou un favori ajouté pendant le chargement du fil ne disparaît plus de la note
+• Même correction pour les profils, la recherche et les favoris

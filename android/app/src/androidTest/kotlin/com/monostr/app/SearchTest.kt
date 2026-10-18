@@ -16,7 +16,6 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.monostr.app.data.PrefsRelayStore
 import com.monostr.app.session.NostrSessionEntryPoint
-import com.monostr.nostr.model.Profile
 import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -101,8 +100,10 @@ class SearchTest {
         rule.onNodeWithTag("search-field").performTextClearance()
         rule.onNodeWithTag("search-field").performTextInput(alice.publicKey().toBech32())
         rule.onNodeWithTag("search-field").performImeAction()
-        val short = Profile.shortPubkey(alice.publicKey().toHex())
-        rule.waitUntil(15_000) { rule.onAllNodesWithText(short).fetchSemanticsNodes().isNotEmpty() }
+        // the profile header shows the npub shortened (npub1abcd…wxyz), not the hex form
+        val npub = alice.publicKey().toBech32()
+        val short = npub.take(9) + "…" + npub.takeLast(4)
+        rule.waitUntil(15_000) { rule.onAllNodes(hasTestTag("profile-npub") and hasText(short)).fetchSemanticsNodes().isNotEmpty() }
     }
 
     @Test

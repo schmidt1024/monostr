@@ -1,0 +1,2 @@
+• Uma gorjeta, curtida ou favorito feito enquanto o feed carrega não some mais da nota
+• A mesma correção para perfis, busca e favoritos

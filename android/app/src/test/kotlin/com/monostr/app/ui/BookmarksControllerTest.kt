@@ -1,5 +1,7 @@
 package com.monostr.app.ui
 
+import kotlinx.coroutines.flow.update
+import com.monostr.app.data.PendingTip
 import com.monostr.app.R
 import com.monostr.app.ui.bookmarks.BookmarksController
 import com.monostr.app.ui.common.BookmarkActions
@@ -33,14 +35,35 @@ class BookmarksControllerTest {
     private val profiles = FakeProfiles(mapOf(alice to Profile(alice, "alice", "Alice", null, null, null)))
     private fun TestScope.eager(): CoroutineScope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher(testScheduler))
 
-    private fun TestScope.controller(repo: FakeBookmarks, counts: FakeCounts = FakeCounts(), muted: StateFlow<Set<String>> = MutableStateFlow(emptySet()), mute: MuteRepository? = null): BookmarksController {
+    private fun TestScope.controller(repo: FakeBookmarks, counts: FakeCounts = FakeCounts(), muted: StateFlow<Set<String>> = MutableStateFlow(emptySet()), mute: MuteRepository? = null, pending: FakePendingTips = FakePendingTips()): BookmarksController {
         val scope = eager()
         val publish = FakePublish()
         val deletions = NoteDeletions()
         return BookmarksController(
-            repo, BookmarkActions(repo, scope), profiles, publish, TipDecorations(FakeTips(), FakePendingTips(), profiles, publish, scope) { 5_000 }, counts, scope,
+            repo, BookmarkActions(repo, scope), profiles, publish, TipDecorations(FakeTips(), pending, profiles, publish, scope) { 5_000 }, counts, scope,
             deletions = deletions, visibility = NoteVisibility(deletions, muted), mute = mute,
         )
+    }
+
+    @Test
+    fun `a pending tip set while the rows are rebuilt is not taken back`() = runTest {
+        val bob = "b".repeat(64)
+        val n1 = note('1', alice, 1000); val n2 = note('2', bob, 900); val n3 = note('3', alice, 800)
+        val repo = FakeBookmarks(initial = listOf(n1.id, n2.id)).apply { notes = mapOf(n1.id to n1, n2.id to n2, n3.id to n3) }
+        val pending = FakePendingTips()
+        val c = controller(repo, pending = pending)
+        c.start(); advanceUntilIdle()
+        // a new bookmark rebuilds the rows; bob's profile lookup is slow
+        val slow = CompletableDeferred<Unit>()
+        profiles.getGates["b".repeat(64)] = slow
+        repo._state.update { it.copy(ids = it.ids + n3.id) }; advanceUntilIdle()
+        // meanwhile n1 gets a pending tip: it shows at once
+        pending.add(PendingTip("e".repeat(64), n1.id, 5, 4_000)); advanceUntilIdle()
+        assertTrue(c.state.value.entries.first { it.id == n1.id }.note!!.pendingTip)
+        // the rebuilt rows land afterwards and must keep it
+        slow.complete(Unit); advanceUntilIdle()
+        assertEquals(listOf(n1.id, n2.id, n3.id), c.state.value.entries.map { it.id })
+        assertTrue(c.state.value.entries.first { it.id == n1.id }.note!!.pendingTip)
     }
 
     @Test

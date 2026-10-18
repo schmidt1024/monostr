@@ -191,7 +191,7 @@ class SearchController(
                 val p = people.await(); val n = notes.await()
                 val decorated = decorate(n.items)
                 val err = (p.error ?: n.error)?.userMessage()
-                _state.update { it.copy(people = p.items, notes = visibility.visible(decorated), loading = false, error = err, searched = true) }
+                _state.update { it.copy(people = p.items, notes = visibility.visible(decorated.map(::flagged)), loading = false, error = err, searched = true) }
                 decorations.track(n.items)
             }
         } catch (e: CancellationException) {
@@ -208,6 +208,7 @@ class SearchController(
             val out = search.hashtag(tag, until)
             val decorated = decorate(out.items)
             _state.update { s ->
+                val decorated = decorated.map(::flagged)
                 val notes = visibility.visible(if (until == null) decorated else (s.notes + decorated).distinctBy { it.note.id })
                 s.copy(notes = notes, loading = false, loadingMore = false, error = out.error?.userMessage(), searched = true)
             }
@@ -258,10 +259,13 @@ class SearchController(
         _state.update { s -> s.copy(notes = s.notes.map(actions::flags), message = message.asMessage()) }
     }
 
+    /** [ui] with the current tips and flags; applied inside `_state.update`, so a change during a slow profile lookup is not undone. */
+    private fun flagged(ui: NoteUi): NoteUi = actions.flags(bookmarks.flags(decorations.decorate(ui)))
+
     private suspend fun decorate(notes: List<Note>): List<NoteUi> {
         profiles.prefetch(notes.flatMap { listOfNotNull(it.author, it.repostOf?.author) })
         return notes.map { n ->
-            actions.flags(bookmarks.flags(decorations.decorate(NoteUi(n, profiles.get(n.author), n.repostOf?.let { profiles.get(it.author) } ?: profiles.get(n.author)))))
+            NoteUi(n, profiles.get(n.author), n.repostOf?.let { profiles.get(it.author) } ?: profiles.get(n.author))
         }
     }
 }

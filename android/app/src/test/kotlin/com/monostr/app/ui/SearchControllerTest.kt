@@ -1,5 +1,6 @@
 package com.monostr.app.ui
 
+import com.monostr.app.data.PendingTip
 import com.monostr.app.R
 import com.monostr.app.ui.common.BookmarkActions
 import com.monostr.app.ui.common.uiText
@@ -50,14 +51,33 @@ class SearchControllerTest {
         muted: StateFlow<Set<String>> = MutableStateFlow(emptySet()),
         mute: MuteRepository? = null,
         recentSearches: RecentSearchesStore? = null,
+        pending: FakePendingTips = FakePendingTips(),
     ): SearchController {
         val scope = eager()
-        val decorations = TipDecorations(FakeTips(), FakePendingTips(), profiles, publish, scope) { 5_000 }
+        val decorations = TipDecorations(FakeTips(), pending, profiles, publish, scope) { 5_000 }
         val deletions = NoteDeletions()
         return SearchController(
             search, profiles, publish, decorations, BookmarkActions(FakeBookmarks(), eager()), relays, scope, debounceMs = 400, detachScope = detachScope,
             deletions = deletions, visibility = NoteVisibility(deletions, muted), mute = mute, recentSearches = recentSearches,
         )
+    }
+
+    @Test
+    fun `a pending tip set while the hits are decorated is not taken back`() = runTest {
+        val bob = "b".repeat(64)
+        val n1 = note('1', alice, 2000); val n2 = note('2', bob, 1500)
+        val search = FakeSearch().apply { hashtagNotes = mapOf("monero" to listOf(n1, n2)) }
+        val pending = FakePendingTips()
+        val c = controller(search, pending = pending)
+        c.start()
+        val slow = CompletableDeferred<Unit>()
+        profiles.getGates[bob] = slow
+        c.onQueryChange("#monero"); c.submit(); advanceUntilIdle()
+        // the user tipped n1 in the meantime (e.g. from the feed)
+        pending.add(PendingTip("e".repeat(64), n1.id, 5, 4_000)); advanceUntilIdle()
+        slow.complete(Unit); advanceUntilIdle()
+        assertEquals(listOf(n1.id, n2.id), c.state.value.notes.map { it.note.id })
+        assertTrue(c.state.value.notes.first { it.note.id == n1.id }.pendingTip)
     }
 
     @Test

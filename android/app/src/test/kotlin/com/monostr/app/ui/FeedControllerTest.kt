@@ -193,6 +193,32 @@ class FeedControllerTest {
     }
 
     @Test
+    fun `a pending tip that starts while a live list is decorated is not lost`() = runTest {
+        val feed = FakeFeed()
+        val n1 = note('1', alice, 2000)
+        val n2 = note('2', bob, 1500)
+        feed.current = listOf(n1)
+        val pending = FakePendingTips()
+        val c = FeedController(feed, profiles, FakePublish(), TipDecorations(FakeTips(), pending, profiles, FakePublish(), eager()) { 5_000 }, BookmarkActions(FakeBookmarks(), eager()), FakeCounts(), eager())
+        c.start()
+        advanceUntilIdle()
+        // a live list arrives; n1 is decorated, then the lookup of bob's profile is slow
+        val slow = CompletableDeferred<Unit>()
+        profiles.getGates[bob] = slow
+        feed.liveUpdates.emit(listOf(n1, n2))
+        advanceUntilIdle()
+        // meanwhile the user tips n1: the marker shows at once
+        pending.add(PendingTip("e".repeat(64), n1.id, 5, 4_000))
+        advanceUntilIdle()
+        assertTrue(c.state.value.notes.first { it.note.id == n1.id }.pendingTip)
+        // the live list lands afterwards and must not take the marker away again
+        slow.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(listOf(n1.id, n2.id), c.state.value.notes.map { it.note.id })
+        assertTrue(c.state.value.notes.first { it.note.id == n1.id }.pendingTip, "the live list overwrote the pending marker")
+    }
+
+    @Test
     fun `feed shows bookmark flags live and toggles through the repository`() = runTest {
         val feed = FakeFeed(); val n1 = note('1', alice, 1000); feed.current = listOf(n1)
         val bookmarks = FakeBookmarks()
