@@ -244,8 +244,6 @@ class SettingsViewModel @Inject constructor(
     fun setAuthorRelays(on: Boolean) = viewModelScope.launch { uiSettings.setAuthorRelays(on) }
     val clientTag: StateFlow<Boolean> = uiSettings.clientTag.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
     fun setClientTag(on: Boolean) = viewModelScope.launch { uiSettings.setClientTag(on) }
-    val primalStats: StateFlow<Boolean> = uiSettings.primalStats.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
-    fun setPrimalStats(on: Boolean) = viewModelScope.launch { uiSettings.setPrimalStats(on) }
     val powBits: StateFlow<Int> = uiSettings.powBits.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), POW_DEFAULT)
     fun setPowBits(bits: Int) = viewModelScope.launch { uiSettings.setPowBits(bits) }
     val quickReactions: StateFlow<List<String>> = uiSettings.quickReactions.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), Reactions.QUICK)
@@ -389,8 +387,6 @@ fun SettingsScreen(onBack: () -> Unit, onMoneroSetup: () -> Unit, onSupport: () 
                     ) { Text(if (bits == 0) stringResource(R.string.settings_pow_off) else stringResource(R.string.settings_pow_bits, bits)) }
                 }
             }
-            val primalStats by vm.primalStats.collectAsStateWithLifecycle()
-            SettingSwitch(stringResource(R.string.settings_primal_stats), stringResource(R.string.settings_primal_stats_hint), primalStats, vm::setPrimalStats, "settings-primal-stats")
             Spacer(Modifier.height(24.dp))
             val dmState by vm.dm.state.collectAsStateWithLifecycle()
             val dmPreviewName by vm.dmPreviewName.collectAsStateWithLifecycle()

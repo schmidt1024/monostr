@@ -297,8 +297,6 @@
     <string name="settings_pow_bits">%1$d bits</string>
     <string name="settings_client_tag">Mostrar “via monostr”</string>
     <string name="settings_client_tag_hint">Notas, curtidas e reposts levam uma tag de cliente que outros apps mostram como “via monostr”.</string>
-    <string name="settings_primal_stats">Seguidores via Primal</string>
-    <string name="settings_primal_stats_hint">Os perfis consultam o índice do Primal para o número de seguidores que outros apps mostram. Desligado: só os relays contam, e o número fica bem menor.</string>
     <string name="note_via">via %1$s</string>
     <string name="settings_monero">Gorjetas em Monero</string>
     <string name="settings_monero_not_set_up">Não configurado. Não é necessário para enviar gorjetas.</string>

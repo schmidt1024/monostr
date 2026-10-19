@@ -16,6 +16,6 @@ monostr é um cliente Nostr para Android com gorjetas em Monero.
 • Gorjetas anônimas são possíveis
 
 <b>Aberto</b>
-O monostr é software livre (AGPL-3.0-or-later). Notas, curtidas e reposts trazem “via monostr” (desligado por padrão, pode ser ligado). O número de seguidores pode vir do índice do Primal, um serviço proprietário; isso também vem desligado por padrão e pode ser ligado.
+O monostr é software livre (AGPL-3.0-or-later). Notas, curtidas e reposts trazem “via monostr” (desligado por padrão, pode ser ligado).
 
 O monostr está em beta.

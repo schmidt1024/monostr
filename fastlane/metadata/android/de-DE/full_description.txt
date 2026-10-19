@@ -16,6 +16,6 @@ monostr ist ein Nostr-Client für Android mit Tips in Monero.
 • Anonyme Tips sind möglich
 
 <b>Offen</b>
-monostr ist freie Software (AGPL-3.0-or-later). Notes, Likes und Reposts tragen „via monostr“ (standardmäßig aus, einschaltbar). Follower-Zahlen können aus Primals Index kommen, einem proprietären Dienst; auch das ist standardmäßig aus und einschaltbar.
+monostr ist freie Software (AGPL-3.0-or-later). Notes, Likes und Reposts tragen „via monostr“ (standardmässig aus, einschaltbar).
 
 monostr ist in der Beta.

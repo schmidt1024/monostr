@@ -1,0 +1,1 @@
+• Takipçi sayıları artık yalnızca relay’lerden geliyor; isteğe bağlı Primal dizini kaldırıldı, sayılar daha düşük olabilir

@@ -297,8 +297,6 @@
     <string name="settings_pow_bits">%1$d bit</string>
     <string name="settings_client_tag">Mostra «via monostr»</string>
     <string name="settings_client_tag_hint">Note, mi piace e repost portano un tag client che le altre app mostrano come «via monostr».</string>
-    <string name="settings_primal_stats">Follower tramite Primal</string>
-    <string name="settings_primal_stats_hint">I profili chiedono all’indice di Primal il numero di follower mostrato dalle altre app. Disattivato: contano solo i relay, il numero è molto più basso.</string>
     <string name="note_via">via %1$s</string>
     <string name="settings_monero">Mance in Monero</string>
     <string name="settings_monero_not_set_up">Non configurato. Non serve per inviare mance.</string>

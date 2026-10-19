@@ -16,6 +16,6 @@ monostr es un cliente Nostr para Android con propinas en Monero.
 • Las propinas anónimas son posibles
 
 <b>Abierto</b>
-monostr es software libre (AGPL-3.0-or-later). Las notas, me gusta y republicaciones llevan «via monostr» (desactivado por defecto, se puede activar). El número de seguidores puede venir del índice de Primal, un servicio propietario; también viene desactivado por defecto y se puede activar.
+monostr es software libre (AGPL-3.0-or-later). Las notas, me gusta y republicaciones llevan «via monostr» (desactivado por defecto, se puede activar).
 
 monostr está en beta.

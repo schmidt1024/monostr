@@ -1,0 +1,1 @@
+• Follower-Zahlen kommen nur noch von Relays; der optionale Primal-Index ist weg, die Zahlen können tiefer sein

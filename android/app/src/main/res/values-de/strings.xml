@@ -296,8 +296,6 @@
     <string name="settings_pow_bits">%1$d Bit</string>
     <string name="settings_client_tag">„via monostr“ anzeigen</string>
     <string name="settings_client_tag_hint">Notes, Likes und Reposts tragen einen Client-Tag, den andere Apps als „via monostr“ zeigen.</string>
-    <string name="settings_primal_stats">Follower-Zahlen über Primal</string>
-    <string name="settings_primal_stats_hint">Profile fragen Primals Index nach der Follower-Zahl, die andere Apps zeigen. Aus: Nur Relays zählen, die Zahl ist viel kleiner.</string>
     <string name="note_via">via %1$s</string>
     <string name="settings_monero">Monero-Tips</string>
     <string name="settings_monero_not_set_up">Nicht eingerichtet. Zum Senden von Tips nicht nötig.</string>

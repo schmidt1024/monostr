@@ -297,8 +297,6 @@
     <string name="settings_pow_bits">%1$d bits</string>
     <string name="settings_client_tag">Afficher « via monostr »</string>
     <string name="settings_client_tag_hint">Les notes, j’aime et reposts portent une étiquette client que les autres applis affichent comme « via monostr ».</string>
-    <string name="settings_primal_stats">Abonnés via Primal</string>
-    <string name="settings_primal_stats_hint">Les profils interrogent l’index de Primal pour le nombre d’abonnés affiché par les autres apps. Désactivé : seuls les relais comptent, le nombre est bien plus bas.</string>
     <string name="note_via">via %1$s</string>
     <string name="settings_monero">Pourboires Monero</string>
     <string name="settings_monero_not_set_up">Non configuré. Pas nécessaire pour envoyer des pourboires.</string>

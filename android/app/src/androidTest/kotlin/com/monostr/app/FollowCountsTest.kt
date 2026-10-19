@@ -3,8 +3,10 @@ package com.monostr.app
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -12,6 +14,7 @@ import com.monostr.app.session.NostrSessionEntryPoint
 import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.runBlocking
 import org.junit.After
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -29,7 +32,7 @@ class FollowCountsTest {
     private val entry get() = EntryPointAccessors.fromApplication(ctx, NostrSessionEntryPoint::class.java)
     private fun nodes(tag: String) = rule.onAllNodes(hasTestTag(tag)).fetchSemanticsNodes()
 
-    @After fun logout() { runBlocking { runCatching { entry.session().logout() }; entry.uiSettings().setPrimalStats(false) } }
+    @After fun logout() { runBlocking { runCatching { entry.session().logout() } } }
 
     private fun reachFeed() {
         runBlocking { runCatching { entry.session().logout() } }
@@ -45,11 +48,6 @@ class FollowCountsTest {
 
     @Test
     fun theOwnProfileCountsTheContactList() {
-        runBlocking { entry.uiSettings().setPrimalStats(true) } // 0.18: off by default, this test covers the Primal path
-        countsTheContactList()
-    }
-
-    private fun countsTheContactList() {
         reachFeed()
         val ready = entry.session().requireReady()
         val contacts = List(3) { Contact(Keys.generate().publicKey(), null, null) }
@@ -60,9 +58,13 @@ class FollowCountsTest {
         rule.onNodeWithTag("profile-follow-counts").assertTextContains("3 ${ctx.getString(R.string.profile_following_label)}", substring = true)
     }
 
+    /** 0.22.4: follower numbers come only from relays; the switch for Primal's index is gone. */
     @Test
-    fun withPrimalSwitchedOffTheOwnListIsStillCounted() {
-        runBlocking { entry.uiSettings().setPrimalStats(false) }
-        countsTheContactList()
+    fun settingsHaveNoPrimalSwitch() {
+        reachFeed()
+        rule.onNodeWithContentDescription(ctx.getString(R.string.feed_settings)).performClick()
+        rule.waitUntil(15_000) { nodes("settings-pow").isNotEmpty() }
+        rule.onNodeWithTag("settings-pow").performScrollTo()
+        assertTrue(nodes("settings-primal-stats").isEmpty())
     }
 }

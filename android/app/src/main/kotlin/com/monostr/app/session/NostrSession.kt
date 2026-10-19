@@ -25,7 +25,6 @@ import com.monostr.app.data.SecretStore
 import com.monostr.app.data.SessionInfo
 import com.monostr.app.data.SessionStore
 import com.monostr.app.data.SignerType
-import com.monostr.app.data.PrimalStats
 import com.monostr.app.data.TipSettingsStore
 import com.monostr.app.data.UiSettingsStore
 import com.monostr.app.data.WatcherClients
@@ -107,7 +106,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -515,13 +513,11 @@ class NostrSession @Inject constructor(
             val feed = NostrFeedRepository(engine, excluded = { mute.muted.value })
             val profiles = NostrProfileRepository(engine, indexRelays = NostrProfileRepository.INDEX_RELAYS)
             val follows = NostrFollowRepository(engine, feed)
-            // Primal's cache has every contact list ever indexed: the number other clients show; the relays' COUNTs stay as a floor
-            // read per lookup (privacy setting: never a seeded default); a switch counts every profile afresh
             // the database at once, the relays' latest behind it (a new install, another client)
             val ownReactions = NostrOwnReactions(engine, scope = engine.backgroundScope)
             engine.backgroundScope.launch { bestEffort { ownReactions.load() } }
-            val followCounts = NostrFollowCountsRepository(engine, indexers = listOf(PrimalStats(http, enabled = { uiSettings.primalStats.first() })))
-            engine.backgroundScope.launch { uiSettings.primalStats.drop(1).collect { followCounts.invalidateAll() } }
+            // followers = the largest NIP-45 COUNT of the relays (0.22.4: no proprietary index any more)
+            val followCounts = NostrFollowCountsRepository(engine)
             // a follow or unfollow changes the own Following number and the target's Followers: counted afresh
             engine.backgroundScope.launch { follows.changes.collect { followCounts.invalidateAll() } }
             val blossom = BlossomClient(http, signer)

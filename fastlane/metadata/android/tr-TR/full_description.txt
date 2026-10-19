@@ -16,6 +16,6 @@ monostr, Monero ile bahşiş verilebilen bir Android Nostr istemcisidir.
 • Anonim bahşiş mümkündür
 
 <b>Açık</b>
-monostr özgür yazılımdır (AGPL-3.0-or-later). Notlar, beğeniler ve paylaşımlar “via monostr” taşır (varsayılan olarak kapalı, açılabilir). Takipçi sayıları özel mülk bir hizmet olan Primal'ın dizininden gelebilir; bu da varsayılan olarak kapalıdır, açılabilir.
+monostr özgür yazılımdır (AGPL-3.0-or-later). Notlar, beğeniler ve paylaşımlar “via monostr” taşır (varsayılan olarak kapalı, açılabilir).
 
 monostr beta aşamasındadır.

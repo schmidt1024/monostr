@@ -551,9 +551,6 @@ class FakeUiSettings : UiSettingsStore {
     val clientTagState = MutableStateFlow(false)
     override val clientTag: Flow<Boolean> = clientTagState
     override suspend fun setClientTag(on: Boolean) { clientTagState.value = on }
-    val primalStatsState = MutableStateFlow(false)
-    override val primalStats: Flow<Boolean> = primalStatsState
-    override suspend fun setPrimalStats(on: Boolean) { primalStatsState.value = on }
     val quickReactionsState = MutableStateFlow(com.monostr.app.ui.common.Reactions.QUICK)
     override val quickReactions: Flow<List<String>> = quickReactionsState
     val powBitsState = MutableStateFlow(0)

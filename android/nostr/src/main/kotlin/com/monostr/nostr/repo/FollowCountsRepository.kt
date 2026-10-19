@@ -21,7 +21,7 @@ import java.time.Duration
 /** What the profile header shows; null = unknown (the line is left out). */
 data class FollowCounts(val following: Int?, val followers: Long?)
 
-/** An index that has seen everybody's contact lists (Primal's cache; nostr.band would be one, offline since 2026-10-04): the numbers other clients show. Null = nothing known. */
+/** An index that has seen everybody's contact lists (none wired since 0.22.4; nostr.band was one, offline since 2026-10-04): the numbers other clients show. Null = nothing known. */
 interface FollowStatsIndexer {
     suspend fun stats(pubkey: String): FollowCounts?
 }
@@ -37,7 +37,7 @@ interface FollowCountsRepository {
  * Followers: a NIP-45 COUNT of kind 3 with `#p` = pubkey, asked of every [countRelays] and every
  * relay of the user's own set at once (one without NIP-45 refuses or stays silent: no answer); the
  * largest answer counts, because each relay only knows the contact lists it stores (always a lower
- * bound), and it is shown as soon as the first relay answers. [indexers] (Primal's cache) have seen
+ * bound), and it is shown as soon as the first relay answers. [indexers] (if any) have seen
  * every list and give the number other clients show; it takes the maximum over the counts. An answer above [MAX_FOLLOWERS] (or negative: a u64 that wrapped) is a lying relay and is
  * dropped. Following: the distinct `p` tags of the profile's newest kind 3 from the database, fetched
  * from [indexRelays] when there is none or the stored one is older than a day. A result with anything

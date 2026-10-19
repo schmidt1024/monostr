@@ -1,0 +1,1 @@
+• O número de seguidores agora vem só dos relays; o índice opcional do Primal foi removido, os números podem ser menores

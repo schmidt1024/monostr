@@ -16,6 +16,6 @@ monostr is a Nostr client for Android with tips in Monero.
 • Anonymous tips are possible
 
 <b>Open</b>
-monostr is free software (AGPL-3.0-or-later). Notes, likes and reposts say “via monostr” (off by default, can be switched on). Follower numbers can come from Primal's index, a proprietary service; that is off by default and can be switched on too.
+monostr is free software (AGPL-3.0-or-later). Notes, likes and reposts say “via monostr” (off by default, can be switched on).
 
 monostr is in beta.

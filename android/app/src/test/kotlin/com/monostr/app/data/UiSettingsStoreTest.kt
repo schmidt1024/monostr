@@ -43,9 +43,6 @@ class UiSettingsStoreTest {
         assertFalse(settings.clientTag.first())
         settings.setClientTag(true)
         assertTrue(settings.clientTag.first())
-        assertFalse(settings.primalStats.first())
-        settings.setPrimalStats(true)
-        assertTrue(settings.primalStats.first())
         settings.setCustomHue(33.5f); assertEquals(33.5f, settings.customHue.first())
         settings.setCustomHue(400f); assertEquals(200f, settings.customHue.first())
         settings.setAccent(Accent.CUSTOM); assertEquals(Accent.CUSTOM, settings.accent.first())
@@ -114,10 +111,9 @@ class UiSettingsStoreTest {
         val st = store()
         val s = PrefsUiSettingsStore(st)
         st.edit {
-            it[booleanPreferencesKey("ui.primal_stats")] = true
             it[booleanPreferencesKey("ui.client_tag")] = true
             it[booleanPreferencesKey("ui.media_on_tap")] = false
         }
-        assertTrue(s.primalStats.first()); assertTrue(s.clientTag.first()); assertFalse(s.mediaOnTap.first())
+        assertTrue(s.clientTag.first()); assertFalse(s.mediaOnTap.first())
     }
 }

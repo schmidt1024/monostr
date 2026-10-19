@@ -300,8 +300,6 @@
     <string name="settings_pow_bits">%1$d бит</string>
     <string name="settings_client_tag">Показывать «via monostr»</string>
     <string name="settings_client_tag_hint">Заметки, лайки и репосты содержат тег клиента, который другие приложения показывают как «via monostr».</string>
-    <string name="settings_primal_stats">Подписчики через Primal</string>
-    <string name="settings_primal_stats_hint">Профили запрашивают у индекса Primal число подписчиков, которое показывают другие приложения. Выключено: считают только релеи, число намного меньше.</string>
     <string name="note_via">через %1$s</string>
     <string name="settings_monero">Чаевые в Monero</string>
     <string name="settings_monero_not_set_up">Не настроено. Для отправки чаевых не требуется.</string>

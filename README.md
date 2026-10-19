@@ -60,7 +60,7 @@ Release APKs are signed with this certificate (SHA-256):
 - DM notifications hide the sender name by default; Settings can show it.
 - Pictures load only on tap by default; Settings can load them automatically.
 - Notes, likes and reposts carry a NIP-89 `client` tag ("via monostr") only if you switch it on in Settings; off by default.
-- Follower numbers come from Primal's index (`cache2.primal.net`), a proprietary service, only if you switch it on in Settings; off by default, then only relays count.
+- Follower numbers are the largest count the relays report (NIP-45); no proprietary index is asked (since 0.22.4).
 
 ## License
 

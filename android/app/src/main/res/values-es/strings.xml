@@ -297,8 +297,6 @@
     <string name="settings_pow_bits">%1$d bits</string>
     <string name="settings_client_tag">Mostrar «vía monostr»</string>
     <string name="settings_client_tag_hint">Las notas, me gusta y reposts llevan una etiqueta de cliente que otras apps muestran como «vía monostr».</string>
-    <string name="settings_primal_stats">Seguidores desde Primal</string>
-    <string name="settings_primal_stats_hint">Los perfiles consultan el índice de Primal para el número de seguidores que muestran otras apps. Desactivado: solo cuentan los relays y el número es mucho menor.</string>
     <string name="note_via">vía %1$s</string>
     <string name="settings_monero">Propinas en Monero</string>
     <string name="settings_monero_not_set_up">No configurado. No hace falta para enviar propinas.</string>

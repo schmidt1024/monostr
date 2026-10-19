@@ -16,6 +16,6 @@ monostr est un client Nostr pour Android avec des pourboires en Monero.
 • Les pourboires anonymes sont possibles
 
 <b>Ouvert</b>
-monostr est un logiciel libre (AGPL-3.0-or-later). Les notes, j'aime et republications indiquent « via monostr » (désactivé par défaut, activable). Le nombre d'abonnés peut venir de l'index de Primal, un service propriétaire ; c'est aussi désactivé par défaut et activable.
+monostr est un logiciel libre (AGPL-3.0-or-later). Les notes, j'aime et republications indiquent « via monostr » (désactivé par défaut, activable).
 
 monostr est en bêta.

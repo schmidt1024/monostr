@@ -1,0 +1,1 @@
+• Follower numbers now come only from relays; the optional Primal index is gone, so numbers can be lower

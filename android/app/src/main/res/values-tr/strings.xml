@@ -296,8 +296,6 @@
     <string name="settings_pow_bits">%1$d bit</string>
     <string name="settings_client_tag">“via monostr” göster</string>
     <string name="settings_client_tag_hint">Notlar, beğeniler ve yeniden paylaşımlar, diğer uygulamaların “via monostr” olarak gösterdiği bir istemci etiketi taşır.</string>
-    <string name="settings_primal_stats">Primal üzerinden takipçi sayısı</string>
-    <string name="settings_primal_stats_hint">Profiller, diğer uygulamaların gösterdiği takipçi sayısını Primal dizininden alır. Kapalı: yalnızca relay’ler sayar, sayı çok daha düşük olur.</string>
     <string name="note_via">%1$s ile</string>
     <string name="settings_monero">Monero bahşişleri</string>
     <string name="settings_monero_not_set_up">Kurulmadı. Bahşiş göndermek için gerekmez.</string>
