@@ -1,6 +1,9 @@
 package com.monostr.nostr.model
 
+import kotlinx.serialization.Serializable
+
 /** A kind 1 note or a kind 6 repost as shown in feeds and threads. */
+@Serializable
 data class Note(
     val id: String,
     val author: String,
@@ -39,6 +42,7 @@ data class Note(
     }
 }
 
+@Serializable
 data class Profile(
     val pubkey: String,
     val name: String?,

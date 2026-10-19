@@ -1,5 +1,6 @@
 package com.monostr.app.session
 
+import com.monostr.app.data.FeedSnapshot
 import com.monostr.tips.RelayHosts
 import com.monostr.app.data.linkpreview.LinkPreviews
 import com.monostr.nostr.repo.NostrOwnReactions
@@ -161,6 +162,8 @@ class Ready(
     val lists: ListsRepository,
     /** Spec 2026-10-18 §3.3: the lists pinned as home feed tabs. */
     val feedTabs: FeedTabsRepository,
+    /** The home feed's last first page, shown at once on the next start (2026-10-19); deleted on logout. */
+    val feedSnapshot: FeedSnapshot? = null,
 ) {
     /** Pubkeys of the muted accounts; every note list filters against them (spec 9.3). */
     val muted: StateFlow<Set<String>> get() = mute.muted
@@ -398,6 +401,8 @@ class NostrSession @Inject constructor(
                 // The account's DMs leave the device with it (spec §4), best effort.
                 bestEffort { (ready.dmStore as? DmDatabase)?.close() }
                 bestEffort { DmDatabase.delete(context, ready.pubkey) }
+                // the feed's last page leaves the device with the account too
+                bestEffort { ready.feedSnapshot?.delete() }
             }
             clearStaleSession(ready?.pubkey)
         }
@@ -544,6 +549,7 @@ class NostrSession @Inject constructor(
             // spec 2026-10-16 §8.2: drafts untouched for 30 days go with their pictures; silent, best effort, off the start path
             engine.backgroundScope.launch { bestEffort { expireDrafts(drafts, signer.pubkey, System.currentTimeMillis() / 1000, media) } }
             return Ready(
+                feedSnapshot = FeedSnapshot(File(dir, "feed-snapshot.json")),
                 pubkey = signer.pubkey, signer = signer, engine = engine,
                 feed = feed, threads = NostrThreadRepository(engine, conversations), conversations = conversations,
                 profiles = profiles, publish = publish,

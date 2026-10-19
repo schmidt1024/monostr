@@ -1,6 +1,9 @@
 package com.monostr.nostr.model
 
+import kotlinx.serialization.Serializable
+
 /** One picture or video attached to a note, from the text or a NIP-92 `imeta` tag (spec 3.1). */
+@Serializable
 data class NoteMedia(
     val url: String,
     val kind: Kind,

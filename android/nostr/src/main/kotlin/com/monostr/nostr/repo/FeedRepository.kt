@@ -17,6 +17,9 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import rust.nostr.sdk.Filter
 import rust.nostr.sdk.Kind
 import rust.nostr.sdk.PublicKey
@@ -135,19 +138,52 @@ class NostrFeedRepository(
 
     private suspend fun storedContacts() = engine.query(Filter().kind(Kind(3u)).author(PublicKey.parse(pubkey)).limit(1u)).firstOrNull()
 
-    private fun followed(contacts: rust.nostr.sdk.Event?): List<String> =
-        ((contacts?.tags()?.publicKeys()?.map { it.toHex() } ?: emptyList()) + pubkey).distinct()
+    /** The last contact list read (its id) and what it gave: every start reads it a few times. */
+    @Volatile private var followsMemo: Pair<String, List<String>>? = null
 
-    private fun feedFilter(authors: List<String>, kinds: List<Int> = FEED_KINDS) =
-        Filter().kinds(kinds.map { Kind(it.toUShort()) }).authors(authors.map { PublicKey.parse(it) })
+    /**
+     * The `p` tags read in Kotlin from the event's JSON: going through rust for each tag cost
+     * 0.3–0.6 s for ~300 follows, three times per cold start (Pixel, 2026-10-19).
+     */
+    private fun followed(contacts: rust.nostr.sdk.Event?): List<String> {
+        if (contacts == null) return listOf(pubkey)
+        val id = contacts.id().toHex()
+        followsMemo?.let { (memoId, list) -> if (memoId == id) return list }
+        val keys = NoteMapper.decoded(contacts).tags
+            .filter { it.size >= 2 && it[0] == "p" }
+            .map { it[1].lowercase() }
+            .filter { it.matches(HEX64) }
+        // a key that is not on the curve stays in (Filter.fromJson takes it, it matches nobody); checking each
+        // key through rust would bring the cost back
+        return (keys + pubkey).distinct().also { followsMemo = id to it }
+    }
+
+    /**
+     * [kinds] by [authors] built from JSON in one call: a [PublicKey.parse] per author cost ~0.5 s for
+     * ~300 authors. A key the JSON route refuses (not on the curve) falls back to parsing each and
+     * leaving the bad ones out.
+     */
+    private fun authorsFilter(authors: List<String>, kinds: List<Int>): Filter {
+        return try {
+            Filter.fromJson(authorsJson(authors, kinds))
+        } catch (e: Exception) {
+            Filter().kinds(kinds.map { Kind(it.toUShort()) }).authors(authors.mapNotNull { runCatching { PublicKey.parse(it) }.getOrNull() })
+        }
+    }
+
+    private fun authorsJson(authors: List<String>, kinds: List<Int>): String = buildJsonObject {
+        put("kinds", JsonArray(kinds.map { JsonPrimitive(it) }))
+        put("authors", JsonArray(authors.map { JsonPrimitive(it) }))
+    }.toString()
+
+    private fun feedFilter(authors: List<String>, kinds: List<Int> = FEED_KINDS) = authorsFilter(authors, kinds)
 
     /**
      * What the live subscription asks for: the notes and their authors' deletion requests (NIP-09, kind 5),
      * so that a withdrawn note leaves the local database. The database is never queried with this
      * filter: the requests would take places in the page.
      */
-    private fun liveFilter(authors: List<String>) =
-        Filter().kinds(listOf(Kind(1u), Kind(6u), Kind(5u))).authors(authors.map { PublicKey.parse(it) })
+    private fun liveFilter(authors: List<String>) = authorsFilter(authors, listOf(1, 6, 5))
 
     /**
      * Fetches a page of notes and, apart from it, the same authors' deletion requests. Two requests and
@@ -162,7 +198,7 @@ class NostrFeedRepository(
             authors.chunked(AUTHOR_CHUNK).map { chunk ->
                 async {
                     var notes = feedFilter(chunk, kinds).limit(limit.toULong())
-                    var requests = Filter().kind(Kind(5u)).authors(chunk.map { PublicKey.parse(it) }).limit(DELETION_LIMIT)
+                    var requests = authorsFilter(chunk, listOf(5)).limit(DELETION_LIMIT)
                     if (untilTs != null) {
                         notes = notes.until(untilTs)
                         requests = requests.until(untilTs)

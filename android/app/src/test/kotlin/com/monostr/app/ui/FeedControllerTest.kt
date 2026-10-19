@@ -1,4 +1,9 @@
 package com.monostr.app.ui
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
+import org.junit.jupiter.api.io.TempDir
+import java.io.File
+import com.monostr.app.data.FeedSnapshot
 import com.monostr.app.ui.common.uiText
 import com.monostr.app.ui.common.BookmarkActions
 import com.monostr.app.R
@@ -43,6 +48,7 @@ import com.monostr.nostr.repo.MuteRepository
 class FeedControllerTest {
     private val alice = "a".repeat(64)
     private val bob = "b".repeat(64)
+    @TempDir lateinit var snapshotDir: File
     private val profiles = FakeProfiles(mapOf(alice to Profile(alice, "alice", "Alice", "https://x/a.png", null, null)))
 
     /** Controllers get an eager scope on the test scheduler; long-lived collectors stay suspended and are dropped with the scope. */
@@ -312,6 +318,79 @@ class FeedControllerTest {
     }
 
     @Test
+    fun `the first page shows with stored profiles while a slow profile lookup still runs`() = runTest {
+        // cold start (2026-10-19): the page waited for profiles fetched from the relays, seconds on the Pixel
+        val known = FakeProfiles(mapOf(alice to Profile(alice, "alice", "Alice", null, null, null)))
+        val gate = CompletableDeferred<Unit>()
+        known.getGates[alice] = gate
+        val feed = FakeFeed().apply { current = listOf(note('1', alice, 1000)) }
+        val c = FeedController(feed, known, FakePublish(), decorations(), BookmarkActions(FakeBookmarks(), eager()), FakeCounts(), eager())
+        c.start()
+        advanceUntilIdle()
+        assertEquals(listOf(note('1', alice).id), c.state.value.notes.map { it.note.id })
+        assertFalse(c.state.value.loading)
+        assertEquals("Alice", c.state.value.notes.single().author.displayName)
+        // the lookup answers with a newer profile: the shown note takes it over
+        known.current.value = mapOf(alice to Profile(alice, "alice", "Alice B.", null, null, null))
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertEquals("Alice B.", c.state.value.notes.single().author.displayName)
+    }
+
+    @Test
+    fun `a snapshot read after an empty first page is not shown`() = runTest {
+        // the file read is slower than the live list, which is empty (nothing followed, or all muted)
+        val snap = FeedSnapshot(File(snapshotDir, "feed.json"), StandardTestDispatcher(testScheduler))
+        snap.write(listOf(FeedSnapshot.Item(note('9', alice, 500), profiles.current.value.getValue(alice), profiles.current.value.getValue(alice))))
+        val feed = FakeFeed().apply { current = emptyList() }
+        val c = FeedController(feed, profiles, FakePublish(), decorations(), BookmarkActions(FakeBookmarks(), eager()), FakeCounts(), eager(), snapshot = snap)
+        c.start()
+        advanceUntilIdle()
+        assertTrue(c.state.value.notes.isEmpty())
+    }
+
+    @Test
+    fun `a mute while only the snapshot shows waits for the first fresh page`() = runTest {
+        val snap = FeedSnapshot(File(snapshotDir, "feed.json"), UnconfinedTestDispatcher(testScheduler))
+        snap.write(listOf(FeedSnapshot.Item(note('9', alice, 500), profiles.current.value.getValue(alice), profiles.current.value.getValue(alice))))
+        val muted = MutableStateFlow<Set<String>>(emptySet())
+        // neither the database nor the relays have answered yet
+        val feed = FakeFeed().apply { current = listOf(note('1', alice, 1000)); liveGate = CompletableDeferred(); refreshGate = CompletableDeferred() }
+        val c = FeedController(
+            feed, profiles, FakePublish(), decorations(), BookmarkActions(FakeBookmarks(), eager()), FakeCounts(), eager(),
+            visibility = NoteVisibility(NoteDeletions(), muted), snapshot = snap,
+        )
+        c.start(); advanceUntilIdle()
+        muted.value = setOf(bob); advanceUntilIdle()
+        assertEquals(1, feed.liveCalls, "the first database read is not cancelled")
+        feed.liveGate!!.complete(Unit); advanceUntilIdle()
+        assertEquals(2, feed.liveCalls, "the live list is read again after the first fresh page")
+    }
+
+    @Test
+    fun `the last shown page appears at once and the first fresh page replaces it`() = runTest {
+        // file work on the test scheduler: the delayed write is done when the virtual time has passed
+        val snap = FeedSnapshot(File(snapshotDir, "feed.json"), UnconfinedTestDispatcher(testScheduler))
+        val old = note('9', alice, 500)
+        snap.write(listOf(FeedSnapshot.Item(old, profiles.current.value.getValue(alice), profiles.current.value.getValue(alice))))
+        val fresh = note('1', alice, 1000)
+        val feed = FakeFeed().apply { current = listOf(fresh); liveGate = CompletableDeferred(); refreshGate = CompletableDeferred() }
+        val c = FeedController(feed, profiles, FakePublish(), decorations(), BookmarkActions(FakeBookmarks(), eager()), FakeCounts(), eager(), snapshot = snap)
+        c.start()
+        advanceUntilIdle()
+        assertEquals(listOf(old.id), c.state.value.notes.map { it.note.id })
+        assertFalse(c.state.value.loading)
+        assertEquals("Alice", c.state.value.notes.single().author.displayName)
+        feed.liveGate!!.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(listOf(fresh.id), c.state.value.notes.map { it.note.id }, "a note only the snapshot had leaves with the first fresh page")
+        feed.refreshGate!!.complete(Unit)
+        advanceTimeBy(FeedController.SNAPSHOT_DELAY_MS + 100)
+        advanceUntilIdle()
+        assertEquals(listOf(fresh.id), snap.read().map { it.note.id }, "the fresh page is kept for the next start")
+    }
+
+    @Test
     fun `a follow change restarts the live list and refreshes from the relays`() = runTest {
         val feed = FakeFeed().apply { current = listOf(note('1', alice, 1000)) }
         val changes = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
@@ -325,16 +404,21 @@ class FeedControllerTest {
     }
 
     @Test
-    fun `a mute change restarts the live list, whose author list is read once per start`() = runTest {
+    fun `a newly muted account is only hidden without a relay round, an unmute restarts and refreshes`() = runTest {
+        // the mute list arrives seconds after the start (cold start): restarting then threw the first page away
         val muted = MutableStateFlow<Set<String>>(emptySet())
-        val feed = FakeFeed().apply { current = listOf(note('1', alice, 1000)) }
+        val feed = FakeFeed().apply { current = listOf(note('1', alice, 1000), note('2', bob, 900)) }
         val c = controller(feed, muted = muted)
         c.start(); advanceUntilIdle()
         assertEquals(1, feed.liveCalls)
+        assertEquals(1, feed.refreshCalls)
         muted.value = setOf(alice); advanceUntilIdle()
-        assertEquals(2, feed.liveCalls)
+        assertEquals(1, feed.refreshCalls, "muting more accounts asks the relays nothing new")
+        assertEquals(listOf(note('2', bob).id), c.state.value.notes.map { it.note.id })
+        val livesBefore = feed.liveCalls
         muted.value = emptySet(); advanceUntilIdle()
-        assertEquals(3, feed.liveCalls)
+        assertEquals(livesBefore + 1, feed.liveCalls, "an unmute restarts, so the account's notes are asked for again")
+        assertEquals(2, feed.refreshCalls)
     }
 
     private fun TestScope.controller(
@@ -473,6 +557,46 @@ class FeedControllerTest {
         advanceUntilIdle()
         assertFalse(c.state.value.notes.single().deleting) // the menu entry is free again
         assertEquals(1, c.state.value.notes.size)
+    }
+
+    @Test
+    fun `an ancestor keeps the profile the background lookup found, also after the list is rebuilt`() = runTest {
+        val carol = "c".repeat(64)
+        val root = note('r', carol, 900)
+        val reply = note('s', alice, 1000, replyTo = root.id, root = root.id)
+        val known = FakeProfiles(mapOf(alice to Profile(alice, "alice", "Alice", null, null, null)))
+        val gate = CompletableDeferred<Unit>()
+        known.getGates[carol] = gate
+        val feed = FakeFeed().apply { current = listOf(reply) }
+        val conversations = FakeConversations(mapOf(reply.id to Chain(listOf(Slot.Shown(root)), cut = false)))
+        val muted = MutableStateFlow<Set<String>>(emptySet())
+        val c = FeedController(
+            feed, known, FakePublish(), decorations(), BookmarkActions(FakeBookmarks(), eager()), FakeCounts(), eager(),
+            conversations = conversations, visibility = NoteVisibility(NoteDeletions(), muted),
+        )
+        c.start()
+        advanceUntilIdle()
+        assertEquals(root.id, c.state.value.ancestors[root.id]?.note?.id)
+        // carol's profile arrives from the relays
+        known.current.value = known.current.value + (carol to Profile(carol, "carol", "Carol", null, null, null))
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertEquals("Carol", c.state.value.ancestors[root.id]?.author?.displayName)
+        // a visibility change rebuilds the ancestors from what the controller keeps
+        muted.value = setOf("d".repeat(64))
+        advanceUntilIdle()
+        assertEquals("Carol", c.state.value.ancestors[root.id]?.author?.displayName)
+    }
+
+    @Test
+    fun `a newly muted account restarts only the live list, so it does not take the newest places`() = runTest {
+        val muted = MutableStateFlow<Set<String>>(emptySet())
+        val feed = FakeFeed().apply { current = listOf(note('1', alice, 1000), note('2', bob, 900)) }
+        val c = controller(feed, muted = muted)
+        c.start(); advanceUntilIdle()
+        muted.value = setOf(alice); advanceUntilIdle()
+        assertEquals(2, feed.liveCalls, "the live query is read again without the muted account")
+        assertEquals(1, feed.refreshCalls, "no new relay round")
     }
 
     @Test

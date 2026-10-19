@@ -146,9 +146,12 @@ class FakeFeed : FeedRepository {
     }
     /** How often [live] was started (each restart counts). */
     var liveCalls = 0
+    /** When set, `live` suspends here before its first list (a slow local read on a cold start). */
+    var liveGate: CompletableDeferred<Unit>? = null
     override fun live(source: FeedSource, limit: Int): Flow<List<Note>> = flow {
         liveCalls++
         seenSources += source
+        liveGate?.await()
         emit(of(source, current))
         liveUpdates.collect { emit(of(source, it)) }
     }
