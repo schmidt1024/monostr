@@ -11,6 +11,28 @@ class NoteLinksTest {
     private val npub = keys.publicKey().toBech32()
 
     @Test
+    fun `a long link is shown shortened and still opens in full`() {
+        val url = "https://codeberg.org/schmidt1024/monostr/releases/tag/v0.22.4"
+        assertEquals(listOf(NoteSpan.Url("codeberg.org/schmidt1024/monost…", url)), NoteLinks.annotate(url))
+        // up to 32 characters a link reads in full
+        assertEquals("en.wikipedia.org/wiki/Foo_(bar)", NoteLinks.shownUrl("https://en.wikipedia.org/wiki/Foo_(bar)"))
+        assertEquals("a.example/" + "b".repeat(22), NoteLinks.shownUrl("https://a.example/" + "b".repeat(22)))
+        assertEquals("a.example/" + "b".repeat(21) + "…", NoteLinks.shownUrl("https://a.example/" + "b".repeat(23)))
+    }
+
+    @Test
+    fun `shortening never hides the host`() {
+        // the host decides where a link goes: it is always shown in full, only the path is cut
+        val host = "paypal.com.login-verify-account.evil.example"
+        assertEquals("$host/…", NoteLinks.shownUrl("https://$host/signin"))
+        assertEquals(host, NoteLinks.shownUrl("https://$host"))
+        assertEquals("a.example:8443/" + "b".repeat(16) + "…", NoteLinks.shownUrl("https://a.example:8443/" + "b".repeat(30)))
+        // with a user part the text before "@" looks like a host: such a link is never cut
+        val tricky = "https://paypal.com@evil.example/" + "x".repeat(40)
+        assertEquals(tricky.removePrefix("https://"), NoteLinks.shownUrl(tricky))
+    }
+
+    @Test
     fun `hashtags end before punctuation and keep the text as written`() {
         assertEquals(
             listOf(NoteSpan.Plain("I love "), NoteSpan.Hashtag("#Monero", "monero"), NoteSpan.Plain(", really #1")),

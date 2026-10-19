@@ -1,5 +1,6 @@
 package com.monostr.nostr.repo
 
+import com.monostr.tips.RelayHosts
 import com.monostr.nostr.NostrEngine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -51,7 +52,7 @@ class NostrAuthorRelaysRepository(
         val list = event?.tags()?.toVec()?.map { it.asVec() }
             ?.filter { it.size >= 2 && it[0] == "r" && (it.getOrNull(2) == null || it[2] == "write") }
             ?.mapNotNull { runCatching { RelayUrl.parse(it[1].trim()) }.getOrNull()?.toString()?.trimEnd('/') }
-            ?.filter { it.startsWith("wss://") && it !in own }
+            ?.filter { RelayHosts.isPublicWss(it) && it !in own }
             ?.distinct()?.take(limit) ?: emptyList()
         mutex.withLock { cache[pubkey] = now() to list }
         return list

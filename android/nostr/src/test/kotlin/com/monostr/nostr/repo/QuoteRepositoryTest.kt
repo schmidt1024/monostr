@@ -26,7 +26,8 @@ class QuoteRepositoryTest {
     /** Real dispatcher: the load waits for a real loopback connection, virtual test time would skip it. */
     private val io = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private suspend fun engine() = NostrEngine.create(dir.resolve("lmdb").toString(), null, emptyList())
-    private fun repo(e: NostrEngine) = NostrQuoteRepository(e, scope = io, now = { time }, timeout = Duration.ofSeconds(3))
+    /** The test relays run on loopback, which the default filter refuses: these tests let every hint through. */
+    private fun repo(e: NostrEngine) = NostrQuoteRepository(e, scope = io, now = { time }, timeout = Duration.ofSeconds(3), relayFilter = { true })
     private fun note(text: String) = EventBuilder.textNote(text).signWithKeys(alice)
 
     @Test
@@ -52,6 +53,18 @@ class QuoteRepositoryTest {
             assertEquals("from the hint", (found as QuoteResult.Found).note.content)
             assertEquals(1, relay.requests.size)
             assertTrue(e.eventById(ev.id().toHex()) != null)
+            assertTrue(e.temporaryRelayUrls().isEmpty())
+            e.close()
+        }
+    }
+
+    @Test
+    fun `hints naming a loopback or lan relay are not contacted`() = runTest {
+        SilentWsRelay(answerEose = true).use { relay ->
+            val e = engine()
+            val r = NostrQuoteRepository(e, scope = io, now = { time }, timeout = Duration.ofSeconds(3))
+            assertEquals(QuoteResult.Missing, r.get("cd".repeat(32), listOf(relay.url, "wss://192.168.1.5", "ws://relay.example.com")))
+            assertEquals(0, relay.requests.size)
             assertTrue(e.temporaryRelayUrls().isEmpty())
             e.close()
         }

@@ -1,0 +1,5 @@
+• Başkalarının notlarında ve profillerinde adı geçen relay’ler ve watcher’lar yalnızca herkese açık sunucularsa kullanılır, yerel ağındaki adreslere asla bağlanılmaz
+• Watcher değiştirmek, böyle seçtiysen bahşiş tutarlarını herkese açık tutar; ikinci bir cihaz aynı seçimi gösterir
+• “Tutarları gizle” başarısız olursa artık bu gösteriliyor
+• Bahşiş tutarı dar ekranlarda büyük yazıyla da görünür kalıyor
+• Uzun bağlantılar kısaltılmış gösteriliyor

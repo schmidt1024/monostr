@@ -31,6 +31,12 @@ class WatcherProfileTest {
     }
 
     @Test
+    fun `lan and loopback relays are dropped`() {
+        assertEquals(WatcherProfile(hex, emptyList()), WatcherProfile.parse(hex, "wss://192.168.1.5"))
+        assertEquals(listOf("wss://1.example"), WatcherProfile.parse(nprofile("wss://umbrel.local", "wss://127.0.0.1:4848", "wss://1.example"))!!.relays)
+    }
+
+    @Test
     fun `relays are filtered to wss and capped at four`() {
         val p = WatcherProfile.parse(
             nprofile("ws://x.example", "wss://1.example", "wss://2.example", "wss://1.example", "wss://3.example", "wss://4.example", "wss://5.example"),

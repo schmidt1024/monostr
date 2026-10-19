@@ -5,7 +5,12 @@ import com.monostr.app.data.TipSettingsStore
 import com.monostr.nostr.repo.TipsRepository
 import com.monostr.tips.PaymentInfo
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 /**
  * The one-time question to recipients who set up before protocol 0.5: hide tip amounts? Asked only
@@ -49,5 +54,44 @@ class AmountsPrompt(
 
     companion object {
         const val HINT = "amounts_hidden_prompt"
+    }
+}
+
+/** What the dialog shows: [busy] while a "yes" is being published, [failed] when it reached no relay. */
+data class AmountsPromptState(val shown: Boolean = false, val busy: Boolean = false, val failed: Boolean = false)
+
+/** The dialog around [AmountsPrompt]: a "yes" keeps it open until a relay took it; a failed one stays open and says so. */
+class AmountsQuestion(private val prompt: AmountsPrompt, private val scope: CoroutineScope) {
+    private val _state = MutableStateFlow(AmountsPromptState())
+    val state: StateFlow<AmountsPromptState> = _state.asStateFlow()
+
+    suspend fun ask() {
+        if (prompt.shouldAsk()) _state.value = AmountsPromptState(shown = true)
+    }
+
+    /** Back or a tap outside: no answer, nothing stored; asked again next start. Ignored while a "yes" is being published. */
+    fun defer() {
+        if (!_state.value.busy) _state.value = AmountsPromptState()
+    }
+
+    fun answer(hide: Boolean) {
+        if (_state.value.busy) return
+        if (!hide) {
+            _state.value = AmountsPromptState()
+            scope.launch { settle(false) }
+            return
+        }
+        _state.value = AmountsPromptState(shown = true, busy = true)
+        scope.launch {
+            _state.value = if (settle(true)) AmountsPromptState() else AmountsPromptState(shown = true, failed = true)
+        }
+    }
+
+    private suspend fun settle(hide: Boolean): Boolean = try {
+        prompt.answer(hide)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        false
     }
 }

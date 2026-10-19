@@ -1,0 +1,5 @@
+• Relays and watchers named in other people's notes and profiles are only contacted when they are public servers, never addresses in your local network
+• Switching the watcher keeps tip amounts public if you chose that; a second device shows the same choice
+• A failed “hide amounts” answer now says so
+• The tip amount stays visible on narrow screens with large text
+• Long links are shown shortened

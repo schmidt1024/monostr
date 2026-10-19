@@ -17,12 +17,14 @@ sealed class Watcher {
 
         /**
          * Canonical `wss://host[:port][/path]`, or null for anything else (other schemes, userinfo,
-         * query, fragment, no host). The relays in a kind 10037 are attacker-controlled.
+         * query, fragment, no host) or a LAN/loopback host (see [RelayHosts]). The relays in a kind 10037
+         * are attacker-controlled.
          */
         fun normalizeRelay(url: String): String? {
             val uri = runCatching { URI(url.trim()) }.getOrNull() ?: return null
             if (!uri.scheme.equals("wss", ignoreCase = true)) return null
             val host = uri.host?.lowercase()?.takeIf { it.isNotEmpty() } ?: return null
+            if (!RelayHosts.isPublic(url.trim())) return null
             if (uri.rawUserInfo != null || uri.rawQuery != null || uri.rawFragment != null) return null
             val port = if (uri.port == -1) "" else ":${uri.port}"
             val path = uri.rawPath.orEmpty().trimEnd('/')

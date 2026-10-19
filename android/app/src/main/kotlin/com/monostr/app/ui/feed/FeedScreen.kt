@@ -235,14 +235,32 @@ fun FeedScreen(
         }
     }
     TipSheetHost(vm.tipSheet)
-    if (amountsPrompt) {
+    if (amountsPrompt.shown) {
         // back or a tap outside is no answer: the question comes again next start
         AlertDialog(
             onDismissRequest = vm::deferAmountsPrompt,
             title = { Text(stringResource(R.string.amounts_prompt_title)) },
-            text = { Text(stringResource(R.string.amounts_prompt_text)) },
-            confirmButton = { TextButton(onClick = { vm.answerAmountsPrompt(true) }, modifier = Modifier.testTag("amounts-prompt-yes")) { Text(stringResource(R.string.amounts_prompt_yes)) } },
-            dismissButton = { TextButton(onClick = { vm.answerAmountsPrompt(false) }, modifier = Modifier.testTag("amounts-prompt-no")) { Text(stringResource(R.string.amounts_prompt_no)) } },
+            text = {
+                Column {
+                    Text(stringResource(R.string.amounts_prompt_text))
+                    if (amountsPrompt.failed) {
+                        Text(
+                            stringResource(R.string.setup_err_not_published), color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(top = 8.dp).testTag("amounts-prompt-error"),
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { vm.answerAmountsPrompt(true) }, enabled = !amountsPrompt.busy, modifier = Modifier.testTag("amounts-prompt-yes")) {
+                    Text(stringResource(R.string.amounts_prompt_yes))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { vm.answerAmountsPrompt(false) }, enabled = !amountsPrompt.busy, modifier = Modifier.testTag("amounts-prompt-no")) {
+                    Text(stringResource(R.string.amounts_prompt_no))
+                }
+            },
         )
     }
     tippersFor?.let { TippersDialog(it, load = vm.decorations::tippers, onDismiss = { tippersFor = null }) }

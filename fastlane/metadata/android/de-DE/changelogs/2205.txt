@@ -1,0 +1,5 @@
+• Relays und Watcher aus Notes und Profilen anderer werden nur noch kontaktiert, wenn es öffentliche Server sind, nie Adressen in deinem lokalen Netz
+• Ein Watcher-Wechsel lässt die Tip-Beträge öffentlich, wenn du das gewählt hast; ein zweites Gerät zeigt dieselbe Wahl
+• Schlägt «Beträge verbergen» fehl, steht das jetzt da
+• Der Tip-Betrag bleibt auf schmalen Bildschirmen mit grosser Schrift sichtbar
+• Lange Links werden gekürzt angezeigt

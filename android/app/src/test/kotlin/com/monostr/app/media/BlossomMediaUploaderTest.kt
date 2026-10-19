@@ -32,7 +32,8 @@ class BlossomMediaUploaderTest {
     private val signer = FakeSigner()
     private val hash = "a".repeat(64)
     private val settings = FakeUiSettings()
-    private val prepared = ArrayList<String>()
+    // two uploads at once prepare on two IO threads
+    private val prepared: MutableList<String> = java.util.Collections.synchronizedList(ArrayList())
     private val preparer = PicturePreparer { source, target ->
         prepared += "$target:$source"
         PreparedImage(byteArrayOf(1, 2, 3), "image/jpeg", 400, 300, hash, "LNM}7u}qfQ}q")

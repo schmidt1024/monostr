@@ -1,0 +1,5 @@
+• Los relays y watchers indicados en notas y perfiles de otros solo se contactan si son servidores públicos, nunca direcciones de tu red local
+• Cambiar de watcher mantiene públicos los importes de las propinas si así lo elegiste; un segundo dispositivo muestra la misma elección
+• Si «ocultar importes» falla, ahora se indica
+• El importe de la propina sigue visible en pantallas estrechas con texto grande
+• Los enlaces largos se muestran acortados

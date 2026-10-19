@@ -1,5 +1,7 @@
 package com.monostr.app.ui.settings
 
+import kotlinx.coroutines.flow.first
+import com.monostr.app.ui.tips.watcher
 import com.monostr.app.data.AmountUnit
 import kotlinx.coroutines.flow.combine
 import com.monostr.app.R
@@ -80,6 +82,7 @@ class MoneroSettingsController(
     private var statusJob: Job? = null
     private var supportJob: Job? = null
     private val visibility = AmountsVisibility(tips, gateway, settings)
+    private var followed = false
 
     private val _state = MutableStateFlow(MoneroSettingsState())
     val state: StateFlow<MoneroSettingsState> = _state.asStateFlow()
@@ -99,6 +102,8 @@ class MoneroSettingsController(
                     val ok = visibility.supported(s)
                     _state.update { it.copy(amountsSupported = ok) }
                 }
+                // once per screen: a choice made here afterwards is not checked against (maybe stale) relays again
+                if (s != null && selfPubkey != null && !followed) { followed = true; launch { followAnnounced(selfPubkey, s) } }
                 if (s != null && s.isPersonal) {
                     statusJob = launch {
                         val st = try {
@@ -126,6 +131,21 @@ class MoneroSettingsController(
         (selfPubkey != null && st.recipient != selfPubkey) || st.address.encode() != setup.address -> PersonalWatcherLine.Mismatch
         st.isOnline(now()) -> PersonalWatcherLine.Online
         else -> PersonalWatcherLine.Offline(st.createdAt)
+    }
+
+    /** Another device may have switched the amounts: the announced payment info wins when it names this address and watcher. */
+    private suspend fun followAnnounced(pubkey: String, s: MoneroSetup) {
+        val info = try {
+            tips.paymentInfo(pubkey, maxAgeSeconds = 0) as? PaymentInfo.Enabled
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        } ?: return
+        if (info.address.encode() != s.address || info.watcher != s.watcher() || info.amountsHidden == s.amountsHidden) return
+        // the setup changed while the relays answered (a switch here, a new setup): that is newer than the lookup
+        if (settings.setup.first() != s) return
+        settings.setSetup(s.copy(amountsHidden = info.amountsHidden))
     }
 
     /** Unreachable relays count as nothing announced: the row then says "not set up", as before. */

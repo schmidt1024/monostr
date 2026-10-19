@@ -22,11 +22,24 @@ object NoteLinks {
             "|${HashtagTags.HASHTAG}", // the hashtags a published note tags (`t`) are exactly the ones shown as links
     )
 
-    /** How a link reads (user 2026-10-11, like X): no scheme, no "www.", no slash that only ends the host. */
+    /**
+     * How a link reads (user 2026-10-11, like X): no scheme, no "www.", no slash that only ends the
+     * host; longer than [MAX_SHOWN] the path is cut with "…" (user 2026-10-19: no links over several
+     * lines). The host is never cut, it decides where the link goes; a link with a user part
+     * ("paypal.com@evil.example") is never cut at all. A tap still opens the full URL.
+     */
     fun shownUrl(url: String): String {
         val bare = url.replaceFirst(SCHEME, "").removePrefix("www.")
-        return if (bare.indexOf('/') == bare.length - 1) bare.dropLast(1) else bare
+        val shown = if (bare.indexOf('/') == bare.length - 1) bare.dropLast(1) else bare
+        if (shown.length <= MAX_SHOWN) return shown
+        val hostEnd = shown.indexOfFirst { it == '/' || it == '?' || it == '#' }.let { if (it < 0) shown.length else it }
+        if ('@' in shown.substring(0, hostEnd)) return shown
+        if (hostEnd == shown.length) return shown
+        val budget = MAX_SHOWN - 1 - hostEnd
+        return if (budget <= 1) shown.substring(0, hostEnd + 1) + "…" else shown.take(hostEnd + budget) + "…"
     }
+
+    const val MAX_SHOWN = 32
 
     private val SCHEME = Regex("^https?://", RegexOption.IGNORE_CASE) // regex
 

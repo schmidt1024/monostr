@@ -99,7 +99,7 @@ class ActionRowScaleTest {
     fun allActionsVisibleInsideTheDetailCardAtLargeFont() {
         // The detail card spreads the row over the full inner width. At 412 dp (a common phone width, 380 dp inside the
         // padding) ~140 dp are left over after five 48 dp icons, enough for "2.5 XMR · 3" at 1.3x, which shows in full
-        // on a single line. (At 360 dp only ~88 dp remain and the unit label makes the chip collapse to the count.)
+        // on a single line. (At 360 dp only ~88 dp remain: the chip then drops the unit label, see detailCardAt360KeepsTheAmountWithoutUnit.)
         val total = 2_500_000_000_000L
         val count = 3
         val rowWidth = 412.dp - 32.dp
@@ -114,6 +114,27 @@ class ActionRowScaleTest {
         val expectedFull = InstrumentationRegistry.getInstrumentation().targetContext
             .getString(R.string.note_tips_chip, Presets.withUnit(total, AmountUnit.XMR), count)
         rule.onNodeWithTag("note-tips-$id8").assertTextEquals(expectedFull)
+    }
+
+    @Test
+    fun detailCardAt360KeepsTheAmountWithoutUnit() {
+        // At 360 dp the spread row has ~88 dp for the tips text: "2.5 XMR · 3" does not fit at 1.3x, "2.5 · 3" does,
+        // so the chip drops the unit label before it drops the amount.
+        val total = 2_500_000_000_000L
+        val count = 3
+        val rowWidth = 360.dp - 32.dp
+        setRow(rowWidth, TipSummary(total, count, emptyList()), spread = true)
+        assertFiveActionsInside(rowWidth)
+        val expected = InstrumentationRegistry.getInstrumentation().targetContext
+            .getString(R.string.note_tips_chip, Presets.format(total, AmountUnit.XMR), count)
+        rule.waitUntil(5_000) {
+            try {
+                rule.onNodeWithTag("note-tips-$id8").assertTextEquals(expected)
+                true
+            } catch (e: AssertionError) {
+                false
+            }
+        }
     }
 
     @Test

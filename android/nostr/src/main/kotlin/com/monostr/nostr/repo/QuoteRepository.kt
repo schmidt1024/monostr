@@ -1,5 +1,6 @@
 package com.monostr.nostr.repo
 
+import com.monostr.tips.RelayHosts
 import com.monostr.nostr.NostrEngine
 import com.monostr.nostr.model.Note
 import com.monostr.nostr.model.NoteMapper
@@ -41,6 +42,8 @@ class NostrQuoteRepository(
     private val timeout: Duration = Duration.ofSeconds(5),
     private val capacity: Int = 200,
     private val missingSeconds: Long = 600,
+    /** Hints come from other people's notes: only public wss relays are contacted. */
+    private val relayFilter: (String) -> Boolean = RelayHosts::isPublicWss,
 ) : QuoteRepository {
     private val lock = Any()
     private val found = object : LinkedHashMap<String, Note>(16, 0.75f, true) {
@@ -94,7 +97,7 @@ class NostrQuoteRepository(
     private suspend fun lookup(id: String, hints: List<String>): QuoteResult {
         local(id)?.let { return QuoteResult.Found(it) }
         loadCount.incrementAndGet()
-        val held = engine.attachTemporary(hints.take(MAX_HINTS))
+        val held = engine.attachTemporary(hints.filter(relayFilter).take(MAX_HINTS))
         try {
             if (held.isNotEmpty()) {
                 withTimeoutOrNull(CONNECT_WAIT_MS) { while (!engine.connectedRelayUrls().containsAll(held)) delay(50) }

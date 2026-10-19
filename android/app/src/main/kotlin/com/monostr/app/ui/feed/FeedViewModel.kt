@@ -32,6 +32,8 @@ import com.monostr.app.ui.common.noteMenu
 import com.monostr.app.ui.common.uiText
 import com.monostr.app.ui.notifications.Unread
 import com.monostr.app.ui.tips.AmountsPrompt
+import com.monostr.app.ui.tips.AmountsPromptState
+import com.monostr.app.ui.tips.AmountsQuestion
 import com.monostr.app.ui.tips.AmountsVisibility
 import com.monostr.app.ui.tips.TipDecorations
 import com.monostr.app.ui.tips.TipSheetFactory
@@ -441,29 +443,26 @@ class FeedViewModel @Inject constructor(session: NostrSession, private val facto
         viewModelScope.launch { runCatching { hints.setSupportHintDone(ready.pubkey) } }
     }
 
-    private val amountsPromptLogic = AmountsPrompt(settings, ready.tips, hints, AmountsVisibility(ready.tips, ready.watchers, settings), ready.pubkey)
-    private val _amountsPrompt = MutableStateFlow(false)
+    private val amountsQuestion = AmountsQuestion(
+        AmountsPrompt(settings, ready.tips, hints, AmountsVisibility(ready.tips, ready.watchers, settings), ready.pubkey), viewModelScope,
+    )
 
     /** The one-time "hide tip amounts?" question, decided once per start after the feed loaded; never while a tip sheet is open. */
-    val amountsPrompt: StateFlow<Boolean> = combine(_amountsPrompt, tipSheet.state) { ask, sheet -> ask && sheet.target == null }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+    val amountsPrompt: StateFlow<AmountsPromptState> = combine(amountsQuestion.state, tipSheet.state) { q, sheet ->
+        if (sheet.target == null) q else q.copy(shown = false)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AmountsPromptState())
 
     /** Back or a tap outside: no answer, nothing stored; asked again next start. */
-    fun deferAmountsPrompt() {
-        _amountsPrompt.value = false
-    }
+    fun deferAmountsPrompt() = amountsQuestion.defer()
 
-    fun answerAmountsPrompt(hide: Boolean) {
-        _amountsPrompt.value = false
-        viewModelScope.launch { runCatching { amountsPromptLogic.answer(hide) } }
-    }
+    fun answerAmountsPrompt(hide: Boolean) = amountsQuestion.answer(hide)
 
     init {
         tabs.start()
         viewModelScope.launch {
             controller.start()
             controller.state.first { !it.loading }
-            _amountsPrompt.value = amountsPromptLogic.shouldAsk()
+            amountsQuestion.ask()
         }
         viewModelScope.launch {
             try {

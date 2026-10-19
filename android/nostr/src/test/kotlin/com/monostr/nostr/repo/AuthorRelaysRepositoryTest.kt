@@ -25,6 +25,8 @@ class AuthorRelaysRepositoryTest {
         e.save(relayList(
             listOf("r", "wss://mine.example"),
             listOf("r", "wss://read.example", "read"),
+            listOf("r", "wss://192.168.0.2", "write"),
+            listOf("r", "wss://localhost:7777"),
             listOf("r", "wss://w1.example/", "write"),
             listOf("r", "wss://w2.example"),
             listOf("r", "wss://w3.example", "write"),

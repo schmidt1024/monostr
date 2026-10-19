@@ -1,5 +1,6 @@
 package com.monostr.app.session
 
+import com.monostr.tips.RelayHosts
 import com.monostr.app.data.linkpreview.LinkPreviews
 import com.monostr.nostr.repo.NostrOwnReactions
 import com.monostr.nostr.repo.OwnReactions
@@ -605,7 +606,8 @@ class NostrSession @Inject constructor(
      */
     suspend fun ensureRelays(extra: List<String>) {
         val current = relayStore.relays.first()
-        val wanted = (current + extra.map { it.trim().trimEnd('/') }.filter { isValidRelayUrl(it) }).distinct()
+        // the watcher names these relays, not the user: only public wss ones join the user's list
+        val wanted = (current + extra.map { it.trim().trimEnd('/') }.filter { isValidRelayUrl(it) && RelayHosts.isPublicWss(it) }).distinct()
         if (wanted != current) applyRelays(wanted)
         val ready = (_state.value as? SessionState.Active)?.ready ?: return
         if (ready.engine.ownRelayList() == null) runCatching { ready.publish.relayList(wanted) }

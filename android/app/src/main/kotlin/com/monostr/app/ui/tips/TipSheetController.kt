@@ -1,5 +1,7 @@
 package com.monostr.app.ui.tips
 
+import com.monostr.app.BuildConfig
+import com.monostr.tips.RelayHosts
 import com.monostr.app.data.AmountUnit
 import com.monostr.app.R
 import com.monostr.app.data.PendingTip
@@ -72,6 +74,8 @@ class TipSheetController(
     private val settings: TipSettingsStore,
     private val pending: PendingTipStore,
     private val scope: CoroutineScope,
+    /** The recipient names the watcher URL: a LAN or loopback one is never asked (debug builds allow it for local test watchers). */
+    private val watcherAllowed: (String) -> Boolean = { BuildConfig.DEBUG || RelayHosts.isPublic(it) },
     private val now: () -> Long = { System.currentTimeMillis() / 1000 },
 ) {
     private val _state = MutableStateFlow(TipSheetState())
@@ -192,8 +196,8 @@ class TipSheetController(
     /** Spec 0.4 §4.2: a personal watcher's relays are in its tag, no `/v1/info`; an HTTP watcher is asked, empty when it does not answer in time. */
     private suspend fun watcherRelays(info: PaymentInfo.Enabled): List<String> = when (val w = info.watcher) {
         is Watcher.Personal -> w.relays
-        is Watcher.Http -> try {
-            withTimeoutOrNull(WATCHER_TIMEOUT_MS) { watchers.info(w.url).relays } ?: emptyList()
+        is Watcher.Http -> if (!watcherAllowed(w.url)) emptyList() else try {
+            withTimeoutOrNull(WATCHER_TIMEOUT_MS) { watchers.info(w.url).relays.filter(RelayHosts::isPublicWss) } ?: emptyList()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

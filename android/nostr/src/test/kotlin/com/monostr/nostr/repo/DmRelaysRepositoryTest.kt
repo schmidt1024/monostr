@@ -26,7 +26,7 @@ class DmRelaysRepositoryTest {
     @Test
     fun `peer with a kind 10050 list gets those relays plus the fallback, capped at four`() = runTest {
         val e = engine()
-        e.save(list(bob, 10050u, "relay", "wss://a.example", "wss://b.example/", "ws://plain.example", "wss://c.example", "wss://d.example"))
+        e.save(list(bob, 10050u, "relay", "wss://10.0.0.7", "wss://a.example", "wss://nas.local", "wss://b.example/", "ws://plain.example", "wss://c.example", "wss://d.example"))
         val repo = NostrDmRelaysRepository(e, NostrAuthorRelaysRepository(e, indexers = emptyList()), indexers = emptyList(), now = { 1000 })
         assertEquals(listOf("wss://a.example", "wss://b.example", "wss://c.example", DmRelaysRepository.FALLBACK), repo.dmRelays(bob.publicKey().toHex()))
         e.close()

@@ -440,7 +440,7 @@ class MoneroSetupController(
         scope.launch {
             try {
                 val old = existing
-                val hidden = ProtocolVersion.supportsHiddenAmounts(status.protocol)
+                val hidden = hidesAmounts(status.protocol)
                 if (!tips.publishPaymentInfo(status.address, Watcher.Personal(profile.pubkey, profile.relays), hidden).sentToAny) throw SetupFailure(ERR_NOT_PUBLISHED)
                 settings.setSetup(MoneroSetup(status.address.encode(), "", profile.pubkey, NetworkTag.toTag(status.network ?: return@launch), now(), profile.relays, hidden))
                 settings.setOnboardingSeen()
@@ -498,7 +498,7 @@ class MoneroSetupController(
         val address = pendingAddress ?: return
         val viewKey = pendingViewKey ?: return
         val loaded = info ?: return
-        val hidden = ProtocolVersion.supportsHiddenAmounts(loaded.protocol)
+        val hidden = hidesAmounts(loaded.protocol)
         _state.update { it.copy(step = SetupStep.Registering, error = null) }
         scope.launch {
             try {
@@ -592,7 +592,11 @@ class MoneroSetupController(
     }
 
     /** Whether the loaded HTTP watcher speaks protocol 0.5: the payment info then hides tip amounts. */
-    private fun hidesAmounts(): Boolean = ProtocolVersion.supportsHiddenAmounts(info?.protocol)
+    private fun hidesAmounts(): Boolean = hidesAmounts(info?.protocol)
+
+    /** A 0.5 watcher hides amounts by default; a setup the user made public stays public across a watcher switch. */
+    private fun hidesAmounts(protocol: String?): Boolean =
+        ProtocolVersion.supportsHiddenAmounts(protocol) && (existing?.amountsHidden ?: true)
 
     private fun fail(text: UiText) = _state.update { it.copy(error = text) }
 

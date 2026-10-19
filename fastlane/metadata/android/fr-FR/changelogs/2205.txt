@@ -1,0 +1,5 @@
+• Les relais et watchers indiqués dans les notes et profils des autres ne sont contactés que s’il s’agit de serveurs publics, jamais d’adresses de votre réseau local
+• Changer de watcher garde les montants des pourboires publics si vous l’avez choisi ; un second appareil affiche le même choix
+• Si « masquer les montants » échoue, c’est maintenant indiqué
+• Le montant du pourboire reste visible sur les écrans étroits avec un grand texte
+• Les liens longs sont raccourcis

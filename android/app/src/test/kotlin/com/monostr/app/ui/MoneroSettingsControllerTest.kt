@@ -256,6 +256,54 @@ class MoneroSettingsControllerTest {
     private val httpSetup = MoneroSetup(MoneroKeys.generate().address(Network.MAINNET).encode(), "https://w.example", "c".repeat(64), "mainnet", 1)
     private val v05 = com.monostr.tips.watcher.WatcherInfo("c".repeat(64), listOf("wss://r"), "mainnet", 1, "t", "0.5")
 
+    private fun announced(setup: MoneroSetup, hidden: Boolean, address: String = setup.address) =
+        PaymentInfo.Enabled(com.monostr.monero.Address.parse(address), Watcher.Http(setup.watcherUrl, setup.watcherPubkey), amountsHidden = hidden)
+
+    @Test
+    fun `the switch follows amounts another device published for the same address and watcher`() = runTest {
+        val local = httpSetup.copy(amountsHidden = true)
+        val settings = FakeTipSettings(setup = local)
+        val tips = FakeTips().apply { liveInfos = mapOf(self to announced(local, hidden = false)) }
+        val c = MoneroSettingsController(settings, FakeSecrets(), tips, FakeWatcherGateway(info = v05), { true }, eager(), selfPubkey = self)
+        c.start()
+        advanceUntilIdle()
+        assertFalse(settings.setupState.value!!.amountsHidden)
+        assertFalse(c.state.value.setup!!.amountsHidden)
+        assertTrue(tips.publishedInfos.isEmpty(), "following is not a new publish")
+    }
+
+    @Test
+    fun `a late announcement never undoes a choice made here meanwhile`() = runTest {
+        val local = httpSetup.copy(amountsHidden = true)
+        val settings = FakeTipSettings(setup = local)
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        // a relay that still has the old announcement: hidden
+        val tips = FakeTips().apply { liveInfos = mapOf(self to announced(local, hidden = true)); liveGate = gate }
+        val c = MoneroSettingsController(settings, FakeSecrets(), tips, FakeWatcherGateway(info = v05), { true }, eager(), selfPubkey = self)
+        c.start()
+        advanceUntilIdle()
+        c.setAmountsPublic(true)
+        advanceUntilIdle()
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertFalse(settings.setupState.value!!.amountsHidden, "the user's choice stands")
+        assertEquals(1, tips.liveCalls, "a choice made here is not checked against the relays again")
+    }
+
+    @Test
+    fun `an announcement for another address or nothing announced leaves the local switch`() = runTest {
+        val local = httpSetup.copy(amountsHidden = true)
+        val other = MoneroKeys.generate().address(Network.MAINNET).encode()
+        for (live in listOf(mapOf(self to announced(local, hidden = false, address = other)), emptyMap())) {
+            val settings = FakeTipSettings(setup = local)
+            val tips = FakeTips().apply { liveInfos = live }
+            val c = MoneroSettingsController(settings, FakeSecrets(), tips, FakeWatcherGateway(info = v05), { true }, eager(), selfPubkey = self)
+            c.start()
+            advanceUntilIdle()
+            assertTrue(settings.setupState.value!!.amountsHidden, "live $live")
+        }
+    }
+
     @Test
     fun `switch republishes and stores`() = runTest {
         val settings = FakeTipSettings(setup = httpSetup)

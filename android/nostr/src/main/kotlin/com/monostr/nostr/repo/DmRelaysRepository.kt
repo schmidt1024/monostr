@@ -1,5 +1,6 @@
 package com.monostr.nostr.repo
 
+import com.monostr.tips.RelayHosts
 import com.monostr.nostr.NostrEngine
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
@@ -100,7 +101,7 @@ class NostrDmRelaysRepository(
         val urls = event?.tags()?.toVec()?.map { it.asVec() }
             ?.filter { it.size >= 2 && it[0] == "relay" }
             ?.mapNotNull { runCatching { RelayUrl.parse(it[1].trim()) }.getOrNull()?.toString()?.trimEnd('/') }
-            ?.filter { it.startsWith("wss://") }?.distinct() ?: return null
+            ?.filter { RelayHosts.isPublicWss(it) }?.distinct() ?: return null
         return urls
     }
 }

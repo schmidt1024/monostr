@@ -621,6 +621,36 @@ class MoneroSetupControllerTest {
         assertTrue(rig.settings.setupState.value!!.amountsHidden)
     }
 
+    @Test
+    fun `switching to a 0_5 http watcher keeps amounts public when the user chose so`() = runTest {
+        val wallet = MoneroKeys.generate()
+        val address = wallet.address(Network.MAINNET)
+        val rig = Rig(
+            FakeWatcherGateway(info = WatcherInfo(watcherPk, listOf("wss://watcher-relay.example"), "mainnet", 3_000_000, "test", protocol = "0.5")),
+            settings = FakeTipSettings(setup = MoneroSetup(address.encode(), "https://old.example", "e".repeat(64), "mainnet", 1, amountsHidden = false)),
+        )
+        rig.secrets.put(KeystoreSecretStore.SECRET_VIEW_KEY, wallet.viewSecret.toHex())
+        val c = controller(rig)
+        c.loadDefaultWatcher(); advanceUntilIdle()
+        c.reuseStored()
+        assertEquals(false, (c.state.value.step as SetupStep.Confirm).amountsHidden)
+        c.confirm(); advanceUntilIdle()
+        assertFalse(rig.tips.publishedInfos.last().third)
+        assertFalse(rig.settings.setupState.value!!.amountsHidden)
+    }
+
+    @Test
+    fun `switching to a 0_5 personal watcher keeps amounts public when the user chose so`() = runTest {
+        val rig = Rig(settings = FakeTipSettings(setup = MoneroSetup(personalAddress.encode(), "https://old.example", "e".repeat(64), "mainnet", 1, amountsHidden = false)))
+        rig.tips.statuses[watcherHex] = status().copy(protocol = "0.5")
+        val c = controller(rig)
+        loadPersonal(c, nprofile("wss://w.example"))
+        c.confirmPersonal(); advanceUntilIdle()
+        assertFalse((c.state.value.step as SetupStep.Done).amountsHidden)
+        assertFalse(rig.tips.publishedInfos.last().third)
+        assertFalse(rig.settings.setupState.value!!.amountsHidden)
+    }
+
     private fun TestScope.pathA(rig: Rig): SetupStep.Done {
         val c = controller(rig)
         c.loadDefaultWatcher(); advanceUntilIdle()

@@ -140,6 +140,7 @@ class PaymentInfoTest {
         assertThrows(IllegalArgumentException::class.java) { PaymentInfo.build(a, Watcher.Personal(watcherPubkey, emptyList()), 1) }
         assertThrows(IllegalArgumentException::class.java) { PaymentInfo.build(a, Watcher.Personal(watcherPubkey, List(5) { "wss://r$it.example" }), 1) }
         assertThrows(IllegalArgumentException::class.java) { PaymentInfo.build(a, Watcher.Personal(watcherPubkey, listOf("ws://r.example")), 1) }
+        assertThrows(IllegalArgumentException::class.java) { PaymentInfo.build(a, Watcher.Personal(watcherPubkey, listOf("wss://192.168.1.5")), 1) }
     }
 
     @Test
@@ -153,6 +154,9 @@ class PaymentInfoTest {
             listOf("watcher", watcherPubkey, "wss://r.example?x=1"),
             listOf("watcher", watcherPubkey, "wss://r.example#f"),
             listOf("watcher", watcherPubkey, "wss://"),
+            listOf("watcher", watcherPubkey, "wss://10.0.0.2"),
+            listOf("watcher", watcherPubkey, "wss://umbrel.local"),
+            listOf("watcher", watcherPubkey, relay, "wss://[::1]"),
             listOf("watcher", watcherPubkey.uppercase(), relay),
         )
         for (w in bad) {

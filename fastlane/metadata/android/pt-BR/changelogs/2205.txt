@@ -1,0 +1,5 @@
+• Relays e watchers indicados em notas e perfis de outras pessoas só são contatados se forem servidores públicos, nunca endereços da sua rede local
+• Trocar de watcher mantém os valores das gorjetas públicos se você escolheu assim; um segundo aparelho mostra a mesma escolha
+• Se “ocultar valores” falhar, agora isso é mostrado
+• O valor da gorjeta continua visível em telas estreitas com texto grande
+• Links longos aparecem encurtados

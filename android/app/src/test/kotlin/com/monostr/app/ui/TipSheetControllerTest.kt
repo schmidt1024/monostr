@@ -1,4 +1,6 @@
 package com.monostr.app.ui
+import com.monostr.tips.watcher.WatcherInfo
+import com.monostr.tips.RelayHosts
 import com.monostr.app.ui.common.uiText
 import com.monostr.app.R
 
@@ -52,6 +54,31 @@ class TipSheetControllerTest {
 
     private fun TestScope.controller(rig: Rig) =
         TipSheetController(rig.tips, rig.gateway, rig.settings, rig.pending, eager()) { 5_000 }
+
+    @Test
+    fun `a watcher on a lan address is never asked and its relays are not used`() = runTest {
+        val lan = PaymentInfo.Enabled(aliceAddress, Watcher.Http("https://192.168.1.10:8080", watcherPk))
+        val rig = Rig(FakeTips(infos = mapOf(alice to lan)))
+        val c = TipSheetController(rig.tips, rig.gateway, rig.settings, rig.pending, eager(), now = { 5_000 }, watcherAllowed = RelayHosts::isPublic)
+        c.open(n)
+        c.setCustom("0,005")
+        c.send()
+        advanceUntilIdle()
+        assertEquals(0, rig.gateway.infoCalls)
+        assertEquals(listOf(emptyList<String>()), rig.tips.sentWatcherRelays)
+    }
+
+    @Test
+    fun `lan relays a public watcher names are left out`() = runTest {
+        val rig = Rig(FakeTips(infos = mapOf(alice to enabled)))
+        rig.gateway.info = WatcherInfo(watcherPk, listOf("wss://10.0.0.3", "wss://watcher-relay.example", "ws://plain.example"), "mainnet", 3_000_000, "test")
+        val c = controller(rig)
+        c.open(n)
+        c.setCustom("0,005")
+        c.send()
+        advanceUntilIdle()
+        assertEquals(listOf(listOf("wss://watcher-relay.example")), rig.tips.sentWatcherRelays)
+    }
 
     @Test
     fun `open loads presets and the recipient's payment info`() = runTest {

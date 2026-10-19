@@ -1,5 +1,13 @@
 package com.monostr.app.ui
 
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.CoroutineScope
+import com.monostr.app.ui.tips.AmountsPromptState
+import com.monostr.app.ui.tips.AmountsQuestion
 import com.monostr.app.data.HintStore
 import com.monostr.app.data.MoneroSetup
 import com.monostr.app.ui.tips.AmountsPrompt
@@ -19,6 +27,7 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class AmountsPromptTest {
     private val me = "a".repeat(64)
     private val watcherPk = "c".repeat(64)
@@ -121,6 +130,43 @@ class AmountsPromptTest {
         val e = env()
         assertTrue(e.prompt.answer(false))
         assertTrue(e.tips.publishedInfos.isEmpty())
+        assertTrue(e.dismissed)
+    }
+
+    private fun TestScope.question(e: Env) = AmountsQuestion(e.prompt, CoroutineScope(SupervisorJob() + StandardTestDispatcher(testScheduler)))
+
+    @Test
+    fun `a failed yes keeps the question open and says so`() = runTest {
+        val e = env(relaysOk = false)
+        val q = question(e)
+        q.ask(); advanceUntilIdle()
+        assertEquals(AmountsPromptState(shown = true), q.state.value)
+        q.answer(true)
+        assertEquals(AmountsPromptState(shown = true, busy = true), q.state.value)
+        q.defer()
+        assertEquals(AmountsPromptState(shown = true, busy = true), q.state.value, "no dismiss while busy")
+        advanceUntilIdle()
+        assertEquals(AmountsPromptState(shown = true, failed = true), q.state.value)
+    }
+
+    @Test
+    fun `a yes that reached a relay closes the question`() = runTest {
+        val e = env()
+        val q = question(e)
+        q.ask(); advanceUntilIdle()
+        q.answer(true); advanceUntilIdle()
+        assertEquals(AmountsPromptState(), q.state.value)
+        assertTrue(e.settings.setupState.value!!.amountsHidden)
+    }
+
+    @Test
+    fun `no closes at once`() = runTest {
+        val e = env()
+        val q = question(e)
+        q.ask(); advanceUntilIdle()
+        q.answer(false)
+        assertEquals(AmountsPromptState(), q.state.value)
+        advanceUntilIdle()
         assertTrue(e.dismissed)
     }
 

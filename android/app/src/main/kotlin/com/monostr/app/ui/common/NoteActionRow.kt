@@ -48,6 +48,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -140,19 +141,25 @@ fun NoteActionRow(
             )
             note.tips?.takeIf { it.count > 0 }?.let { t ->
                 val openTippers = stringResource(R.string.note_tips_open)
-                var compact by remember(t) { mutableStateOf(false) }
+                // 0 = amount with unit · count, 1 = amount · count, 2 = count only; each overflow steps down once
+                var level by remember(t) { mutableIntStateOf(0) }
+                val unit = LocalAmountUnit.current
                 // The tips text is its own 48 dp target (it opens the tippers). minimumInteractiveComponentSize()
                 // centres a short count in it, which put a lone "1" ~30 dp off the Monero glyph; the text is
                 // shifted left by that centring plus TIP_COUNT_PULL, so it starts 4 dp after the glyph like a count.
                 val density = LocalDensity.current
                 var centring by remember(t) { mutableStateOf(0.dp) }
                 Text(
-                    text = if (compact || !t.amountsKnown) t.count.toString() else stringResource(R.string.note_tips_chip, Presets.withUnit(t.total, LocalAmountUnit.current), t.count),
+                    text = when {
+                        !t.amountsKnown || level >= 2 -> t.count.toString()
+                        level == 1 -> stringResource(R.string.note_tips_chip, Presets.format(t.total, unit), t.count)
+                        else -> stringResource(R.string.note_tips_chip, Presets.withUnit(t.total, unit), t.count)
+                    },
                     style = MaterialTheme.typography.labelSmall, fontFamily = MonostrFonts.mono,
                     color = if (note.tipped) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis,
                     onTextLayout = {
-                        if (it.hasVisualOverflow && !compact) compact = true
+                        if (it.hasVisualOverflow && level < 2) level++
                         val width = with(density) { it.size.width.toDp() }
                         centring = ((48.dp - width - 12.dp) / 2).coerceAtLeast(0.dp)
                     },

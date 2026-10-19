@@ -1,0 +1,5 @@
+• Relay e watcher indicati nelle note e nei profili altrui vengono contattati solo se sono server pubblici, mai indirizzi della tua rete locale
+• Cambiare watcher mantiene pubblici gli importi delle mance se l’hai scelto; un secondo dispositivo mostra la stessa scelta
+• Se «nascondi importi» non riesce, ora viene indicato
+• L’importo della mancia resta visibile su schermi stretti con testo grande
+• I link lunghi sono mostrati accorciati
