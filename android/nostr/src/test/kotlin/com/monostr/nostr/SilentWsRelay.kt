@@ -10,7 +10,7 @@ import kotlin.concurrent.thread
  * for rust-nostr to report the relay CONNECTED without any network. It never answers a REQ, unless
  * [answerEose] is set: then every REQ gets an immediate EOSE (an empty relay), and/or [closeWith] is
  * set: then every REQ is refused with `["CLOSED", id, closeWith]` (sent before the EOSE when both are set). With [acceptEvents] every EVENT
- * gets `["OK", id, true, ""]`. [serve]: every REQ gets these events, then EOSE; [requests] records every REQ.
+ * gets `["OK", id, true, ""]`. [serve]: every REQ gets these events, then EOSE; [requests] records every REQ (on a relay that answers nothing only with [recordRequests]).
  * With [rejectEvents] every EVENT gets `["OK", id, false, …]`; [events] records every EVENT frame.
  * With [authChallenge] the relay sends `["AUTH", challenge]` on connect and answers every AUTH event with OK; [auths] records them.
  * [authOkDelayMs] delays that OK, [answerAuth] = false never sends it. With [refuseUntilAuth] (strfry's behaviour) every REQ
@@ -36,10 +36,12 @@ class SilentWsRelay(
     private val handshakeDelayMs: Long = 0,
     /** Every COUNT gets `["COUNT", id, {"count": countWith}]` (NIP-45); null: a COUNT is refused with CLOSED "unsupported". */
     private val countWith: Long? = null,
+    /** Records every REQ in [requests] although the relay stays silent (without it a silent relay discards frames unread). */
+    private val recordRequests: Boolean = false,
     /** A fixed port, to come back where an earlier relay was shut down; 0 picks a free one. */
     port: Int = 0,
 ) : AutoCloseable {
-    private val answers: Boolean get() = answerEose || closeWith != null || acceptEvents || rejectEvents || serve.isNotEmpty() || authChallenge != null || refuseUntilAuth != null || refuseEventsUntilAuth != null || countWith != null
+    private val answers: Boolean get() = answerEose || closeWith != null || acceptEvents || rejectEvents || serve.isNotEmpty() || authChallenge != null || refuseUntilAuth != null || refuseEventsUntilAuth != null || countWith != null || recordRequests
     /** Every COUNT frame the client sent, as received. */
     val counts = java.util.concurrent.CopyOnWriteArrayList<String>()
     /** Every AUTH frame the client sent, as received. */

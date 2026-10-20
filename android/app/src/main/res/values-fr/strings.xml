@@ -361,6 +361,7 @@
     <!-- notifications -->
     <string name="notifications_title">Notifications</string>
     <string name="notifications_empty">Pas encore de notifications</string>
+    <string name="notifications_checking">Interrogation de vos relais…</string>
     <string name="notifications_error_load">Impossible de charger les notifications</string>
     <string name="messages_title">Messages</string>
     <string name="messages_empty">Pas encore de messages. Ouvrez un profil et touchez « Message ».</string>
@@ -589,6 +590,7 @@
     <string name="list_no_members">Aucun membre pour l’instant</string>
     <string name="list_feed_empty">Pas encore de notes de cette liste</string>
     <string name="list_untitled">Liste sans titre</string>
+    <string name="feed_tab_list_loading">Liste</string>
     <string name="profile_tab_lists">Listes</string>
     <string name="list_create">Nouvelle liste</string>
     <string name="lists_empty_own">Aucune liste pour l’instant</string>

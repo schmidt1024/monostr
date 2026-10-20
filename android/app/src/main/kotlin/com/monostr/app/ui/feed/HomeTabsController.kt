@@ -1,9 +1,12 @@
 package com.monostr.app.ui.feed
 
 import com.monostr.app.R
+import com.monostr.app.data.FeedSnapshot
+import com.monostr.app.data.ListSnapshots
 import com.monostr.app.ui.common.Message
 import com.monostr.app.ui.common.attempt
 import com.monostr.app.ui.common.uiText
+import com.monostr.nostr.PerfTrace
 import com.monostr.nostr.model.FollowSet
 import com.monostr.nostr.model.ListAddress
 import com.monostr.nostr.model.SaveResult
@@ -64,13 +67,15 @@ class HomeTabsController(
     private val scope: CoroutineScope,
     private val self: String,
     val following: FeedController,
-    private val newFeed: (FeedSource.Authors, CoroutineScope) -> FeedController,
+    /** Spec perf 3.7: a feed snapshot per pinned list; null (tests that do not care) keeps none. */
+    private val snapshots: ListSnapshots? = null,
+    private val newFeed: (FeedSource.Authors, CoroutineScope, FeedSnapshot?) -> FeedController,
 ) {
     private val _state = MutableStateFlow(HomeTabsState())
     val state: StateFlow<HomeTabsState> = _state.asStateFlow()
 
-    /** A list tab's feed, its own scope (cancelled on close) and the members it was built for. */
-    private class Slot(val members: List<String>, val scope: CoroutineScope, val feed: FeedController)
+    /** A list tab's feed, its own scope (cancelled on close) and the members it was built for, as a set: their order does not matter. */
+    private class Slot(val members: Set<String>, val scope: CoroutineScope, val feed: FeedController)
 
     private val slots = HashMap<String, Slot>()
 
@@ -78,6 +83,10 @@ class HomeTabsController(
     private val found = MutableStateFlow<Map<String, FollowSet?>>(emptyMap())
     private val looking = HashSet<String>()
     private var sets: Map<String, FollowSet> = emptyMap()
+    /** The tab titles are marked once, when no pinned tab is loading any more (spec perf 3.9). */
+    private var titlesMarked = false
+    /** The pins the list snapshots were last trimmed to. */
+    private var lastPinned: List<ListAddress>? = null
 
     fun start() {
         val own: Flow<List<FollowSet>?> = lists.own().map<List<FollowSet>, List<FollowSet>?> { it }.onStart { emit(null) }
@@ -93,6 +102,11 @@ class HomeTabsController(
     }
 
     private fun rebuild(pinned: List<ListAddress>, own: List<FollowSet>?, lookedUp: Map<String, FollowSet?>) {
+        if (pinned != lastPinned) {
+            lastPinned = pinned
+            // a list unpinned here or on another device loses its snapshot (spec perf 3.7, privacy)
+            snapshots?.let { s -> scope.launch { s.retain(pinned) } }
+        }
         val resolved = pinned.map { address ->
             val key = address.toString()
             val mine = if (address.pubkey == self) own?.firstOrNull { it.address == address } else null
@@ -105,16 +119,21 @@ class HomeTabsController(
             HomeTab.Pinned(address, set?.title.orEmpty(), status) to set
         }
         sets = resolved.mapNotNull { (tab, set) -> set?.let { tab.key to it } }.toMap()
-        // a list that was unpinned, is no longer readable or whose members changed loses its feed (spec §4.3)
+        // a list that was unpinned, is no longer readable or whose member SET changed loses its feed (spec §4.3, perf 3.7):
+        // a relay result with the same members in another order must not throw the tab's notes away
         slots.keys.toList().forEach { key ->
             val ready = sets[key]?.takeIf { statusOf(it) == ListStatus.READY }
-            if (ready == null || ready.members != slots.getValue(key).members) close(key)
+            if (ready == null || ready.members.toSet() != slots.getValue(key).members) close(key)
         }
         val before = _state.value
         val tabs = listOf<HomeTab>(HomeTab.Following) + resolved.map { it.first }
         val selected = tabs.indexOfFirst { it.key == before.current.key }.takeIf { it >= 0 } ?: 0
         if (selected == 0 && before.current !is HomeTab.Following) following.setLive(true)
         _state.update { it.copy(tabs = tabs, selected = selected) }
+        if (!titlesMarked && resolved.isNotEmpty() && resolved.none { it.first.status == ListStatus.LOADING }) {
+            titlesMarked = true
+            PerfTrace.mark("tab title shown")
+        }
         activate()
     }
 
@@ -136,8 +155,8 @@ class HomeTabsController(
         slots[tab.key]?.let { it.feed.setLive(true); return }
         val set = sets[tab.key] ?: return
         val child = CoroutineScope(scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job]))
-        val feed = newFeed(FeedSource.Authors(set.members), child)
-        slots[tab.key] = Slot(set.members, child, feed)
+        val feed = newFeed(FeedSource.Authors(set.members), child, snapshots?.of(set.address))
+        slots[tab.key] = Slot(set.members.toSet(), child, feed)
         _state.update { it.copy(feeds = it.feeds + (tab.key to feed)) }
         feed.start()
     }

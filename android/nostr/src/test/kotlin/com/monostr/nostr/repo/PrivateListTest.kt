@@ -5,6 +5,7 @@ import com.monostr.nostr.NostrEngine
 import com.monostr.nostr.PublishResult
 import com.monostr.nostr.SilentWsRelay
 import com.monostr.nostr.awaitTrue
+import com.monostr.nostr.connectedEngine
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancelAndJoin
@@ -122,6 +123,54 @@ class PrivateListTest {
             assertFalse(a in list.state.value.ids)
             assertTrue(list.state.value.writable && list.state.value.loaded)
             assertEquals(0, sends)
+            e.close()
+        }
+    }
+
+    private suspend fun list(entries: String, at: ULong) =
+        EventBuilder(Kind(10000u), signer.nip44Encrypt(signer.pubkey, entries)).customCreatedAt(Timestamp.fromSecs(at)).signWithKeys(me)
+
+    @Test
+    fun `a stored list is published before the relays answer`() = runTest {
+        // spec perf 3.3: the fetch ran first under the mutex (8 s on a silent relay), so the first feed page excluded nobody
+        SilentWsRelay().use { relay ->
+            val e = connectedEngine(dir, relay, me.secretKey().toHex())
+            e.save(list("""[["p","$a"]]""", 1000u))
+            val l = NostrPrivateList(e, signer, kind = 10000, tag = "p", now = { 2000 }, send = okSend(e))
+            val started = System.currentTimeMillis()
+            l.ensureLoaded(interactive = true)
+            val took = System.currentTimeMillis() - started
+            assertTrue(took < 2_000, "ensureLoaded waited $took ms for the relays")
+            assertEquals(listOf(a), l.state.value.ids)
+            assertTrue(l.state.value.loaded && l.state.value.writable)
+            e.close()
+        }
+    }
+
+    @Test
+    fun `a newer list the relays hold is taken over behind the stored one`() = runTest {
+        SilentWsRelay(serve = listOf(list("""[["p","$b"]]""", 1500u).asJson())).use { relay ->
+            val e = connectedEngine(dir, relay, me.secretKey().toHex())
+            e.save(list("""[["p","$a"]]""", 1000u))
+            val l = NostrPrivateList(e, signer, kind = 10000, tag = "p", now = { 2000 }, send = okSend(e))
+            l.ensureLoaded(interactive = true)
+            assertTrue(awaitTrue { l.state.value.ids == listOf(b) }, "the relays' newer list never came: ${l.state.value}")
+            e.close()
+        }
+    }
+
+    @Test
+    fun `a first write that loaded only the stored copy still merges the relays' newer list`() = runTest {
+        // Review Focus: without the pre-write refresh the write would overwrite b, which another device added
+        SilentWsRelay(serve = listOf(list("""[["p","$b"]]""", 1500u).asJson())).use { relay ->
+            val e = connectedEngine(dir, relay, me.secretKey().toHex())
+            e.save(list("""[["p","$a"]]""", 1000u))
+            val l = NostrPrivateList(e, signer, kind = 10000, tag = "p", now = { 2000 }, send = okSend(e))
+            val c = "c".repeat(64)
+            assertEquals(ListOutcome.Ok, l.set(c, present = true))
+            val stored = e.query(Filter().kind(Kind(10000u)).author(me.publicKey())).single()
+            val decrypted = signer.nip44Decrypt(signer.pubkey, stored.content())
+            assertTrue(decrypted.contains(b) && decrypted.contains(c), "lost an entry: $decrypted")
             e.close()
         }
     }

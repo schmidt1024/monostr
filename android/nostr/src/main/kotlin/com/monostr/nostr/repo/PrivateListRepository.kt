@@ -90,7 +90,7 @@ class NostrPrivateList(
     /** Set on [Decrypt.NO_SILENT_ANSWER]; skips the silent signer on further implicit loads until an interactive call. */
     private var silentTried = false
 
-    /** Whether [loadLocked] has already refreshed an existing local copy from the relays this session. */
+    /** Whether the relays were asked for a newer copy of an existing local list this session (in the background, see [refreshLater]). */
     private var refreshed = false
 
     /** Loads once (semantics as documented on [BookmarksRepository.ensureLoaded]), then watches for newer lists. */
@@ -99,7 +99,7 @@ class NostrPrivateList(
         startWatching()
     }
 
-    private enum class Load { ALREADY, LOADED, NOT_LOADED, REJECTED }
+    private enum class Load { ALREADY, LOADED, LOCAL, NOT_LOADED, REJECTED }
 
     /** How [adopt] fared with a list's private part. */
     private enum class Decrypt { OK, NO_SILENT_ANSWER, REJECTED, UNREADABLE }
@@ -109,6 +109,7 @@ class NostrPrivateList(
         if (_state.value.loaded) return Load.ALREADY
         if (!interactive && silentTried) return Load.NOT_LOADED
         var event = engine.query(filter()).firstOrNull()
+        var fetched = false
         if (event == null) {
             // No local copy: a fetch that throws, or one that quietly reaches no relay at all
             // (a dead/unconfigured relay list returns an empty result without throwing - see
@@ -124,29 +125,48 @@ class NostrPrivateList(
                 emit(ListState(ids = emptyList(), writable = false, loaded = false))
                 return Load.NOT_LOADED
             }
+            fetched = true
             event = engine.query(filter()).firstOrNull()
             if (event == null && engine.connectedNormalRelayUrls().isEmpty()) {
                 emit(ListState(ids = emptyList(), writable = false, loaded = false))
                 return Load.NOT_LOADED
             }
-        } else {
-            // We already have a local copy: a failed refresh just means we keep using it. Only
-            // the first load per session hits the relays here - the subscription keeps it fresh after.
-            if (!refreshed) {
-                refreshed = true
-                quietly { engine.fetch(filter(), fetchTimeout) }
-                event = engine.query(filter()).firstOrNull() ?: event
-            }
+        } else if (!refreshed) {
+            // spec perf 3.3: the local copy is taken at once (the feed's first page already leaves the muted out);
+            // the relays' copy is asked for behind it and taken over when newer. Only the first load per session asks,
+            // the subscription keeps it fresh after.
+            refreshed = true
+            refreshLater()
         }
         if (event == null) {
             publish(writable = true, loaded = true)
             return Load.LOADED
         }
+        val done = if (fetched) Load.LOADED else Load.LOCAL
         return when (adopt(event, interactive)) {
-            Decrypt.OK -> { publish(writable = true, loaded = true); Load.LOADED }
-            Decrypt.UNREADABLE -> { publish(writable = false, loaded = true); Load.LOADED }
+            Decrypt.OK -> { publish(writable = true, loaded = true); done }
+            Decrypt.UNREADABLE -> { publish(writable = false, loaded = true); done }
             Decrypt.NO_SILENT_ANSWER -> { silentTried = true; publish(writable = false, loaded = false); Load.NOT_LOADED }
             Decrypt.REJECTED -> { publish(writable = false, loaded = false); Load.REJECTED }
+        }
+    }
+
+    /**
+     * The relays' copy of the list, off the caller's path; a newer one is adopted through [onListEvent] like one
+     * from the subscription. Nothing to ask without relays.
+     */
+    private fun refreshLater() {
+        (watch ?: engine.backgroundScope).launch {
+            if (engine.relayUrls().isEmpty()) return@launch
+            quietly { engine.fetch(filter(), fetchTimeout) }
+            val newest = try {
+                engine.query(filter()).firstOrNull()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null
+            } ?: return@launch
+            onListEvent(newest)
         }
     }
 
@@ -283,8 +303,8 @@ class NostrPrivateList(
         if (publicTags == revertPublic && privateIds == revertPrivate) return ListOutcome.Ok
         publish(writable = true, loaded = true)
         try {
-            // A load that just ran has fetched already; only an older snapshot needs the refresh.
-            if (load == Load.ALREADY) {
+            // A load that just fetched has the relays' copy already; a local-only load or an older snapshot needs the refresh.
+            if (load == Load.ALREADY || load == Load.LOCAL) {
                 val refresh = refreshLocked()
                 if (refresh.outcome != null) {
                     publicTags = revertPublic; privateIds = revertPrivate

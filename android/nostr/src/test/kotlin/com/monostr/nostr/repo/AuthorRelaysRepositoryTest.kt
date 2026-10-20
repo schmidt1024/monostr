@@ -1,6 +1,7 @@
 package com.monostr.nostr.repo
 
 import com.monostr.nostr.NostrEngine
+import com.monostr.nostr.SilentWsRelay
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -101,5 +102,17 @@ class AuthorRelaysRepositoryTest {
         repo.fetchNotes(listOf("ws://127.0.0.1:9"), alice.publicKey().toHex())
         assertTrue(e.temporaryRelayUrls().isEmpty())
         e.close()
+    }
+
+    @Test
+    fun `fetchNotes reports the ids the relays sent`() = runTest {
+        val note = EventBuilder.textNote("from the outbox").signWithKeys(alice)
+        SilentWsRelay(serve = listOf(note.asJson())).use { relay ->
+            val e = engine(emptyList())
+            val repo = NostrAuthorRelaysRepository(e, indexers = emptyList(), now = { 1000 }, notesFetchTimeout = java.time.Duration.ofSeconds(1))
+            assertEquals(setOf(note.id().toHex()), repo.fetchNotes(listOf(relay.url), alice.publicKey().toHex()))
+            assertEquals(emptySet<String>(), repo.fetchNotes(listOf("ws://127.0.0.1:9"), alice.publicKey().toHex()))
+            e.close()
+        }
     }
 }

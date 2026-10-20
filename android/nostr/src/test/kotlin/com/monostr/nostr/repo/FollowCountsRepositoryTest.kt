@@ -45,8 +45,42 @@ class FollowCountsRepositoryTest {
             assertEquals(3373L, counts.followers)
             assertEquals(2, counts.following)
             assertTrue(r1.counts.single().contains("\"#p\":[\"$pk\"]"))
-            assertTrue(e.temporaryRelayUrls().isEmpty())
+            assertEquals(setOf(r1.url, none.url, r2.url), e.temporaryRelayUrls().toSet()) // kept for the session
         } } }
+        e.close()
+    }
+
+    @Test
+    fun `the count relays stay attached for the session, the next profile reuses the connection`() = runTest {
+        val e = engine()
+        SilentWsRelay(countWith = 7).use { r ->
+            val repo = NostrFollowCountsRepository(e, countRelays = listOf(r.url), indexRelays = emptyList(), timeout = Duration.ofSeconds(3), now = { 1000 })
+            assertEquals(7L, repo.counts(pk).last().followers)
+            assertEquals(7L, repo.counts(Keys.generate().publicKey().toHex()).last().followers)
+            assertEquals(2, r.counts.size)
+            assertEquals(1, r.connections, "one connection for both profiles")
+            assertEquals(listOf(r.url), e.temporaryRelayUrls())
+        }
+        e.close()
+    }
+
+    @Test
+    fun `numbers counted before the screen left show at once on the next open`() = runTest {
+        val e = engine()
+        e.save(contacts("d".repeat(64)))
+        val fast = SilentWsRelay(countWith = 5)
+        try {
+            SilentWsRelay().use { silent ->
+                val repo = NostrFollowCountsRepository(e, countRelays = listOf(silent.url, fast.url), indexRelays = emptyList(), timeout = Duration.ofSeconds(3), now = { 1000 })
+                // the screen leaves with the first follower number, before the silent relay timed out
+                withContext(Dispatchers.Default.limitedParallelism(1)) { withTimeout(2_500) { repo.counts(pk).first { it.followers != null } } }
+                fast.shutdown()
+                val again = withContext(Dispatchers.Default.limitedParallelism(1)) { withTimeout(1_000) { repo.counts(pk).first() } }
+                assertEquals(5L, again.followers)
+            }
+        } finally {
+            fast.close()
+        }
         e.close()
     }
 

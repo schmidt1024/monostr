@@ -14,7 +14,7 @@ object NoteMapper {
     fun note(event: Event, withQuote: Boolean = true, resolveRepost: (String) -> Event? = { null }): Note? =
         note(EventJson.decode(event.asJson()), withQuote, resolveRepost)
 
-    private fun note(event: JsonEvent, withQuote: Boolean, resolveRepost: (String) -> Event?): Note? {
+    internal fun note(event: JsonEvent, withQuote: Boolean = true, resolveRepost: (String) -> Event? = { null }): Note? {
         val tags = event.tags
         return when (event.kind) {
             1 -> {

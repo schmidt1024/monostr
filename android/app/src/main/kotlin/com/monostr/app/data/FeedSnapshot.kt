@@ -43,6 +43,7 @@ class FeedSnapshot(private val file: File, private val io: CoroutineDispatcher =
     suspend fun write(items: List<Item>) = withContext(io) {
         if (closed) return@withContext
         try {
+            file.parentFile?.mkdirs()
             val tmp = File(file.parentFile, file.name + ".tmp")
             tmp.writeText(JSON.encodeToString(Stored.serializer(), Stored(VERSION, items.take(MAX_ITEMS))))
             if (closed || !tmp.renameTo(file)) tmp.delete()

@@ -1,0 +1,5 @@
+• Plus rapide partout : chaque écran affiche tout de suite ce qui est déjà sur votre téléphone et se met à jour en arrière-plan
+• Les profils s’ouvrent instantanément, aussi quand vous y revenez
+• Les onglets de listes affichent leur nom tout de suite au lieu de « Liste sans titre »
+• Notifications, recherche et signets affichent d’abord ce qui est enregistré
+• Les comptes masqués restent cachés dès la première page

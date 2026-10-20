@@ -17,11 +17,11 @@ object MentionNames {
     fun textMentions(text: String): List<String> =
         NoteLinks.annotate(text).filterIsInstance<NoteSpan.Mention>().map { it.pubkey }
 
-    /** One prefetch for all [pubkeys] (the negative cache of Plan 10a keeps misses off the network), then local reads. */
+    /** Queues the missing ones (one batched lookup in the repository), then one local read; names that land later come through [MentionResolver]. */
     suspend fun resolve(profiles: ProfileRepository, pubkeys: Collection<String>): Map<String, String> {
         if (pubkeys.isEmpty()) return emptyMap()
         profiles.prefetch(pubkeys)
-        return pubkeys.mapNotNull { pk -> named(profiles.get(pk, LOCAL_MAX_AGE))?.let { pk to it } }.toMap()
+        return profiles.getAll(pubkeys, LOCAL_MAX_AGE).mapNotNull { (pk, p) -> named(p)?.let { pk to it } }.toMap()
     }
 
     fun named(p: Profile): String? = p.displayName?.takeIf { it.isNotBlank() } ?: p.name?.takeIf { it.isNotBlank() }

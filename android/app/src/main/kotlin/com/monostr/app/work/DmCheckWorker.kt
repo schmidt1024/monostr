@@ -124,7 +124,7 @@ class DmCheckWorker(context: Context, params: WorkerParameters) : CoroutineWorke
             val fresh = selection.fresh
             val names = fresh.map { it.peer }.distinct().associateWith { peer ->
                 try {
-                    ready.profiles.get(peer).shownName
+                    ready.profiles.fetched(peer).shownName
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {

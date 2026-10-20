@@ -361,6 +361,7 @@
     <!-- notifications -->
     <string name="notifications_title">Notificações</string>
     <string name="notifications_empty">Ainda não há notificações</string>
+    <string name="notifications_checking">Consultando seus relays…</string>
     <string name="notifications_error_load">Não foi possível carregar as notificações</string>
     <string name="messages_title">Mensagens</string>
     <string name="messages_empty">Ainda não há mensagens. Abra um perfil e toque em “Mensagem”.</string>
@@ -589,6 +590,7 @@
     <string name="list_no_members">Ainda sem membros</string>
     <string name="list_feed_empty">Ainda não há notas desta lista</string>
     <string name="list_untitled">Lista sem título</string>
+    <string name="feed_tab_list_loading">Lista</string>
     <string name="profile_tab_lists">Listas</string>
     <string name="list_create">Nova lista</string>
     <string name="lists_empty_own">Ainda sem listas</string>

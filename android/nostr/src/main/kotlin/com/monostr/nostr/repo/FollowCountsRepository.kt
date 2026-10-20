@@ -1,6 +1,7 @@
 package com.monostr.nostr.repo
 
 import com.monostr.nostr.NostrEngine
+import com.monostr.nostr.model.NoteMapper
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
@@ -40,8 +41,8 @@ interface FollowCountsRepository {
  * bound), and it is shown as soon as the first relay answers. [indexers] (if any) have seen
  * every list and give the number other clients show; it takes the maximum over the counts. An answer above [MAX_FOLLOWERS] (or negative: a u64 that wrapped) is a lying relay and is
  * dropped. Following: the distinct `p` tags of the profile's newest kind 3 from the database, fetched
- * from [indexRelays] when there is none or the stored one is older than a day. A result with anything
- * known is kept for [maxAgeSeconds] per pubkey.
+ * from [indexRelays] when there is none or the stored one is older than a day. A result is kept for
+ * [maxAgeSeconds] per pubkey, from its first emission on; the COUNT relays stay attached for the session.
  */
 class NostrFollowCountsRepository(
     private val engine: NostrEngine,
@@ -53,17 +54,26 @@ class NostrFollowCountsRepository(
     private val now: () -> Long = { System.currentTimeMillis() / 1000 },
     private val maxAgeSeconds: Long = 300,
 ) : FollowCountsRepository {
-    private class Known(val counts: FollowCounts, val at: Long)
+    /** [complete]: every relay answered or timed out; a partial result (the screen left early) is continued at the next open. */
+    private class Known(val counts: FollowCounts, val at: Long, val complete: Boolean)
 
     private val known = HashMap<String, Known>()
+    private val attachMutex = Mutex()
+    @Volatile private var countRelaysHeld = false
 
     override fun counts(pubkey: String): Flow<FollowCounts> = flow {
-        synchronized(known) { known[pubkey] }?.takeIf { now() - it.at < maxAgeSeconds }?.let { emit(it.counts); return@flow }
+        val memo = synchronized(known) { known[pubkey] }?.takeIf { now() - it.at < maxAgeSeconds }
+        if (memo != null) {
+            emit(memo.counts)
+            if (memo.complete) return@flow
+        }
+        ensureCountRelays()
         val author = PublicKey.parse(pubkey)
         val relays = (countRelays + engine.relayUrls()).map { it.trim().trimEnd('/') }.distinct()
         val updates = channelFlow {
             val state = Mutex()
-            var current = FollowCounts(null, null)
+            // a partial memo is the floor: the numbers never go back while the run catches up
+            var current = memo?.counts ?: FollowCounts(null, null)
             suspend fun publish(change: (FollowCounts) -> FollowCounts) {
                 val next = state.withLock { change(current).also { current = it } }
                 send(next)
@@ -72,7 +82,7 @@ class NostrFollowCountsRepository(
             var listed = false
             launch { following(author)?.let { n -> publish { listed = true; it.copy(following = n) } } }
             for (relay in relays) launch {
-                val n = engine.countFrom(relay, Filter().kind(Kind(3u)).pubkey(author), timeout)?.takeIf { it in 0..MAX_FOLLOWERS } ?: return@launch
+                val n = engine.countFrom(relay, Filter().kind(Kind(3u)).pubkey(author), timeout, attach = false)?.takeIf { it in 0..MAX_FOLLOWERS } ?: return@launch
                 publish { if (n > (it.followers ?: -1)) it.copy(followers = n) else it }
             }
             for (indexer in indexers) launch {
@@ -84,9 +94,23 @@ class NostrFollowCountsRepository(
                 }
             }
         }.distinctUntilChanged().filter { it.following != null || it.followers != null }
-        var last: FollowCounts? = null
-        updates.collect { last = it; emit(it) }
-        last?.let { synchronized(known) { known[pubkey] = Known(it, now()) } }
+        var last = memo?.counts
+        updates.collect { c ->
+            // kept on every emission (spec perf 3.5): a screen that leaves before the slowest relay leaves its numbers for the next open
+            synchronized(known) { known[pubkey] = Known(c, now(), complete = false) }
+            if (c != last) {
+                last = c
+                emit(c)
+            }
+        }
+        last?.let { c -> synchronized(known) { known[pubkey] = Known(c, now(), complete = true) } }
+    }
+
+    /** The COUNT relays join once and stay for the session (spec perf 3.5): attaching and force-removing them per profile cost a connection each time. */
+    private suspend fun ensureCountRelays() = attachMutex.withLock {
+        if (countRelaysHeld || countRelays.isEmpty()) return@withLock
+        withContext(NonCancellable) { engine.attachTemporary(countRelays) }
+        countRelaysHeld = true
     }
 
     override fun invalidateAll() {
@@ -115,8 +139,9 @@ class NostrFollowCountsRepository(
         return list?.let(::followed)
     }
 
+    /** Distinct well-formed `p` tags, read in Kotlin (0.3–2 s through rust for 300–1500 tags). */
     private fun followed(list: Event): Int =
-        list.tags().toVec().map { it.asVec() }.filter { it.size >= 2 && it[0] == "p" && HEX64.matches(it[1]) }.map { it[1] }.toSet().size
+        NoteMapper.decoded(list).tags.filter { it.size >= 2 && it[0] == "p" && HEX64.matches(it[1]) }.map { it[1] }.toSet().size
 
     companion object {
         /** Relays that answer NIP-45 COUNT (probed 2026-10-08; purplepag.es and snort do not, nostr.band is offline since 2026-10-04). */

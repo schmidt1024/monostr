@@ -218,7 +218,7 @@ fun SearchScreen(
                     item { SectionHeader("#" + (state.hashtag ?: "")) }
                     noteItems(state, onOpenThread, onOpenProfile, onReply, hashtag, vm, onShowTippers = { tippersFor = it }, onOpenMedia = onOpenMedia, onOpenVideo = onOpenVideo, onQuote = onQuote, names = names)
                     if (state.searched && !state.loading && state.notes.isEmpty()) item { EmptyHint() }
-                    if (state.notes.isNotEmpty()) item { LaunchedEffect(state.notes.size) { vm.controller.loadMore() } }
+                    if (state.notes.isNotEmpty()) item { LaunchedEffect(state.notes.size, state.loading) { vm.controller.loadMore() } }
                 }
             }
         }

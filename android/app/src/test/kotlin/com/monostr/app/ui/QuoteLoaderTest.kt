@@ -4,6 +4,7 @@ import com.monostr.app.ui.common.QuoteLoader
 import com.monostr.app.ui.common.QuoteUi
 import com.monostr.nostr.model.Profile
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
@@ -53,5 +54,17 @@ class QuoteLoaderTest {
         val r = QuoteLoader.shortRef("ab".repeat(32))
         assertTrue(r.startsWith("note1"))
         assertTrue(r.contains("…"))
+    }
+
+    @Test
+    fun `an author whose profile lands after the card loaded shows on the card`() = runTest {
+        val quoted = note('1', alice, 100)
+        val profiles = FakeProfiles()
+        val loader = QuoteLoader(FakeQuotes(mapOf(quoted.id to quoted)), profiles)
+        val found = loader.load(quoted.id, emptyList()) as QuoteUi.Found
+        assertEquals(Profile.shortPubkey(alice), found.author.shownName)
+        assertEquals(Profile.shortPubkey(alice), loader.author(found).first().shownName)
+        profiles.land(Profile(alice, "alice", "Alice", null, null, null))
+        assertEquals("Alice", loader.author(found).first().shownName)
     }
 }

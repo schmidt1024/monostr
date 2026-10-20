@@ -24,6 +24,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
@@ -51,8 +52,11 @@ import com.monostr.nostr.repo.ProfileRepository
 import com.monostr.nostr.repo.QuoteRepository
 import com.monostr.nostr.repo.QuoteResult
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import rust.nostr.sdk.EventId
 import java.util.concurrent.ConcurrentHashMap
 
@@ -84,6 +88,10 @@ class QuoteLoader(
             null -> null
         }
     }
+
+    /** The card's author as it is now: a profile the background lookup finds after the card loaded replaces it (spec perf 3.2). */
+    fun author(found: QuoteUi.Found): Flow<Profile> =
+        profiles.observe(found.note.author).map { if (it == Profile.empty(it.pubkey)) found.author else it }
 
     suspend fun load(id: String, hints: List<String>): QuoteUi {
         found[id]?.let { return if (it.note.author in muted.value) QuoteUi.Muted else it }
@@ -175,10 +183,11 @@ fun QuoteCard(
                 Text(QuoteLoader.shortRef(quotedId), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             is QuoteUi.Found -> {
+                val author by remember(q, loader) { loader?.author(q) ?: flowOf(q.author) }.collectAsState(q.author)
                 Row(Modifier.clickable { onOpenProfile(q.note.author) }, verticalAlignment = Alignment.CenterVertically) {
-                    Avatar(q.author.picture, Modifier.size(24.dp))
+                    Avatar(author.picture, Modifier.size(24.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text(q.author.shownName, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                    Text(author.shownName, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                     Spacer(Modifier.width(6.dp))
                     Text(relativeTime(q.note.createdAt).asString(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }

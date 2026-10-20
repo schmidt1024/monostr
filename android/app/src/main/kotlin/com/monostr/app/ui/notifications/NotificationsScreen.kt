@@ -42,7 +42,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.monostr.app.R
-import com.monostr.app.data.TipSettingsStore
 import com.monostr.app.session.NostrSession
 import com.monostr.app.ui.common.BottomTab
 import com.monostr.app.ui.common.LoadingScreen
@@ -60,18 +59,19 @@ import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
 
 @HiltViewModel
-class NotificationsViewModel @Inject constructor(session: NostrSession, settings: TipSettingsStore) : ViewModel() {
+class NotificationsViewModel @Inject constructor(session: NostrSession) : ViewModel() {
     private val ready = session.requireReady()
-    val controller = NotificationsController(ready.notifications, ready.profiles, settings, viewModelScope, muted = ready.muted, me = ready.engine.pubkey)
+    /** Spec perf 3.6: the session's store; a reopen shows its last rows at once and reads the database behind them. */
+    val store: NotificationsStore = ready.notificationsStore
     val dmUnread: StateFlow<Int> = ready.dmStore.unreadTotalExcept(ready.muted).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
-    init { controller.start() }
+    init { store.open() }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NotificationsScreen(onFeed: () -> Unit, onSearch: () -> Unit, onBookmarks: () -> Unit, onMessages: () -> Unit, onOpenThread: (String) -> Unit, onOpenProfile: (String) -> Unit, vm: NotificationsViewModel = hiltViewModel()) {
-    val state by vm.controller.state.collectAsStateWithLifecycle()
-    val names by vm.controller.names.collectAsStateWithLifecycle()
+    val state by vm.store.state.collectAsStateWithLifecycle()
+    val names by vm.store.names.collectAsStateWithLifecycle()
     val dmUnread by vm.dmUnread.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
@@ -83,9 +83,9 @@ fun NotificationsScreen(onFeed: () -> Unit, onSearch: () -> Unit, onBookmarks: (
         }
     }
     // everything shown counts as read once the list is on screen
-    LaunchedEffect(state.loading, state.items.size) { if (!state.loading) vm.controller.markRead() }
+    LaunchedEffect(state.loading, state.items.size) { if (!state.loading) vm.store.markRead() }
     val message = state.message?.asString()
-    LaunchedEffect(message) { message?.let { snackbar.showSnackbar(it); vm.controller.clearMessage() } }
+    LaunchedEffect(message) { message?.let { snackbar.showSnackbar(it); vm.store.clearMessage() } }
     val hide = rememberHideOnScroll()
     val listState = rememberLazyListState()
     ShowBarsWhenStuck(hide, listState, hasList = !state.loading && state.rows.isNotEmpty())
@@ -97,10 +97,23 @@ fun NotificationsScreen(onFeed: () -> Unit, onSearch: () -> Unit, onBookmarks: (
     ) { padding ->
         if (state.loading) LoadingScreen()
         // like the home feed: pulling down at the top fetches from the relays
-        else PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = vm.controller::refresh, modifier = Modifier.padding(padding).fillMaxSize().testTag("notifications-refresh")) {
+        else PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = vm.store::pull, modifier = Modifier.padding(padding).fillMaxSize().testTag("notifications-refresh")) {
             if (state.rows.isEmpty()) {
-                // scrollable so the pull works on the empty state too
-                Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(32.dp), contentAlignment = Alignment.Center) { Text(stringResource(R.string.notifications_empty), textAlign = TextAlign.Center) }
+                // scrollable so the pull works on the empty state too; spec perf 3.6: shown at once, the relays asked behind it
+                Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(32.dp), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(stringResource(R.string.notifications_empty), textAlign = TextAlign.Center)
+                        if (state.syncing) {
+                            Text(
+                                stringResource(R.string.notifications_checking),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(top = 8.dp).testTag("notifications-checking"),
+                            )
+                        }
+                    }
+                }
             } else {
                 LazyColumn(state = listState, modifier = Modifier.fillMaxSize().testTag("notifications-list")) {
                     items(state.rows, key = { it.row.key }) { row ->

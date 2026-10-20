@@ -29,6 +29,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -100,5 +101,30 @@ class ListControllerTest {
         c.togglePin(); runCurrent()
         assertEquals(listOf(theirs.address), pins.state.value)
         assertTrue(c.state.value.pinned)
+    }
+
+    @Test
+    fun `member and author profiles that land later show`() = runTest {
+        val friends = followSet("friends", listOf(bob, carol), author = self, title = "Friends")
+        val profiles = FakeProfiles()
+        val c = controller(friends.address, FakeLists(listOf(friends)), profiles = profiles)
+        c.start(); runCurrent()
+        assertEquals(listOf(Profile.shortPubkey(bob), Profile.shortPubkey(carol)), c.state.value.members.map { it.shownName })
+        profiles.land(Profile(carol, "carol", "Carol", null, null, null), Profile(self, "me", "Me", null, null, null))
+        runCurrent()
+        assertEquals(listOf(Profile.shortPubkey(bob), "Carol"), c.state.value.members.map { it.shownName })
+        assertEquals("Me", c.state.value.author?.shownName)
+    }
+
+    @Test
+    fun `the same members in another order keep the feed`() = runTest {
+        val friends = followSet("friends", listOf(bob, carol), author = self)
+        val lists = FakeLists(listOf(friends))
+        val c = controller(friends.address, lists)
+        c.start(); runCurrent()
+        val feed = c.state.value.feed
+        lists.ownState.value = listOf(friends.copy(members = listOf(carol, bob), createdAt = 2000)); runCurrent()
+        assertSame(feed, c.state.value.feed)
+        assertEquals(1, built.size)
     }
 }

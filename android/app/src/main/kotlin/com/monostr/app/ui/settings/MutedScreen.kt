@@ -75,6 +75,7 @@ class MutedController(
     val state: StateFlow<MutedUiState> = _state.asStateFlow()
 
     fun start() {
+        scope.launch { profiles.updates.collect { byKey -> _state.update { s -> s.copy(entries = s.entries.map { (pk, p) -> pk to (byKey[pk] ?: p) }) } } }
         // here the signer may be asked (interactive): the user opened the list on purpose
         scope.launch {
             try {
@@ -97,16 +98,15 @@ class MutedController(
                 } catch (e: Exception) {
                     // the rows keep the short pubkey
                 }
-                val entries = muted.map { pk ->
-                    pk to try {
-                        profiles.get(pk, MentionNames.LOCAL_MAX_AGE)
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        Profile.empty(pk)
-                    }
+                val byKey = try {
+                    profiles.getAll(muted, MentionNames.LOCAL_MAX_AGE)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    emptyMap()
                 }
-                _state.update { it.copy(entries = entries) }
+                // inside the update: a profile that landed meanwhile stays
+                _state.update { s -> s.copy(entries = muted.map { pk -> pk to (byKey[pk]?.takeUnless { it == Profile.empty(pk) } ?: s.entries.firstOrNull { it.first == pk }?.second ?: Profile.empty(pk)) }) }
             }
         }
     }

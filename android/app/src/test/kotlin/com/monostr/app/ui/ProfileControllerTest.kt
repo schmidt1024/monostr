@@ -7,9 +7,12 @@ import com.monostr.app.R
 import com.monostr.app.ui.common.uiText
 import com.monostr.nostr.repo.FollowState
 import com.monostr.nostr.repo.FollowError
+import com.monostr.app.ui.common.NoteDeletions
+import com.monostr.app.ui.profile.ProfileCache
 import com.monostr.app.ui.profile.ProfileController
 import com.monostr.app.ui.tips.TipDecorations
 import com.monostr.nostr.model.Profile
+import com.monostr.nostr.repo.FollowCounts
 import com.monostr.nostr.repo.ListOutcome
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -44,7 +47,7 @@ class ProfileControllerTest {
         ProfileController(bob, "a".repeat(64), feed, FakeProfiles(), FakePublish(), decorations(), BookmarkActions(FakeBookmarks(), scope), FakeCounts(), relays, { enabled }, scope, refreshMs = 1_000)
 
     @Test
-    fun `a pending tip set while the reposts are decorated is not taken back`() = runTest {
+    fun `a reposted author's profile landing later keeps a pending tip set meanwhile`() = runTest {
         val carol = "c".repeat(64); val dave = "d".repeat(64)
         val first = note('y', author = bob, createdAt = 2000).copy(repostOf = note('z', author = carol, createdAt = 1900))
         val second = note('v', author = bob, createdAt = 1500).copy(repostOf = note('w', author = dave, createdAt = 1400))
@@ -57,15 +60,76 @@ class ProfileControllerTest {
             BookmarkActions(FakeBookmarks(), scope), FakeCounts(), FakeAuthorRelays(), { false }, scope, refreshMs = 1_000,
         )
         c.start(); runCurrent()
-        val slow = CompletableDeferred<Unit>()
-        profiles.getGates[dave] = slow // the second reposted author's profile is slow
         c.selectTab(ProfileSection.REPOSTS); runCurrent()
-        // the user tips the first reposted note meanwhile
         pending.add(PendingTip("e".repeat(64), first.repostOf!!.id, 5, 4_000)); runCurrent()
-        slow.complete(Unit); runCurrent()
+        profiles.land(Profile(dave, "dave", "Dave", null, null, null)); runCurrent()
         val reposts = c.state.value.list(ProfileSection.REPOSTS).orEmpty()
         assertEquals(listOf(first.id, second.id), reposts.map { it.note.id })
         assertTrue(reposts.first().pendingTip)
+        assertEquals("Dave", reposts[1].repostedAuthor.shownName)
+    }
+
+    @Test
+    fun `stored notes show before the relay refresh, which then reloads the tabs`() = runTest {
+        val feed = FakeFeed().apply { byAuthor = mapOf(bob to listOf(note('x', author = bob))); refreshProfileGate = CompletableDeferred() }
+        val c = controller(feed, FakeAuthorRelays(), enabled = false, scope = eager())
+        c.start(); runCurrent()
+        assertEquals(1, c.state.value.notes.size)
+        assertEquals(false, c.state.value.loading)
+        assertTrue(c.state.value.refreshing)
+        assertEquals(listOf(bob), feed.refreshProfileCalls)
+        feed.byAuthor = mapOf(bob to listOf(note('x', author = bob), note('y', author = bob, createdAt = 900)))
+        feed.refreshProfileGate!!.complete(Unit); runCurrent()
+        assertEquals(2, c.state.value.notes.size)
+        assertEquals(false, c.state.value.refreshing)
+        c.close()
+    }
+
+    @Test
+    fun `the author's relays are attached while the notes still refresh`() = runTest {
+        val feed = FakeFeed().apply { byAuthor = mapOf(bob to listOf(note('x', author = bob))); refreshProfileGate = CompletableDeferred() }
+        val relays = FakeAuthorRelays(mapOf(bob to listOf("wss://w1.example")))
+        val c = controller(feed, relays, enabled = true, scope = eager())
+        c.start(); runCurrent()
+        assertTrue(c.state.value.refreshing)
+        assertEquals(listOf(listOf("wss://w1.example")), relays.attached)
+        c.close(); runCurrent()
+    }
+
+    @Test
+    fun `an outbox tick that brings nothing new does not read the tabs again`() = runTest {
+        val x = note('x', author = bob)
+        val feed = FakeFeed().apply { byAuthor = mapOf(bob to listOf(x)) }
+        val relays = FakeAuthorRelays(mapOf(bob to listOf("wss://w1.example"))).apply { fetchedIds = setOf(x.id) }
+        val c = controller(feed, relays, enabled = true, scope = eager())
+        c.start(); advanceUntilIdle()
+        val reads = feed.profileCalls.size
+        advanceTimeBy(1_100)
+        assertEquals(2, relays.fetched.size)
+        assertEquals(reads, feed.profileCalls.size, "nothing new came: no reload")
+        relays.fetchedIds = setOf("9".repeat(64))
+        advanceTimeBy(1_000)
+        assertTrue(feed.profileCalls.size > reads, "a new note came: the tabs are read again")
+        c.close(); advanceUntilIdle()
+    }
+
+    @Test
+    fun `replies and reposts the outbox brings while only posts is open reload once, not on every tick`() = runTest {
+        val x = note('x', author = bob)
+        val reply = note('r', author = bob, createdAt = 990, replyTo = "f".repeat(64))
+        val shared = repostOf(note('s', author = "c".repeat(64)), by = bob, createdAt = 980)
+        val feed = FakeFeed().apply { byAuthor = mapOf(bob to listOf(x, reply, shared)) }
+        val relays = FakeAuthorRelays(mapOf(bob to listOf("wss://w1.example"))).apply { fetchedIds = setOf(x.id, reply.id, shared.id) }
+        val c = controller(feed, relays, enabled = true, scope = eager())
+        c.start(); advanceUntilIdle()
+        assertEquals(listOf(x.id), c.state.value.notes.map { it.note.id }) // the reply and the repost are on tabs not opened
+        val reads = feed.profileCalls.size
+        advanceTimeBy(1_100)
+        advanceTimeBy(1_000)
+        advanceTimeBy(1_000)
+        assertEquals(4, relays.fetched.size)
+        assertEquals(reads, feed.profileCalls.size, "ids seen by an earlier fetch: no reload")
+        c.close(); advanceUntilIdle()
     }
 
     @Test
@@ -205,6 +269,7 @@ class ProfileControllerTest {
         c.start(); advanceUntilIdle()
         assertEquals(1, c.state.value.notes.size)
         feed.byAuthor = mapOf(bob to listOf(note('x', author = bob), note('y', author = bob)))
+        relays.fetchedIds = setOf(note('y', author = bob).id) // the tick's fetch is what brought it
         advanceTimeBy(1_100)
         assertEquals(2, c.state.value.notes.size)
         assertEquals(false, feed.notesByCalls.last())
@@ -305,5 +370,43 @@ class ProfileControllerTest {
         c.follow(); runCurrent()
         assertTrue(follows.calls.isEmpty())
         c.close()
+    }
+
+    @Test
+    fun `a reopened profile shows what it showed last at once, before the database answers`() = runTest {
+        val cache = ProfileCache()
+        val x = note('x', author = bob)
+        val feed = FakeFeed().apply { byAuthor = mapOf(bob to listOf(x)) }
+        val known = FakeProfiles(mapOf(bob to Profile(bob, "bob", "Bob", null, null, null)))
+        val first = ProfileController(bob, "a".repeat(64), feed, known, FakePublish(), decorations(), BookmarkActions(FakeBookmarks(), eager()), FakeCounts(), FakeAuthorRelays(), { false }, eager(), refreshMs = 1_000, followCounts = FakeFollowCounts(mapOf(bob to listOf(FollowCounts(3, 7)))), cache = cache)
+        first.start(); runCurrent()
+        first.close()
+        feed.profileGate = CompletableDeferred() // the database is slow this time
+        val second = ProfileController(bob, "a".repeat(64), feed, FakeProfiles(), FakePublish(), decorations(), BookmarkActions(FakeBookmarks(), eager()), FakeCounts(), FakeAuthorRelays(), { false }, eager(), refreshMs = 1_000, followCounts = FakeFollowCounts(), cache = cache)
+        second.start(); runCurrent()
+        val s = second.state.value
+        assertEquals("Bob", s.profile.shownName)
+        assertEquals(listOf(x.id), s.notes.map { it.note.id })
+        assertEquals(false, s.loading)
+        assertEquals(FollowCounts(3, 7), s.followCounts)
+        second.close()
+    }
+
+    @Test
+    fun `a note deleted after the profile was left does not come back from the session cache`() = runTest {
+        // Review Focus
+        val cache = ProfileCache()
+        val x = note('x', author = bob); val y = note('y', author = bob, createdAt = 900)
+        val feed = FakeFeed().apply { byAuthor = mapOf(bob to listOf(x, y)) }
+        val deletions = NoteDeletions()
+        val first = ProfileController(bob, "a".repeat(64), feed, FakeProfiles(), FakePublish(), decorations(), BookmarkActions(FakeBookmarks(), eager()), FakeCounts(), FakeAuthorRelays(), { false }, eager(), refreshMs = 1_000, deletions = deletions, cache = cache)
+        first.start(); runCurrent()
+        first.close()
+        deletions.begin(x.id); deletions.end(x.id, deleted = true)
+        feed.profileGate = CompletableDeferred()
+        val second = ProfileController(bob, "a".repeat(64), feed, FakeProfiles(), FakePublish(), decorations(), BookmarkActions(FakeBookmarks(), eager()), FakeCounts(), FakeAuthorRelays(), { false }, eager(), refreshMs = 1_000, deletions = deletions, cache = cache)
+        second.start(); runCurrent()
+        assertEquals(listOf(y.id), second.state.value.notes.map { it.note.id })
+        second.close()
     }
 }

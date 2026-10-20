@@ -293,13 +293,13 @@ class NostrEngine private constructor(
     }
 
     /**
-     * NIP-45: asks [relay] alone how many events match [filter]. The relay is attached for the call
-     * only (an engine relay stays). Null when it does not answer in [timeout], refuses COUNT, or
-     * cannot be reached; cancellation is propagated.
+     * NIP-45: asks [relay] alone how many events match [filter]. With [attach] the relay is attached for the call
+     * only (an engine relay stays); without, it must be in the pool already (a caller that holds it) and stays.
+     * Null when it does not answer in [timeout], refuses COUNT, or cannot be reached; cancellation is propagated.
      */
-    suspend fun countFrom(relay: String, filter: Filter, timeout: Duration): Long? {
+    suspend fun countFrom(relay: String, filter: Filter, timeout: Duration, attach: Boolean = true): Long? {
         // NonCancellable: a cancellation landing on the attach's own return would lose `held` and leak the relay
-        val held = withContext(NonCancellable) { attachTemporary(listOf(relay)) }
+        val held = if (attach) withContext(NonCancellable) { attachTemporary(listOf(relay)) } else emptyList()
         try {
             val url = runCatching { RelayUrl.parse(relay.trim()) }.getOrNull() ?: return null
             return ffi {
@@ -312,7 +312,7 @@ class NostrEngine private constructor(
                 }
             }
         } finally {
-            detachTemporary(held)
+            if (held.isNotEmpty()) detachTemporary(held)
         }
     }
 

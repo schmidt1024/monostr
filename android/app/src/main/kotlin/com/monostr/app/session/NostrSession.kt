@@ -1,6 +1,10 @@
 package com.monostr.app.session
 
 import com.monostr.app.data.FeedSnapshot
+import com.monostr.app.data.FileOwnListsCache
+import com.monostr.app.data.ListSnapshots
+import com.monostr.app.data.SessionOwnListsCache
+import com.monostr.app.data.accountDir
 import com.monostr.tips.RelayHosts
 import com.monostr.app.data.linkpreview.LinkPreviews
 import com.monostr.nostr.repo.NostrOwnReactions
@@ -40,6 +44,7 @@ import com.monostr.app.media.OwnPictures
 import com.monostr.app.ui.common.NoteDeletions
 import com.monostr.app.ui.common.NoteVisibility
 import com.monostr.app.ui.common.UiText
+import com.monostr.app.ui.profile.ProfileCache
 import com.monostr.app.ui.common.pluralText
 import com.monostr.app.ui.common.uiText
 import com.monostr.app.ui.media.MediaReveals
@@ -47,6 +52,7 @@ import com.monostr.app.work.DmCheckWorker
 import com.monostr.app.work.DmNotifier
 import com.monostr.nostr.LocalSigner
 import com.monostr.nostr.NostrEngine
+import com.monostr.nostr.PerfTrace
 import com.monostr.nostr.Signer
 import com.monostr.nostr.model.Note
 import rust.nostr.sdk.Filter
@@ -89,6 +95,7 @@ import com.monostr.nostr.repo.NostrThreadRepository
 import com.monostr.nostr.repo.NostrSearchRepository
 import com.monostr.nostr.repo.NostrTipsRepository
 import com.monostr.nostr.repo.NotificationsRepository
+import com.monostr.app.ui.notifications.NotificationsStore
 import com.monostr.nostr.repo.ProfileRepository
 import com.monostr.nostr.repo.PublishRepository
 import com.monostr.nostr.repo.QuoteRepository
@@ -102,6 +109,7 @@ import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -134,6 +142,8 @@ class Ready(
     val publish: PublishRepository,
     val tips: TipsRepository,
     val notifications: NotificationsRepository,
+    /** Spec perf 3.6: the notifications of this session, shared by the badge, the screen and the tip check. */
+    val notificationsStore: NotificationsStore,
     val search: SearchRepository,
     val bookmarks: BookmarksRepository,
     val watchers: WatcherGateway,
@@ -164,6 +174,12 @@ class Ready(
     val feedTabs: FeedTabsRepository,
     /** The home feed's last first page, shown at once on the next start (2026-10-19); deleted on logout. */
     val feedSnapshot: FeedSnapshot? = null,
+    /** Spec perf 3.5: the last 20 profiles as shown, for an instant reopen; this session only. */
+    val profileCache: ProfileCache = ProfileCache(),
+    /** Spec perf 3.7: the last first page of each pinned list; deleted on unpin and logout. */
+    val listSnapshots: ListSnapshots? = null,
+    /** Spec perf 3.7: this session's access to the own lists' summary; closed at logout before the file goes. */
+    val ownLists: SessionOwnListsCache? = null,
 ) {
     /** Pubkeys of the muted accounts; every note list filters against them (spec 9.3). */
     val muted: StateFlow<Set<String>> get() = mute.muted
@@ -233,6 +249,12 @@ class NostrSession @Inject constructor(
     val state: StateFlow<SessionState> = _state.asStateFlow()
     private val mutex = Mutex()
 
+    /**
+     * Spec perf 3.7: the own lists' summary per account (private members decrypted). Below `noBackupFilesDir`
+     * (never backed up nor moved to a new device, unlike `filesDir`); removed at logout.
+     */
+    private val ownListsCache = FileOwnListsCache(context.noBackupFilesDir)
+
     companion object {
         val RESTORE_FAILED: UiText = uiText(R.string.session_restore_failed)
         /** Logout waits at most this long for the drafts' pictures to leave the server. */
@@ -267,6 +289,7 @@ class NostrSession @Inject constructor(
             }
             val ready = start(signer)
             _state.value = SessionState.Active(ready)
+            PerfTrace.mark("session ready")
             markFirstLogin(signer.pubkey)
             resumeSetupLater(ready)
         } catch (e: CancellationException) {
@@ -339,6 +362,7 @@ class NostrSession @Inject constructor(
     /** The persisted session runs: shown, scheduled, and its pending setup (if any) goes out. */
     private suspend fun activate(ready: Ready) {
         _state.value = SessionState.Active(ready)
+        PerfTrace.mark("session ready")
         markFirstLogin(ready.pubkey)
         bestEffort { DmCheckWorker.schedule(context) } // logout cancelled it
         resumeSetupLater(ready)
@@ -403,6 +427,12 @@ class NostrSession @Inject constructor(
                 bestEffort { DmDatabase.delete(context, ready.pubkey) }
                 // the feed's last page leaves the device with the account too
                 bestEffort { ready.feedSnapshot?.delete() }
+                // the engine's scope (reconcile, list jobs) ended above; a collector of the old session on a screen's
+                // scope may still load or persist the own lists: closed before the summary goes, it cannot bring it back
+                bestEffort { ready.engine.backgroundScope.cancel() } // a no-op unless a step above threw before close
+                bestEffort { ready.ownLists?.close() }
+                // the pinned lists' pages leave the device with the account too (spec perf 3.7)
+                bestEffort { ready.listSnapshots?.deleteAll() }
             }
             clearStaleSession(ready?.pubkey)
         }
@@ -432,7 +462,8 @@ class NostrSession @Inject constructor(
      * state (view key, setup, pending tips, notification watermarks) belongs to the account and
      * is cleared too, best effort: one failing step does not stop the others. So are the drafts of
      * [pubkey] (spec 2026-10-16 §8; without a signer their pictures stay on the server) and its
-     * pending setup record (spec 2026-10-17 §7) and its pinned tabs (spec 2026-10-18 §3.3).
+     * pending setup record (spec 2026-10-17 §7) and its pinned tabs (spec 2026-10-18 §3.3), the own lists' summary
+     * and the list snapshots (spec perf 3.7).
      */
     private suspend fun clearStaleSession(pubkey: String?) {
         secrets.remove(KeystoreSecretStore.SECRET_NSEC)
@@ -440,6 +471,10 @@ class NostrSession @Inject constructor(
         if (pubkey != null) bestEffort { drafts.removeAll(pubkey) }
         if (pubkey != null) bestEffort { pendingSetup.remove(pubkey) }
         if (pubkey != null) bestEffort { feedTabsCache.remove(pubkey) }
+        // spec perf 3.7: the own lists' summary (decrypted private members) and the list snapshots, also without a running session
+        if (pubkey != null) bestEffort { ownListsCache.remove(pubkey) }
+        if (pubkey != null) bestEffort { ListSnapshots(listSnapshotsDir(pubkey)).deleteAll() }
+        if (pubkey != null) bestEffort { withContext(Dispatchers.IO) { accountDir(context.noBackupFilesDir, pubkey).delete() } } // only when empty
         bestEffort { secrets.remove(KeystoreSecretStore.SECRET_VIEW_KEY) }
         bestEffort { tipSettings.setSetup(null) }
         bestEffort { pendingTips.clear() }
@@ -454,6 +489,9 @@ class NostrSession @Inject constructor(
         bestEffort { dmSettings.setListAdopted(false) }
         _state.value = SessionState.LoggedOut()
     }
+
+    /** The pinned lists' snapshots of [pubkey]: below `noBackupFilesDir` (spec perf 3.7, ruling Task 4). */
+    private fun listSnapshotsDir(pubkey: String) = File(accountDir(context.noBackupFilesDir, pubkey), ListSnapshots.DIR)
 
     /** Spec 11: the first successful login of this account on this device (existing accounts: the first start with 10d). */
     private suspend fun markFirstLogin(pubkey: String) = bestEffort { hints.markFirstLogin(pubkey, System.currentTimeMillis() / 1000) }
@@ -484,7 +522,7 @@ class NostrSession @Inject constructor(
     }
 
     private suspend fun start(signer: Signer): Ready {
-        val dir = File(context.filesDir, "nostr-${signer.pubkey.take(16)}").apply { mkdirs() }
+        val dir = accountDir(context.filesDir, signer.pubkey).apply { mkdirs() }
         val engine = NostrEngine.create(dir.absolutePath, signer, relayStore.relays.first())
         try {
             engine.connect()
@@ -497,7 +535,9 @@ class NostrSession @Inject constructor(
         try {
             val tips = NostrTipsRepository(engine)
             val authorRelays = NostrAuthorRelaysRepository(engine)
-            val lists = NostrListsRepository(engine, signer, authorRelays, defaultRelays = PrefsRelayStore.DEFAULT_RELAYS)
+            // a collector of this session's own lists may outlive it (a screen's scope): logout closes this view first
+            val ownLists = SessionOwnListsCache(ownListsCache)
+            val lists = NostrListsRepository(engine, signer, authorRelays, defaultRelays = PrefsRelayStore.DEFAULT_RELAYS, cache = ownLists, reconcileScope = engine.backgroundScope)
             val feedTabs = NostrFeedTabsRepository(engine, signer, feedTabsCache, defaultRelays = PrefsRelayStore.DEFAULT_RELAYS, reconcileScope = engine.backgroundScope)
             // NIP-89 "via Monostr": read from the store at publish time (not a stateIn with a seed), so a
             // note published before the first emission cannot carry the tag against the user's choice
@@ -518,6 +558,9 @@ class NostrSession @Inject constructor(
             // muted accounts are left out at the query, so a flooding account cannot fill the feed's pages
             val feed = NostrFeedRepository(engine, excluded = { mute.muted.value })
             val profiles = NostrProfileRepository(engine, indexRelays = NostrProfileRepository.INDEX_RELAYS)
+            val notifications = NostrNotificationsRepository(engine, tips)
+            // one pipeline for the badge, the screen and the tip check; started by the first of them (spec perf 3.6)
+            val notificationsStore = NotificationsStore(notifications, profiles, tipSettings, engine.backgroundScope, muted = mute.muted, me = signer.pubkey)
             val follows = NostrFollowRepository(engine, feed)
             // the database at once, the relays' latest behind it (a new install, another client)
             val ownReactions = NostrOwnReactions(engine, scope = engine.backgroundScope)
@@ -550,10 +593,13 @@ class NostrSession @Inject constructor(
             engine.backgroundScope.launch { bestEffort { expireDrafts(drafts, signer.pubkey, System.currentTimeMillis() / 1000, media) } }
             return Ready(
                 feedSnapshot = FeedSnapshot(File(dir, "feed-snapshot.json")),
+                // they name the members of possibly private lists: noBackupFilesDir, like the own lists' summary
+                listSnapshots = ListSnapshots(listSnapshotsDir(signer.pubkey)),
+                ownLists = ownLists,
                 pubkey = signer.pubkey, signer = signer, engine = engine,
                 feed = feed, threads = NostrThreadRepository(engine, conversations), conversations = conversations,
                 profiles = profiles, publish = publish,
-                tips = tips, notifications = NostrNotificationsRepository(engine, tips), search = NostrSearchRepository(engine),
+                tips = tips, notifications = notifications, notificationsStore = notificationsStore, search = NostrSearchRepository(engine, profileUpdates = profiles.updates, scope = engine.backgroundScope),
                 bookmarks = NostrBookmarksRepository(engine, signer, watch = engine.backgroundScope),
                 watchers = WatcherClients(http, signer),
                 counts = NostrCountsRepository(engine, engine.backgroundScope),

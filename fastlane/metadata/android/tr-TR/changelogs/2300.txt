@@ -1,0 +1,5 @@
+• Her yerde daha hızlı: her ekran telefonda olanı hemen gösterir ve arka planda güncellenir
+• Profiller anında açılır, bir profile geri döndüğünde de
+• Liste sekmeleri “Başlıksız liste” yerine adlarını hemen gösterir
+• Bildirimler, arama ve yer imleri önce kayıtlı olanı gösterir
+• Sessize alınan hesaplar ilk sayfadan itibaren gizli kalır

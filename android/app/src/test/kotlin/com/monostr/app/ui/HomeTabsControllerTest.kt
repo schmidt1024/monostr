@@ -1,16 +1,24 @@
 package com.monostr.app.ui
 
 import com.monostr.app.R
+import com.monostr.app.data.FeedSnapshot
+import com.monostr.app.data.ListSnapshots
+import com.monostr.nostr.model.Profile
+import org.junit.jupiter.api.io.TempDir
+import java.io.File
 import com.monostr.app.ui.common.BookmarkActions
 import com.monostr.app.ui.common.uiText
 import com.monostr.app.ui.feed.FeedController
 import com.monostr.app.ui.feed.HomeTab
 import com.monostr.app.ui.feed.HomeTabsController
 import com.monostr.app.ui.feed.ListStatus
+import com.monostr.app.ui.feed.TabLabel
+import com.monostr.app.ui.feed.label
 import com.monostr.app.ui.tips.TipDecorations
 import com.monostr.nostr.model.ListAddress
 import com.monostr.nostr.model.SaveResult
 import com.monostr.nostr.repo.FeedSource
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
@@ -21,6 +29,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotSame
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -37,14 +46,55 @@ class HomeTabsControllerTest {
     /** The source of every list feed the controller built, in order. */
     private val built = ArrayList<FeedSource.Authors>()
 
-    private fun TestScope.feed(repo: FakeFeed, scope: CoroutineScope, source: FeedSource = FeedSource.Following) =
-        FeedController(repo, FakeProfiles(), FakePublish(), decorations(), BookmarkActions(FakeBookmarks(), scope), FakeCounts(), scope, source = source)
+    @TempDir lateinit var snapshotDir: File
 
-    private fun TestScope.controller(pins: FakeFeedTabs, lists: FakeLists, home: FakeFeed = FakeFeed(), listRepo: FakeFeed = FakeFeed()): HomeTabsController {
+    private fun TestScope.feed(repo: FakeFeed, scope: CoroutineScope, source: FeedSource = FeedSource.Following, snapshot: FeedSnapshot? = null) =
+        FeedController(repo, FakeProfiles(), FakePublish(), decorations(), BookmarkActions(FakeBookmarks(), scope), FakeCounts(), scope, source = source, snapshot = snapshot)
+
+    private fun TestScope.controller(pins: FakeFeedTabs, lists: FakeLists, home: FakeFeed = FakeFeed(), listRepo: FakeFeed = FakeFeed(), snapshots: ListSnapshots? = null): HomeTabsController {
         val scope = eager()
         val following = feed(home, scope)
         following.start()
-        return HomeTabsController(pins, lists, scope, self, following) { source, child -> built += source; feed(listRepo, child, source) }
+        return HomeTabsController(pins, lists, scope, self, following, snapshots) { source, child, snapshot -> built += source; feed(listRepo, child, source, snapshot) }
+    }
+
+    @Test
+    fun `a list tab shows its last first page at once, unpinning deletes it`() = runTest {
+        val friends = followSet("friends", listOf(bob), author = self, title = "Friends")
+        val snapshots = ListSnapshots(File(snapshotDir, ListSnapshots.DIR), UnconfinedTestDispatcher(testScheduler))
+        val old = note('9', bob, 500)
+        snapshots.of(friends.address).write(listOf(FeedSnapshot.Item(old, Profile.empty(bob), Profile.empty(bob))))
+        // neither the database nor the relays have answered yet
+        val listRepo = FakeFeed().apply { current = listOf(note('1', bob, 1000)); liveGate = CompletableDeferred(); refreshGate = CompletableDeferred() }
+        val c = controller(FakeFeedTabs(listOf(friends.address)), FakeLists(listOf(friends)), listRepo = listRepo, snapshots = snapshots)
+        c.start(); runCurrent()
+        c.select(1); runCurrent()
+        assertEquals(listOf(old.id), c.feedOf(c.state.value.current)!!.state.value.notes.map { it.note.id })
+        c.unpin(friends.address); runCurrent()
+        assertFalse(File(snapshotDir, "${ListSnapshots.DIR}/${ListSnapshots.fileName(friends.address)}").exists())
+    }
+
+    @Test
+    fun `a tab that is still loading never says untitled`() {
+        // spec perf 3.7: "Untitled list" was shown for "loading" and "no title" alike
+        val address = ListAddress(30000, self, "x")
+        assertEquals(TabLabel.Loading, HomeTab.Pinned(address, "", ListStatus.LOADING).label())
+        assertEquals(TabLabel.Title("Friends"), HomeTab.Pinned(address, "Friends", ListStatus.LOADING).label())
+        assertEquals(TabLabel.Title("Friends"), HomeTab.Pinned(address, "Friends", ListStatus.READY).label())
+        assertEquals(TabLabel.Untitled, HomeTab.Pinned(address, "", ListStatus.READY).label())
+    }
+
+    @Test
+    fun `the same members in another order keep the list feed`() = runTest {
+        val friends = followSet("friends", listOf(bob, carol), author = self)
+        val lists = FakeLists(listOf(friends))
+        val c = controller(FakeFeedTabs(listOf(friends.address)), lists)
+        c.start(); runCurrent()
+        c.select(1); runCurrent()
+        val first = c.feedOf(c.state.value.current)
+        lists.ownState.value = listOf(friends.copy(members = listOf(carol, bob), createdAt = 2000)); runCurrent()
+        assertSame(first, c.feedOf(c.state.value.current))
+        assertEquals(1, built.size)
     }
 
     @Test
@@ -147,5 +197,20 @@ class HomeTabsControllerTest {
         runCurrent()
         assertEquals(listOf("unpin:friends", "unpin:friends"), pins.calls)
         assertEquals(1, c.state.value.tabs.size)
+    }
+
+    @Test
+    fun `the tab titles are marked once, when no pinned tab is loading any more`() = runTest {
+        withPerfLines {
+            val friends = followSet("friends", listOf(bob), author = self, title = "Friends")
+            val lists = FakeLists(listOf(friends)).apply { ownGate = CompletableDeferred() }
+            val c = controller(FakeFeedTabs(listOf(friends.address)), lists)
+            c.start(); runCurrent()
+            assertEquals(ListStatus.LOADING, (c.state.value.tabs[1] as HomeTab.Pinned).status)
+            assertTrue(none { it.endsWith(" tab title shown") })
+            lists.ownGate!!.complete(Unit); runCurrent()
+            lists.ownState.value = listOf(friends.copy(title = "Pals")); runCurrent()
+            assertEquals(1, count { it.endsWith(" tab title shown") })
+        }
     }
 }

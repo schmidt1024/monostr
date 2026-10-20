@@ -3,6 +3,7 @@ package com.monostr.app.ui
 import com.monostr.app.data.PendingTip
 import com.monostr.app.ui.feed.NoteUi
 import com.monostr.app.ui.tips.TipDecorations
+import com.monostr.nostr.model.Note
 import com.monostr.nostr.model.Profile
 import com.monostr.nostr.repo.TipSummary
 import com.monostr.nostr.repo.Tipper
@@ -11,6 +12,7 @@ import com.monostr.tips.TipType
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -210,5 +212,71 @@ class TipDecorationsTest {
         assertTrue(d.decorate(ui(mine)).isOwn)
         assertFalse(d.decorate(ui(foreign)).isOwn)
         assertTrue(d.decorate(ui(repostOf(mine, by = bob, createdAt = 5))).isOwn)
+    }
+
+    @Test
+    fun `add watches only targets it was not given before and never restarts a running subscription`() = runTest {
+        val tips = FakeTips()
+        val d = TipDecorations(tips, FakePendingTips(), profiles, FakePublish(), eager()) { 5_000 }
+        d.start()
+        val n1 = note('1', alice, 1000); val n2 = note('2', alice, 900)
+        d.add(listOf(n1)); advanceUntilIdle()
+        d.add(listOf(n1, n2)); advanceUntilIdle()
+        d.add(listOf(n1, n2)); advanceUntilIdle()
+        // the group grows once (one fetch for the new id), the repeated call changes nothing
+        assertEquals(listOf(mapOf(n1.id to alice), mapOf(n1.id to alice, n2.id to alice)), tips.observed.filter { it.isNotEmpty() })
+        assertEquals(2, tips.activeReceiptObservers, "the (empty) tracked set and the one added group; the replaced one stopped")
+        tips.receipts.value = mapOf(
+            n1.id to TipSummary(3, 1, listOf(receipt(n1.id, "e".repeat(64), 3, 4_500))),
+            n2.id to TipSummary(4, 1, listOf(receipt(n2.id, "d".repeat(64), 4, 4_400))),
+        )
+        advanceUntilIdle()
+        assertEquals(setOf(n1.id, n2.id), d.summaries.value.keys)
+    }
+
+    private fun hexNote(i: Int) = Note("%064x".format(i), alice, "n$i", 10_000L - i, 1, null, null, null, emptyList())
+
+    @Test
+    fun `many add calls keep a bounded number of live receipt subscriptions`() = runTest {
+        val tips = FakeTips()
+        val pending = FakePendingTips()
+        val d = TipDecorations(tips, pending, profiles, FakePublish(), eager()) { 5_000 }
+        d.start()
+        val all = (0 until 480).map(::hexNote)
+        // stored receipts for every note: each one is answered once, also when its group is no longer live
+        tips.receipts.value = all.associate { it.id to TipSummary(1, 1, listOf(receipt(it.id, "%064x".format(10_000 + it.createdAt), 1, 4_000))) }
+        all.chunked(40).forEach { page -> d.add(page); advanceUntilIdle() }
+        // + 1: the (empty) tracked set
+        assertTrue(tips.activeReceiptObservers <= TipDecorations.MAX_LIVE_GROUPS + 1, "live: ${tips.activeReceiptObservers}")
+        assertTrue(tips.observed.all { it.size <= 100 })
+        assertEquals(all.map { it.id }.toSet(), d.summaries.value.keys)
+        // a tip on the newest page and one on the first page (the profile's latest notes) still settle
+        val last = all.last(); val first = all.first()
+        val intentLast = "1".repeat(64); val intentFirst = "2".repeat(64)
+        pending.add(PendingTip(intentLast, last.id, 5, 4_000))
+        pending.add(PendingTip(intentFirst, first.id, 5, 4_000))
+        advanceUntilIdle()
+        tips.receipts.update { it + mapOf(
+            last.id to TipSummary(5, 1, listOf(receipt(last.id, intentLast, 5, 4_600))),
+            first.id to TipSummary(5, 1, listOf(receipt(first.id, intentFirst, 5, 4_700))),
+        ) }
+        advanceUntilIdle()
+        assertTrue(pending.state.value.isEmpty(), "both pending tips settle")
+        assertEquals(5L, d.summaries.value[last.id]?.total)
+    }
+
+    @Test
+    fun `a failed receipt group is retried on the next add`() = runTest {
+        val tips = FakeTips()
+        val d = TipDecorations(tips, FakePendingTips(), profiles, FakePublish(), eager()) { 5_000 }
+        d.start(); advanceUntilIdle()
+        val n1 = note('1', alice, 1000)
+        tips.receipts.value = mapOf(n1.id to TipSummary(3, 1, listOf(receipt(n1.id, "e".repeat(64), 3, 4_500))))
+        tips.receiptsError = IllegalStateException("db") // hits the add group, the tracked (empty) set runs already
+        d.add(listOf(n1)); advanceUntilIdle()
+        assertNull(d.summaries.value[n1.id])
+        d.add(listOf(n1)); advanceUntilIdle()
+        assertEquals(3L, d.summaries.value[n1.id]?.total)
+        assertEquals(2, tips.activeReceiptObservers, "the tracked set and the retried group")
     }
 }

@@ -5,10 +5,13 @@ import com.monostr.app.ui.FakeFeedTabs
 import com.monostr.app.ui.FakeLists
 import com.monostr.app.ui.common.uiText
 import com.monostr.app.ui.followSet
+import com.monostr.app.ui.profile.ProfileCache
+import com.monostr.nostr.model.FollowSet
 import com.monostr.nostr.model.ListAddress
 import com.monostr.nostr.model.SaveResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -82,5 +85,43 @@ class ProfileListsControllerTest {
         screen.cancel()
         c.togglePin(target); runCurrent()
         assertEquals(listOf(target.address), pins.state.value)
+    }
+
+    @Test
+    fun `another profile's stored lists show before the relays answered`() = runTest {
+        val stored = followSet("x", listOf(self), author = bob, title = "Stored")
+        val newer = followSet("y", listOf(self), author = bob, title = "Newer")
+        val lists = FakeLists().apply {
+            localByAuthor = mapOf(bob to listOf(stored))
+            byAuthor = mapOf(bob to listOf(newer, stored))
+            ofGate = CompletableDeferred()
+        }
+        val c = ProfileListsController(bob, self, lists, FakeFeedTabs(), eager())
+        c.open(); runCurrent()
+        assertEquals(listOf(stored), c.state.value.lists)
+        lists.ofGate!!.complete(Unit); runCurrent()
+        assertEquals(listOf(newer, stored), c.state.value.lists)
+    }
+
+    @Test
+    fun `with nothing stored the tab waits for the relays instead of saying there are none`() = runTest {
+        val lists = FakeLists().apply { ofGate = CompletableDeferred() }
+        val c = ProfileListsController(bob, self, lists, FakeFeedTabs(), eager())
+        c.open(); runCurrent()
+        assertNull(c.state.value.lists)
+        lists.ofGate!!.complete(Unit); runCurrent()
+        assertEquals(emptyList<FollowSet>(), c.state.value.lists)
+    }
+
+    @Test
+    fun `a reopened profile shows its lists from the session cache at once`() = runTest {
+        val theirs = followSet("x", listOf(self), author = bob)
+        val cache = ProfileCache()
+        val first = ProfileListsController(bob, self, FakeLists().apply { byAuthor = mapOf(bob to listOf(theirs)) }, FakeFeedTabs(), eager(), cache = cache)
+        first.open(); runCurrent()
+        val slow = FakeLists().apply { ofGate = CompletableDeferred() }
+        val second = ProfileListsController(bob, self, slow, FakeFeedTabs(), eager(), cache = cache)
+        second.open(); runCurrent()
+        assertEquals(listOf(theirs), second.state.value.lists)
     }
 }

@@ -4,6 +4,7 @@ import com.monostr.monero.Address
 import com.monostr.nostr.DetachedSender
 import com.monostr.nostr.NostrEngine
 import com.monostr.nostr.PublishResult
+import com.monostr.nostr.RefreshGate
 import com.monostr.nostr.RustConvert
 import com.monostr.tips.Kinds
 import com.monostr.tips.PaymentInfo
@@ -21,8 +22,6 @@ import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import rust.nostr.sdk.Event
 import rust.nostr.sdk.EventId
@@ -31,6 +30,7 @@ import rust.nostr.sdk.Keys
 import rust.nostr.sdk.Kind
 import rust.nostr.sdk.PublicKey
 import rust.nostr.sdk.Timestamp
+import java.time.Duration
 
 /** Valid receipts of one note (spec 3.4), newest first, with the sum of the known amounts in piconero; [amountsKnown] is false when a receipt carries none (protocol 0.5). */
 data class TipSummary(val total: Long, val count: Int, val receipts: List<TipReceipt>, val amountsKnown: Boolean = true)
@@ -97,10 +97,11 @@ interface TipsRepository {
 class NostrTipsRepository(
     private val engine: NostrEngine,
     private val detached: DetachedSender = DetachedSender(engine.ffiDispatcher),
+    private val fetchTimeout: Duration = Duration.ofSeconds(8),
     private val now: () -> Long = { System.currentTimeMillis() / 1000 },
 ) : TipsRepository {
-    private val infoFetchedAt = HashMap<String, Long>()
-    private val mutex = Mutex()
+    /** One payment info fetch per pubkey at a time, shared by every caller; its stamp is the freshness (spec perf 3.4). */
+    private val infoRefresh = RefreshGate<String>(engine.backgroundScope, ttlSeconds = 3600, now = now)
 
     private fun infoFilter(pubkey: String) = Filter().kind(Kind(Kinds.PAYMENT_INFO.toUShort())).author(PublicKey.parse(pubkey)).limit(1u)
 
@@ -109,15 +110,18 @@ class NostrTipsRepository(
 
     override suspend fun paymentInfo(pubkey: String, maxAgeSeconds: Long): PaymentInfo {
         val filter = infoFilter(pubkey)
-        val last = mutex.withLock { infoFetchedAt[pubkey] ?: 0L }
-        var event = engine.query(filter).firstOrNull()
+        val stored = engine.query(filter).firstOrNull()
+        val last = infoRefresh.fetchedAt(pubkey)
         // a missing info is cached like a present one: no relay round trip per call for users without Monero
-        if ((event == null && last == 0L) || last + maxAgeSeconds < now()) {
-            quietly { engine.fetch(filter) }
-            mutex.withLock { infoFetchedAt[pubkey] = now() }
-            event = engine.query(filter).firstOrNull()
+        if (last != null && last + maxAgeSeconds >= now()) return parsePaymentInfo(stored)
+        val fetch: suspend () -> Unit = { quietly { engine.fetch(filter, fetchTimeout) } }
+        // spec perf 3.4: a stored info answers at once and is refreshed behind it; only a forced read (maxAge 0) or a missing info waits
+        if (stored != null && maxAgeSeconds > 0) {
+            infoRefresh.launch(pubkey, force = true, block = fetch)
+            return parsePaymentInfo(stored)
         }
-        return parsePaymentInfo(event)
+        infoRefresh.await(pubkey, force = true, block = fetch)
+        return parsePaymentInfo(engine.query(filter).firstOrNull())
     }
 
     override suspend fun cachedPaymentInfo(pubkey: String): PaymentInfo = parsePaymentInfo(engine.query(infoFilter(pubkey)).firstOrNull())
@@ -126,8 +130,8 @@ class NostrTipsRepository(
     private suspend fun parsePaymentInfo(event: Event?): PaymentInfo =
         if (event == null) PaymentInfo.Disabled else withContext(engine.ffiDispatcher) { PaymentInfo.parse(RustConvert.toTips(event)) }
 
-    /** When the payment info of [pubkey] was last fetched from relays; null if never (for tests). */
-    internal suspend fun lastFetchAt(pubkey: String): Long? = mutex.withLock { infoFetchedAt[pubkey] }
+    /** When the payment info of [pubkey] was last fetched from relays in this process; null if never (for tests). */
+    internal fun lastFetchAt(pubkey: String): Long? = infoRefresh.fetchedAt(pubkey)
 
     override suspend fun publishPaymentInfo(address: Address, watcher: Watcher, amountsHidden: Boolean): PublishResult =
         engine.signAndPublish(RustConvert.toBuilder(PaymentInfo.build(address, watcher, now(), amountsHidden)))

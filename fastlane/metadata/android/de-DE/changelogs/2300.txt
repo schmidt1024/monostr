@@ -1,0 +1,5 @@
+• Überall schneller: jede Ansicht zeigt sofort, was schon auf dem Telefon ist, und aktualisiert im Hintergrund
+• Profile öffnen sofort, beim erneuten Öffnen ohne Wartezeit
+• Listen-Tabs zeigen gleich ihren Namen statt «Liste ohne Titel»
+• Mitteilungen, Suche und Lesezeichen zeigen zuerst, was gespeichert ist
+• Stummgeschaltete Konten sind schon auf der ersten Seite ausgeblendet

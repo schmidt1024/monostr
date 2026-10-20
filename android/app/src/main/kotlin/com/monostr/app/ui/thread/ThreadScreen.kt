@@ -1,6 +1,5 @@
 package com.monostr.app.ui.thread
 
-import com.monostr.nostr.repo.getAll
 import com.monostr.nostr.repo.OwnReactions
 import com.monostr.nostr.repo.MemoryOwnReactions
 import kotlinx.coroutines.Dispatchers
@@ -61,10 +60,12 @@ import com.monostr.app.ui.common.muteUndoTag
 import com.monostr.app.ui.common.uiText
 import com.monostr.app.ui.feed.NoteUi
 import com.monostr.app.ui.feed.target
+import com.monostr.app.ui.feed.withProfiles
 import com.monostr.app.ui.tips.TipDecorations
 import com.monostr.app.ui.tips.TipSheetFactory
 import com.monostr.app.ui.tips.TipSheetHost
 import com.monostr.app.ui.tips.TippersDialog
+import com.monostr.nostr.PerfTrace
 import com.monostr.nostr.model.Note
 import com.monostr.nostr.model.Strands
 import com.monostr.nostr.repo.Slot
@@ -152,12 +153,21 @@ class ThreadController(
     muteScope: CoroutineScope? = null,
 ) {
     val names: StateFlow<Map<String, String>> get() = mentions.names
+    /** The thread's first shown content is marked once (spec perf 3.9). */
+    private var contentMarked = false
     private val _state = MutableStateFlow(ThreadUiState())
     val state: StateFlow<ThreadUiState> = _state.asStateFlow()
     private val actions = NoteActions(publish, scope, counts, deletions, afterDelete, own)
     private val muteActions = mute?.let { MuteActions(it, scope, profiles, background = muteScope) }
 
     fun start() {
+        // a profile the background lookup finds replaces the shown one (spec perf 3.2); flags and counts stay
+        scope.launch {
+            profiles.updates.collect { byKey ->
+                all = all.map { it.withProfiles(byKey) }
+                _state.update { s -> s.copy(items = s.items.map { it.withProfiles(byKey) }) }
+            }
+        }
         mentions.follow(_state.map { s -> s.items.map { it.note } })
         bookmarks.ensureLoaded()
         scope.launch { bookmarks.changes.collect { _state.update { s -> s.copy(items = s.items.map(bookmarks::flags)) } } }
@@ -201,11 +211,11 @@ class ThreadController(
                             if (s.hidden > 0) add(ThreadRow.More("more-${s.reply.id}", open = s.reply.id))
                         }
                     }
-                    profiles.prefetch(withFocused.map { it.author })
                     val byKey = profiles.getAll(withFocused.map { it.author })
                     all = withFocused.map { n -> NoteUi(n, byKey.getValue(n.author), byKey.getValue(n.author)) }
                     val items = visibility.visible(all.map(::fresh), keep = view.focused.id)
                     _state.update { it.copy(items = items, rows = rows, focusedId = view.focused.id, loading = false) }
+                    if (!contentMarked && items.isNotEmpty()) { contentMarked = true; PerfTrace.mark("thread first content") }
                     decorations.track(withFocused)
                 }
                 if (!seen) _state.update { it.copy(loading = false, notFound = true) }

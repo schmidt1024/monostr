@@ -33,4 +33,15 @@ class ProfileJsonTest {
         assertEquals("alice", mixed["name"])
         assertEquals("", mixed["nip05"])
     }
+
+    @Test
+    fun `a kind 0 is read into a profile in Kotlin, string values only`() {
+        val pk = "a".repeat(64)
+        val p = ProfileJson.profile(pk, """{"name":"al","display_name":"Al","picture":"https://x/p.png","about":"hi","nip05":"al@x","banner":"https://x/b.png","website":"https://x","lud16":"al@w"}""")!!
+        assertEquals(Profile(pk, "al", "Al", "https://x/p.png", "hi", "al@x", banner = "https://x/b.png", website = "https://x"), p)
+        assertEquals("Al", ProfileJson.profile(pk, """{"displayName":"Al"}""")!!.displayName)
+        assertEquals(null, ProfileJson.profile(pk, """{"name":42}""")!!.name)
+        assertEquals(null, ProfileJson.profile(pk, "not json"))
+        assertEquals(null, ProfileJson.profile(pk, "[1,2]"))
+    }
 }

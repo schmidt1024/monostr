@@ -46,24 +46,20 @@ class BookmarksControllerTest {
     }
 
     @Test
-    fun `a pending tip set while the rows are rebuilt is not taken back`() = runTest {
+    fun `a pending tip set while the rows show is kept when a profile lands`() = runTest {
         val bob = "b".repeat(64)
         val n1 = note('1', alice, 1000); val n2 = note('2', bob, 900); val n3 = note('3', alice, 800)
         val repo = FakeBookmarks(initial = listOf(n1.id, n2.id)).apply { notes = mapOf(n1.id to n1, n2.id to n2, n3.id to n3) }
         val pending = FakePendingTips()
         val c = controller(repo, pending = pending)
         c.start(); advanceUntilIdle()
-        // a new bookmark rebuilds the rows; bob's profile lookup is slow
-        val slow = CompletableDeferred<Unit>()
-        profiles.getGates["b".repeat(64)] = slow
         repo._state.update { it.copy(ids = it.ids + n3.id) }; advanceUntilIdle()
-        // meanwhile n1 gets a pending tip: it shows at once
         pending.add(PendingTip("e".repeat(64), n1.id, 5, 4_000)); advanceUntilIdle()
         assertTrue(c.state.value.entries.first { it.id == n1.id }.note!!.pendingTip)
-        // the rebuilt rows land afterwards and must keep it
-        slow.complete(Unit); advanceUntilIdle()
+        profiles.land(Profile(bob, "bob", "Bob", null, null, null)); advanceUntilIdle()
         assertEquals(listOf(n1.id, n2.id, n3.id), c.state.value.entries.map { it.id })
         assertTrue(c.state.value.entries.first { it.id == n1.id }.note!!.pendingTip)
+        assertEquals("Bob", c.state.value.entries.first { it.id == n2.id }.note!!.author.shownName)
     }
 
     @Test
@@ -159,5 +155,22 @@ class BookmarksControllerTest {
         c.start(); advanceUntilIdle()
         c.visible(listOf(n1.id, unresolved))
         assertEquals(listOf(listOf(n1.id)), counts.requested)
+    }
+
+    @Test
+    fun `stored bookmarks show before the missing ones arrive`() = runTest {
+        val n1 = note('1', alice, 1000); val n2 = note('2', alice, 900)
+        val repo = FakeBookmarks(initial = listOf(n1.id, n2.id)).apply {
+            notes = mapOf(n1.id to n1, n2.id to n2)
+            localNotes = mapOf(n1.id to n1)
+            entriesGate = CompletableDeferred()
+        }
+        val c = controller(repo)
+        c.start(); advanceUntilIdle()
+        assertFalse(c.state.value.loading)
+        assertEquals(n1.id, c.state.value.entries.first { it.id == n1.id }.note?.note?.id)
+        assertNull(c.state.value.entries.first { it.id == n2.id }.note)
+        repo.entriesGate!!.complete(Unit); advanceUntilIdle()
+        assertEquals(n2.id, c.state.value.entries.first { it.id == n2.id }.note?.note?.id)
     }
 }

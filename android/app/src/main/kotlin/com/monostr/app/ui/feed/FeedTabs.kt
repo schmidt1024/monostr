@@ -48,6 +48,19 @@ import com.monostr.nostr.model.ListAddress
 /** Which moves the menu of the tab at [index] offers: (left, right). Following (0) is fixed, so the first list never moves left. */
 internal fun tabMoves(index: Int, tabCount: Int): Pair<Boolean, Boolean> = (index > 1) to (index in 1 until tabCount - 1)
 
+/** What a list tab says (spec perf 3.7): its title; while it loads a neutral word; "Untitled list" only for a list without one. */
+internal sealed interface TabLabel {
+    data class Title(val text: String) : TabLabel
+    data object Loading : TabLabel
+    data object Untitled : TabLabel
+}
+
+internal fun HomeTab.Pinned.label(): TabLabel = when {
+    title.isNotBlank() -> TabLabel.Title(title)
+    status == ListStatus.LOADING -> TabLabel.Loading
+    else -> TabLabel.Untitled
+}
+
 /** Spec 2026-10-18 §2.1: "Following | list 1 | …", scrollable, like X; a long press on a list tab opens its menu. */
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -64,7 +77,11 @@ internal fun FeedTabRow(
             val isSelected = state.selected == i
             val label = when (tab) {
                 HomeTab.Following -> stringResource(R.string.feed_tab_following)
-                is HomeTab.Pinned -> tab.title.ifBlank { stringResource(R.string.list_untitled) }
+                is HomeTab.Pinned -> when (val l = tab.label()) {
+                    is TabLabel.Title -> l.text
+                    TabLabel.Loading -> stringResource(R.string.feed_tab_list_loading)
+                    TabLabel.Untitled -> stringResource(R.string.list_untitled)
+                }
             }
             Box(
                 Modifier

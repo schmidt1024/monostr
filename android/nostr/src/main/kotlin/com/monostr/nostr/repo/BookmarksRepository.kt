@@ -2,9 +2,14 @@ package com.monostr.nostr.repo
 
 import com.monostr.nostr.NostrEngine
 import com.monostr.nostr.PublishResult
+import com.monostr.nostr.RefreshGate
 import com.monostr.nostr.Signer
 import com.monostr.nostr.model.Note
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.flow.StateFlow
 import rust.nostr.sdk.Event
 import rust.nostr.sdk.EventBuilder
@@ -56,7 +61,9 @@ interface BookmarksRepository {
      * published) and applies the change on top of a newer list another device wrote meanwhile.
      */
     suspend fun toggle(noteId: String): BookmarkOutcome
-    /** Notes for [BookmarksState.ids] in list order; missing ones fetched in chunks of 50. */
+    /** [entries] from the database only (spec perf 3.8): the stored notes at once, the others as placeholders. */
+    suspend fun localEntries(): List<BookmarkEntry>
+    /** Notes for [BookmarksState.ids] in list order; missing ones fetched in chunks of 50 side by side, an id no relay had is not asked again for 10 minutes. */
     suspend fun entries(): List<BookmarkEntry>
     fun clear()
 }
@@ -70,8 +77,17 @@ class NostrBookmarksRepository(
     fetchTimeout: Duration = Duration.ofSeconds(8),
     refreshTimeout: Duration = Duration.ofSeconds(3),
     watch: CoroutineScope? = null,
+    /** A chunk of ids is not asked of the relays again for this long (spec perf 3.8). */
+    private val missRetrySeconds: Long = 600,
+    /** One chunk's relay lookup. */
+    private val entriesTimeout: Duration = Duration.ofSeconds(8),
 ) : BookmarksRepository {
     private val list = NostrPrivateList(engine, signer, kind = 10003, tag = "e", now, send, fetchTimeout, refreshTimeout, watch)
+    /** Runs (and joins) the relay lookups on the engine's scope so a left screen does not cancel them (spec 3.1); freshness is [missedAt], not the gate. */
+    private val lookups = RefreshGate<String>(engine.backgroundScope, 0, now)
+    private val clock = now
+    /** Lower-case ids no relay had, with the time they were last asked (spec perf 3.8). */
+    private val missedAt = ConcurrentHashMap<String, Long>()
     override val state: StateFlow<BookmarksState> get() = list.state
 
     override suspend fun ensureLoaded(interactive: Boolean) = list.ensureLoaded(interactive)
@@ -81,21 +97,48 @@ class NostrBookmarksRepository(
     /** A kind 10003 of ours from a relay; see [NostrPrivateList.onListEvent]. */
     internal suspend fun onListEvent(event: Event) = list.onListEvent(event)
 
-    override fun clear() = list.clear()
+    override fun clear() {
+        list.clear()
+        missedAt.clear()
+    }
 
-    override suspend fun entries(): List<BookmarkEntry> {
-        val ids = list.state.value.ids
+    override suspend fun localEntries(): List<BookmarkEntry> = resolve(list.state.value.ids, fetch = false)
+
+    override suspend fun entries(): List<BookmarkEntry> = resolve(list.state.value.ids, fetch = true)
+
+    /**
+     * The notes of [ids] from the database; with [fetch] the missing ones are asked of the relays in chunks of
+     * [CHUNK] side by side (spec perf 3.8: one after another, 8 s each, before), except ids no relay had less than
+     * [missRetrySeconds] ago. A lookup while no relay is connected is not remembered.
+     */
+    private suspend fun resolve(ids: List<String>, fetch: Boolean): List<BookmarkEntry> {
+        val parsed = ids.mapNotNull { id -> runCatching { EventId.parse(id) }.getOrNull()?.let { id.lowercase() to it } }.distinctBy { it.first }
         val found = HashMap<String, Event>() // keyed by lowercase hex id
-        for (chunk in ids.chunked(CHUNK)) {
-            val parsedIds = chunk.mapNotNull { runCatching { EventId.parse(it) }.getOrNull() }
-            if (parsedIds.isEmpty()) continue
-            val f = Filter().ids(parsedIds)
-            var events = engine.query(f)
-            if (events.size < parsedIds.size) {
-                quietly { engine.fetch(f) }
-                events = engine.query(f)
+        suspend fun read(chunk: List<Pair<String, EventId>>) =
+            engine.query(Filter().ids(chunk.map { it.second })).forEach { found[it.id().toHex().lowercase()] = it }
+        parsed.chunked(CHUNK).forEach { read(it) }
+        if (fetch) {
+            val t = clock()
+            val missing = parsed.filter { (id, _) -> id !in found && missedAt[id]?.let { t - it < missRetrySeconds } != true }
+            if (missing.isNotEmpty()) {
+                coroutineScope {
+                    missing.chunked(CHUNK).map { chunk ->
+                        async {
+                            val key = chunk.joinToString(",") { it.first }
+                            lookups.awaitStamped(key, force = true) {
+                                quietly { engine.fetch(Filter().ids(chunk.map { it.second }), entriesTimeout) }
+                                val have = engine.query(Filter().ids(chunk.map { it.second })).map { it.id().toHex().lowercase() }.toSet()
+                                val online = engine.connectedNormalRelayUrls().isNotEmpty()
+                                val stamp = clock()
+                                chunk.forEach { (id, _) -> if (id in have) missedAt.remove(id) else if (online) missedAt[id] = stamp }
+                                online
+                            }
+                            lookups.invalidate(key) // the gate only joins runs; nothing to keep per chunk
+                        }
+                    }.awaitAll()
+                }
+                missing.chunked(CHUNK).forEach { read(it) }
             }
-            events.forEach { found[it.id().toHex().lowercase()] = it }
         }
         val notes = NoteLoader.notes(engine, ids.mapNotNull { found[it.lowercase()] }).associateBy { it.id.lowercase() }
         return ids.map { BookmarkEntry(it, notes[it.lowercase()]) }

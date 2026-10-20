@@ -1,6 +1,5 @@
 package com.monostr.app.ui.search
 
-import com.monostr.nostr.repo.getAll
 import com.monostr.nostr.repo.OwnReactions
 import com.monostr.nostr.repo.MemoryOwnReactions
 import kotlinx.coroutines.flow.map
@@ -16,7 +15,9 @@ import com.monostr.app.ui.common.NoteVisibility
 import com.monostr.app.ui.common.UiText
 import com.monostr.app.ui.common.userMessage
 import com.monostr.app.ui.feed.NoteUi
+import com.monostr.app.ui.feed.withProfiles
 import com.monostr.app.ui.tips.TipDecorations
+import com.monostr.nostr.PerfTrace
 import com.monostr.nostr.model.Note
 import com.monostr.nostr.model.Profile
 import com.monostr.nostr.repo.MuteRepository
@@ -104,8 +105,11 @@ class SearchController(
     private var debounce: Job? = null
     private var running: Job? = null
     private var attached: List<String> = emptyList()
+    /** The first local people of this screen are marked once (spec perf 3.9). */
+    private var peopleMarked = false
 
     fun start() {
+        scope.launch { profiles.updates.collect { byKey -> _state.update { s -> s.copy(notes = s.notes.map { it.withProfiles(byKey) }) } } }
         mentions.follow(_state.map { s -> s.notes.map { it.note } })
         recentSearches?.let { r -> scope.launch { r.recent.collect { list -> _state.update { it.copy(recent = list) } } } }
         bookmarks.ensureLoaded()
@@ -115,6 +119,8 @@ class SearchController(
         // a request started on another screen greys the entry here too, and frees it again when it failed
         scope.launch { deletions.pending.collect { _state.update { s -> s.copy(notes = s.notes.map(actions::flags)) } } }
         decorations.start()
+        // the people index is built behind the screen, so the first search does not wait for it (spec perf 3.8)
+        search.warmUp()
         scope.launch { decorations.changes.collect { _state.update { s -> s.copy(notes = s.notes.map(decorations::decorate)) } } }
         scope.launch {
             searchRelays.collect { relays ->
@@ -193,14 +199,16 @@ class SearchController(
         val relays = searchRelays.first()
         val local = try { search.profilesLocal(q) } catch (e: CancellationException) { throw e } catch (e: Exception) { emptyList() }
         _state.update { it.copy(mode = SearchMode.TEXT, hashtag = null, people = local, notes = emptyList(), loading = true, error = null, noSearchRelays = relays.isEmpty(), searched = false) }
+        if (!peopleMarked) { peopleMarked = true; PerfTrace.mark("search people shown") }
         try {
             coroutineScope {
-                val people = async { search.profiles(q, relays) }
-                val notes = async { search.notes(q, relays) }
-                val p = people.await(); val n = notes.await()
+                // spec perf 3.8: the people show as soon as they are in; the NIP-50 notes take longer and must not hold them back
+                val people = async { search.profiles(q, relays).also { p -> _state.update { it.copy(people = p.items) } } }
+                val n = search.notes(q, relays)
+                val p = people.await()
                 val decorated = decorate(n.items)
                 val err = (p.error ?: n.error)?.userMessage()
-                _state.update { it.copy(people = p.items, notes = visibility.visible(decorated.map(::flagged)), loading = false, error = err, searched = true) }
+                _state.update { it.copy(notes = visibility.visible(decorated.map(::flagged)), loading = false, error = err, searched = true) }
                 decorations.track(n.items)
             }
         } catch (e: CancellationException) {
@@ -211,7 +219,16 @@ class SearchController(
     }
 
     private suspend fun hashtag(tag: String, until: Long? = null) {
-        if (until == null) _state.update { it.copy(mode = SearchMode.HASHTAG, hashtag = tag, people = emptyList(), notes = emptyList(), loading = true, error = null, searched = false) }
+        if (until == null) {
+            _state.update { it.copy(mode = SearchMode.HASHTAG, hashtag = tag, people = emptyList(), notes = emptyList(), loading = true, error = null, searched = false) }
+            // spec perf 3.8: what the database holds shows at once; the relays' page replaces it when it lands
+            val stored = try { search.hashtagLocal(tag) } catch (e: CancellationException) { throw e } catch (e: Exception) { emptyList() }
+            if (stored.isNotEmpty()) {
+                val decorated = decorate(stored)
+                _state.update { s -> s.copy(notes = visibility.visible(decorated.map(::flagged))) }
+                decorations.track(stored)
+            }
+        }
         try {
             val out = search.hashtag(tag, until)
             val decorated = decorate(out.items)
@@ -231,7 +248,8 @@ class SearchController(
     fun loadMore() {
         val s = _state.value
         val tag = s.hashtag ?: return
-        if (s.mode != SearchMode.HASHTAG || s.loadingMore || s.notes.isEmpty()) return
+        // loading: the first page is still on its way (stored notes may show already); a paged fetch would race it
+        if (s.mode != SearchMode.HASHTAG || s.loading || s.loadingMore || s.notes.isEmpty()) return
         _state.update { it.copy(loadingMore = true) }
         running = scope.launch { hashtag(tag, until = s.notes.last().note.createdAt) }
     }
@@ -272,7 +290,6 @@ class SearchController(
 
     private suspend fun decorate(notes: List<Note>): List<NoteUi> {
         val pubkeys = notes.flatMap { listOfNotNull(it.author, it.repostOf?.author) }
-        profiles.prefetch(pubkeys)
         val byKey = profiles.getAll(pubkeys)
         return notes.map { n ->
             NoteUi(n, byKey.getValue(n.author), n.repostOf?.let { byKey.getValue(it.author) } ?: byKey.getValue(n.author))

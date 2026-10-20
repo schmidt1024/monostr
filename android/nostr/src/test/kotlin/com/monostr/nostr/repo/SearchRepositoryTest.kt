@@ -3,6 +3,10 @@ package com.monostr.nostr.repo
 import com.monostr.nostr.LocalSigner
 import com.monostr.nostr.NostrEngine
 import com.monostr.nostr.SilentWsRelay
+import com.monostr.nostr.connectedEngine
+import com.monostr.nostr.model.Profile
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
@@ -18,6 +22,7 @@ import rust.nostr.sdk.Timestamp
 import java.nio.file.Path
 import java.time.Duration
 
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class SearchRepositoryTest {
     @TempDir lateinit var dir: Path
     private val me = Keys.parse("0000000000000000000000000000000000000000000000000000000000000001")
@@ -43,6 +48,37 @@ class SearchRepositoryTest {
     }
 
     @Test
+    fun `stored people are read once per session, profiles that change later are found`() = runTest {
+        val e = engine()
+        e.save(meta(alice, """{"name":"alice"}"""))
+        val updates = MutableSharedFlow<Map<String, Profile>>(extraBufferCapacity = 4)
+        val repo = NostrSearchRepository(e, Duration.ofMillis(200), profileUpdates = updates, scope = backgroundScope)
+        runCurrent()
+        assertEquals(listOf(alice.publicKey().toHex()), repo.profilesLocal("ali").map { it.pubkey })
+        // F6: every stored kind 0 was read and parsed on every search; now once, then kept current by the updates
+        e.save(meta(bob, """{"name":"alina"}"""))
+        val carol = Keys.generate().publicKey().toHex()
+        updates.emit(mapOf(carol to Profile(carol, "alissa", null, null, null, null))); runCurrent()
+        assertEquals(setOf(alice.publicKey().toHex(), carol), repo.profilesLocal("ali").map { it.pubkey }.toSet())
+        // Review Focus: a changed profile is found under the new name only
+        updates.emit(mapOf(carol to Profile(carol, "carol", null, null, null, null))); runCurrent()
+        assertEquals(listOf(alice.publicKey().toHex()), repo.profilesLocal("ali").map { it.pubkey })
+        assertEquals(listOf(carol), repo.profilesLocal("carol").map { it.pubkey })
+    }
+
+    @Test
+    fun `stored hashtag notes are read without a relay`() = runTest {
+        SilentWsRelay(recordRequests = true).use { relay ->
+            val e = connectedEngine(dir, relay)
+            e.save(note(alice, "xmr day", 1000, listOf("monero")))
+            val repo = NostrSearchRepository(e, Duration.ofSeconds(5))
+            assertEquals(listOf("xmr day"), repo.hashtagLocal("Monero").map { it.content })
+            assertTrue(relay.requests.none { "\"#t\"" in it }, "asked: ${relay.requests}")
+            e.close()
+        }
+    }
+
+    @Test
     fun `profiles without search relays are the local ones and carry no error`() = runTest {
         val e = engine()
         e.save(meta(alice, """{"name":"alice"}"""))
@@ -65,6 +101,20 @@ class SearchRepositoryTest {
         assertTrue(notes.error is SearchRelayUnreachableException)
         repo.detach(listOf("ws://127.0.0.1:9"))
         assertTrue(e.temporaryRelayUrls().isEmpty())
+    }
+
+    @Test
+    fun `an old profile from a search relay never replaces a newer one in the index`() = runTest {
+        val e = engine()
+        val at = { s: Long -> Timestamp.fromSecs(s.toULong()) }
+        e.save(EventBuilder.metadata(Metadata.fromJson("""{"name":"alicenew"}""")).customCreatedAt(at(2000)).signWithKeys(alice))
+        val old = EventBuilder.metadata(Metadata.fromJson("""{"name":"aliceold"}""")).customCreatedAt(at(1000)).signWithKeys(alice)
+        SilentWsRelay(serve = listOf(old.asJson())).use { r ->
+            val repo = NostrSearchRepository(e, Duration.ofSeconds(2))
+            repo.profiles("aliceold", listOf(r.url))
+            assertTrue(repo.profilesLocal("aliceold").isEmpty())
+            assertEquals(listOf(alice.publicKey().toHex()), repo.profilesLocal("alicenew").map { it.pubkey })
+        }
     }
 
     @Test

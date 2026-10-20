@@ -364,6 +364,7 @@
     <!-- notifications -->
     <string name="notifications_title">Notifications</string>
     <string name="notifications_empty">No notifications yet</string>
+    <string name="notifications_checking">Asking your relays…</string>
     <string name="notifications_error_load">Notifications could not be loaded</string>
     <string name="messages_title">Messages</string>
     <string name="messages_empty">No messages yet. Open a profile and tap “Message”.</string>
@@ -588,6 +589,8 @@
     <string name="list_no_members">No members yet</string>
     <string name="list_feed_empty">No notes from this list yet</string>
     <string name="list_untitled">Untitled list</string>
+    <!-- spec perf 3.7: a list tab whose title is not known yet -->
+    <string name="feed_tab_list_loading">List</string>
     <string name="profile_tab_lists">Lists</string>
     <string name="list_create">New list</string>
     <string name="lists_empty_own">No lists yet</string>

@@ -64,7 +64,7 @@ class MentionResolverTest {
         val known = FakeProfiles(mapOf(carol to Profile(carol, "carol", null, null, null, null)))
         var offline = true
         val profiles = object : ProfileRepository by known {
-            override suspend fun prefetch(pubkeys: Collection<String>) {
+            override fun prefetch(pubkeys: Collection<String>) {
                 if (offline) error("offline")
                 known.prefetch(pubkeys)
             }
@@ -81,5 +81,17 @@ class MentionResolverTest {
         advanceUntilIdle()
         assertEquals(mapOf(carol to "carol"), r.names.value)
         assertEquals(1, r.seenCount())
+    }
+
+    @Test
+    fun `a name that lands later from the background lookup joins the map, others do not`() = runTest {
+        val profiles = FakeProfiles()
+        val r = MentionResolver(profiles, eager())
+        r.track(listOf(carol))
+        advanceUntilIdle()
+        assertEquals(emptyMap<String, String>(), r.names.value)
+        profiles.land(Profile(carol, "carol", null, null, null, null), Profile("d".repeat(64), "dave", null, null, null, null))
+        advanceUntilIdle()
+        assertEquals(mapOf(carol to "carol"), r.names.value)
     }
 }

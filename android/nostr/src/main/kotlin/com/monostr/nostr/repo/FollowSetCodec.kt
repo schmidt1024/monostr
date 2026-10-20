@@ -2,7 +2,7 @@ package com.monostr.nostr.repo
 
 import com.monostr.nostr.model.FollowSet
 import com.monostr.nostr.model.ListAddress
-import rust.nostr.sdk.Event
+import com.monostr.tips.event.Event as JsonEvent
 
 /** Kind 30000 events ↔ [FollowSet] (spec 2026-10-18 §3.1). */
 internal object FollowSetCodec {
@@ -16,17 +16,17 @@ internal object FollowSetCodec {
     private val HEX64 = Regex("[0-9a-f]{64}")
 
     /**
-     * The list behind [event], or null when it is hidden: mute list, empty replacement of a deleted list,
-     * or a foreign list with nothing readable. [privateTags] decrypts the private part of an own list; null
-     * for foreign lists, whose private part is never read (only their public part shows).
+     * The list behind [event] (read once in Kotlin, spec perf 3.7), or null when it is hidden: mute list, empty
+     * replacement of a deleted list, or a foreign list with nothing readable. [privateTags] decrypts the private
+     * part of an own list; null for foreign lists, whose private part is never read (only their public part shows).
      */
-    suspend fun decode(event: Event, privateTags: PrivateTags?, interactive: Boolean): FollowSet? {
-        val tags = event.tags().toVec().map { it.asVec() }.filter { it.isNotEmpty() }
+    suspend fun decode(event: JsonEvent, privateTags: PrivateTags?, interactive: Boolean): FollowSet? {
+        val tags = event.tags.filter { it.isNotEmpty() }
         val d = tags.firstOrNull { it[0] == "d" }?.getOrNull(1) ?: return null
         if (d in HIDDEN_D) return null
-        val content = event.content()
+        val content = event.content
         if (tags.all { it[0] == "d" } && content.isBlank()) return null
-        val author = event.author().toHex()
+        val author = event.pubkey
         val public = tags.filter { it[0] != "d" }
         var secret: List<List<String>> = emptyList()
         var locked = false
@@ -50,9 +50,10 @@ internal object FollowSetCodec {
             members = members,
             private = ownPrivate,
             author = author,
-            createdAt = event.createdAt().asSecs().toLong(),
+            createdAt = event.createdAt,
             locked = locked,
             extra = all.filter { it[0] !in EDITED },
+            eventId = event.id,
         )
     }
 

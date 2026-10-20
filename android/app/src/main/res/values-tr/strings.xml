@@ -360,6 +360,7 @@
     <!-- notifications -->
     <string name="notifications_title">Bildirimler</string>
     <string name="notifications_empty">Henüz bildirim yok</string>
+    <string name="notifications_checking">Relay\'leriniz sorgulanıyor…</string>
     <string name="notifications_error_load">Bildirimler yüklenemedi</string>
     <string name="messages_title">Mesajlar</string>
     <string name="messages_empty">Henüz mesaj yok. Bir profil açıp “Mesaj”a dokun.</string>
@@ -583,6 +584,7 @@
     <string name="list_no_members">Henüz üye yok</string>
     <string name="list_feed_empty">Bu listeden henüz not yok</string>
     <string name="list_untitled">Başlıksız liste</string>
+    <string name="feed_tab_list_loading">Liste</string>
     <string name="profile_tab_lists">Listeler</string>
     <string name="list_create">Yeni liste</string>
     <string name="lists_empty_own">Henüz liste yok</string>

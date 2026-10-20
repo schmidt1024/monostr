@@ -199,7 +199,7 @@ class FeedControllerTest {
     }
 
     @Test
-    fun `a pending tip that starts while a live list is decorated is not lost`() = runTest {
+    fun `a profile landing after the live list keeps a pending tip set meanwhile`() = runTest {
         val feed = FakeFeed()
         val n1 = note('1', alice, 2000)
         val n2 = note('2', bob, 1500)
@@ -208,20 +208,19 @@ class FeedControllerTest {
         val c = FeedController(feed, profiles, FakePublish(), TipDecorations(FakeTips(), pending, profiles, FakePublish(), eager()) { 5_000 }, BookmarkActions(FakeBookmarks(), eager()), FakeCounts(), eager())
         c.start()
         advanceUntilIdle()
-        // a live list arrives; n1 is decorated, then the lookup of bob's profile is slow
-        val slow = CompletableDeferred<Unit>()
-        profiles.getGates[bob] = slow
+        // a live list arrives; n1 is decorated, bob's profile is still to come from the background lookup
         feed.liveUpdates.emit(listOf(n1, n2))
         advanceUntilIdle()
-        // meanwhile the user tips n1: the marker shows at once
+        // the user tips n1: the marker shows at once
         pending.add(PendingTip("e".repeat(64), n1.id, 5, 4_000))
         advanceUntilIdle()
         assertTrue(c.state.value.notes.first { it.note.id == n1.id }.pendingTip)
-        // the live list lands afterwards and must not take the marker away again
-        slow.complete(Unit)
+        // bob's profile lands from the background lookup and must not take the marker away
+        profiles.land(Profile(bob, "bob", "Bob", null, null, null))
         advanceUntilIdle()
         assertEquals(listOf(n1.id, n2.id), c.state.value.notes.map { it.note.id })
-        assertTrue(c.state.value.notes.first { it.note.id == n1.id }.pendingTip, "the live list overwrote the pending marker")
+        assertTrue(c.state.value.notes.first { it.note.id == n1.id }.pendingTip, "the landed profile overwrote the pending marker")
+        assertEquals("Bob", c.state.value.notes.first { it.note.id == n2.id }.author.displayName)
     }
 
     @Test
@@ -318,11 +317,9 @@ class FeedControllerTest {
     }
 
     @Test
-    fun `the first page shows with stored profiles while a slow profile lookup still runs`() = runTest {
+    fun `the first page shows with stored profiles and takes over a profile the background lookup found`() = runTest {
         // cold start (2026-10-19): the page waited for profiles fetched from the relays, seconds on the Pixel
         val known = FakeProfiles(mapOf(alice to Profile(alice, "alice", "Alice", null, null, null)))
-        val gate = CompletableDeferred<Unit>()
-        known.getGates[alice] = gate
         val feed = FakeFeed().apply { current = listOf(note('1', alice, 1000)) }
         val c = FeedController(feed, known, FakePublish(), decorations(), BookmarkActions(FakeBookmarks(), eager()), FakeCounts(), eager())
         c.start()
@@ -331,10 +328,21 @@ class FeedControllerTest {
         assertFalse(c.state.value.loading)
         assertEquals("Alice", c.state.value.notes.single().author.displayName)
         // the lookup answers with a newer profile: the shown note takes it over
-        known.current.value = mapOf(alice to Profile(alice, "alice", "Alice B.", null, null, null))
-        gate.complete(Unit)
+        known.land(Profile(alice, "alice", "Alice B.", null, null, null))
         advanceUntilIdle()
         assertEquals("Alice B.", c.state.value.notes.single().author.displayName)
+    }
+
+    @Test
+    fun `a list feed's snapshot leaves out accounts no longer on the list`() = runTest {
+        val snap = FeedSnapshot(File(snapshotDir, "list.json"), UnconfinedTestDispatcher(testScheduler))
+        val kept = note('8', alice, 600)
+        val gone = note('9', bob, 500)
+        snap.write(listOf(kept, gone).map { FeedSnapshot.Item(it, Profile.empty(it.author), Profile.empty(it.author)) })
+        val feed = FakeFeed().apply { current = listOf(note('1', alice, 1000)); liveGate = CompletableDeferred(); refreshGate = CompletableDeferred() }
+        val c = FeedController(feed, profiles, FakePublish(), decorations(), BookmarkActions(FakeBookmarks(), eager()), FakeCounts(), eager(), source = FeedSource.Authors(listOf(alice)), snapshot = snap)
+        c.start(); advanceUntilIdle()
+        assertEquals(listOf(kept.id), c.state.value.notes.map { it.note.id })
     }
 
     @Test
@@ -565,8 +573,6 @@ class FeedControllerTest {
         val root = note('r', carol, 900)
         val reply = note('s', alice, 1000, replyTo = root.id, root = root.id)
         val known = FakeProfiles(mapOf(alice to Profile(alice, "alice", "Alice", null, null, null)))
-        val gate = CompletableDeferred<Unit>()
-        known.getGates[carol] = gate
         val feed = FakeFeed().apply { current = listOf(reply) }
         val conversations = FakeConversations(mapOf(reply.id to Chain(listOf(Slot.Shown(root)), cut = false)))
         val muted = MutableStateFlow<Set<String>>(emptySet())
@@ -578,8 +584,7 @@ class FeedControllerTest {
         advanceUntilIdle()
         assertEquals(root.id, c.state.value.ancestors[root.id]?.note?.id)
         // carol's profile arrives from the relays
-        known.current.value = known.current.value + (carol to Profile(carol, "carol", "Carol", null, null, null))
-        gate.complete(Unit)
+        known.land(Profile(carol, "carol", "Carol", null, null, null))
         advanceUntilIdle()
         assertEquals("Carol", c.state.value.ancestors[root.id]?.author?.displayName)
         // a visibility change rebuilds the ancestors from what the controller keeps

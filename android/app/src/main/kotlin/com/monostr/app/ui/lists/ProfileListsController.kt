@@ -2,6 +2,7 @@ package com.monostr.app.ui.lists
 
 import com.monostr.app.ui.common.Message
 import com.monostr.app.ui.common.attempt
+import com.monostr.app.ui.profile.ProfileCache
 import com.monostr.nostr.model.FollowSet
 import com.monostr.nostr.model.ListAddress
 import com.monostr.nostr.repo.FeedTabsRepository
@@ -28,6 +29,8 @@ class ProfileListsController(
     private val pins: FeedTabsRepository,
     private val scope: CoroutineScope,
     writeScope: CoroutineScope = scope,
+    /** Spec perf 3.5/3.7: the session's last profiles, their lists too; null (tests that do not care) keeps nothing. */
+    private val cache: ProfileCache? = null,
 ) {
     private val _state = MutableStateFlow(ProfileListsState())
     val state: StateFlow<ProfileListsState> = _state.asStateFlow()
@@ -44,10 +47,21 @@ class ProfileListsController(
             if (isSelf) {
                 lists.own().collect { l -> _state.update { it.copy(lists = l) } }
             } else {
-                val found = attempt { lists.of(author) } ?: emptyList()
-                _state.update { it.copy(lists = found) }
+                // spec perf 3.7: the session's last view, then the database, then the relays (~16 s before, one after
+                // another). With nothing stored the spinner stays until the relays answered: "No public lists" before
+                // them would be wrong for most foreign profiles.
+                cache?.lists(author)?.let { l -> _state.update { it.copy(lists = l) } }
+                val stored = attempt { lists.localOf(author) }.orEmpty()
+                if (stored.isNotEmpty()) show(stored)
+                val fetched = attempt { lists.of(author) }
+                show(fetched ?: _state.value.lists ?: stored)
             }
         }
+    }
+
+    private fun show(found: List<FollowSet>) {
+        _state.update { it.copy(lists = found) }
+        cache?.putLists(author, found)
     }
 
     fun togglePin(set: FollowSet) = pinActions.toggle(set.address, set.address in _state.value.pinned)

@@ -145,6 +145,20 @@ class ThreadComposeControllerTest {
     }
 
     @Test
+    fun `a reply author's profile that lands later shows in the thread`() = runTest {
+        val root = note('1', alice, 100)
+        val r1 = note('2', bob, 200, replyTo = root.id)
+        val threads = FakeThreads(mapOf(r1.id to ThreadView(root, r1, listOf(r1), ancestors = listOf(Slot.Shown(root)))))
+        val c = ThreadController(r1.id, threads, profiles, FakePublish(), decorations(), BookmarkActions(FakeBookmarks(), eager()), FakeCounts(), eager())
+        c.start()
+        advanceUntilIdle()
+        assertEquals(Profile.shortPubkey(bob), c.state.value.items.first { it.note.id == r1.id }.author.shownName)
+        profiles.land(Profile(bob, "bob", "Bob", null, null, null))
+        advanceUntilIdle()
+        assertEquals("Bob", c.state.value.items.first { it.note.id == r1.id }.author.shownName)
+    }
+
+    @Test
     fun `a send tapped while the quote loads shows its error, which the loaded quote clears`() = runTest {
         val quoted = note('1', alice, 100)
         val gate = CompletableDeferred<Note?>()

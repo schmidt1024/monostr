@@ -2,7 +2,6 @@ package com.monostr.app.ui.feed
 
 import kotlinx.coroutines.delay
 import com.monostr.app.data.FeedSnapshot
-import com.monostr.nostr.repo.getAll
 import kotlinx.coroutines.flow.first
 import com.monostr.nostr.repo.OwnReactions
 import com.monostr.nostr.repo.MemoryOwnReactions
@@ -32,13 +31,13 @@ import com.monostr.app.ui.common.NoteVisibility
 import com.monostr.app.ui.common.UiText
 import com.monostr.app.ui.common.noteMenu
 import com.monostr.app.ui.common.uiText
-import com.monostr.app.ui.notifications.Unread
 import com.monostr.app.ui.tips.AmountsPrompt
 import com.monostr.app.ui.tips.AmountsPromptState
 import com.monostr.app.ui.tips.AmountsQuestion
 import com.monostr.app.ui.tips.AmountsVisibility
 import com.monostr.app.ui.tips.TipDecorations
 import com.monostr.app.ui.tips.TipSheetFactory
+import com.monostr.nostr.PerfTrace
 import com.monostr.nostr.model.Note
 import com.monostr.nostr.model.NoteCounts
 import com.monostr.nostr.model.Profile
@@ -151,7 +150,7 @@ class FeedController(
     muteScope: CoroutineScope? = null,
     /** Whose notes this feed shows: the home feed, or a list's members (spec 2026-10-18 §4.3). */
     private val source: FeedSource = FeedSource.Following,
-    /** The home feed's last first page, shown at once on the next start; null (lists, tests) = none. */
+    /** The last first page of this feed (home or a pinned list), shown at once on the next start; null (tests, the list screen) = none. */
     private val snapshot: FeedSnapshot? = null,
 ) {
     val names: StateFlow<Map<String, String>> get() = mentions.names
@@ -169,8 +168,18 @@ class FeedController(
     private var snapshotJob: Job? = null
     /** True once a page came from the database or the relays (also an empty one): the snapshot is over then. */
     private val freshSeen = MutableStateFlow(false)
+    /** The home feed's first shown notes are marked once (spec perf 3.9). */
+    private var firstNotesMarked = false
 
     fun start() {
+        // first, so nothing is missed: a profile the background lookup finds replaces the shown one (spec perf 3.2);
+        // only the profiles change, flags set meanwhile (a like, a bookmark, a pending tip) stay, the kept ancestors too
+        scope.launch {
+            profiles.updates.collect { byKey ->
+                allAncestors.replaceAll { _, ui -> ui.withProfiles(byKey) }
+                _state.update { s -> s.mapAll { ui -> ui.withProfiles(byKey) } }
+            }
+        }
         if (snapshot != null) scope.launch { showSnapshot(snapshot) }
         mentions.follow(_state.map { s -> s.notes.map { it.note } + s.ancestors.values.map { it.note } })
         bookmarks.ensureLoaded()
@@ -372,7 +381,9 @@ class FeedController(
      * already replaced (a pending tip, a like, a bookmark), and no later change would correct them.
      */
     private suspend fun showSnapshot(snapshot: FeedSnapshot) {
-        val items = snapshot.read()
+        // a list feed shows its members only: a snapshot written before one left the list must not bring their notes back
+        val members = (source as? FeedSource.Authors)?.pubkeys?.toSet()
+        val items = snapshot.read().let { all -> if (members == null) all else all.filter { it.note.author in members } }
         // the live list was faster (also with an empty page): nothing to show from the snapshot
         if (items.isEmpty() || freshSeen.value) return
         snapshotIds = items.map { it.note.id }.toSet()
@@ -395,6 +406,10 @@ class FeedController(
 
     private fun setNotes(loading: Boolean? = null, refreshing: Boolean? = null, f: (FeedUiState) -> List<NoteUi>) {
         _state.update { s -> s.copy(notes = visibility.visible(f(s).map(::flagged)), loading = loading ?: s.loading, refreshing = refreshing ?: s.refreshing) }
+        if (!firstNotesMarked && source == FeedSource.Following && _state.value.notes.isNotEmpty()) {
+            firstNotesMarked = true
+            PerfTrace.mark("feed first notes")
+        }
         trackShown()
     }
 
@@ -448,56 +463,18 @@ class FeedController(
     private fun withCounts(ui: NoteUi): NoteUi = ui.copy(counts = counts.counts.value[ui.target.id])
 
     /**
-     * Notes with the profiles stored now; the flags follow in [setNotes] / [visibleAncestors]. Missing
-     * or stale profiles are fetched in the background and replace the shown ones when they arrive: a
-     * page waiting for the relays' profiles took seconds on a cold start (Pixel, 2026-10-19).
+     * Notes with the profiles stored now; the flags follow in [setNotes] / [visibleAncestors]. Missing or stale
+     * profiles are queued in the repository and arrive through [ProfileRepository.updates] (collected in [start]):
+     * a page waiting for the relays' profiles took seconds on a cold start (Pixel, 2026-10-19).
      */
     private suspend fun decorate(notes: List<Note>): List<NoteUi> {
         val pubkeys = notes.flatMap { listOfNotNull(it.author, it.repostOf?.author) }.distinct()
         val stored = profiles.local(pubkeys).associateBy { it.pubkey }
-        refreshProfilesLater(pubkeys)
+        profiles.prefetch(pubkeys)
         return notes.map { n ->
             val author = stored[n.author] ?: Profile.empty(n.author)
             NoteUi(n, author, n.repostOf?.let { stored[it.author] ?: Profile.empty(it.author) } ?: author)
         }
-    }
-
-    private val pendingProfiles = LinkedHashSet<String>()
-    private var profileJob: Job? = null
-
-    /** One lookup at a time over everything asked for meanwhile (a cold start emits pages in waves). */
-    private fun refreshProfilesLater(pubkeys: List<String>) {
-        if (pubkeys.isEmpty()) return
-        pendingProfiles += pubkeys
-        if (profileJob?.isActive == true) return
-        profileJob = scope.launch {
-            while (pendingProfiles.isNotEmpty()) {
-                val batch = pendingProfiles.toList()
-                pendingProfiles.clear()
-                refreshProfiles(batch)
-            }
-        }
-    }
-
-    private suspend fun refreshProfiles(pubkeys: List<String>) {
-        val byKey = try {
-            profiles.prefetch(pubkeys)
-            profiles.getAll(pubkeys)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            return // the stored profiles stay
-        }
-        // only the profiles change: flags set meanwhile (a like, a bookmark) stay as they are; the kept
-        // ancestors too, or the next rebuild (visibleAncestors) would bring the stored profiles back
-        allAncestors.replaceAll { _, ui -> ui.withProfiles(byKey) }
-        _state.update { s -> s.mapAll { ui -> ui.withProfiles(byKey) } }
-    }
-
-    private fun NoteUi.withProfiles(byKey: Map<String, Profile>): NoteUi {
-        val author = byKey[note.author] ?: author
-        val reposted = note.repostOf?.let { byKey[it.author] ?: repostedAuthor } ?: author
-        return if (author == this.author && reposted == repostedAuthor) this else copy(author = author, repostedAuthor = reposted)
     }
 
     companion object {
@@ -509,13 +486,20 @@ class FeedController(
 /** The note a like/repost/reply/tip refers to: the original for reposts. */
 val NoteUi.target: Note get() = note.repostOf ?: note
 
-/** A list's feed (spec 2026-10-18 §4.3): the home feed's controller over [source], on its own [scope]. */
-fun Ready.listFeed(factory: TipSheetFactory, source: FeedSource.Authors, scope: CoroutineScope): FeedController = FeedController(
+/** [this] with the authors [byKey] holds (a landed profile, spec perf 3.2); the same instance when neither changes. */
+fun NoteUi.withProfiles(byKey: Map<String, Profile>): NoteUi {
+    val author = byKey[note.author] ?: author
+    val reposted = note.repostOf?.let { byKey[it.author] ?: repostedAuthor } ?: author
+    return if (author == this.author && reposted == repostedAuthor) this else copy(author = author, repostedAuthor = reposted)
+}
+
+/** A list's feed (spec 2026-10-18 §4.3): the home feed's controller over [source], on its own [scope]; a pinned tab passes its [snapshot] (spec perf 3.7). */
+fun Ready.listFeed(factory: TipSheetFactory, source: FeedSource.Authors, scope: CoroutineScope, snapshot: FeedSnapshot? = null): FeedController = FeedController(
     feed, profiles, publish, factory.decorations(scope),
     BookmarkActions(bookmarks, scope, background = engine.backgroundScope), counts, scope,
     conversations = conversations, mentions = MentionResolver(profiles, scope, Dispatchers.Default),
     deletions = deletions, visibility = visibility, afterDelete = afterNoteDelete, own = ownReactions,
-    mute = mute, muteScope = engine.backgroundScope, source = source,
+    mute = mute, muteScope = engine.backgroundScope, source = source, snapshot = snapshot,
 )
 
 @HiltViewModel
@@ -528,7 +512,9 @@ class FeedViewModel @Inject constructor(session: NostrSession, private val facto
     val menu = ready.noteMenu(delete = controller::delete, mute = controller::mute)
 
     /** Spec 2026-10-18 §4.3: Following plus one feed per pinned list. */
-    val tabs = HomeTabsController(ready.feedTabs, ready.lists, viewModelScope, ready.pubkey, controller) { source, scope -> ready.listFeed(factory, source, scope) }
+    val tabs = HomeTabsController(ready.feedTabs, ready.lists, viewModelScope, ready.pubkey, controller, ready.listSnapshots) { source, scope, snapshot ->
+        ready.listFeed(factory, source, scope, snapshot)
+    }
 
     /** The note menu of [feed]: delete and mute go through the tab's own controller. */
     fun menuFor(feed: FeedController): NoteMenu = if (feed === controller) menu else ready.noteMenu(delete = feed::delete, mute = feed::mute)
@@ -536,7 +522,7 @@ class FeedViewModel @Inject constructor(session: NostrSession, private val facto
     val relayStates = ready.engine.relayStates()
 
     /** Badge count from the live notification list and the read marker (spec 5.7). */
-    val unread: StateFlow<Int> = Unread.live(ready.notifications, settings.notificationsReadAt, ready.muted)
+    val unread: StateFlow<Int> = ready.notificationsStore.unread
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
     val dmUnread: StateFlow<Int> = ready.dmStore.unreadTotalExcept(ready.muted).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
@@ -568,6 +554,7 @@ class FeedViewModel @Inject constructor(session: NostrSession, private val facto
     fun answerAmountsPrompt(hide: Boolean) = amountsQuestion.answer(hide)
 
     init {
+        ready.notificationsStore.start()
         tabs.start()
         viewModelScope.launch {
             controller.start()

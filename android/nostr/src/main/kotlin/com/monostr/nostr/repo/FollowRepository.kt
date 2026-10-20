@@ -2,6 +2,7 @@ package com.monostr.nostr.repo
 
 import com.monostr.nostr.NostrEngine
 import com.monostr.nostr.PublishResult
+import com.monostr.nostr.model.NoteMapper
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.BufferOverflow
@@ -153,7 +154,15 @@ class NostrFollowRepository(
         return if (list != null) snapshotOf(list) else Snapshot(emptySet(), known = fetch.completed)
     }
 
-    private fun snapshotOf(list: Event) = Snapshot(pTags(list.tags().toVec().map { it.asVec() }), known = true)
+    /** The last own contact list read (its id) and its snapshot: every profile open reads it (spec perf 3.5). */
+    @Volatile private var memo: Pair<String, Snapshot>? = null
+
+    /** The `p` tags read in Kotlin from the event's JSON (one FFI call instead of one per tag; 0.3–0.6 s for ~300 follows), memoised per event id. */
+    private fun snapshotOf(list: Event): Snapshot {
+        val id = list.id().toHex()
+        memo?.let { (memoId, s) -> if (memoId == id) return s }
+        return Snapshot(pTags(NoteMapper.decoded(list).tags), known = true).also { memo = id to it }
+    }
 
     private fun pTags(tags: List<List<String>>): Set<String> = tags.filter { it.size >= 2 && it[0] == "p" }.map { it[1] }.toSet()
 

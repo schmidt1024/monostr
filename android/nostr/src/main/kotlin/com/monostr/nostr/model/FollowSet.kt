@@ -28,6 +28,8 @@ data class ListAddress(val kind: Int, val pubkey: String, val d: String) {
  * private ones together. [private]: written NIP-44-encrypted. [locked]: an own list whose private part could
  * not be decrypted; it is never written then. [extra]: tags of a list made elsewhere that monostr does not
  * edit (e.g. `image`), written back as they were.
+ * [eventId]: the event the list was read from; empty for one that was not read from an event yet (being created).
+ * The decrypt cache and the persisted summary key on it (spec perf 3.7).
  */
 data class FollowSet(
     val address: ListAddress,
@@ -39,6 +41,7 @@ data class FollowSet(
     val createdAt: Long,
     val locked: Boolean,
     val extra: List<List<String>> = emptyList(),
+    val eventId: String = "",
 )
 
 /** How a list or pin change went (spec 2026-10-18 §3.3, §3.4). */

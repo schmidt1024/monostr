@@ -46,13 +46,15 @@ class ProfileIndexTest {
                 try {
                     val repo = NostrProfileRepository(e, now = { clock }, indexRelays = listOf(index.url))
                     val aliceHex = alice.publicKey().toHex()
-                    assertEquals("alice", repo.get(aliceHex).name)
+                    repo.get(aliceHex)
+                    assertTrue(awaitTrue { repo.observe(aliceHex).first().name == "alice" }, "the index relay's profile never arrived")
                     assertEquals(1, index.requests.size)
                     assertTrue(index.requests[0].contains(aliceHex))
                     assertEquals("alice", repo.get(aliceHex).name)
+                    withContext(Dispatchers.IO) { Thread.sleep(300) }
                     assertEquals(1, index.requests.size, "it is in the database now")
                     assertEquals(1, e.relayUrls().size, "the index relay never joins the user's relays")
-                    assertTrue(e.temporaryRelayUrls().isEmpty(), "and is let go after the lookup")
+                    assertTrue(awaitTrue { e.temporaryRelayUrls().isEmpty() }, "and is let go after the lookup")
                 } finally {
                     e.close()
                 }
@@ -70,7 +72,7 @@ class ProfileIndexTest {
                     val aliceHex = alice.publicKey().toHex()
                     val bobHex = bob.publicKey().toHex()
                     repo.prefetch(listOf(aliceHex, bobHex))
-                    assertEquals(listOf("bob"), repo.local(listOf(bobHex)).map { it.name })
+                    assertTrue(awaitTrue { repo.local(listOf(bobHex)).map { it.name } == listOf("bob") })
                     assertTrue(awaitTrue { repo.observe(aliceHex).first().name == "alice" }, "what the index relay had shows once it is there")
                     assertEquals(listOf("alice", "bob"), repo.local(listOf(aliceHex, bobHex)).map { it.name })
                     assertEquals(1, index.requests.size)
@@ -92,7 +94,7 @@ class ProfileIndexTest {
                     val repo = NostrProfileRepository(e, now = { clock }, missingRetrySeconds = 600, indexRelays = listOf(index.url))
                     val aliceHex = alice.publicKey().toHex()
                     assertNull(repo.get(aliceHex).name)
-                    assertEquals(1, index.requests.size)
+                    assertTrue(awaitTrue { index.requests.size == 1 })
                     clock += 599
                     assertNull(repo.get(aliceHex).name)
                     repo.prefetch(listOf(aliceHex))
@@ -136,7 +138,8 @@ class ProfileIndexTest {
                 try {
                     val held = e.attachTemporary(listOf(index.url))
                     val repo = NostrProfileRepository(e, now = { clock }, indexRelays = listOf(index.url))
-                    assertEquals("alice", repo.get(alice.publicKey().toHex()).name)
+                    repo.get(alice.publicKey().toHex())
+                    assertTrue(awaitTrue { repo.observe(alice.publicKey().toHex()).first().name == "alice" })
                     assertEquals(held, e.temporaryRelayUrls(), "the other holder keeps its relay")
                     e.detachTemporary(held)
                     assertTrue(e.temporaryRelayUrls().isEmpty())
@@ -173,6 +176,8 @@ class ProfileIndexTest {
             try {
                 val repo = NostrProfileRepository(e, now = { clock }, indexRelays = listOf(own.url))
                 assertNull(repo.get(alice.publicKey().toHex()).name)
+                assertTrue(awaitTrue { own.requests.isNotEmpty() })
+                withContext(Dispatchers.IO) { Thread.sleep(300) }
                 assertEquals(1, own.requests.size, "one request over the normal connection, none as an index lookup: ${own.requests}")
             } finally {
                 e.close()

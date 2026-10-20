@@ -1,8 +1,11 @@
 package com.monostr.nostr.repo
 
 import com.monostr.nostr.NostrEngine
+import com.monostr.nostr.RefreshGate
+import com.monostr.nostr.model.Nip10
 import com.monostr.nostr.model.Note
 import com.monostr.nostr.model.NoteMapper
+import com.monostr.tips.event.Event as JsonEvent
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -45,6 +48,11 @@ interface FeedRepository {
     suspend fun notesBy(author: String, limit: Int = 50, fetch: Boolean = true): List<Note>
     /** The newest [limit] notes of one profile tab ([section]), newest first; fetches the author's latest page from relays when [fetch] is set. */
     suspend fun profileNotes(author: String, section: ProfileSection, limit: Int = 50, fetch: Boolean = true): List<Note>
+    /**
+     * Spec perf 3.5: one relay refresh of [author] for all profile tabs (kind 1 and kind 6 under their own limits, and the
+     * author's deletion requests), in the background; again only after the session TTL. Waiting callers may leave, the fetch goes on.
+     */
+    suspend fun refreshProfile(author: String, limit: Int = 50) {}
     /** The [section]'s notes before [before], fetched from relays first; paging works like [loadMore]. */
     suspend fun moreProfileNotes(author: String, section: ProfileSection, before: Long, limit: Int = 50): List<Note>
 }
@@ -115,6 +123,7 @@ class NostrFeedRepository(
      * cannot fill a page; reposts of their notes by others are still filtered in the UI. [notesBy] and the profile reads ignore it.
      */
     private val excluded: () -> Set<String> = { emptySet() },
+    private val profileTtlSeconds: Long = 60,
 ) : FeedRepository {
     private val pubkey = requireNotNull(engine.pubkey) { "feed needs a logged-in user" }
     /** When the deletion requests of an author set (sorted, joined) were last fetched for the newest page; this process only. */
@@ -198,26 +207,29 @@ class NostrFeedRepository(
             authors.chunked(AUTHOR_CHUNK).map { chunk ->
                 async {
                     var notes = feedFilter(chunk, kinds).limit(limit.toULong())
-                    var requests = authorsFilter(chunk, listOf(5)).limit(DELETION_LIMIT)
-                    if (untilTs != null) {
-                        notes = notes.until(untilTs)
-                        requests = requests.until(untilTs)
-                    }
-                    // the newest page asks only for what came since the last answer for the same authors: the relays
-                    // otherwise send the same few hundred requests every time, and taking them in costs seconds on a phone
-                    val key = if (untilTs == null) chunk.sorted().joinToString(",") else null
-                    val since = key?.let { deletionsAnswered[it] }
-                    if (since != null) requests = requests.since(Timestamp.fromSecs((since - DELETION_SKEW).coerceAtLeast(0).toULong()))
-                    val askedAt = now()
+                    if (untilTs != null) notes = notes.until(untilTs)
                     // side by side: each waits for the slowest relay, one after the other they added up
                     val n = async { quietly { engine.fetch(notes) } }
-                    quietly {
-                        engine.fetch(requests)
-                        if (key != null) deletionsAnswered[key] = askedAt
-                    }
+                    fetchDeletions(chunk, untilTs)
                     n.await()
                 }
             }.awaitAll()
+        }
+    }
+
+    /** The deletion requests (kind 5) of [authors] (at most [AUTHOR_CHUNK]) under their own limit, before [untilTs] when set. */
+    private suspend fun fetchDeletions(authors: List<String>, untilTs: Timestamp?) {
+        var requests = authorsFilter(authors, listOf(5)).limit(DELETION_LIMIT)
+        if (untilTs != null) requests = requests.until(untilTs)
+        // the newest page asks only for what came since the last answer for the same authors: the relays
+        // otherwise send the same few hundred requests every time, and taking them in costs seconds on a phone
+        val key = if (untilTs == null) authors.sorted().joinToString(",") else null
+        val since = key?.let { deletionsAnswered[it] }
+        if (since != null) requests = requests.since(Timestamp.fromSecs((since - DELETION_SKEW).coerceAtLeast(0).toULong()))
+        val askedAt = now()
+        quietly {
+            engine.fetch(requests)
+            if (key != null) deletionsAnswered[key] = askedAt
         }
     }
 
@@ -343,9 +355,50 @@ class NostrFeedRepository(
         return NoteLoader.notes(engine, engine.query(feedFilter(listOf(author)).limit(limit.toULong()))).sortedByDescending { it.createdAt }
     }
 
+    /** One profile refresh per author at a time, on the engine's background scope; none again within [profileTtlSeconds]. */
+    private val profileRefresh = RefreshGate<String>(engine.backgroundScope, profileTtlSeconds, now)
+
+    override suspend fun refreshProfile(author: String, limit: Int) {
+        profileRefresh.await(author) { fetchProfilePage(author, limit) }
+    }
+
+    /**
+     * Kind 1 and kind 6 under their own limits (many notes cannot crowd the reposts out) and the author's kind 5
+     * (incremental like [fetchPage]), side by side.
+     */
+    private suspend fun fetchProfilePage(author: String, limit: Int) {
+        val authors = listOf(author)
+        coroutineScope {
+            listOf(
+                async { quietly { engine.fetch(authorsFilter(authors, listOf(1)).limit(limit.toULong())) } },
+                async { quietly { engine.fetch(authorsFilter(authors, listOf(6)).limit(limit.toULong())) } },
+                async { fetchDeletions(authors, null) },
+            ).awaitAll()
+        }
+    }
+
     override suspend fun profileNotes(author: String, section: ProfileSection, limit: Int, fetch: Boolean): List<Note> {
-        if (fetch) fetchPage(listOf(author), limit, kinds = section.kinds)
-        return localPage(listOf(author), section::keeps, limit, null, section.kinds)
+        if (fetch) refreshProfile(author, limit)
+        return if (section == ProfileSection.POSTS) localPosts(author, limit) else localPage(listOf(author), section::keeps, limit, null, section.kinds)
+    }
+
+    /**
+     * The "Posts" tab from the database (spec perf 3.5): larger pages of the author's kind 1, each event read once in
+     * Kotlin, the root filter on that JSON, and only the kept notes go through [Withdrawn] and [NoteLoader].
+     */
+    private suspend fun localPosts(author: String, limit: Int): List<Note> = withContext(Dispatchers.IO) {
+        val kept = ArrayList<Note>()
+        var before: Long? = null
+        repeat(POSTS_ROUNDS) {
+            val decoded = engine.query(pageFilter(listOf(author), POSTS_SCAN, before, listOf(1))).map { it to NoteMapper.decoded(it) }
+            if (decoded.isEmpty()) return@withContext kept.sortedByDescending { it.createdAt }
+            val roots = decoded.filter { (_, ev) -> Nip10.parse(ev.tags).replyToId == null }.sortedByDescending { it.second.createdAt }
+            val taken = roots.take(limit - kept.size + POSTS_SLACK)
+            kept += NoteLoader.notesDecoded(engine, taken).filter(ProfileSection.POSTS::keeps)
+            if (kept.size >= limit || (decoded.size < POSTS_SCAN && taken.size == roots.size)) return@withContext kept.sortedByDescending { it.createdAt }.take(limit)
+            before = (if (taken.size < roots.size) taken.last().second.createdAt else decoded.minOf { it.second.createdAt }) - 1
+        }
+        kept.sortedByDescending { it.createdAt }.take(limit)
     }
 
     override suspend fun moreProfileNotes(author: String, section: ProfileSection, before: Long, limit: Int): List<Note> =
@@ -358,11 +411,14 @@ class NostrFeedRepository(
  * original the database refuses (withdrawn by its author, NIP-09) is dropped.
  */
 internal object NoteLoader {
-    suspend fun notes(engine: NostrEngine, all: List<rust.nostr.sdk.Event>): List<Note> {
-        val events = Withdrawn.filter(engine, all)
+    suspend fun notes(engine: NostrEngine, all: List<rust.nostr.sdk.Event>): List<Note> = notesDecoded(engine, all.map { it to NoteMapper.decoded(it) })
+
+    /** [notes] for events already read in Kotlin: each event crosses the FFI once (spec perf 3.1). */
+    suspend fun notesDecoded(engine: NostrEngine, all: List<Pair<rust.nostr.sdk.Event, JsonEvent>>): List<Note> {
+        val events = Withdrawn.filterDecoded(engine, all)
         val referenced = HashMap<String, rust.nostr.sdk.Event?>()
         val withdrawn = HashSet<String>()
-        for (ev in events.map { NoteMapper.decoded(it) }) {
+        for ((_, ev) in events) {
             if (ev.kind != 6) continue
             val embedded = NoteMapper.verifiedEmbedded(ev)
             if (embedded != null) {
@@ -380,7 +436,7 @@ internal object NoteLoader {
                 if (id !in referenced) referenced[id] = runCatching { engine.eventById(id) }.getOrNull()
             }
         }
-        return events.filterNot { it.id().toHex() in withdrawn }.mapNotNull { NoteMapper.note(it) { id -> referenced[id] } }
+        return events.filterNot { it.second.id in withdrawn }.mapNotNull { (_, ev) -> NoteMapper.note(ev) { id -> referenced[id] } }
     }
 }
 
@@ -389,3 +445,12 @@ private const val DELETION_LIMIT = 200uL
 
 /** Margin for [NostrFeedRepository]'s incremental deletion fetch: a request signed by a clock a bit behind still comes. */
 private const val DELETION_SKEW = 600L
+
+/** Events per database read of the "Posts" tab; replies in between are dropped in Kotlin before any further work. */
+private const val POSTS_SCAN = 200
+
+/** Database reads per "Posts" page at most. */
+private const val POSTS_ROUNDS = 5
+
+/** Roots handed to [NoteLoader] beyond the page size, for the ones [Withdrawn] drops. */
+private const val POSTS_SLACK = 10

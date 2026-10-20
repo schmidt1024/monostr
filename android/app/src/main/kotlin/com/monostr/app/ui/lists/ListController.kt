@@ -57,6 +57,12 @@ class ListController(
     private var feedScope: CoroutineScope? = null
 
     fun start() {
+        // the author's and the members' profiles the background lookup finds (spec perf 3.2)
+        scope.launch {
+            profiles.updates.collect { byKey ->
+                _state.update { s -> s.copy(author = byKey[address.pubkey] ?: s.author, members = s.members.map { byKey[it.pubkey] ?: it }) }
+            }
+        }
         scope.launch { pins.tabs().collect { p -> _state.update { it.copy(pinned = address in p) } } }
         scope.launch { attempt { profiles.get(address.pubkey) }?.let { a -> _state.update { it.copy(author = a) } } }
         if (address.pubkey == self) {
@@ -77,13 +83,18 @@ class ListController(
             return
         }
         val before = _state.value.set
-        if (before == null || before.members != set.members || before.locked != set.locked) rebuildFeed(set)
+        // the member SET decides (spec perf 3.7): the same members from a relay in another order keep the feed
+        if (before == null || before.members.toSet() != set.members.toSet() || before.locked != set.locked) rebuildFeed(set)
         _state.update { it.copy(set = set, loading = false, unavailable = false) }
         val known = attempt {
             profiles.prefetch(set.members)
             profiles.local(set.members).associateBy { it.pubkey }
         } ?: emptyMap()
-        _state.update { it.copy(members = set.members.map { pk -> known[pk] ?: Profile.empty(pk) }) }
+        // inside the update: a profile that landed meanwhile stays
+        _state.update { s ->
+            val shown = s.members.associateBy { it.pubkey }
+            s.copy(members = set.members.map { pk -> known[pk] ?: shown[pk] ?: Profile.empty(pk) })
+        }
     }
 
     private fun rebuildFeed(set: FollowSet) {

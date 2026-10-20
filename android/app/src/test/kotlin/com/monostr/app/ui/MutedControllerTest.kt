@@ -99,11 +99,21 @@ class MutedControllerTest {
     @Test
     fun `a failing profile prefetch still lists the entries`() = runTest {
         val profiles = object : ProfileRepository by FakeProfiles() {
-            override suspend fun prefetch(pubkeys: Collection<String>) = throw IllegalArgumentException("not a pubkey")
+            override fun prefetch(pubkeys: Collection<String>): Unit = throw IllegalArgumentException("not a pubkey")
         }
         val c = MutedController(FakeMute(initial = setOf(bob, carol)), profiles, eager())
         c.start(); runCurrent()
         assertEquals(listOf(bob, carol), c.state.value.entries.map { it.first })
         assertEquals(Profile.empty(bob), c.state.value.entries.first().second)
+    }
+
+    @Test
+    fun `a muted account's profile that lands later fills its row`() = runTest {
+        val profiles = FakeProfiles()
+        val c = MutedController(FakeMute(initial = setOf(bob, carol)), profiles, eager())
+        c.start(); runCurrent()
+        assertEquals(Profile.empty(carol), c.state.value.entries.first { it.first == carol }.second)
+        profiles.land(Profile(carol, "carol", "Carol", null, null, null)); runCurrent()
+        assertEquals("Carol", c.state.value.entries.first { it.first == carol }.second.shownName)
     }
 }

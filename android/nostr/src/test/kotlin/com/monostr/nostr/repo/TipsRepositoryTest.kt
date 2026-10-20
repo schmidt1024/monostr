@@ -6,6 +6,7 @@ import com.monostr.nostr.LocalSigner
 import com.monostr.nostr.NostrEngine
 import com.monostr.nostr.SilentWsRelay
 import com.monostr.nostr.awaitTrue
+import com.monostr.nostr.connectedEngine
 import com.monostr.nostr.RustConvert
 import com.monostr.tips.Kinds
 import com.monostr.tips.PaymentId
@@ -16,6 +17,8 @@ import com.monostr.tips.TipReceipt
 import com.monostr.tips.TipRequest
 import com.monostr.tips.TipType
 import com.monostr.tips.event.UnsignedEvent
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
@@ -32,6 +35,7 @@ import rust.nostr.sdk.Filter
 import rust.nostr.sdk.Keys
 import rust.nostr.sdk.Kind
 import java.nio.file.Path
+import java.time.Duration
 
 class TipsRepositoryTest {
     @TempDir lateinit var dir: Path
@@ -367,5 +371,43 @@ class TipsRepositoryTest {
         val repo = NostrTipsRepository(engine()) { clock }
         val got = SilentWsRelay(answerEose = true).use { r -> repo.watcherStatus(watcher.publicKey().toHex(), listOf(r.url)) }
         assertNull(got)
+    }
+
+    @Test
+    fun `a stored payment info is returned at once on the first call of the process, the relays are asked behind it`() = runTest {
+        // spec perf 3.4 / F6: `last == 0` made the first call per process always wait for the relays (8 s on a silent one)
+        SilentWsRelay(recordRequests = true).use { relay ->
+            val e = connectedEngine(dir, relay, me.secretKey().toHex())
+            try {
+                e.save(alicePaymentInfo())
+                val repo = NostrTipsRepository(e) { clock }
+                val started = System.currentTimeMillis()
+                val info = repo.paymentInfo(alice.publicKey().toHex())
+                val took = System.currentTimeMillis() - started
+                assertTrue(info is PaymentInfo.Enabled, "got $info")
+                assertTrue(took < 2_000, "the first call waited $took ms for the relays")
+                assertTrue(awaitTrue { relay.requests.any { "10037" in it } }, "no refresh behind it: ${relay.requests}")
+            } finally {
+                e.close()
+            }
+        }
+    }
+
+    @Test
+    fun `callers asking for the same payment info at once share one relay request`() = runTest {
+        SilentWsRelay(recordRequests = true).use { relay ->
+            val e = connectedEngine(dir, relay, me.secretKey().toHex())
+            try {
+                val repo = NostrTipsRepository(e, fetchTimeout = Duration.ofSeconds(1)) { clock }
+                val hex = alice.publicKey().toHex()
+                val a = async(Dispatchers.Default) { repo.paymentInfo(hex, maxAgeSeconds = 0) }
+                val b = async(Dispatchers.Default) { repo.paymentInfo(hex, maxAgeSeconds = 0) }
+                assertEquals(PaymentInfo.Disabled, a.await())
+                assertEquals(PaymentInfo.Disabled, b.await())
+                assertEquals(1, relay.requests.count { "10037" in it }, "requests: ${relay.requests}")
+            } finally {
+                e.close()
+            }
+        }
     }
 }

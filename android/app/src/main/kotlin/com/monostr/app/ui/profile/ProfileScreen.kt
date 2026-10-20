@@ -1,10 +1,10 @@
 package com.monostr.app.ui.profile
 
-import com.monostr.nostr.repo.getAll
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.ui.platform.LocalContext
 import com.monostr.app.ui.common.copyToClipboard
 import com.monostr.nostr.Npub
+import com.monostr.nostr.PerfTrace
 import com.monostr.nostr.repo.OwnReactions
 import com.monostr.nostr.repo.MemoryOwnReactions
 import kotlinx.coroutines.Dispatchers
@@ -106,6 +106,8 @@ import com.monostr.app.ui.common.VisibleNotes
 import com.monostr.app.ui.common.muteUndoTag
 import com.monostr.app.ui.common.uiText
 import com.monostr.app.ui.feed.NoteUi
+import com.monostr.app.ui.feed.withProfiles
+import com.monostr.app.ui.common.attempt
 import com.monostr.app.ui.feed.target
 import com.monostr.app.ui.tips.TipDecorations
 import com.monostr.app.ui.tips.TipSheetFactory
@@ -174,12 +176,14 @@ data class ProfileUiState(
     val loadingMore: Boolean = false,
     /** Tabs whose paging found nothing older: the list end no longer asks. */
     val ended: Set<ProfileSection> = emptySet(),
+    /** The relays are asked for this profile's notes (spec perf 3.5); the stored ones show meanwhile. */
+    val refreshing: Boolean = false,
 ) {
     /** The open tab's notes. */
     val shown: List<NoteUi> get() = list(tab).orEmpty()
 
-    /** The open tab has not loaded yet. */
-    val shownLoading: Boolean get() = if (tab == ProfileSection.POSTS) loading else list(tab) == null
+    /** The open tab has not loaded yet, or it is still empty while the relays are asked. */
+    val shownLoading: Boolean get() = (if (tab == ProfileSection.POSTS) loading else list(tab) == null) || (refreshing && shown.isEmpty())
 
     /** Applies [f] to the lists of all tabs. */
     fun mapNotes(f: (List<NoteUi>) -> List<NoteUi>): ProfileUiState = copy(notes = f(notes), replies = replies?.let(f), reposts = reposts?.let(f))
@@ -227,6 +231,8 @@ class ProfileController(
     muteScope: CoroutineScope? = null,
     /** Null (tests that do not care): no counts line. */
     private val followCounts: FollowCountsRepository? = null,
+    /** Spec perf 3.5: the session's last profiles; null (tests that do not care) keeps nothing. */
+    private val cache: ProfileCache? = null,
 ) {
     val names: StateFlow<Map<String, String>> get() = mentions.names
     private val _state = MutableStateFlow(ProfileUiState(Profile.empty(pubkey), isSelf = pubkey == selfPubkey))
@@ -237,13 +243,35 @@ class ProfileController(
     /** The author's write relays currently attached (spec 5); empty when the setting is off or none were found. */
     private var attached: List<String> = emptyList()
     private var loader: Job? = null
+    private var notesJob: Job? = null
     /** Whether the screen is visible (started); the outbox refresh loop only fetches while it is (spec 5.2). */
     private val visible = MutableStateFlow(true)
 
     /** Called from the screen's lifecycle: false on stop, true on start. */
     fun setVisible(visible: Boolean) { this.visible.value = visible }
 
+    /** The perf marks of this screen, once each (spec perf 3.9). */
+    private val marked: MutableSet<String> = java.util.Collections.synchronizedSet(HashSet())
+    private fun markOnce(name: String) { if (marked.add(name)) PerfTrace.mark(name) }
+
     fun start() {
+        // a reopened profile shows what it showed last at once; everything below refreshes it (spec perf 3.5)
+        cache?.get(pubkey)?.let { e ->
+            _state.update { s ->
+                s.copy(
+                    profile = e.profile,
+                    notes = deletions.visible(e.posts.map(::flagged)),
+                    loading = false,
+                    replies = e.replies?.let { l -> deletions.visible(l.map(::flagged)) },
+                    reposts = e.reposts?.let { l -> deletions.visible(l.map(::flagged)) },
+                    followCounts = e.counts,
+                )
+            }
+            markOnce("profile header")
+            markOnce("profile first notes")
+        }
+        // first, so nothing is missed: a profile the background lookup finds lands on the notes (spec perf 3.2)
+        scope.launch { profiles.updates.collect { byKey -> _state.update { s -> s.mapNotes { l -> l.map { it.withProfiles(byKey) } } } } }
         mentions.follow(_state.map { s -> s.allNotes.map { it.note } })
         scope.launch { deletions.deleted.collect { _state.update { s -> s.mapNotes(deletions::visible) } } }
         // a request started on another screen greys the entry here too, and frees it again when it failed
@@ -260,16 +288,23 @@ class ProfileController(
                 _state.update { s ->
                     s.copy(profile = p).mapNotes { l -> l.map { n -> if (n.note.author == pubkey) n.copy(author = p, repostedAuthor = if (n.note.isRepost) n.repostedAuthor else p) else n } }
                 }
+                markOnce("profile header")
             }
         }
+        // the header from the database at once; a missing or stale one is looked up behind it and arrives above (spec perf 3.2)
+        scope.launch { attempt { profiles.get(pubkey) } }
         // the numbers come in as the relays answer (following at once, followers growing): apart from the notes, a failure costs only the line
         followCounts?.let { repo ->
             scope.launch {
                 try {
-                    repo.counts(pubkey).collect { counts -> _state.update { it.copy(followCounts = counts) } }
+                    repo.counts(pubkey).collect { counts ->
+                        _state.update { it.copy(followCounts = counts) }
+                        markOnce("profile counts")
+                    }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
+                    // the counts line is an extra: a failed lookup leaves it out (followCounts stays null or keeps the last numbers)
                 }
             }
         }
@@ -279,57 +314,96 @@ class ProfileController(
         decorations.start()
         scope.launch { decorations.changes.collect { _state.update { s -> s.mapNotes { l -> l.map(decorations::decorate) } } } }
         scope.launch { counts.counts.collect { _state.update { s -> s.mapNotes { l -> l.map(::withCounts) } } } }
+        // spec perf 3.5: independent jobs; the notes never wait for the author's relays, nor the other way round
+        notesJob = scope.launch { loadNotes() }
         // This one coroutine owns the whole outbox lifecycle: it attaches the author's write relays
         // and, in its `finally`, detaches them — on a normal return, on close()'s cancel(), and on the
         // ViewModel's viewModelScope being torn down (onCleared runs after that cancellation already
         // happened, so a plain launch in close() would never run; cancelling this job's finally does).
         loader = scope.launch {
             try {
-                val profile = profiles.get(pubkey)
-                _state.update { it.copy(profile = profile) }
-                reload(profile, fetch = true) // normal relays first: no outbox wait before the first notes
-                val extra = if (authorRelaysEnabled()) runCatching { authorRelays.writeRelays(pubkey) }.getOrElse { e -> if (e is CancellationException) throw e; emptyList() } else emptyList()
-                if (extra.isEmpty()) return@launch
-                try {
-                    authorRelays.attach(extra)
-                    attached = extra
-                    _state.update { it.copy(extraRelays = extra) }
-                    authorRelays.fetchNotes(extra, pubkey)
-                    reloadQuietly()
-                    while (true) {
-                        delay(refreshMs)
-                        visible.first { it }
-                        authorRelays.fetchNotes(extra, pubkey)
-                        reloadQuietly()
-                    }
-                } finally {
-                    // Unconditional: attach() itself loops per relay URL with suspension points, so a
-                    // cancellation landing mid-attach can leave some of [extra] actually attached while
-                    // `attached` is still empty. Detaching is refcounted in the engine, so a URL this
-                    // screen never attached would decrement another holder's reference; that cannot
-                    // happen here because attach() only fails between URLs by cancellation, fetchNotes()
-                    // pairs its own attach/detach per call, and this loader does exactly one attach and
-                    // one detach of [extra]. Detaching the full list is therefore balanced and leak-free.
-                    withContext(NonCancellable) { runCatching { authorRelays.detach(extra) } }
-                    attached = emptyList()
-                }
+                outbox()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _state.update { it.copy(loading = false, message = uiText(R.string.profile_error_load).asMessage()) }
+                // the author's relays are an extra: the notes from the user's own relays stay
             }
         }
     }
 
-    /** Loads and decorates the author's "Posts"; called on start (with a normal-relay fetch) and after every outbox refresh (without, so the refresh only pulls in what the extra relays already delivered). */
-    private suspend fun reload(profile: Profile, fetch: Boolean) = reload(ProfileSection.POSTS, profile, fetch)
+    /** Spec perf 3.5: the stored "Posts" first, then one relay refresh for every tab, then the database again. */
+    private suspend fun loadNotes() {
+        try {
+            reload(ProfileSection.POSTS)
+            markOnce("profile first notes")
+            _state.update { it.copy(refreshing = true) }
+            try {
+                feed.refreshProfile(pubkey)
+            } finally {
+                _state.update { it.copy(refreshing = false) }
+            }
+            reloadLoaded()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            _state.update { it.copy(loading = false, message = uiText(R.string.profile_error_load).asMessage()) }
+        }
+    }
+
+    /** Attaches the author's write relays (spec 5), fetches from them and refreshes every [refreshMs] while visible. */
+    private suspend fun outbox() {
+        val extra = try {
+            if (authorRelaysEnabled()) authorRelays.writeRelays(pubkey) else emptyList()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            emptyList()
+        }
+        if (extra.isEmpty()) return
+        try {
+            authorRelays.attach(extra)
+            attached = extra
+            _state.update { it.copy(extraRelays = extra) }
+            refreshFrom(extra)
+            while (true) {
+                delay(refreshMs)
+                visible.first { it }
+                refreshFrom(extra)
+            }
+        } finally {
+            // Unconditional: attach() itself loops per relay URL with suspension points, so a
+            // cancellation landing mid-attach can leave some of [extra] actually attached while
+            // `attached` is still empty. Detaching is refcounted in the engine, so a URL this
+            // screen never attached would decrement another holder's reference; that cannot
+            // happen here because attach() only fails between URLs by cancellation, fetchNotes()
+            // pairs its own attach/detach per call, and this loader does exactly one attach and
+            // one detach of [extra]. Detaching the full list is therefore balanced and leak-free.
+            withContext(NonCancellable) { runCatching { authorRelays.detach(extra) } }
+            attached = emptyList()
+        }
+    }
 
     /**
-     * Loads the newest page of [section]. Notes older than that page, loaded by [loadMore] before, stay below it:
-     * the refresh loop must not take the user's scrolled-in pages away.
+     * Ids earlier outbox fetches returned. A fetch reports every note it saw (replies and reposts of unopened tabs,
+     * deleted ones, ones older than the loaded page), so "not shown" alone would reload on every tick.
      */
-    private suspend fun reload(section: ProfileSection, profile: Profile, fetch: Boolean) {
-        val fresh = decorate(feed.profileNotes(pubkey, section, fetch = fetch), profile)
+    private val outboxSeen = HashSet<String>()
+
+    /** One outbox fetch; the tabs are read again only when it brought an id neither shown nor seen by an earlier fetch (spec perf 3.5). */
+    private suspend fun refreshFrom(relays: List<String>) {
+        val ids = authorRelays.fetchNotes(relays, pubkey)
+        val shown = _state.value.allNotes.mapTo(HashSet()) { it.note.id }
+        val fresh = ids.any { it !in outboxSeen && it !in shown }
+        outboxSeen += ids
+        if (fresh) reloadLoaded()
+    }
+
+    /**
+     * Reads the newest page of [section] from the database. Notes older than that page, loaded by [loadMore] before,
+     * stay below it: a refresh must not take the user's scrolled-in pages away.
+     */
+    private suspend fun reload(section: ProfileSection) {
+        val fresh = decorate(feed.profileNotes(pubkey, section, fetch = false), _state.value.profile)
         _state.update { s ->
             val fresh = fresh.map(::flagged)
             val oldest = fresh.minOfOrNull { it.note.createdAt }
@@ -340,9 +414,16 @@ class ProfileController(
         track()
     }
 
-    /** [notes] with their authors' profiles; the flags follow inside the state update ([flagged]), read when the list is written. */
+    /** [reload] of every tab opened so far; one tab's failure must not stop the others or replace a loaded profile with an error. */
+    private suspend fun reloadLoaded() {
+        for (section in ProfileSection.entries) {
+            if (section != ProfileSection.POSTS && _state.value.list(section) == null) continue
+            runCatching { reload(section) }.onFailure { if (it is CancellationException) throw it }
+        }
+    }
+
+    /** [notes] with their authors' profiles (one read; landed ones come through [ProfileRepository.updates]); the flags follow in [flagged]. */
     private suspend fun decorate(notes: List<Note>, profile: Profile): List<NoteUi> {
-        profiles.prefetch(notes.mapNotNull { it.repostOf?.author })
         val byKey = profiles.getAll(notes.mapNotNull { it.repostOf?.author })
         return notes.map { n -> NoteUi(n, profile, n.repostOf?.let { r -> byKey.getValue(r.author) } ?: profile) }
     }
@@ -350,29 +431,19 @@ class ProfileController(
     /** [ui] with the current tips, flags and counts; applied inside `_state.update`, so a change during a slow lookup is not undone. */
     private fun flagged(ui: NoteUi): NoteUi = withCounts(actions.flags(bookmarks.flags(decorations.decorate(ui))))
 
-    /** Tips are watched for the notes of all tabs. */
+    /** Tips are watched for the notes of all tabs; added ones only, the running subscriptions stay (spec perf 3.5). */
     private fun track() {
-        decorations.track(_state.value.allNotes.map { it.note })
+        decorations.add(_state.value.allNotes.map { it.note })
     }
 
-    /** A refresh-loop [reload] of every tab loaded so far; a per-iteration failure must not stop the loop or replace an already-loaded profile with an error message. */
-    private suspend fun reloadQuietly() {
-        // the CURRENT profile, not the one captured at start: the observer above may have replaced it after an edit
-        runCatching { reload(_state.value.profile, fetch = false) }.onFailure { if (it is CancellationException) throw it }
-        for (section in listOf(ProfileSection.REPLIES, ProfileSection.REPOSTS)) {
-            if (_state.value.list(section) == null) continue
-            runCatching { reload(section, _state.value.profile, fetch = false) }.onFailure { if (it is CancellationException) throw it }
-        }
-    }
-
-    /** Opens a tab; "Replies" and "Reposts" load (with a relay fetch) the first time they open. */
+    /** Opens a tab; "Replies" and "Reposts" are read from the database the first time they open (the refresh in [loadNotes] covers them). */
     fun selectTab(section: ProfileSection) {
         val before = _state.value
         _state.update { it.copy(tab = section) }
         if (section == ProfileSection.POSTS || before.list(section) != null || !tabsLoading.add(section)) return
         scope.launch {
             try {
-                reload(section, _state.value.profile, fetch = true)
+                reload(section)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -419,6 +490,12 @@ class ProfileController(
     fun close() {
         loader?.cancel()
         loader = null
+        notesJob?.cancel()
+        notesJob = null
+        val s = _state.value
+        if (!s.loading) {
+            cache?.put(pubkey, ProfileCache.Entry(s.profile, s.notes.take(ProfileCache.PAGE), s.replies?.take(ProfileCache.PAGE), s.reposts?.take(ProfileCache.PAGE), s.followCounts))
+        }
     }
 
     fun like(note: Note) = actions.like(note, ::onActionResult)
@@ -506,6 +583,7 @@ class ProfileViewModel @Inject constructor(
         deletions = ready.deletions, afterDelete = ready.afterNoteDelete, own = ready.ownReactions,
         mute = ready.mute, muteScope = ready.engine.backgroundScope,
         followCounts = ready.followCounts,
+        cache = ready.profileCache,
     )
     val deletions = ready.deletions
     val menu = ready.noteMenu(delete = controller::delete, mute = controller::mute)
@@ -513,7 +591,7 @@ class ProfileViewModel @Inject constructor(
     /** The user's own pending profile tips to this person; idle on the own profile (no tip button there). */
     val tipWatch = factory.profileTipWatch(pubkey, viewModelScope)
     /** The Lists tab (spec 2026-10-18 §2.2); pin writes run on the background scope so leaving does not cancel them. */
-    val lists = ProfileListsController(pubkey, ready.pubkey, ready.lists, ready.feedTabs, viewModelScope, writeScope = ready.engine.backgroundScope)
+    val lists = ProfileListsController(pubkey, ready.pubkey, ready.lists, ready.feedTabs, viewModelScope, writeScope = ready.engine.backgroundScope, cache = ready.profileCache)
     /** The "Add to list" sheet; started when it opens, so other profiles do not load the own lists for nothing. */
     val addToList = AddToListController(pubkey, ready.lists, viewModelScope, writeScope = ready.engine.backgroundScope)
     init {

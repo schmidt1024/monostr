@@ -2,10 +2,13 @@ package com.monostr.nostr.repo
 
 import com.monostr.nostr.LocalSigner
 import com.monostr.nostr.NostrEngine
+import com.monostr.nostr.awaitTrue
 import com.monostr.nostr.model.NoteMapper
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
@@ -67,8 +70,7 @@ class RepositoriesTest {
         assertNull(unknown.name); assertEquals(bob.publicKey().toHex(), unknown.pubkey)
         repo.prefetch(listOf(alice.publicKey().toHex(), bob.publicKey().toHex()))
         assertEquals("Alice A", repo.observe(alice.publicKey().toHex()).first().displayName)
-        assertEquals(1_000_000L, repo.lastFetchAt(alice.publicKey().toHex()))
-        assertEquals(1_000_000L, repo.lastFetchAt(bob.publicKey().toHex()))
+        assertTrue(awaitTrue { repo.lastFetchAt(alice.publicKey().toHex()) == 1_000_000L && repo.lastFetchAt(bob.publicKey().toHex()) == 1_000_000L })
     }
 
     @Test
@@ -78,13 +80,14 @@ class RepositoriesTest {
         val repo = NostrProfileRepository(e, now = { time })
         val pk = bob.publicKey().toHex()
         repo.prefetch(listOf(pk))
-        assertEquals(1_000_000L, repo.lastFetchAt(pk))
+        assertTrue(awaitTrue { repo.lastFetchAt(pk) == 1_000_000L })
         time += 100
         repo.prefetch(listOf(pk)); repo.get(pk)
+        withContext(Dispatchers.IO) { Thread.sleep(300) }
         assertEquals(1_000_000L, repo.lastFetchAt(pk)) // no second relay round trip
         time += 600
         repo.get(pk)
-        assertEquals(1_000_700L, repo.lastFetchAt(pk))
+        assertTrue(awaitTrue { repo.lastFetchAt(pk) == 1_000_700L })
     }
 
     @Test
@@ -95,10 +98,11 @@ class RepositoriesTest {
         val repo = NostrProfileRepository(e, now = { time })
         val pk = alice.publicKey().toHex()
         repo.prefetch(listOf(pk))
-        assertEquals(1_000_000L, repo.lastFetchAt(pk))
+        assertTrue(awaitTrue { repo.lastFetchAt(pk) == 1_000_000L })
         time = 1_000_100L
         assertEquals("alice", repo.get(pk).name)
-        assertEquals(1_000_000L, repo.lastFetchAt(pk)) // get() stamps when it fetches; no relay round trip here
+        withContext(Dispatchers.IO) { Thread.sleep(300) }
+        assertEquals(1_000_000L, repo.lastFetchAt(pk)) // fetched within the hour: no relay round trip
     }
 
     @Test

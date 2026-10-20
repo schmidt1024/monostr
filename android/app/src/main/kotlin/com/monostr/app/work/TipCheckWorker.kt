@@ -124,7 +124,7 @@ class TipCheckWorker(context: Context, params: WorkerParameters) : CoroutineWork
                         applicationContext.getString(R.string.tip_anonymous)
                     } else {
                         try {
-                            ready.profiles.get(sender).shownName
+                            ready.profiles.fetched(sender).shownName
                         } catch (e: CancellationException) {
                             throw e
                         } catch (e: Exception) {
@@ -134,6 +134,8 @@ class TipCheckWorker(context: Context, params: WorkerParameters) : CoroutineWork
                     notifier.show(name, item, settings.amountUnit.first())
                 }
             }
+            // receipts the check stored show in the badge and an open screen without waiting for their next reload (spec perf 3.6)
+            ready.notificationsStore.reloadLocal()
             try {
                 settings.setLastTipNotifiedAt(outcome.watermark)
                 settings.setNotifiedReceiptIds(outcome.notified)

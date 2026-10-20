@@ -23,6 +23,8 @@ android {
         buildConfigField("String", "LICENSE", "\"${appValue("MONOSTR_LICENSE")}\"")
         // spec 5: true until 1.0
         buildConfigField("boolean", "BETA", "true")
+        // spec perf 3.9: timing marks only in a build made with -Pmonostr.perf=true
+        buildConfigField("boolean", "PERF", (providers.gradleProperty("monostr.perf").orNull == "true").toString())
     }
     signingConfigs {
         if (releaseStoreFile != null) create("release") {

@@ -42,7 +42,7 @@ class ListsRepositoryTest {
         override suspend fun writeRelays(pubkey: String) = emptyList<String>()
         override suspend fun attach(relays: List<String>) {}
         override suspend fun detach(relays: List<String>) {}
-        override suspend fun fetchNotes(relays: List<String>, pubkey: String, limit: Int) {}
+        override suspend fun fetchNotes(relays: List<String>, pubkey: String, limit: Int): Set<String> = emptySet()
     }
 
     private suspend fun engine() = NostrEngine.create(dir.resolve("lmdb").toString(), signer, emptyList())

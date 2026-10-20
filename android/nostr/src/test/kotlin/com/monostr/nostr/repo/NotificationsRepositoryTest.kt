@@ -9,12 +9,17 @@ import com.monostr.tips.PaymentInfo
 import com.monostr.tips.Watcher
 import com.monostr.tips.TipReceipt
 import com.monostr.tips.TipType
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import com.monostr.nostr.SilentWsRelay
 import com.monostr.nostr.awaitTrue
+import com.monostr.nostr.connectedEngine
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -63,7 +68,6 @@ class NotificationsRepositoryTest {
         assertEquals(mine.id().toHex(), items[0].aboutId) // the tip is about my note
         assertEquals("hey nostr:$meHex", items[2].text)
         assertEquals("reply", items[3].text)
-        assertEquals(items, repo.live().first())
         assertEquals(listOf(500L), repo.list().filter { it.createdAt > 450 }.map { it.createdAt })
     }
 
@@ -151,9 +155,109 @@ class NotificationsRepositoryTest {
             val idRequests = relay.requests.filter { "\"ids\"" in it }
             assertEquals(1, idRequests.size, "one request for the missing ids: ${relay.requests}")
             assertTrue(missing in idRequests.single() && local.id().toHex() !in idRequests.single())
-            // a second call asks again only for what is still missing; found and withdrawn come from the memo
+            // a second call within ten minutes: found and withdrawn from the memo, the missing one not asked again (spec perf 3.6)
             repo.notes(setOf(local.id().toHex(), withdrawn.id().toHex(), missing))
-            assertEquals(2, relay.requests.count { "\"ids\"" in it })
+            assertEquals(1, relay.requests.count { "\"ids\"" in it })
+            e.close()
+        }
+    }
+
+    @Test
+    fun `localNotes reads the database only and leaves out what is not stored`() = runTest {
+        SilentWsRelay(answerEose = true).use { relay ->
+            val e = connectedEngine(dir, relay)
+            val local = EventBuilder.textNote("local").customCreatedAt(Timestamp.fromSecs(100u)).signWithKeys(me); e.save(local)
+            val repo = NostrNotificationsRepository(e, NostrTipsRepository(e) { 1000 }) { 1000 }
+            val result = repo.localNotes(setOf(local.id().toHex(), "f".repeat(64), "not-an-id"))
+            assertEquals(setOf(local.id().toHex()), result.keys)
+            assertEquals("local", (result[local.id().toHex()] as AboutNote.Found).note.content)
+            withContext(Dispatchers.IO) { Thread.sleep(200) }
+            assertTrue(relay.requests.none { "\"ids\"" in it }, "localNotes asked the relays: ${relay.requests}")
+            e.close()
+        }
+    }
+
+    @Test
+    fun `a parent nobody has is asked for once per ten minutes`() = runTest {
+        // spec perf 3.6: a missing parent went to the relays (8 s on a silent one) on every emission
+        SilentWsRelay(answerEose = true).use { relay ->
+            val e = connectedEngine(dir, relay)
+            var clock = 10_000L
+            val repo = NostrNotificationsRepository(e, NostrTipsRepository(e) { clock }) { clock }
+            val missing = "f".repeat(64)
+            fun asked() = relay.requests.count { "\"ids\"" in it && missing in it }
+            assertEquals(AboutNote.Missing, repo.notes(setOf(missing))[missing])
+            clock += 599
+            assertEquals(AboutNote.Missing, repo.notes(setOf(missing))[missing])
+            assertEquals(1, asked(), "requests: ${relay.requests}")
+            clock += 2
+            assertEquals(AboutNote.Missing, repo.notes(setOf(missing))[missing])
+            assertEquals(2, asked())
+            e.close()
+        }
+    }
+
+    @Test
+    fun `a refresh with since asks for newer notifications only, but for deletions of every held one`() = runTest {
+        // Review Focus: an un-like comes long after the like; the store refreshes with since from now on
+        SilentWsRelay(answerEose = true).use { relay ->
+            val e = connectedEngine(dir, relay)
+            val mine = EventBuilder.textNote("my note").customCreatedAt(Timestamp.fromSecs(100u)).signWithKeys(me); e.save(mine)
+            val oldLike = EventBuilder.reaction(mine, "+").customCreatedAt(Timestamp.fromSecs(200u)).signWithKeys(alice); e.save(oldLike)
+            val repo = NostrNotificationsRepository(e, NostrTipsRepository(e) { 1000 }) { 1000 }
+            repo.refresh(since = 5_000, limit = 100)
+            assertTrue(relay.requests.any { "\"#p\"" in it && "\"since\":5000" in it }, "no since on the notifications fetch: ${relay.requests}")
+            val deletions = relay.requests.filter { "\"kinds\":[5]" in it }
+            assertEquals(1, deletions.size, relay.requests.toString())
+            assertTrue(oldLike.id().toHex() in deletions.single(), "the held like older than since was not asked about")
+            e.close()
+        }
+    }
+
+    @Test
+    fun `refresh asks for the own payment info so later lists show tip rows`() = runTest {
+        // ruling R4: list() reads the cached info and never waits, so the refresh has to fetch it
+        SilentWsRelay(answerEose = true).use { relay ->
+            val e = connectedEngine(dir, relay)
+            val repo = NostrNotificationsRepository(e, NostrTipsRepository(e) { 1000 }) { 1000 }
+            repo.refresh(since = null, limit = 100)
+            assertTrue(relay.requests.any { "\"kinds\":[${com.monostr.tips.Kinds.PAYMENT_INFO}]" in it && me.publicKey().toHex() in it }, "no payment info request: ${relay.requests}")
+            e.close()
+        }
+    }
+
+    @Test
+    fun `a remembered miss skips the relays but still reads the database`() = runTest {
+        // another screen may have stored the parent since: the memo must not hide it for ten minutes
+        SilentWsRelay(answerEose = true).use { relay ->
+            val e = connectedEngine(dir, relay)
+            val repo = NostrNotificationsRepository(e, NostrTipsRepository(e) { 1000 }) { 1000 }
+            val parent = EventBuilder.textNote("parent").customCreatedAt(Timestamp.fromSecs(100u)).signWithKeys(me)
+            val id = parent.id().toHex()
+            assertEquals(AboutNote.Missing, repo.notes(setOf(id))[id])
+            assertEquals(1, relay.requests.count { "\"ids\"" in it })
+            e.save(parent)
+            assertEquals("parent", ((repo.notes(setOf(id))[id]) as AboutNote.Found).note.content)
+            assertEquals(1, relay.requests.count { "\"ids\"" in it }, "asked the relays again: ${relay.requests}")
+            e.close()
+        }
+    }
+
+    @Test
+    fun `refresh sends the notifications request without waiting for the own payment info`() = runTest {
+        SilentWsRelay(answerEose = true).use { relay ->
+            val e = connectedEngine(dir, relay)
+            val gate = CompletableDeferred<Unit>()
+            val real = NostrTipsRepository(e) { 1000 }
+            val slow = object : TipsRepository by real {
+                override suspend fun paymentInfo(pubkey: String, maxAgeSeconds: Long): PaymentInfo { gate.await(); return PaymentInfo.Disabled }
+            }
+            val repo = NostrNotificationsRepository(e, slow) { 1000 }
+            val job = launch(Dispatchers.IO) { repo.refresh(since = null, limit = 100) }
+            assertTrue(awaitTrue { relay.requests.any { "\"#p\"" in it } }, "notifications request waited for the payment info: ${relay.requests}")
+            assertTrue(job.isActive, "refresh returned before the payment info")
+            gate.complete(Unit)
+            job.join()
             e.close()
         }
     }

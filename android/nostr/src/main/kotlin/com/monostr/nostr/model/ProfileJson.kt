@@ -24,6 +24,16 @@ object ProfileJson {
         return JsonObject(out).toString()
     }
 
+    /**
+     * A kind 0 [content] read in Kotlin (spec perf 3.2: no rust Metadata per profile); null when it is no JSON
+     * object. Only string values count; `displayName` is read when `display_name` is missing.
+     */
+    fun profile(pubkey: String, content: String): Profile? {
+        val o = runCatching { Json.parseToJsonElement(content) as? JsonObject }.getOrNull() ?: return null
+        fun s(vararg keys: String): String? = keys.firstNotNullOfOrNull { k -> (o[k] as? JsonPrimitive)?.takeIf { it.isString }?.content }
+        return Profile(pubkey, s("name"), s("display_name", "displayName"), s("picture"), s("about"), s("nip05"), banner = s("banner"), website = s("website"))
+    }
+
     private fun obj(raw: String?): Map<String, JsonElement> =
         raw?.let { runCatching { Json.parseToJsonElement(it) as? JsonObject }.getOrNull() } ?: emptyMap()
 }

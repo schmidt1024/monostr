@@ -63,21 +63,55 @@ class SearchControllerTest {
     }
 
     @Test
-    fun `a pending tip set while the hits are decorated is not taken back`() = runTest {
+    fun `remote people show while the notes are still on their way`() = runTest {
+        val search = FakeSearch().apply {
+            local = listOf(aliceProfile)
+            remotePeople = listOf(Profile("b".repeat(64), "alicia", null, null, null, null))
+            notesGate = CompletableDeferred()
+        }
+        val c = controller(search)
+        c.start()
+        c.onQueryChange("ali"); c.submit(); runCurrent()
+        assertEquals(listOf(alice, "b".repeat(64)), c.state.value.people.map { it.pubkey })
+        assertTrue(c.state.value.loading)
+        search.notesGate!!.complete(Unit); advanceUntilIdle()
+        assertFalse(c.state.value.loading)
+    }
+
+    @Test
+    fun `a hashtag search shows the stored notes before the relays answered`() = runTest {
+        val stored = note('1', alice, 1000)
+        val fetched = note('2', alice, 2000)
+        val search = FakeSearch().apply {
+            hashtagLocalNotes = mapOf("monero" to listOf(stored))
+            hashtagNotes = mapOf("monero" to listOf(fetched, stored))
+            hashtagGate = CompletableDeferred()
+        }
+        val c = controller(search)
+        c.start()
+        c.onQueryChange("#monero"); c.submit(); runCurrent()
+        assertEquals(listOf(stored.id), c.state.value.notes.map { it.note.id })
+        assertTrue(c.state.value.loading)
+        search.hashtagGate!!.complete(Unit); advanceUntilIdle()
+        assertEquals(listOf(fetched.id, stored.id), c.state.value.notes.map { it.note.id })
+        assertFalse(c.state.value.loading)
+    }
+
+    @Test
+    fun `a pending tip set while the hits show is kept when a profile lands`() = runTest {
         val bob = "b".repeat(64)
         val n1 = note('1', alice, 2000); val n2 = note('2', bob, 1500)
         val search = FakeSearch().apply { hashtagNotes = mapOf("monero" to listOf(n1, n2)) }
         val pending = FakePendingTips()
         val c = controller(search, pending = pending)
         c.start()
-        val slow = CompletableDeferred<Unit>()
-        profiles.getGates[bob] = slow
         c.onQueryChange("#monero"); c.submit(); advanceUntilIdle()
         // the user tipped n1 in the meantime (e.g. from the feed)
         pending.add(PendingTip("e".repeat(64), n1.id, 5, 4_000)); advanceUntilIdle()
-        slow.complete(Unit); advanceUntilIdle()
+        profiles.land(Profile(bob, "bob", "Bob", null, null, null)); advanceUntilIdle()
         assertEquals(listOf(n1.id, n2.id), c.state.value.notes.map { it.note.id })
         assertTrue(c.state.value.notes.first { it.note.id == n1.id }.pendingTip)
+        assertEquals("Bob", c.state.value.notes.first { it.note.id == n2.id }.author.shownName)
     }
 
     @Test
@@ -235,6 +269,25 @@ class SearchControllerTest {
     }
 
     @Test
+    fun `no second page while the first one is still coming`() = runTest {
+        val stored = note('1', alice, 1000)
+        val fetched = note('2', alice, 2000)
+        val search = FakeSearch().apply {
+            hashtagLocalNotes = mapOf("monero" to listOf(stored))
+            hashtagNotes = mapOf("monero" to listOf(fetched, stored))
+            hashtagGate = CompletableDeferred()
+        }
+        val c = controller(search)
+        c.start()
+        c.onQueryChange("#monero"); c.submit(); runCurrent()
+        c.loadMore(); runCurrent() // the end-of-list effect fires on the stored notes
+        assertFalse(search.calls.any { it == "tag:monero:1000" })
+        search.hashtagGate!!.complete(Unit); advanceUntilIdle()
+        c.loadMore(); advanceUntilIdle()
+        assertEquals("tag:monero:1000", search.calls.last())
+    }
+
+    @Test
     fun `without search relays people come from the local database and the hint is set`() = runTest {
         relays.value = emptyList()
         val search = FakeSearch().apply { local = listOf(aliceProfile) }
@@ -290,5 +343,19 @@ class SearchControllerTest {
         advanceUntilIdle()
         assertEquals(listOf(listOf("wss://s.example")), search.detached)
         assertEquals(listOf(listOf("wss://s.example"), listOf("wss://new.example")), search.attached)
+    }
+
+    @Test
+    fun `the first local people of the screen are marked once`() = runTest {
+        withPerfLines {
+            val search = FakeSearch().apply { local = listOf(aliceProfile); notesGate = CompletableDeferred() }
+            val c = controller(search)
+            c.start()
+            c.onQueryChange("ali"); c.submit(); runCurrent()
+            assertEquals(1, count { it.endsWith(" search people shown") }, "marked before the notes came")
+            search.notesGate!!.complete(Unit); advanceUntilIdle()
+            c.onQueryChange("alic"); c.submit(); advanceUntilIdle()
+            assertEquals(1, count { it.endsWith(" search people shown") })
+        }
     }
 }

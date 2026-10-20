@@ -360,6 +360,7 @@
     <!-- notifications -->
     <string name="notifications_title">Mitteilungen</string>
     <string name="notifications_empty">Noch keine Mitteilungen</string>
+    <string name="notifications_checking">Relays werden gefragt…</string>
     <string name="notifications_error_load">Mitteilungen konnten nicht geladen werden</string>
     <string name="messages_title">Nachrichten</string>
     <string name="messages_empty">Noch keine Nachrichten. Öffne ein Profil und tippe auf „Nachricht“.</string>
@@ -583,6 +584,7 @@
     <string name="list_no_members">Noch keine Mitglieder</string>
     <string name="list_feed_empty">Noch keine Notes aus dieser Liste</string>
     <string name="list_untitled">Liste ohne Titel</string>
+    <string name="feed_tab_list_loading">Liste</string>
     <string name="profile_tab_lists">Listen</string>
     <string name="list_create">Neue Liste</string>
     <string name="lists_empty_own">Noch keine Listen</string>

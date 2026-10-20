@@ -1,0 +1,5 @@
+• Más rápido en todas partes: cada pantalla muestra al instante lo que ya está en tu teléfono y se actualiza en segundo plano
+• Los perfiles se abren al instante, también al volver a uno
+• Las pestañas de listas muestran su nombre enseguida en lugar de «Lista sin título»
+• Notificaciones, búsqueda y marcadores muestran primero lo guardado
+• Las cuentas silenciadas quedan ocultas desde la primera página

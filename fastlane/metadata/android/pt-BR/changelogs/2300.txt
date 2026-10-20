@@ -1,0 +1,5 @@
+• Mais rápido em tudo: cada tela mostra na hora o que já está no seu celular e atualiza em segundo plano
+• Perfis abrem na hora, também quando você volta a um
+• As abas de listas mostram o nome logo, em vez de “Lista sem título”
+• Notificações, busca e marcadores mostram primeiro o que está salvo
+• Contas silenciadas ficam ocultas desde a primeira página

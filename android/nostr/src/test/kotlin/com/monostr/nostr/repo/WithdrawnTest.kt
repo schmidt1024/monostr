@@ -106,4 +106,19 @@ class WithdrawnTest {
         assertEquals(QuoteResult.Missing, NostrQuoteRepository(e, scope = e.backgroundScope).get(withdrawn.id().toHex()))
         e.close()
     }
+
+    @Test
+    fun `several bare reposts are checked together, a malformed e tag neither drops them nor breaks the check`() = runTest {
+        // spec perf 3.6 / F3: the originals of bare reposts are read with one query instead of one eventById per repost
+        val e = engine()
+        val withdrawn = EventBuilder.textNote("withdrawn").signWithKeys(alice)
+        val kept = EventBuilder.textNote("kept").signWithKeys(alice)
+        e.save(deletion(alice, withdrawn.id().toHex())); e.save(withdrawn); e.save(kept)
+        fun bare(id: String) = EventBuilder(Kind(6u), "").tags(listOf(Tag.parse(listOf("e", id)))).signWithKeys(bob)
+        val reposts = listOf(bare(withdrawn.id().toHex()), bare(kept.id().toHex()), bare("not-an-id"))
+        reposts.forEach { e.save(it) }
+        val left = Withdrawn.filter(e, reposts).map { it.id().toHex() }.toSet()
+        assertEquals(setOf(reposts[1].id().toHex(), reposts[2].id().toHex()), left)
+        e.close()
+    }
 }

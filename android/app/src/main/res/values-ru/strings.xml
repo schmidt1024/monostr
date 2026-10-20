@@ -364,6 +364,7 @@
     <!-- notifications -->
     <string name="notifications_title">Уведомления</string>
     <string name="notifications_empty">Уведомлений пока нет</string>
+    <string name="notifications_checking">Опрашиваем ваши релеи…</string>
     <string name="notifications_error_load">Не удалось загрузить уведомления</string>
     <string name="messages_title">Сообщения</string>
     <string name="messages_empty">Сообщений пока нет. Откройте профиль и нажмите «Сообщение».</string>
@@ -601,6 +602,7 @@
     <string name="list_no_members">Пока нет участников</string>
     <string name="list_feed_empty">Пока нет заметок из этого списка</string>
     <string name="list_untitled">Список без названия</string>
+    <string name="feed_tab_list_loading">Список</string>
     <string name="profile_tab_lists">Списки</string>
     <string name="list_create">Новый список</string>
     <string name="lists_empty_own">Пока нет списков</string>

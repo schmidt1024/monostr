@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
 
@@ -32,7 +33,21 @@ class MentionResolver(
     /** Note ids already scanned by [follow], oldest first; guarded by itself. */
     private val seen = LinkedHashSet<String>()
 
+    private val listening = AtomicBoolean(false)
+
+    /** Names of requested pubkeys whose profile lands later (spec perf 3.2); started with the first [track] or [follow]. */
+    private fun listen() {
+        if (!listening.compareAndSet(false, true)) return
+        scope.launch {
+            profiles.updates.collect { byKey ->
+                val add = byKey.filterKeys { it in requested }.mapNotNull { (pk, p) -> MentionNames.named(p)?.let { pk to it } }.toMap()
+                if (add.isNotEmpty()) _names.update { it + add }
+            }
+        }
+    }
+
     fun track(pubkeys: Collection<String>) {
+        listen()
         if (pubkeys.isEmpty()) return
         scope.launch { resolve(pubkeys) }
     }
@@ -60,6 +75,7 @@ class MentionResolver(
      * are forgotten again, so the next emission scans them once more.
      */
     fun follow(notes: Flow<List<Note>>) {
+        listen()
         scope.launch {
             notes.collect { list ->
                 val fresh = synchronized(seen) {

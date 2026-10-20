@@ -11,9 +11,10 @@ import kotlin.concurrent.thread
 /**
  * A relay on 127.0.0.1 inside the test process (same idea as `SilentWsRelay` in the :nostr JVM
  * tests): every REQ gets the [serve]d events and EOSE, every EVENT gets `["OK", id, true, ""]` and
- * is recorded in [events]. Nothing leaves the emulator.
+ * is recorded in [events]. With [silent] no REQ is ever answered (a relay that hangs). Nothing leaves
+ * the emulator.
  */
-class LoopbackRelay(private val serve: List<String> = emptyList()) : AutoCloseable {
+class LoopbackRelay(private val serve: List<String> = emptyList(), private val silent: Boolean = false) : AutoCloseable {
     private val server = ServerSocket(0, 50, InetAddress.getByAddress(byteArrayOf(127, 0, 0, 1)))
     val url: String = "ws://127.0.0.1:${server.localPort}"
     val events = CopyOnWriteArrayList<String>()
@@ -55,7 +56,7 @@ class LoopbackRelay(private val serve: List<String> = emptyList()) : AutoCloseab
                 events += text
                 send(out, "[\"OK\",\"$event\",true,\"\"]")
             }
-            if (req != null) {
+            if (req != null && !silent) {
                 serve.forEach { send(out, "[\"EVENT\",\"$req\",$it]") }
                 send(out, "[\"EOSE\",\"$req\"]")
             }

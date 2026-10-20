@@ -163,10 +163,21 @@ class FakeFeed : FeedRepository {
     }
     /** Section and `fetch` flag of every profileNotes call, in order (the fetch flag is also added to [notesByCalls]). */
     val profileCalls = ArrayList<Pair<ProfileSection, Boolean>>()
+    /** When set, profileNotes suspends here (a slow database read). */
+    var profileGate: CompletableDeferred<Unit>? = null
     override suspend fun profileNotes(author: String, section: ProfileSection, limit: Int, fetch: Boolean): List<Note> {
+        profileGate?.await()
         notesByCalls += fetch
         profileCalls += section to fetch
         return (byAuthor[author] ?: emptyList()).filter(section::keeps)
+    }
+    /** Authors of every refreshProfile call, in order. */
+    val refreshProfileCalls = ArrayList<String>()
+    /** When set, refreshProfile suspends here (the relays still answering). */
+    var refreshProfileGate: CompletableDeferred<Unit>? = null
+    override suspend fun refreshProfile(author: String, limit: Int) {
+        refreshProfileCalls += author
+        refreshProfileGate?.await()
     }
     /** What moreProfileNotes returns per author, before the section filter. */
     var olderByAuthor: Map<String, List<Note>> = emptyMap()
@@ -182,15 +193,30 @@ class FakeProfiles(known: Map<String, Profile> = emptyMap()) : ProfileRepository
     /** The profiles as the repository knows them now; tests replace entries to simulate an own edit. */
     val current = MutableStateFlow(known)
     val prefetched = ArrayList<Collection<String>>()
+    /** The keys of every getAll call, in order. */
+    val getAllCalls = ArrayList<List<String>>()
+    private val _updates = MutableSharedFlow<Map<String, Profile>>(extraBufferCapacity = 16)
+    override val updates: SharedFlow<Map<String, Profile>> = _updates
     override fun observe(pubkey: String) = current.map { it[pubkey] ?: Profile.empty(pubkey) }
-    /** A lookup of a pubkey with a gate here suspends until the gate completes (a slow relay lookup). */
-    val getGates = HashMap<String, CompletableDeferred<Unit>>()
-    override suspend fun get(pubkey: String, maxAgeSeconds: Long): Profile {
-        getGates[pubkey]?.await()
+    override suspend fun get(pubkey: String, maxAgeSeconds: Long): Profile = current.value[pubkey] ?: Profile.empty(pubkey)
+    override suspend fun getAll(pubkeys: Collection<String>, maxAgeSeconds: Long): Map<String, Profile> {
+        getAllCalls += pubkeys.toList()
+        return pubkeys.distinct().associateWith { get(it, maxAgeSeconds) }
+    }
+    override fun prefetch(pubkeys: Collection<String>) { prefetched += pubkeys }
+    override suspend fun local(pubkeys: Collection<String>) = pubkeys.mapNotNull { current.value[it] }
+    /** Pubkeys asked through [fetched] (background workers). */
+    val fetchedCalls = ArrayList<String>()
+    override suspend fun fetched(pubkey: String, timeout: Duration): Profile {
+        fetchedCalls += pubkey
         return current.value[pubkey] ?: Profile.empty(pubkey)
     }
-    override suspend fun prefetch(pubkeys: Collection<String>) { prefetched += pubkeys }
-    override suspend fun local(pubkeys: Collection<String>) = pubkeys.mapNotNull { current.value[it] }
+    /** A background lookup lands, like the repository's refresh queue: stored, then announced through [updates]. */
+    suspend fun land(vararg profiles: Profile) {
+        val byKey = profiles.associateBy { it.pubkey }
+        current.update { it + byKey }
+        _updates.emit(byKey)
+    }
     /** Raw kind 0 content per pubkey, as the database would hold it. */
     var raw: Map<String, String> = emptyMap()
     val invalidated = ArrayList<String>()
@@ -359,7 +385,22 @@ class FakeTips(
         anonymousResends += eventJson to relays
         return PublishResult("0".repeat(64), 9738, if (relaysOk) relays else emptyList(), emptyMap())
     }
-    override fun observeReceipts(notes: Map<String, String>): Flow<Map<String, TipSummary>> { observed += notes; return receipts.map { all -> all.filterKeys { it in notes } } }
+    /** observeReceipts collections running right now (each one is a live relay subscription in the real repository). */
+    var activeReceiptObservers = 0
+    /** When set, the next observeReceipts collection fails with it (once). */
+    var receiptsError: Exception? = null
+    override fun observeReceipts(notes: Map<String, String>): Flow<Map<String, TipSummary>> {
+        observed += notes
+        return flow {
+            receiptsError?.let { receiptsError = null; throw it }
+            activeReceiptObservers++
+            try {
+                emitAll(receipts.map { all -> all.filterKeys { it in notes } })
+            } finally {
+                activeReceiptObservers--
+            }
+        }
+    }
     /** Intent ids emitted by observeProfileReceipts; tests push new values to simulate arriving receipts. */
     val profileReceipts = MutableStateFlow<Set<String>>(emptySet())
     val profileObserved = ArrayList<Pair<String, Long>>()
@@ -381,6 +422,8 @@ class FakeSearch : SearchRepository {
     var local: List<Profile> = emptyList()
     var remotePeople: List<Profile> = emptyList()
     var remoteNotes: List<Note> = emptyList()
+    /** What the database holds per hashtag (hashtagLocal); [hashtagNotes] is the answer after the relays. */
+    var hashtagLocalNotes: Map<String, List<Note>> = emptyMap()
     var hashtagNotes: Map<String, List<Note>> = emptyMap()
     var error: Exception? = null
     val attached = ArrayList<List<String>>()
@@ -390,6 +433,8 @@ class FakeSearch : SearchRepository {
     var notesGate: CompletableDeferred<Unit>? = null
     /** When set, `profilesLocal` suspends here first (a slow database read). */
     var localGate: CompletableDeferred<Unit>? = null
+    /** When set, `hashtag` suspends here after recording the call (the relays are slow). */
+    var hashtagGate: CompletableDeferred<Unit>? = null
     override suspend fun profilesLocal(query: String, limit: Int): List<Profile> { localGate?.await(); return local.also { calls += "local:$query" } }
     override suspend fun profiles(query: String, relays: List<String>, limit: Int): SearchOutcome<Profile> {
         calls += "people:$query:${relays.size}"
@@ -400,8 +445,13 @@ class FakeSearch : SearchRepository {
         notesGate?.await()
         return if (relays.isEmpty()) SearchOutcome(emptyList()) else SearchOutcome(remoteNotes, error)
     }
+    override suspend fun hashtagLocal(tag: String, until: Long?, limit: Int): List<Note> {
+        calls += "tagLocal:$tag:$until"
+        return hashtagLocalNotes[tag].orEmpty().filter { until == null || it.createdAt < until }
+    }
     override suspend fun hashtag(tag: String, until: Long?, limit: Int): SearchOutcome<Note> {
         calls += "tag:$tag:$until"
+        hashtagGate?.await()
         return SearchOutcome(hashtagNotes[tag].orEmpty().filter { until == null || it.createdAt < until }, error)
     }
     override suspend fun attach(relays: List<String>) { attached += relays }
@@ -412,12 +462,22 @@ class FakeNotifications(var items: List<NotificationItem> = emptyList()) : Notif
     var refreshCalls = ArrayList<Long?>()
     /** When set, `refresh` suspends until completed — models a slow relay fetch. */
     var refreshGate: CompletableDeferred<Unit>? = null
-    val updates = MutableSharedFlow<List<NotificationItem>>()
     var about: Map<String, AboutNote> = emptyMap()
+    /** What the database holds: [localNotes] answers from here, [notes] prefers it over [about] (the relays). */
+    var stored: Map<String, AboutNote> = emptyMap()
+    override suspend fun localNotes(ids: Set<String>): Map<String, AboutNote> = ids.mapNotNull { id -> stored[id]?.let { id to it } }.toMap()
     val notesCalls = ArrayList<Set<String>>()
     /** When set, `notes` suspends until completed — models a slow relay lookup. */
     var notesGate: CompletableDeferred<Unit>? = null
-    override suspend fun list(limit: Int) = items.sortedByDescending { it.createdAt }.take(limit)
+    /** Number of list() calls (database reads of the list). */
+    var listCalls = 0
+    /** When set, list() suspends until completed: a slow database read. */
+    var listGate: CompletableDeferred<Unit>? = null
+    override suspend fun list(limit: Int): List<NotificationItem> {
+        listCalls++
+        listGate?.await()
+        return items.sortedByDescending { it.createdAt }.take(limit)
+    }
     /** Null: every id counts as the user's own (tests that do not care). */
     var ownIds: Set<String>? = null
     val ownCalls = ArrayList<Set<String>>()
@@ -425,16 +485,24 @@ class FakeNotifications(var items: List<NotificationItem> = emptyList()) : Notif
     override suspend fun notes(ids: Set<String>): Map<String, AboutNote> {
         notesCalls += ids
         notesGate?.await()
-        return ids.associateWith { about[it] ?: AboutNote.Missing }
+        return ids.associateWith { stored[it] ?: about[it] ?: AboutNote.Missing }
     }
     override suspend fun refresh(since: Long?, limit: Int) { refreshCalls += since; refreshGate?.await() }
-    override fun live(limit: Int): Flow<List<NotificationItem>> = flow {
-        // mirrors NostrNotificationsRepository.live: an empty local list is not shown before the first refresh
-        val local = list(limit)
-        if (local.isNotEmpty()) emit(local)
-        refresh(null, limit)
-        emit(list(limit))
-        updates.collect { items = it; emit(list(limit)) }
+    private val incomingEvents = MutableSharedFlow<Unit>()
+    /** Live subscriptions open right now. */
+    var subscriptions = 0
+    override fun incoming(): Flow<Unit> = flow {
+        subscriptions++
+        try {
+            incomingEvents.collect { emit(Unit) }
+        } finally {
+            subscriptions--
+        }
+    }
+    /** A live event: the database holds [now] from here on, then the subscription reports one event. */
+    suspend fun arrive(now: List<NotificationItem>) {
+        items = now
+        incomingEvents.emit(Unit)
     }
 }
 
@@ -569,7 +637,9 @@ class FakeAuthorRelays(private val lists: Map<String, List<String>> = emptyMap()
     override suspend fun writeRelays(pubkey: String) = lists[pubkey] ?: emptyList()
     override suspend fun attach(relays: List<String>) { gate?.await(); attached += relays }
     override suspend fun detach(relays: List<String>) { detached += relays }
-    override suspend fun fetchNotes(relays: List<String>, pubkey: String, limit: Int) { fetched += relays to pubkey }
+    /** What fetchNotes reports; the default is an id no screen shows, so every outbox tick counts as new. */
+    var fetchedIds: Set<String> = setOf("f".repeat(64))
+    override suspend fun fetchNotes(relays: List<String>, pubkey: String, limit: Int): Set<String> { fetched += relays to pubkey; return fetchedIds }
 }
 
 class FakeCounts : CountsRepository {
@@ -603,7 +673,15 @@ class FakeBookmarks(initial: List<String> = emptyList(), var outcome: BookmarkOu
         if (outcome != BookmarkOutcome.Ok) _state.update { it.copy(ids = before) }
         return outcome
     }
-    override suspend fun entries() = _state.value.ids.map { BookmarkEntry(it, notes[it]) }
+    /** What the database holds (localEntries); null = the same as [notes]. */
+    var localNotes: Map<String, Note>? = null
+    /** When set, `entries` suspends here (the relays are asked for the missing notes). */
+    var entriesGate: CompletableDeferred<Unit>? = null
+    override suspend fun localEntries() = _state.value.ids.map { BookmarkEntry(it, (localNotes ?: notes)[it]) }
+    override suspend fun entries(): List<BookmarkEntry> {
+        entriesGate?.await()
+        return _state.value.ids.map { BookmarkEntry(it, notes[it]) }
+    }
     override fun clear() { _state.value = BookmarksState() }
 }
 
@@ -840,8 +918,21 @@ class FakeLists(initial: List<FollowSet> = emptyList()) : ListsRepository {
     /** What `unlock` turns the list into; null = it stays locked. */
     var unlockTo: FollowSet? = null
     val calls = ArrayList<String>()
-    override fun own(): Flow<List<FollowSet>> = ownState
-    override suspend fun of(author: String) = byAuthor[author] ?: emptyList()
+    /** When set, own() emits nothing until it completes (the own lists are still loading). */
+    var ownGate: CompletableDeferred<Unit>? = null
+    override fun own(): Flow<List<FollowSet>> = flow {
+        ownGate?.await()
+        emitAll(ownState)
+    }
+    /** What the database holds per author (localOf); the relays' answer is [byAuthor]. */
+    var localByAuthor: Map<String, List<FollowSet>> = emptyMap()
+    /** When set, `of` suspends here (a slow relay lookup). */
+    var ofGate: CompletableDeferred<Unit>? = null
+    override suspend fun localOf(author: String) = localByAuthor[author] ?: emptyList()
+    override suspend fun of(author: String): List<FollowSet> {
+        ofGate?.await()
+        return byAuthor[author] ?: emptyList()
+    }
     /** When set, a lookup that fetches from relays throws (offline). */
     var fetchFails = false
     override suspend fun byAddress(address: ListAddress, fetch: Boolean): FollowSet? {

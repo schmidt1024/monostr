@@ -6,6 +6,7 @@ import com.monostr.nostr.PublishResult
 import com.monostr.nostr.Signer
 import com.monostr.nostr.SilentWsRelay
 import com.monostr.nostr.awaitTrue
+import com.monostr.nostr.connectedEngine
 import com.monostr.nostr.SigningRejectedException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
@@ -381,5 +382,100 @@ class BookmarksRepositoryTest {
         assertEquals(BookmarkOutcome.Ok, repo.toggle(n3))
         assertTrue(n3 in repo.state.value.ids, "an add must not turn into a remove")
         assertEquals(listOf(listOf("e", n3), listOf("e", n1)), privateTags(e))
+    }
+
+    private fun idRequests(relay: SilentWsRelay) = relay.requests.filter { "\"ids\"" in it }
+
+    @Test
+    fun `stored bookmarks resolve without a relay, missing ones are placeholders`() = runTest {
+        SilentWsRelay(recordRequests = true).use { relay ->
+            val e = connectedEngine(dir, relay)
+            try {
+                val note = EventBuilder.textNote("saved").signWithKeys(alice); e.save(note)
+                e.save(EventBuilder(Kind(10003u), "").tags(listOf(Tag.parse(listOf("e", note.id().toHex())), Tag.parse(listOf("e", n1)))).signWithKeys(keys))
+                val repo = NostrBookmarksRepository(e, signer, now = { 2000 }, send = okSend(e))
+                repo.ensureLoaded()
+                val started = System.currentTimeMillis()
+                val entries = repo.localEntries()
+                assertTrue(System.currentTimeMillis() - started < 1_000)
+                assertEquals("saved", entries.first { it.id == note.id().toHex() }.note?.content)
+                assertNull(entries.first { it.id == n1 }.note)
+                assertTrue(idRequests(relay).isEmpty(), "asked: ${relay.requests}")
+            } finally {
+                e.close()
+            }
+        }
+    }
+
+    @Test
+    fun `missing bookmarks are asked for in parallel chunks, a miss is not asked again for ten minutes`() = runTest {
+        SilentWsRelay(recordRequests = true).use { relay ->
+            val e = connectedEngine(dir, relay)
+            try {
+                var clock = 2_000L
+                e.save(EventBuilder(Kind(10003u), "").tags((1..120).map { Tag.parse(listOf("e", "%064x".format(it))) }).signWithKeys(keys))
+                val repo = NostrBookmarksRepository(e, signer, now = { clock }, send = okSend(e), entriesTimeout = Duration.ofSeconds(1))
+                repo.ensureLoaded()
+                assertEquals(120, repo.state.value.ids.size)
+                val started = System.currentTimeMillis()
+                assertTrue(repo.entries().all { it.note == null })
+                val took = System.currentTimeMillis() - started
+                assertTrue(took < 2_500, "three chunks one after another: $took ms")
+                assertEquals(3, idRequests(relay).size)
+                repo.entries()
+                assertEquals(3, idRequests(relay).size, "the misses were asked again")
+                clock += 601
+                repo.entries()
+                assertTrue(awaitTrue { idRequests(relay).size == 6 })
+            } finally {
+                e.close()
+            }
+        }
+    }
+
+    @Test
+    fun `a changed missing set asks only the new ids, remembered misses stay quiet`() = runTest {
+        SilentWsRelay(recordRequests = true).use { relay ->
+            val e = connectedEngine(dir, relay)
+            try {
+                val a = "%064x".format(1); val b = "%064x".format(2); val c = "%064x".format(3)
+                e.save(EventBuilder(Kind(10003u), "").tags(listOf(a, b).map { Tag.parse(listOf("e", it)) }).signWithKeys(keys))
+                val repo = NostrBookmarksRepository(e, signer, now = { 2000 }, send = okSend(e), entriesTimeout = Duration.ofSeconds(1))
+                repo.ensureLoaded()
+                repo.entries()
+                assertEquals(1, idRequests(relay).size)
+                e.save(EventBuilder(Kind(10003u), "").tags(listOf(b, c).map { Tag.parse(listOf("e", it)) }).customCreatedAt(Timestamp.fromSecs(4_000_000_000u)).signWithKeys(keys))
+                repo.onListEvent(latest(e))
+                assertEquals(listOf(b, c), repo.state.value.ids)
+                repo.entries()
+                val asked = idRequests(relay)
+                assertEquals(2, asked.size)
+                assertTrue(c in asked.last() && b !in asked.last(), "asked again: ${asked.last()}")
+            } finally {
+                e.close()
+            }
+        }
+    }
+
+    @Test
+    fun `offline remembers no miss, the next call asks again`() = runTest {
+        SilentWsRelay(recordRequests = true).use { relay ->
+            val e = NostrEngine.create(dir.resolve("lmdb").toString(), signer, listOf(relay.url)) // not connected yet
+            try {
+                e.save(EventBuilder(Kind(10003u), "").tags(listOf(Tag.parse(listOf("e", n1)))).signWithKeys(keys))
+                val repo = NostrBookmarksRepository(e, signer, now = { 2000 }, send = okSend(e), entriesTimeout = Duration.ofSeconds(1))
+                repo.ensureLoaded()
+                repo.entries(); repo.entries()
+                assertTrue(idRequests(relay).isEmpty())
+                e.connect()
+                assertTrue(awaitTrue { e.connectedNormalRelayUrls().isNotEmpty() })
+                repo.entries()
+                assertEquals(1, idRequests(relay).size, "asked while offline or not asked after coming back")
+                repo.entries()
+                assertEquals(1, idRequests(relay).size, "the miss was not remembered once online")
+            } finally {
+                e.close()
+            }
+        }
     }
 }

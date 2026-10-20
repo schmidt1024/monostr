@@ -197,4 +197,18 @@ class ChatControllerTest {
         assertEquals(quoted, c.state.value.messages[0].note.quotedId)
         assertEquals("look", c.state.value.messages[0].note.displayContent)
     }
+
+    @Test
+    fun `the peer's profile that lands later shows in the header`() = runTest {
+        val store = InMemoryDmStore()
+        store.upsert(msg("1", 100))
+        val profiles = FakeProfiles()
+        val c = controller(store, profiles = profiles)
+        c.start()
+        advanceUntilIdle()
+        assertEquals(Profile.empty(bob), c.state.value.peer)
+        profiles.land(Profile(bob, "bob", "Bob", null, null, null))
+        advanceUntilIdle()
+        assertEquals("Bob", c.state.value.peer.shownName)
+    }
 }

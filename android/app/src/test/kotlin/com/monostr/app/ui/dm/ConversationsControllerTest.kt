@@ -37,7 +37,7 @@ class ConversationsControllerTest {
 
     private fun TestScope.controller(
         store: InMemoryDmStore,
-        profiles: FakeProfiles = FakeProfiles(),
+        profiles: com.monostr.nostr.repo.ProfileRepository = FakeProfiles(),
         syncState: MutableStateFlow<DmSyncState> = MutableStateFlow(DmSyncState()),
         onRefresh: suspend () -> Unit = {},
         onUnlock: suspend () -> Int = { 0 },
@@ -126,6 +126,33 @@ class ConversationsControllerTest {
     }
 
     @Test
+    fun `a profile that lands while the list is read survives the replacement`() = runTest {
+        val store = InMemoryDmStore()
+        store.upsert(msg("1", bob, 100))
+        val fake = FakeProfiles()
+        val gate = CompletableDeferred<Unit>()
+        var gated = false
+        val profiles = object : com.monostr.nostr.repo.ProfileRepository by fake {
+            override suspend fun getAll(pubkeys: Collection<String>, maxAgeSeconds: Long): Map<String, Profile> {
+                val stale = fake.getAll(pubkeys, maxAgeSeconds)
+                if (gated) gate.await()
+                return stale
+            }
+        }
+        val c = controller(store, profiles = profiles)
+        c.start()
+        advanceUntilIdle()
+        gated = true
+        store.upsert(msg("2", bob, 200))
+        advanceUntilIdle()
+        fake.land(Profile(bob, "bob", "Bob", null, null, null))
+        advanceUntilIdle()
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertEquals("Bob", c.state.value.items.single().profile.shownName)
+    }
+
+    @Test
     fun `sorted by last message desc, names from profiles`() = runTest {
         val store = InMemoryDmStore()
         store.upsert(msg("1", bob, 100, text = "old"))
@@ -140,6 +167,20 @@ class ConversationsControllerTest {
         assertEquals(listOf("newest", "newer"), items.map { it.conversation.lastText })
         assertEquals("Bob", items[1].profile.shownName)
         assertEquals(Profile.shortPubkey(dave), items[0].profile.shownName)
-        assertTrue(profiles.prefetched.any { it.containsAll(listOf(bob, dave)) })
+        assertTrue(profiles.getAllCalls.any { it.containsAll(listOf(bob, dave)) })
+    }
+
+    @Test
+    fun `a peer's profile that lands later shows in the list`() = runTest {
+        val store = InMemoryDmStore()
+        store.upsert(msg("1", bob, 100))
+        val profiles = FakeProfiles()
+        val c = controller(store, profiles = profiles)
+        c.start()
+        advanceUntilIdle()
+        assertEquals(Profile.empty(bob), c.state.value.items.single().profile)
+        profiles.land(Profile(bob, "bob", "Bob", null, null, null))
+        advanceUntilIdle()
+        assertEquals("Bob", c.state.value.items.single().profile.shownName)
     }
 }

@@ -53,6 +53,12 @@ class ConversationsController(
     val state: StateFlow<ConversationsUiState> = _state.asStateFlow()
 
     fun start() {
+        // a peer's profile the background lookup finds replaces the shown one (spec perf 3.2)
+        scope.launch {
+            profiles.updates.collect { byKey ->
+                _state.update { s -> s.copy(items = s.items.map { it.withProfile(byKey) }, requests = s.requests.map { it.withProfile(byKey) }) }
+            }
+        }
         scope.launch { syncState.collect { s -> _state.update { it.copy(authFailed = s.authFailed, authRejected = s.authRejected) } } }
         scope.launch { pendingCount.collect { n -> _state.update { it.copy(pending = n) } } }
         scope.launch {
@@ -67,7 +73,12 @@ class ConversationsController(
                 store.conversations().combine(muted) { conversations, m -> conversations.filter { it.peer !in m } }.collect { conversations ->
                     val decorated = decorate(conversations, follows)
                     _state.update { s ->
-                        s.copy(items = decorated.filterNot { it.request }, requests = decorated.filter { it.request }, loading = false)
+                        // a profile that landed while the read was in flight is newer than an empty one read before it
+                        val shown = (s.items + s.requests).associate { it.conversation.peer to it.profile }
+                        val merged = decorated.map { u ->
+                            shown[u.conversation.peer]?.takeIf { u.profile == Profile.empty(u.conversation.peer) }?.let { u.copy(profile = it) } ?: u
+                        }
+                        s.copy(items = merged.filterNot { it.request }, requests = merged.filter { it.request }, loading = false)
                     }
                 }
             } catch (e: CancellationException) {
@@ -78,13 +89,12 @@ class ConversationsController(
         }
     }
 
+    private fun ConversationUi.withProfile(byKey: Map<String, Profile>): ConversationUi =
+        byKey[conversation.peer]?.let { copy(profile = it) } ?: this
+
     private suspend fun decorate(conversations: List<Conversation>, follows: Set<String>): List<ConversationUi> {
-        val peers = conversations.map { it.peer }
-        guarded(Unit) { profiles.prefetch(peers) }
-        return conversations.map { c ->
-            val profile = guarded(Profile.empty(c.peer)) { profiles.get(c.peer) }
-            ConversationUi(c, profile, request = c.peer !in follows && !c.hasOutgoing)
-        }
+        val byKey = guarded(emptyMap()) { profiles.getAll(conversations.map { it.peer }) }
+        return conversations.map { c -> ConversationUi(c, byKey[c.peer] ?: Profile.empty(c.peer), request = c.peer !in follows && !c.hasOutgoing) }
     }
 
     /** A failing profile lookup or sync never breaks the list: [fallback] stands in (a peer then shows with the default profile). */

@@ -1,0 +1,5 @@
+• Più veloce ovunque: ogni schermata mostra subito ciò che è già sul telefono e si aggiorna in background
+• I profili si aprono all’istante, anche quando ci torni
+• Le schede delle liste mostrano subito il loro nome invece di «Lista senza titolo»
+• Notifiche, ricerca e segnalibri mostrano prima ciò che è salvato
+• Gli account silenziati restano nascosti già dalla prima pagina

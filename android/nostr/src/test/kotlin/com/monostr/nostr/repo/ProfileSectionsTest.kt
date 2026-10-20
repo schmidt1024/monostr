@@ -12,6 +12,8 @@ import org.junit.jupiter.api.io.TempDir
 import rust.nostr.sdk.Event
 import rust.nostr.sdk.EventBuilder
 import rust.nostr.sdk.Keys
+import rust.nostr.sdk.Kind
+import rust.nostr.sdk.Tag
 import rust.nostr.sdk.Timestamp
 import java.nio.file.Path
 
@@ -100,6 +102,40 @@ class ProfileSectionsTest {
             val hex = alice.publicKey().toHex()
             assertEquals(listOf("bob root"), repo.profileNotes(hex, ProfileSection.REPOSTS).map { it.repostOf?.content })
             assertTrue(relay.requests.any { "\"kinds\":[6]" in it && hex in it }, "no kind 6 page: ${relay.requests}")
+            e.close()
+        }
+    }
+
+    @Test
+    fun `one refresh serves all three tabs and is not repeated within a minute`() = runTest {
+        SilentWsRelay(answerEose = true).use { relay ->
+            val e = engine(relay)
+            var clock = 1_000L
+            val repo = NostrFeedRepository(e, now = { clock })
+            val hex = alice.publicKey().toHex()
+            fun asked(kind: Int) = relay.requests.count { "\"kinds\":[$kind]" in it && hex in it }
+            repo.profileNotes(hex, ProfileSection.POSTS)
+            repo.profileNotes(hex, ProfileSection.REPLIES)
+            repo.profileNotes(hex, ProfileSection.REPOSTS)
+            assertEquals(1, asked(1), "requests: ${relay.requests}")
+            assertEquals(1, asked(6))
+            assertEquals(1, asked(5))
+            clock += 61
+            repo.profileNotes(hex, ProfileSection.POSTS)
+            assertEquals(2, asked(1))
+            e.close()
+        }
+    }
+
+    @Test
+    fun `posts are found under many newer replies, withdrawn ones stay out`() = runTest {
+        SilentWsRelay(answerEose = true).use { relay ->
+            val e = engine(relay)
+            val roots = (0 until 5).map { note(alice, "root $it", 1000L + it).also { e.save(it) } }
+            (0 until 450).forEach { e.save(reply(alice, "reply $it", roots[0], 2000L + it)) }
+            e.save(EventBuilder(Kind(5u), "").tags(listOf(Tag.parse(listOf("e", roots[2].id().toHex())), Tag.parse(listOf("k", "1")))).signWithKeys(alice))
+            val repo = NostrFeedRepository(e)
+            assertEquals(listOf("root 4", "root 3", "root 1", "root 0"), repo.profileNotes(alice.publicKey().toHex(), ProfileSection.POSTS, fetch = false).map { it.content })
             e.close()
         }
     }

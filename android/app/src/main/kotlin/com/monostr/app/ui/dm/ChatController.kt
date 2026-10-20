@@ -57,9 +57,11 @@ class ChatController(
 
     fun start() {
         mentions.follow(_state.map { s -> s.messages.map { it.note } })
+        // subscribed first: the peer's profile can land while the stored one is read (spec perf 3.2)
+        scope.launch { profiles.updates.collect { byKey -> byKey[peer]?.let { p -> _state.update { it.copy(peer = p) } } } }
         scope.launch {
             val profile = guarded(null) { profiles.get(peer) }
-            if (profile != null) _state.update { it.copy(peer = profile) }
+            if (profile != null && profile != Profile.empty(peer)) _state.update { it.copy(peer = profile) }
         }
         scope.launch {
             try {

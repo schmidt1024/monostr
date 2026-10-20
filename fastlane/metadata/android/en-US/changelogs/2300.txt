@@ -1,0 +1,5 @@
+• Faster everywhere: every screen shows what is already on your phone at once and updates in the background
+• Profiles open instantly, and right away when you come back to one
+• List tabs show their names at once instead of “Untitled list”
+• Notifications, search and bookmarks show stored results first
+• Muted accounts stay hidden from the first page on

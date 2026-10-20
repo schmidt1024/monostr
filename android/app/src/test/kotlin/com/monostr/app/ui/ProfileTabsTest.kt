@@ -40,13 +40,15 @@ class ProfileTabsTest {
         assertEquals(ProfileSection.POSTS, c.state.value.tab)
         assertEquals(listOf(post.id), c.state.value.shown.map { it.note.id })
         assertNull(c.state.value.replies)
-        assertEquals(listOf(ProfileSection.POSTS to true), feed.profileCalls)
+        assertEquals(listOf(ProfileSection.POSTS to false, ProfileSection.POSTS to false), feed.profileCalls) // the database, then again after the refresh
+        assertEquals(listOf(bob), feed.refreshProfileCalls)
         c.selectTab(ProfileSection.REPLIES); runCurrent()
         assertEquals(listOf(answer.id), c.state.value.shown.map { it.note.id })
-        assertEquals(ProfileSection.REPLIES to true, feed.profileCalls.last())
+        assertEquals(ProfileSection.REPLIES to false, feed.profileCalls.last())
         // back and forth again: nothing is loaded twice
         c.selectTab(ProfileSection.POSTS); c.selectTab(ProfileSection.REPLIES); runCurrent()
-        assertEquals(2, feed.profileCalls.size)
+        assertEquals(3, feed.profileCalls.size)
+        assertEquals(1, feed.refreshProfileCalls.size)
         c.close()
     }
 
@@ -60,7 +62,7 @@ class ProfileTabsTest {
         assertNull(c.state.value.reposts)
         c.selectTab(ProfileSection.REPOSTS); runCurrent()
         assertEquals(listOf(shared.id), c.state.value.shown.map { it.note.id })
-        assertEquals(ProfileSection.REPOSTS to true, feed.profileCalls.last())
+        assertEquals(ProfileSection.REPOSTS to false, feed.profileCalls.last())
         c.close()
     }
 
@@ -95,13 +97,15 @@ class ProfileTabsTest {
             byAuthor = mapOf(bob to listOf(post, answer))
             olderByAuthor = mapOf(bob to listOf(older))
         }
-        val c = controller(feed, FakeAuthorRelays(mapOf(bob to listOf("wss://w1.example"))))
+        val relays = FakeAuthorRelays(mapOf(bob to listOf("wss://w1.example")))
+        val c = controller(feed, relays)
         c.start(); runCurrent()
         c.loadMore(); runCurrent()
         c.selectTab(ProfileSection.REPLIES); runCurrent()
         val newer = note('n', author = bob, createdAt = 2000)
         val newAnswer = note('m', author = bob, createdAt = 1990, replyTo = root.id)
         feed.byAuthor = mapOf(bob to listOf(newer, post, newAnswer, answer))
+        relays.fetchedIds = setOf(newer.id, newAnswer.id) // the tick's fetch is what brought them
         advanceTimeBy(1_100)
         assertEquals(listOf(newer.id, post.id, older.id), c.state.value.notes.map { it.note.id })
         assertEquals(listOf(newAnswer.id, answer.id), c.state.value.replies?.map { it.note.id })

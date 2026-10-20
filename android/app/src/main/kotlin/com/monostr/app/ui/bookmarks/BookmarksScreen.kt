@@ -1,6 +1,5 @@
 package com.monostr.app.ui.bookmarks
 
-import com.monostr.nostr.repo.getAll
 import com.monostr.nostr.repo.OwnReactions
 import com.monostr.nostr.repo.MemoryOwnReactions
 import kotlinx.coroutines.Dispatchers
@@ -69,12 +68,14 @@ import com.monostr.app.ui.common.muteUndoTag
 import com.monostr.app.ui.common.uiText
 import com.monostr.app.ui.feed.NoteUi
 import com.monostr.app.ui.feed.target
+import com.monostr.app.ui.feed.withProfiles
 import com.monostr.app.ui.tips.TipDecorations
 import com.monostr.app.ui.tips.TipSheetFactory
 import com.monostr.app.ui.tips.TipSheetHost
 import com.monostr.app.ui.tips.TippersDialog
 import com.monostr.nostr.model.Note
 import com.monostr.nostr.model.Profile
+import com.monostr.nostr.repo.BookmarkEntry
 import com.monostr.nostr.repo.BookmarksRepository
 import com.monostr.nostr.repo.CountsRepository
 import com.monostr.nostr.repo.MuteRepository
@@ -88,6 +89,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
@@ -131,6 +133,12 @@ class BookmarksController(
     private val pendingRemoval = MutableStateFlow<Set<String>>(emptySet())
 
     fun start() {
+        scope.launch {
+            profiles.updates.collect { byKey ->
+                fresh = fresh.map { r -> r.copy(note = r.note?.withProfiles(byKey)) }
+                _state.update { s -> s.copy(entries = s.entries.map { e -> e.copy(note = e.note?.withProfiles(byKey)) }) }
+            }
+        }
         mentions.follow(_state.map { s -> s.entries.mapNotNull { it.note?.note } })
         // spec 4.2, 9.3: a deleted own note or a muted account's note shows like any note that cannot be found; the list itself is not touched
         scope.launch { visibility.changes.collect { _state.update { s -> s.copy(entries = s.entries.map(::filtered)) } } }
@@ -141,9 +149,9 @@ class BookmarksController(
         // a request started on another screen greys the entry here too, and frees it again when it failed
         scope.launch { deletions.pending.collect { _state.update { s -> s.copy(entries = s.entries.map { e -> e.copy(note = e.note?.let(noteActions::flags)) }) } } }
         scope.launch { counts.counts.collect { _state.update { s -> s.copy(entries = s.entries.map { e -> e.copy(note = e.note?.let(::withCounts)) }) } } }
-        // Rows are rebuilt only when the id list changes (entries() may hit the relays); a pending
+        // Rows are rebuilt only when the id list changes (a new list replaces a relay lookup still running for the old one); a pending
         // removal just re-applies the kept rows, re-flagged so the icon shows the pending state.
-        scope.launch { bookmarks.state.map { it.ids }.distinctUntilChanged().collect { ids -> rebuild(ids) } }
+        scope.launch { bookmarks.state.map { it.ids }.distinctUntilChanged().collectLatest { ids -> rebuild(ids) } }
         scope.launch {
             pendingRemoval.collect { pending -> _state.update { it.copy(entries = keepPending(it.entries, fresh.map(::current), pending, bookmarks.state.value.ids)) } }
         }
@@ -156,22 +164,26 @@ class BookmarksController(
     private fun current(row: BookmarkUi): BookmarkUi =
         filtered(row.copy(note = row.note?.let { withCounts(noteActions.flags(actions.flags(decorations.decorate(it)))) }))
 
-    /** Resolves the rows for [ids] from the repository. */
+    /** Resolves the rows for [ids]: the stored notes at once, then the missing ones the relays have (spec perf 3.8). */
     private suspend fun rebuild(ids: List<String>) {
         try {
-            val entries = bookmarks.entries()
-            profiles.prefetch(entries.mapNotNull { it.note?.author })
-            val byKey = profiles.getAll(entries.flatMap { e -> listOfNotNull(e.note?.author, e.note?.repostOf?.author) })
-            fresh = entries.map { e ->
-                BookmarkUi(e.id, e.note?.let { n -> NoteUi(n, byKey.getValue(n.author), n.repostOf?.let { byKey.getValue(it.author) } ?: byKey.getValue(n.author)) })
-            }
-            _state.update { it.copy(entries = keepPending(it.entries, fresh.map(::current), pendingRemoval.value, ids), loading = false) }
-            decorations.track(entries.mapNotNull { it.note })
+            val stored = bookmarks.localEntries()
+            show(ids, stored)
+            if (stored.any { it.note == null }) show(ids, bookmarks.entries())
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             _state.update { it.copy(loading = false, message = uiText(R.string.bookmarks_error_load).asMessage()) }
         }
+    }
+
+    private suspend fun show(ids: List<String>, entries: List<BookmarkEntry>) {
+        val byKey = profiles.getAll(entries.flatMap { e -> listOfNotNull(e.note?.author, e.note?.repostOf?.author) })
+        fresh = entries.map { e ->
+            BookmarkUi(e.id, e.note?.let { n -> NoteUi(n, byKey.getValue(n.author), n.repostOf?.let { byKey.getValue(it.author) } ?: byKey.getValue(n.author)) })
+        }
+        _state.update { it.copy(entries = keepPending(it.entries, fresh.map(::current), pendingRemoval.value, ids), loading = false) }
+        decorations.track(entries.mapNotNull { it.note })
     }
 
     fun remove(note: Note) {
