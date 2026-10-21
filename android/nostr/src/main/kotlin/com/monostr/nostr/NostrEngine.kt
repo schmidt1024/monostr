@@ -93,6 +93,9 @@ class NostrEngine private constructor(
 
     private val started = AtomicBoolean(false)
 
+    /** [System.nanoTime] of the first [connect]; 0 before it. [fetchSettled] works around rust-nostr's first minute only. */
+    @Volatile private var connectedAt = 0L
+
     /** What [HandleNotification.handle] hands over: nothing read yet (spec wave 2 B2: no FFI and no parsing in the callback). */
     private class RawIncoming(val relay: RelayUrl, val subscriptionId: String, val event: Event)
 
@@ -462,6 +465,7 @@ class NostrEngine private constructor(
     suspend fun connect() {
         ffi { client.connect() }
         if (started.compareAndSet(false, true)) {
+            connectedAt = System.nanoTime()
             scope.launch(Dispatchers.Default) { decodeIncoming() }
             notifications = scope.launch(ffiDispatcher) { runNotifications() }
         }
@@ -678,6 +682,53 @@ class NostrEngine private constructor(
         if (targets.isEmpty()) return emptyList()
         // stored by the client on receipt, see fetchFrom
         return ffi { client.fetchEventsFrom(targets, filter, timeout).toVec() }
+    }
+
+    /**
+     * [fetch] for a page that should not wait for a relay whose connection failed. rust-nostr 0.44 keeps a relay that
+     * refuses every connection in a fetch for the first 60 s after the start, and the fetch then waits for it until
+     * [timeout] (Pixel 2026-10-21: the first fresh page after 8.5 s instead of 2 s in half the cold starts). Within
+     * [START_WINDOW] after [connect] this asks the relays of the normal set that are connected once none of them is
+     * setting its connection up any more (at most [CONNECT_GRACE]); a relay still connecting then is asked in the
+     * background once it is connected, within [LATE_WAIT] (stored like every fetch's events, nothing returned). None
+     * connected after the grace: every relay that has not failed is asked. After the window it is [fetch]: rust-nostr
+     * leaves a relay that keeps failing out itself, and a page never waits for the grace.
+     */
+    suspend fun fetchSettled(filter: Filter, timeout: Duration = Duration.ofSeconds(8)): List<Event> {
+        val targets = snapshot().parsed
+        val since = connectedAt
+        if (targets.isEmpty() || since == 0L || System.nanoTime() - since > START_WINDOW.toNanos()) return fetch(filter, timeout)
+        val states = settledStates(targets)
+        fun state(url: RelayUrl) = states[url.toString().trimEnd('/')]
+        val ready = targets.filter { state(it) == RelayStatus.CONNECTED.name }
+        if (ready.isEmpty()) {
+            val trying = targets.filter { state(it) !in LOST }.ifEmpty { targets }
+            return ffi { client.fetchEventsFrom(trying, filter, timeout).toVec() }
+        }
+        // only the ones still connecting: a relay whose attempt failed is left to the next fetch (a dead one would be polled for nothing)
+        val late = targets.filter { state(it) in SETTING_UP }.map { it.toString().trimEnd('/') }
+        if (late.isNotEmpty()) scope.launch { askWhenConnected(late, filter, timeout) }
+        return ffi { client.fetchEventsFrom(ready, filter, timeout).toVec() }
+    }
+
+    /** [fetchSettled]'s second part: each of [urls] is asked once it is connected, while it is still in the normal set and not a temporary relay; gives up after [LATE_WAIT]. */
+    private suspend fun askWhenConnected(urls: List<String>, filter: Filter, timeout: Duration) {
+        val waiting = urls.toMutableSet()
+        val deadline = System.nanoTime() + LATE_WAIT.toNanos()
+        while (waiting.isNotEmpty() && System.nanoTime() < deadline) {
+            val set = snapshot()
+            waiting.retainAll(set.normalSet)
+            waiting.removeAll(temporary)
+            val now = ffi { waiting.filter { set.pool[it]?.status()?.name == RelayStatus.CONNECTED.name } }
+            if (now.isNotEmpty()) {
+                waiting.removeAll(now.toSet())
+                // checked again right before the send: a relay re-attached as a search relay meanwhile gets nothing
+                val asked = now.filter { it !in temporary }
+                if (asked.isNotEmpty()) ignoringErrors { ffi { client.fetchEventsFrom(asked.toRelayUrls(), filter, timeout) } }
+            } else {
+                delay(LATE_POLL_MS)
+            }
+        }
     }
 
     /** Cap on an early-exit fetch's timeout (spec D8); tests change it. */
@@ -1041,14 +1092,16 @@ class NostrEngine private constructor(
      * for it, at most [CONNECT_GRACE]: left out, a replaceable event (follow list, profile, payment
      * info) would reach the one fast relay only, and nothing sends it to the others later.
      */
-    private suspend fun connectedOnceSettled(targets: List<RelayUrl>): Set<String> {
+    private suspend fun connectedOnceSettled(targets: List<RelayUrl>): Set<String> =
+        settledStates(targets).filterValues { it == RelayStatus.CONNECTED.name }.keys
+
+    /** The status of each relay of [targets] in the pool (by normalised URL), read once none of them is setting its connection up any more, at most [CONNECT_GRACE]. */
+    private suspend fun settledStates(targets: List<RelayUrl>): Map<String, String> {
         val wanted = targets.map { it.toString().trimEnd('/') }.toSet()
         val deadline = System.nanoTime() + CONNECT_GRACE.toNanos()
         while (true) {
-            val states = ffi { snapshot().pool.filterKeys { it in wanted }.map { (url, relay) -> url to relay.status().name } }
-            if (states.none { it.second in SETTING_UP } || System.nanoTime() >= deadline) {
-                return states.filter { it.second == RelayStatus.CONNECTED.name }.map { it.first }.toSet()
-            }
+            val states = ffi { snapshot().pool.filterKeys { it in wanted }.mapValues { (_, relay) -> relay.status().name } }
+            if (states.values.none { it in SETTING_UP } || System.nanoTime() >= deadline) return states
             ffi { delay(CONNECT_POLL_MS) }
         }
     }
@@ -1173,6 +1226,11 @@ class NostrEngine private constructor(
         /** How long a publish waits for a relay that is setting its connection up right now. */
         private val CONNECT_GRACE: Duration = Duration.ofSeconds(2)
         private const val CONNECT_POLL_MS = 50L
+        /** How long [fetchSettled] keeps waiting in the background for a relay that was not connected yet (rust retries a refused one after 10 s). */
+        private val LATE_WAIT: Duration = Duration.ofSeconds(15)
+        private const val LATE_POLL_MS = 250L
+        /** rust-nostr 0.44 keeps a relay whose connections fail in every fetch for this long after it started (DEFAULT_CONNECTION_TIMEOUT in ensure_operational). */
+        private val START_WINDOW: Duration = Duration.ofSeconds(60)
         /** Relay states in which a connection attempt is under way. */
         private val SETTING_UP = setOf(RelayStatus.CONNECTING.name, RelayStatus.PENDING.name)
         /** Relay states in which rust-nostr is not trying to connect right now. */

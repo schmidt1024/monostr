@@ -1,0 +1,1 @@
+• Akışın ilk taze sayfası artık listendeki ulaşılamayan bir röleyi beklemiyor; geç bağlanan bir röleye sonradan soruluyor

@@ -209,7 +209,8 @@ class NostrFeedRepository(
                     var notes = feedFilter(chunk, kinds).limit(limit.toULong())
                     if (untilTs != null) notes = notes.until(untilTs)
                     // side by side: each waits for the slowest relay, one after the other they added up
-                    val n = async { quietly { engine.fetch(notes) } }
+                    // a relay whose connection failed must not hold the page to the timeout (engine.fetchSettled)
+                    val n = async { quietly { engine.fetchSettled(notes) } }
                     fetchDeletions(chunk, untilTs)
                     n.await()
                 }
@@ -228,7 +229,7 @@ class NostrFeedRepository(
         if (since != null) requests = requests.since(Timestamp.fromSecs((since - DELETION_SKEW).coerceAtLeast(0).toULong()))
         val askedAt = now()
         quietly {
-            engine.fetch(requests)
+            engine.fetchSettled(requests)
             if (key != null) deletionsAnswered[key] = askedAt
         }
     }

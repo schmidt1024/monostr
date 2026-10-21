@@ -1,0 +1,1 @@
+• La prima pagina aggiornata del feed non aspetta più un relay della tua lista irraggiungibile; uno che si connette tardi viene interrogato dopo

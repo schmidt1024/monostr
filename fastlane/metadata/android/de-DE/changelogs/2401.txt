@@ -1,0 +1,1 @@
+• Die erste frische Seite des Feeds wartet nicht mehr auf ein Relay aus deiner Liste, das nicht erreichbar ist; eines, das sich spät verbindet, wird danach gefragt

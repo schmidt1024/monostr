@@ -1,0 +1,1 @@
+• The first fresh page of the feed no longer waits for a relay in your list that cannot be reached; one that connects late is asked afterwards

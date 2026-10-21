@@ -1,0 +1,1 @@
+• A primeira página nova do feed não espera mais um relay da sua lista que não responde; um que conecta tarde é consultado depois
