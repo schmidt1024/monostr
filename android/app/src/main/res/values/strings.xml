@@ -24,6 +24,18 @@
     <string name="relay_connecting">connecting…</string>
     <string name="relay_disconnected">disconnected</string>
     <string name="relay_not_connected">not connected</string>
+    <string name="relay_resting">unreachable, tried again every 10 minutes</string>
+    <string name="relay_last_seen">last connected: %1$s</string>
+    <string name="relay_never_seen">never connected yet</string>
+    <string name="relays_none_found">No published relay list found. Other apps and the tip watcher look for you on the relays of that list.</string>
+    <plurals name="relays_unpublished">
+        <item quantity="one">%d relay here is not in your published list: other apps and the tip watcher do not look for you there.</item>
+        <item quantity="other">%d relays here are not in your published list: other apps and the tip watcher do not look for you there.</item>
+    </plurals>
+    <plurals name="relays_missing_here">
+        <item quantity="one">Your published list names %d relay that is not here.</item>
+        <item quantity="other">Your published list names %d relays that are not here.</item>
+    </plurals>
     <string name="relay_status">Relay status: %1$s</string>
 
     <!-- relative time -->

@@ -23,6 +23,18 @@
     <string name="relay_connecting">bağlanıyor…</string>
     <string name="relay_disconnected">bağlantı kesildi</string>
     <string name="relay_not_connected">bağlı değil</string>
+    <string name="relay_resting">ulaşılamıyor, 10 dakikada bir yeniden deneniyor</string>
+    <string name="relay_last_seen">son bağlantı: %1$s</string>
+    <string name="relay_never_seen">henüz bağlanmadı</string>
+    <string name="relays_none_found">Yayınlanmış röle listesi bulunamadı. Diğer uygulamalar ve bahşiş watcher’ı seni bu listedeki rölelerde arar.</string>
+    <plurals name="relays_unpublished">
+        <item quantity="one">Buradaki %d röle yayınlanmış listende yok: diğer uygulamalar ve bahşiş watcher’ı seni orada aramaz.</item>
+        <item quantity="other">Buradaki %d röle yayınlanmış listende yok: diğer uygulamalar ve bahşiş watcher’ı seni orada aramaz.</item>
+    </plurals>
+    <plurals name="relays_missing_here">
+        <item quantity="one">Yayınlanmış listen burada olmayan %d röle içeriyor.</item>
+        <item quantity="other">Yayınlanmış listen burada olmayan %d röle içeriyor.</item>
+    </plurals>
     <string name="relay_status">Relay durumu: %1$s</string>
 
     <!-- relative time -->

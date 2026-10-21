@@ -23,6 +23,18 @@
     <string name="relay_connecting">conectando…</string>
     <string name="relay_disconnected">desconectado</string>
     <string name="relay_not_connected">no conectado</string>
+    <string name="relay_resting">inaccesible, se reintenta cada 10 minutos</string>
+    <string name="relay_last_seen">última conexión: %1$s</string>
+    <string name="relay_never_seen">nunca conectado</string>
+    <string name="relays_none_found">No se encontró una lista de relays publicada. Otras apps y el watcher de propinas te buscan en los relays de esa lista.</string>
+    <plurals name="relays_unpublished">
+        <item quantity="one">%d relay de aquí no está en tu lista publicada: otras apps y el watcher de propinas no te buscan allí.</item>
+        <item quantity="other">%d relays de aquí no están en tu lista publicada: otras apps y el watcher de propinas no te buscan allí.</item>
+    </plurals>
+    <plurals name="relays_missing_here">
+        <item quantity="one">Tu lista publicada nombra %d relay que no está aquí.</item>
+        <item quantity="other">Tu lista publicada nombra %d relays que no están aquí.</item>
+    </plurals>
     <string name="relay_status">Estado del relay: %1$s</string>
 
     <!-- relative time -->

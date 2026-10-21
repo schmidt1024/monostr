@@ -11,6 +11,8 @@ import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.monostr.app.ui.settings.RelayListActions
+import com.monostr.app.ui.settings.RelayListDiff
+import com.monostr.app.ui.settings.RelayListDiffHint
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -92,5 +94,15 @@ class RelayListActionsTest {
         rule.onNodeWithTag("settings-publish-relays").assertIsNotEnabled()
         rule.onNodeWithTag("settings-adopt-relays").assertIsNotEnabled()
         rule.onNodeWithTag("settings-reset-relays").assertIsNotEnabled()
+    }
+
+    /** 0.24.3: relays added in the app without publishing them, and published ones missing here, are named above the button. */
+    @Test
+    fun theDifferenceToThePublishedListIsNamed() {
+        val res = InstrumentationRegistry.getInstrumentation().targetContext.resources
+        rule.setContent { MaterialTheme { Column { RelayListDiffHint(RelayListDiff(unpublished = 2, missing = 1)) } } }
+        val text = res.getQuantityString(R.plurals.relays_unpublished, 2, 2) + " " + res.getQuantityString(R.plurals.relays_missing_here, 1, 1)
+        rule.onNodeWithTag("settings-relay-diff").assertIsDisplayed()
+        rule.onNodeWithText(text).assertIsDisplayed()
     }
 }

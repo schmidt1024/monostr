@@ -23,6 +23,22 @@
     <string name="relay_connecting">подключение…</string>
     <string name="relay_disconnected">отключено</string>
     <string name="relay_not_connected">не подключено</string>
+    <string name="relay_resting">недоступен, новая попытка каждые 10 минут</string>
+    <string name="relay_last_seen">последнее подключение: %1$s</string>
+    <string name="relay_never_seen">ещё не подключался</string>
+    <string name="relays_none_found">Опубликованный список релеев не найден. Другие приложения и watcher чаевых ищут вас на релеях этого списка.</string>
+    <plurals name="relays_unpublished">
+        <item quantity="one">%d релей здесь не входит в ваш опубликованный список: другие приложения и watcher чаевых не ищут вас там.</item>
+        <item quantity="few">%d релея здесь не входят в ваш опубликованный список: другие приложения и watcher чаевых не ищут вас там.</item>
+        <item quantity="many">%d релеев здесь не входят в ваш опубликованный список: другие приложения и watcher чаевых не ищут вас там.</item>
+        <item quantity="other">%d релея здесь не входят в ваш опубликованный список: другие приложения и watcher чаевых не ищут вас там.</item>
+    </plurals>
+    <plurals name="relays_missing_here">
+        <item quantity="one">Ваш опубликованный список называет %d релей, которого здесь нет.</item>
+        <item quantity="few">Ваш опубликованный список называет %d релея, которых здесь нет.</item>
+        <item quantity="many">Ваш опубликованный список называет %d релеев, которых здесь нет.</item>
+        <item quantity="other">Ваш опубликованный список называет %d релея, которых здесь нет.</item>
+    </plurals>
     <string name="relay_status">Статус релея: %1$s</string>
 
     <!-- relative time -->

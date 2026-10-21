@@ -190,6 +190,8 @@ class Ready(
     val startupGate: StartupGate = StartupGate.OPEN,
     /** Spec perf2 A5: per-relay-set fetch stamps of this account (timestamps only); deleted at logout (D7). */
     val syncMarks: SyncMarks? = null,
+    /** 0.24.3: when each relay was last seen connected ([RELAY_SEEN_FILE]); logout deletes it. */
+    val relaySeen: SyncMarks? = null,
     /** Spec perf2 D11: the Messages tab's network follows() lookup; runs on the engine's background scope, so leaving the tab never cancels it. */
     val followsRefresh: RefreshGate<String> = RefreshGate(engine.backgroundScope, 60),
 ) {
@@ -441,6 +443,7 @@ class NostrSession @Inject constructor(
                 bestEffort { ready.feedSnapshot?.delete() }
                 // spec perf2 D7: nothing about this session stays behind; a re-login does one full fetch
                 bestEffort { ready.syncMarks?.delete() }
+                bestEffort { ready.relaySeen?.delete() }
                 // the engine's scope (reconcile, list jobs) ended above; a collector of the old session on a screen's
                 // scope may still load or persist the own lists: closed before the summary goes, it cannot bring it back
                 bestEffort { ready.engine.backgroundScope.cancel() } // a no-op unless a step above threw before close
@@ -489,6 +492,7 @@ class NostrSession @Inject constructor(
         if (pubkey != null) bestEffort { ownListsCache.remove(pubkey) }
         if (pubkey != null) bestEffort { ListSnapshots(listSnapshotsDir(pubkey)).deleteAll() }
         if (pubkey != null) bestEffort { withContext(Dispatchers.IO) { File(accountDir(context.filesDir, pubkey), SyncMarks.FILE_NAME).delete() } }
+        if (pubkey != null) bestEffort { withContext(Dispatchers.IO) { File(accountDir(context.filesDir, pubkey), RELAY_SEEN_FILE).delete() } }
         if (pubkey != null) bestEffort { withContext(Dispatchers.IO) { accountDir(context.noBackupFilesDir, pubkey).delete() } } // only when empty
         bestEffort { secrets.remove(KeystoreSecretStore.SECRET_VIEW_KEY) }
         bestEffort { tipSettings.setSetup(null) }
@@ -581,6 +585,8 @@ class NostrSession @Inject constructor(
             val follows = NostrFollowRepository(engine, feed)
             // the database at once, the relays' latest behind the startup gate and only since the last completed fetch (spec perf2 A5)
             val syncMarks = SyncMarks(File(dir, SyncMarks.FILE_NAME))
+            val relaySeen = SyncMarks(File(dir, RELAY_SEEN_FILE))
+            engine.backgroundScope.launch { trackRelaysSeen({ engine.relayStates().first() }, relaySeen) }
             val ownReactions = NostrOwnReactions(engine, scope = engine.backgroundScope, gate = startupGate, marks = syncMarks)
             engine.backgroundScope.launch { bestEffort { ownReactions.load() } }
             // followers = the largest NIP-45 COUNT of the relays (0.22.4: no proprietary index any more)
@@ -614,6 +620,7 @@ class NostrSession @Inject constructor(
             return Ready(
                 startupGate = startupGate,
                 syncMarks = syncMarks,
+                relaySeen = relaySeen,
                 feedSnapshot = FeedSnapshot(File(dir, "feed-snapshot.json")),
                 // they name the members of possibly private lists: noBackupFilesDir, like the own lists' summary
                 listSnapshots = ListSnapshots(listSnapshotsDir(signer.pubkey)),

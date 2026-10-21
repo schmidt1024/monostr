@@ -58,6 +58,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
@@ -89,6 +90,7 @@ import com.monostr.app.ui.common.statusColor
 import com.monostr.app.ui.common.asString
 import com.monostr.app.ui.common.label
 import com.monostr.app.ui.common.uiText
+import com.monostr.nostr.RelayList
 import com.monostr.nostr.model.Profile
 import com.monostr.nostr.model.RelayInfo
 import com.monostr.nostr.model.RelayState
@@ -101,6 +103,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -228,6 +231,27 @@ class SettingsViewModel @Inject constructor(
     private val _renewBusy = MutableStateFlow(false)
     val renewBusy: StateFlow<Boolean> = _renewBusy.asStateFlow()
     val relayStates = session.requireReady().engine.relayStates()
+
+    /** 0.24.3: when each relay was last seen connected (read once per screen; the session writes it at most every ten minutes). */
+    private val _relaySeen = MutableStateFlow<Map<String, Long>>(emptyMap())
+    val relaySeen: StateFlow<Map<String, Long>> = _relaySeen.asStateFlow()
+
+    /** 0.24.3: the user's published NIP-65 list as stored or fetched; null until read or when none was found. */
+    private val published = MutableStateFlow<RelayList?>(null)
+    private val publishedRead = MutableStateFlow(false)
+
+    /** How the app's relays differ from the published list; null while it is being read or when they agree. */
+    val relayListDiff: StateFlow<RelayListDiff?> = combine(relays.relays, published, publishedRead) { local, list, read -> if (read) relayListDiff(local, list) else null }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** "No list found" only counts when a relay was connected to ask: offline the screen says nothing rather than invite a publish over a list it could not read. */
+    private fun readPublished() = viewModelScope.launch {
+        val engine = session.requireReady().engine
+        val asked = runCatching { engine.connectedNormalRelayUrls().isNotEmpty() }.getOrDefault(false)
+        val list = runCatching { engine.ownRelayList() }.getOrNull()
+        published.value = list
+        publishedRead.value = list != null || asked
+    }
     val themeMode: StateFlow<ThemeMode> = uiSettings.themeMode.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ThemeMode.SYSTEM)
     val accent: StateFlow<Accent> = uiSettings.accent.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), Accent.DEFAULT)
     val customHue: StateFlow<Float> = uiSettings.customHue.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AccentSeed.DEFAULT_HUE)
@@ -274,6 +298,7 @@ class SettingsViewModel @Inject constructor(
             _notice.value = publishRelayList({ relays.relays.first() }, { session.requireReady().publish.publishRelayList(it) })
         } finally {
             _relayListBusy.value = false
+            readPublished()
         }
     }
 
@@ -296,7 +321,11 @@ class SettingsViewModel @Inject constructor(
         }
     }
     fun clearNotice() { _notice.value = null }
-    init { controller.start(); search.start(); dm.start(); monero.start() }
+    init {
+        controller.start(); search.start(); dm.start(); monero.start()
+        readPublished()
+        viewModelScope.launch { _relaySeen.value = runCatching { session.requireReady().relaySeen?.all() }.getOrNull().orEmpty() }
+    }
     private val _logoutBusy = MutableStateFlow(false)
     /** True while a logout runs (up to a few seconds for the draft pictures); the button waits. */
     val logoutBusy: StateFlow<Boolean> = _logoutBusy.asStateFlow()
@@ -361,12 +390,15 @@ fun SettingsScreen(onBack: () -> Unit, onMoneroSetup: () -> Unit, onSupport: () 
             Spacer(Modifier.height(8.dp))
             MediaServerSetting(mediaServer, onSave = vm::setMediaServer, onReset = { vm.resetMediaServer() })
             Spacer(Modifier.height(24.dp))
+            val relaySeen by vm.relaySeen.collectAsStateWithLifecycle()
             RelayListEditor(
                 title = stringResource(R.string.settings_relays), relays = state.relays, live = live, error = state.error,
-                onAdd = vm.controller::add, onRemove = vm.controller::remove, tagPrefix = "settings-relay",
+                onAdd = vm.controller::add, onRemove = vm.controller::remove, tagPrefix = "settings-relay", seen = relaySeen,
             )
             SuggestedRelays(suggestions = RelaySuggestions.PAID_MONERO.filter { it.url !in state.relays }, onAdd = { vm.controller.add(it) })
             val relayListBusy by vm.relayListBusy.collectAsStateWithLifecycle()
+            val relayDiff by vm.relayListDiff.collectAsStateWithLifecycle()
+            relayDiff?.let { RelayListDiffHint(it) }
             RelayListActions(
                 isDefault = isDefaultRelayList(state.relays), busy = relayListBusy || monero.busy,
                 onPublish = { vm.publishRelays() }, onAdopt = vm.monero::adoptRelayList, onReset = { vm.resetRelays() },
@@ -505,6 +537,19 @@ fun SettingsScreen(onBack: () -> Unit, onMoneroSetup: () -> Unit, onSupport: () 
     }
 }
 
+/** 0.24.3: says how the app's relays differ from the published NIP-65 list, right above the button that publishes them. */
+@Composable
+fun RelayListDiffHint(diff: RelayListDiff) {
+    val lines = buildList {
+        if (diff.noneFound) add(stringResource(R.string.relays_none_found))
+        if (diff.unpublished > 0) add(pluralStringResource(R.plurals.relays_unpublished, diff.unpublished, diff.unpublished))
+        if (diff.missing > 0) add(pluralStringResource(R.plurals.relays_missing_here, diff.missing, diff.missing))
+    }
+    Spacer(Modifier.height(8.dp))
+    Text(lines.joinToString(" "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("settings-relay-diff"))
+    Spacer(Modifier.height(4.dp))
+}
+
 /** One relay list with status lines (optional), an add field and a remove icon per row. */
 @Composable
 private fun RelayListEditor(
@@ -516,19 +561,29 @@ private fun RelayListEditor(
     onRemove: (String) -> Unit,
     tagPrefix: String,
     hint: String? = null,
+    /** 0.24.3: epoch seconds each relay was last seen connected (the feed relays only). */
+    seen: Map<String, Long> = emptyMap(),
     footer: @Composable () -> Unit = {},
 ) {
     var newRelay by rememberSaveable(tagPrefix) { mutableStateOf("") }
     Text(title, style = MaterialTheme.typography.titleMedium)
     hint?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-    val notConnected = stringResource(R.string.relay_not_connected)
     relays.forEach { url ->
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(url, style = MaterialTheme.typography.bodyMedium)
                 if (live != null) {
-                    val state = live.firstOrNull { it.url.trimEnd('/') == url }?.state
-                    Text(state?.label()?.asString() ?: notConnected, style = MaterialTheme.typography.labelSmall, color = (state ?: RelayState.DISCONNECTED).statusColor())
+                    val info = live.firstOrNull { it.url.trimEnd('/') == url }
+                    val line = relayStatusLine(info, seen[url.trimEnd('/')], System.currentTimeMillis() / 1000)
+                    val parts = listOfNotNull(
+                        line.state.asString(),
+                        line.lastSeenAgo?.let { stringResource(R.string.relay_last_seen, it.asString()) },
+                        if (line.neverSeen) stringResource(R.string.relay_never_seen) else null,
+                    )
+                    Text(
+                        parts.joinToString(" · "), style = MaterialTheme.typography.labelSmall, color = (info?.state ?: RelayState.DISCONNECTED).statusColor(),
+                        modifier = Modifier.testTag("$tagPrefix-status-${url.hashCode().toUInt()}"),
+                    )
                 }
             }
             RelaySignupButton(url)

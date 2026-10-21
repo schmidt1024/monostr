@@ -1,0 +1,2 @@
+• Le impostazioni mostrano per ogni relay quando è stato connesso l’ultima volta; uno che non si connette mai viene provato solo ogni 10 minuti, risparmiando batteria
+• Le impostazioni dicono quali relay dell’app mancano nella tua lista di relay pubblicata, dove le altre app ti cercano

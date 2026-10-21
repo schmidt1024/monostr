@@ -96,6 +96,59 @@ class NostrEngine private constructor(
     /** [System.nanoTime] of the first [connect]; 0 before it. [fetchSettled] works around rust-nostr's first minute only. */
     @Volatile private var connectedAt = 0L
 
+    /** Normalised URLs [restFailing] took out of the pool's retries, with the [System.nanoTime] they began to rest. */
+    private val resting = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    /**
+     * 0.24.3: a relay of the normal set that has not connected once in this session and failed [restAttempts] times is
+     * disconnected (rust-nostr would retry it every 10 to 60 s for as long as the app runs, which costs battery and radio
+     * time) and tried again once every [restPeriodMs]; when that try fails it rests again. A relay that connected once is
+     * never rested: it is only away for a while. Nothing rests while no other relay of the set has connected in this
+     * session: then the device is offline (or was at the start), and rust's own retries must bring the relays back when
+     * the network returns. Fetches leave a resting relay out (TERMINATED).
+     */
+    private suspend fun restFailing() {
+        while (true) {
+            delay(restCheckMs)
+            ignoringErrors {
+                val set = snapshot()
+                resting.keys.retainAll(set.normalSet)
+                ffi {
+                    val relays = set.normal.mapNotNull { key -> set.pool[key]?.let { key to it } }
+                    val now = System.nanoTime()
+                    for ((key, relay) in relays) {
+                        val since = resting[key] ?: continue
+                        if (relay.status() == RelayStatus.TERMINATED && now - since >= restPeriodMs * 1_000_000) {
+                            resting.remove(key)
+                            ignoringErrors { relay.connect() }
+                        }
+                    }
+                    val online = relays.any { (_, relay) -> relay.stats().success() > 0uL }
+                    if (!online) return@ffi
+                    for ((key, relay) in relays) {
+                        if (resting.containsKey(key)) continue
+                        val status = relay.status()
+                        if (status == RelayStatus.TERMINATED || status.name !in LOST) continue
+                        val stats = relay.stats()
+                        if (stats.success() == 0uL && stats.attempts() >= restAttempts.toULong()) {
+                            resting[key] = now
+                            ignoringErrors { relay.disconnect() }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /** A relay of the normal set rests ([restFailing]) after this many failed attempts without one success in the session; tests lower it. */
+    @Volatile internal var restAttempts: Int = REST_ATTEMPTS
+
+    /** How often [restFailing] looks at the relays; tests shorten it. */
+    @Volatile internal var restCheckMs: Long = REST_CHECK_MS
+
+    /** How long a relay rests before [restFailing] tries it again; tests shorten it. */
+    @Volatile internal var restPeriodMs: Long = REST_PERIOD_MS
+
     /** rust-nostr 0.44 keeps a relay whose connections fail in every fetch for this long after it started (DEFAULT_CONNECTION_TIMEOUT in ensure_operational); tests shorten it. */
     @Volatile internal var startWindow: Duration = Duration.ofSeconds(60)
 
@@ -471,6 +524,7 @@ class NostrEngine private constructor(
             connectedAt = System.nanoTime()
             scope.launch(Dispatchers.Default) { decodeIncoming() }
             notifications = scope.launch(ffiDispatcher) { runNotifications() }
+            scope.launch { restFailing() }
         }
     }
 
@@ -1195,7 +1249,12 @@ class NostrEngine private constructor(
     /** Relay states, refreshed every two seconds while collected. */
     fun relayStates(): Flow<List<RelayInfo>> = flow {
         while (true) {
-            emit(client.relays().filterKeys { it.toString().trimEnd('/') !in temporary }.map { (url, relay) -> RelayInfo(url.toString(), relay.status().toState()) })
+            emit(
+                client.relays().filterKeys { it.toString().trimEnd('/') !in temporary }.map { (url, relay) ->
+                    val status = relay.status()
+                    RelayInfo(url.toString(), status.toState(), everConnected = relay.stats().success() > 0uL, resting = status == RelayStatus.TERMINATED && resting.containsKey(url.toString().trimEnd('/')))
+                },
+            )
             delay(2000)
         }
     }.flowOn(ffiDispatcher)
@@ -1255,6 +1314,10 @@ class NostrEngine private constructor(
         private val CONNECT_GRACE: Duration = Duration.ofSeconds(2)
         private const val CONNECT_POLL_MS = 50L
         private const val REACHABLE_POLL_MS = 100L
+        /** Three failed attempts: rust-nostr retries after 10 s, then longer, so a relay rests about half a minute after the start. */
+        private const val REST_ATTEMPTS = 3
+        private const val REST_CHECK_MS = 10_000L
+        private const val REST_PERIOD_MS = 10 * 60_000L
         /** How long [fetchSettled] keeps waiting in the background for a relay that was not connected yet (rust retries a refused one after 10 s). */
         private val LATE_WAIT: Duration = Duration.ofSeconds(15)
         private const val LATE_POLL_MS = 250L

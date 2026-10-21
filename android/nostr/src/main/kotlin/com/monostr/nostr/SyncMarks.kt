@@ -26,6 +26,9 @@ class SyncMarks(private val file: File, private val io: CoroutineDispatcher = Di
 
     suspend fun get(key: String): Long? = lock.withLock { withContext(io) { readAll()[key] } }
 
+    /** Every key with its time (0.24.3: the relay-seen file reads all relays at once). */
+    suspend fun all(): Map<String, Long> = lock.withLock { withContext(io) { readAll() } }
+
     suspend fun put(key: String, epochSeconds: Long) = lock.withLock {
         withContext(io) {
             if (closed) return@withContext

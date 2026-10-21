@@ -23,6 +23,18 @@
     <string name="relay_connecting">connexion…</string>
     <string name="relay_disconnected">déconnecté</string>
     <string name="relay_not_connected">non connecté</string>
+    <string name="relay_resting">injoignable, nouvel essai toutes les 10 minutes</string>
+    <string name="relay_last_seen">dernière connexion : %1$s</string>
+    <string name="relay_never_seen">jamais connecté</string>
+    <string name="relays_none_found">Aucune liste de relais publiée trouvée. Les autres apps et le watcher de pourboires te cherchent sur les relais de cette liste.</string>
+    <plurals name="relays_unpublished">
+        <item quantity="one">%d relais ici n’est pas dans ta liste publiée : les autres apps et le watcher de pourboires ne t’y cherchent pas.</item>
+        <item quantity="other">%d relais ici ne sont pas dans ta liste publiée : les autres apps et le watcher de pourboires ne t’y cherchent pas.</item>
+    </plurals>
+    <plurals name="relays_missing_here">
+        <item quantity="one">Ta liste publiée nomme %d relais absent d’ici.</item>
+        <item quantity="other">Ta liste publiée nomme %d relais absents d’ici.</item>
+    </plurals>
     <string name="relay_status">État du relais : %1$s</string>
 
     <!-- relative time -->

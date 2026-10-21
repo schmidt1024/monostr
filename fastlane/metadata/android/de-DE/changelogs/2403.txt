@@ -1,0 +1,2 @@
+• Die Einstellungen zeigen pro Relay, wann es zuletzt verbunden war; eines, das sich nie verbindet, wird nur noch alle 10 Minuten versucht, das spart Akku
+• Die Einstellungen sagen, welche Relays der App in deiner veröffentlichten Relay-Liste fehlen, wo andere Apps dich suchen

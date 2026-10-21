@@ -1,0 +1,2 @@
+• Les réglages montrent pour chaque relais sa dernière connexion ; un relais qui ne se connecte jamais n’est essayé que toutes les 10 minutes, pour économiser la batterie
+• Les réglages indiquent quels relais de l’app manquent dans ta liste de relais publiée, où les autres apps te cherchent

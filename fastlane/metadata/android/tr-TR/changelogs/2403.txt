@@ -1,0 +1,2 @@
+• Ayarlar her rölenin en son ne zaman bağlandığını gösteriyor; hiç bağlanmayan bir röle yalnızca 10 dakikada bir deneniyor, pil tasarrufu sağlanıyor
+• Ayarlar, uygulamadaki hangi rölelerin diğer uygulamaların seni aradığı yayınlanmış röle listende olmadığını söylüyor

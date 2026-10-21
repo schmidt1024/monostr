@@ -1,0 +1,2 @@
+• Settings show for each relay when it was last connected; one that never connects is tried only every 10 minutes, saving battery
+• Settings say which relays of the app are missing from your published relay list, where other apps look for you

@@ -1,0 +1,2 @@
+• Los ajustes muestran cuándo se conectó cada relay por última vez; uno que nunca conecta se intenta solo cada 10 minutos, ahorrando batería
+• Los ajustes indican qué relays de la app faltan en tu lista de relays publicada, donde otras apps te buscan

@@ -66,4 +66,8 @@ data class Profile(
 
 enum class RelayState { CONNECTING, CONNECTED, DISCONNECTED }
 
-data class RelayInfo(val url: String, val state: RelayState)
+/**
+ * A relay of the list as the settings show it. [everConnected]: it connected at least once in this session; [resting]: it
+ * never did and failed its attempts, so the engine tries it only once every ten minutes (0.24.3).
+ */
+data class RelayInfo(val url: String, val state: RelayState, val everConnected: Boolean = false, val resting: Boolean = false)
