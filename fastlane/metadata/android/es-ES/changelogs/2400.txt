@@ -1,0 +1,4 @@
+• La primera página nueva del feed ya no espera al trabajo en segundo plano y a menudo llega antes
+• Los «me gusta», reposts y respuestas aparecen poco después del feed, nota a nota
+• Los hilos muestran antes las respuestas de arriba y de abajo, también al abrirlos desde un enlace
+• Los mensajes se abren al instante y los chats largos se abren en el mensaje más reciente sin tirones

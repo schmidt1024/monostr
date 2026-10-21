@@ -1,5 +1,6 @@
 package com.monostr.app.ui.tips
 
+import com.monostr.nostr.StartupGate
 import com.monostr.app.data.PendingTipStore
 import com.monostr.app.data.PendingTips
 import com.monostr.app.ui.feed.NoteUi
@@ -15,14 +16,17 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -44,6 +48,8 @@ class TipDecorations(
     private val scope: CoroutineScope,
     /** The logged-in user: their own notes get no tip action. */
     private val selfPubkey: String? = null,
+    /** Spec perf2 A3: stored intents are re-sent after the home feed's first page is in. */
+    private val gate: StartupGate = StartupGate.OPEN,
     private val now: () -> Long = { System.currentTimeMillis() / 1000 },
 ) {
     private val tracked = MutableStateFlow<Map<String, String>>(emptyMap())
@@ -69,7 +75,7 @@ class TipDecorations(
         scope.launch { resendPending() }
         scope.launch {
             tracked
-                .flatMapLatest { notes -> tips.observeReceipts(notes).catch { /* relay or db error: keep the last state */ } }
+                .flatMapLatest { notes -> receiptsOf(notes) }
                 .collect { trackedSummaries.value = it }
         }
         scope.launch {
@@ -91,6 +97,16 @@ class TipDecorations(
         val map = notes.associate { n -> (n.repostOf ?: n).let { it.id to it.author } }
         if (map != tracked.value) tracked.value = map
     }
+
+    /**
+     * Spec perf2 A4: the stored sums of [notes] at once; the relay part (fetch + subscription) only after
+     * [RECEIPTS_DEBOUNCE_MS] without a newer set, so the 4-8 set changes of a cold start make one or two REQs.
+     */
+    private fun receiptsOf(notes: Map<String, String>): Flow<Map<String, TipSummary>> = flow {
+        emit(tips.localReceipts(notes))
+        delay(RECEIPTS_DEBOUNCE_MS)
+        emitAll(tips.observeReceipts(notes))
+    }.catch { /* relay or db error: keep the last state */ }
 
     /**
      * Like [track], but only adds: the targets are kept in order and watched in slices of [NostrTipsRepository.MAX_NOTES]
@@ -165,6 +181,7 @@ class TipDecorations(
 
     /** Re-publishes the still active pending intents to the user's relays; an intent sent while offline would otherwise never reach the watcher. */
     private suspend fun resendPending() {
+        gate.await()
         val active = try {
             PendingTips.active(pending.pending.first(), now())
         } catch (e: CancellationException) {
@@ -206,5 +223,7 @@ class TipDecorations(
     companion object {
         /** Live receipt subscriptions [add] keeps at most (each is one REQ on every relay; strfry allows ~20 per connection). */
         const val MAX_LIVE_GROUPS = 3
+        /** A tracked set must stay this long before its receipts are asked of the relays (spec perf2 A4). */
+        const val RECEIPTS_DEBOUNCE_MS = 500L
     }
 }

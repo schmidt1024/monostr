@@ -1,5 +1,8 @@
 package com.monostr.app.dm
 
+import kotlinx.coroutines.test.runCurrent
+import com.monostr.nostr.StartupGate
+import com.monostr.app.ui.ManualGate
 import com.monostr.app.data.dm.DmMessage
 import com.monostr.app.data.dm.DmStatus
 import com.monostr.app.data.dm.DropReason
@@ -46,11 +49,13 @@ class DmSyncTest {
 
     private fun TestScope.eager(): CoroutineScope = CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler))
 
-    private inner class Rig(scope: CoroutineScope, own: OwnDmRelays, peers: Map<String, List<String>> = emptyMap()) {
+    private inner class Rig(scope: CoroutineScope, own: OwnDmRelays, peers: Map<String, List<String>> = emptyMap(), gate: StartupGate = StartupGate.OPEN) {
         var clock = 10_000_000L
         val repo = FakeDmRepository()
         val relays = FakeDmRelays(own, peers)
         val store = InMemoryDmStore()
+        /** What DmSync sees: [store] with its per-wrap lookups counted. */
+        val counting = CountingStore(store)
         val settings = FakeDmSettings(listOf(relay))
         val publish = FakePublish()
         val attached = ArrayList<List<String>>()
@@ -67,11 +72,28 @@ class DmSyncTest {
         /** The engine database as seen by `loadWrap`. */
         val db = HashMap<String, Event>()
         val dms = DmSync(
-            repo, relays, store, settings, publish,
+            repo, relays, counting, settings, publish,
             attach = { attached += it; holds(it) }, detach = { detached += it },
             closed = closed, scope = scope, loadWrap = { db[it] }, now = { clock }, authOk = authOk, authOkSeq = { authOkSeqs[it] },
-            authRejected = authRejected, authRejection = { authRejections[it] },
+            authRejected = authRejected, authRejection = { authRejections[it] }, gate = gate,
         )
+    }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test
+    fun `the backlog waits for the startup gate while live wraps are handled at once`() = runTest {
+        val gate = ManualGate()
+        val r = Rig(eager(), own = OwnDmRelays.None, gate = gate)
+        r.dms.start()
+        assertTrue(r.attached.isEmpty())
+        assertTrue(r.repo.fetchCalls.isEmpty())
+        assertTrue(r.repo.subscribeCalls.isEmpty())
+        r.repo.wraps.emit(wrapEvent())
+        assertEquals(1, r.repo.unwrapCalls.size, "a live wrap is not held back")
+        gate.open("test"); runCurrent()
+        assertEquals(listOf(listOf(relay)), r.attached)
+        assertEquals(1, r.repo.fetchCalls.size)
+        assertEquals(1, r.repo.subscribeCalls.size)
     }
 
     @Test
@@ -161,6 +183,30 @@ class DmSyncTest {
     }
 
     @Test
+    fun `storing an unwrapped message reads no row first`() = runTest {
+        val r = Rig(eager(), own = OwnDmRelays.Found(listOf(relay)))
+        r.repo.unwrapAnswers = { w, _ -> DmIncoming("1".repeat(64), bob, false, "hi", r.clock - 10, w.id().toHex()) }
+        r.repo.fetched = listOf(wrapEvent())
+        r.dms.start()
+        assertEquals(1, r.store.messages(bob).first().size)
+        assertEquals(0, r.counting.messageReads)
+    }
+
+    @Test
+    fun `a replayed wrap is skipped from memory after the first time`() = runTest {
+        val r = Rig(eager(), own = OwnDmRelays.Found(listOf(relay)))
+        val wrap = wrapEvent()
+        r.repo.unwrapAnswers = { w, _ -> DmIncoming("1".repeat(64), bob, false, "hi", r.clock - 10, w.id().toHex()) }
+        r.repo.fetched = listOf(wrap)
+        r.dms.start() // the start fetch stores it
+        val lookups = r.counting.lookups
+        r.repo.wraps.emit(wrap) // the live subscription replays the same window
+        r.dms.sync(interactive = false) // the next round fetches it again
+        assertEquals(listOf(wrap.id().toHex()), r.repo.unwrapCalls)
+        assertEquals(lookups, r.counting.lookups, "no SQL for a known wrap")
+    }
+
+    @Test
     fun `stop releases relays and subscription and a later start takes them again`() = runTest {
         val r = Rig(eager(), own = OwnDmRelays.Found(listOf(relay)))
         r.dms.start()
@@ -211,6 +257,19 @@ class DmSyncTest {
         // an edited list refetches the whole window from the new relays
         assertEquals(listOf(newRelay) to r.clock - 30 * day, r.repo.fetchCalls.last())
         assertEquals(0, r.relays.ownCalls)
+    }
+
+    @Test
+    fun `an own message's self copy is never unwrapped`() = runTest {
+        val r = Rig(eager(), own = OwnDmRelays.Found(listOf(relay)))
+        val selfCopy = wrapEvent()
+        val rumor = "4".repeat(64)
+        r.repo.sendResult = DmSendResult(rumor, 900, sentToPeer = true, sentToSelf = true, selfWrapId = selfCopy.id().toHex())
+        assertEquals(DmStatus.SENT, r.dms.send(bob, "hi"))
+        r.dms.start()
+        r.repo.wraps.emit(selfCopy) // our inbox relay delivers the self copy back
+        assertTrue(r.repo.unwrapCalls.isEmpty(), "no Amber round trip for our own message")
+        assertEquals(selfCopy.id().toHex(), r.store.message(rumor)!!.wrapId)
     }
 
     @Test
@@ -401,6 +460,41 @@ class DmSyncTest {
         assertEquals(PendingSince(1, first), r.store.pendingSince(0))
         assertEquals(2, r.repo.unwrapCalls.size) // locked wraps are retried: they may open later
         assertFalse(r.store.isDropped(locked.id().toHex()))
+    }
+
+    @Test
+    fun `a locked wrap the round tried is not tried again by the live replay of the same window`() = runTest {
+        val r = Rig(eager(), own = OwnDmRelays.Found(listOf(relay)))
+        val locked = wrapEvent()
+        r.db[locked.id().toHex()] = locked // for the interactive drain at the end
+        r.repo.unwrapOutcomes = { _, _ -> Unwrap.Locked }
+        r.repo.fetched = listOf(locked)
+        r.dms.start() // round 1: the start fetch tries it once
+        r.repo.wraps.emit(locked) // the live subscription replays the window
+        assertEquals(1, r.store.pendingAttempts(locked.id().toHex()))
+        assertEquals(1, r.repo.unwrapCalls.size)
+        r.dms.sync(interactive = false) // round 2
+        r.dms.sync(interactive = false) // round 3
+        assertEquals(3, r.store.pendingAttempts(locked.id().toHex()))
+        r.dms.sync(interactive = false) // SILENT_ATTEMPTS reached: it waits for a tap or a healed AUTH
+        assertEquals(3, r.repo.unwrapCalls.size)
+        r.dms.drainPending()
+        assertEquals(4, r.repo.unwrapCalls.size, "a tap on the pending row still tries it")
+    }
+
+    @Test
+    fun `a parked locked wrap is never known and the next round tries it again`() = runTest {
+        val r = Rig(eager(), own = OwnDmRelays.Found(listOf(relay)))
+        val locked = wrapEvent()
+        val id = locked.id().toHex()
+        r.repo.unwrapOutcomes = { _, _ -> Unwrap.Locked }
+        r.repo.fetched = listOf(locked)
+        r.dms.start()
+        assertFalse(r.store.isKnownWrap(id), "parked is not durable-final: never in the known set")
+        assertEquals(1, r.repo.unwrapCalls.size)
+        r.dms.sync(interactive = false)
+        assertFalse(r.store.isKnownWrap(id))
+        assertEquals(2, r.repo.unwrapCalls.size, "the known-wrap fast path does not skip it")
     }
 
     @Test

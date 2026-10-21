@@ -101,6 +101,8 @@ class TipCheckWorker(context: Context, params: WorkerParameters) : CoroutineWork
     }
 
     override suspend fun doWork(): Result {
+        // the foreground app shows tips itself; a due run during a cold start would add an 8 s lookup beside the feed (spec perf2 A7)
+        if (MainActivity.inForeground.get()) return Result.success()
         val deps = EntryPointAccessors.fromApplication(applicationContext, Deps::class.java)
         val session = deps.session()
         // the process may have been woken only for this job; track whether we are the ones starting the engine
@@ -108,6 +110,8 @@ class TipCheckWorker(context: Context, params: WorkerParameters) : CoroutineWork
         try {
             session.restore()
             val ready = (session.state.value as? SessionState.Active)?.ready ?: return Result.success()
+            // spec perf2 A2 (4): a worker session has no feed to protect
+            ready.startupGate.open("worker")
             val settings = deps.settings()
             val outcome = try {
                 TipChecker.check(ready.notifications, settings.lastTipNotifiedAt(), System.currentTimeMillis() / 1000, notified = settings.notifiedReceiptIds())

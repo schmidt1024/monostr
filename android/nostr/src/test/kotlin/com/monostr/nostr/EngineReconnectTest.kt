@@ -13,8 +13,6 @@ import org.junit.jupiter.api.io.TempDir
 import rust.nostr.sdk.EventBuilder
 import rust.nostr.sdk.Filter
 import rust.nostr.sdk.Kind
-import java.net.InetAddress
-import java.net.ServerSocket
 import java.net.Socket
 import java.nio.file.Path
 import java.util.concurrent.CopyOnWriteArrayList
@@ -161,7 +159,7 @@ class EngineReconnectTest {
             first.shutdown()
             assertTrue(awaitTrue(15_000) { e.connectedRelayUrls().isEmpty() })
             // something answers on the port but never completes the websocket handshake: the forced connect hangs
-            val stalling = ServerSocket(first.port, 50, InetAddress.getLoopbackAddress())
+            val stalling = bindLoopback(first.port)
             val held = CopyOnWriteArrayList<Socket>()
             thread(isDaemon = true) { while (!stalling.isClosed) held += runCatching { stalling.accept() }.getOrNull() ?: break }
             val job = launch { e.reconnectIfLost() }

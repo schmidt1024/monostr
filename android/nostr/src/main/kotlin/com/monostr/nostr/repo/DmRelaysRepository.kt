@@ -56,7 +56,7 @@ class NostrDmRelaysRepository(
     override suspend fun dmRelays(pubkey: String): List<String> {
         mutex.withLock { cache[pubkey]?.let { (at, list) -> if (at + maxAgeSeconds > now()) return list } }
         val fromList = lookup10050(pubkey, fetch = true).urls ?: emptyList()
-        val relays = if (fromList.isNotEmpty()) fromList else authorRelays.writeRelays(pubkey)
+        val relays = if (fromList.isNotEmpty()) fromList else authorRelays.writeRelaysExact(pubkey)
         val result = (relays.take(DmRelaysRepository.MAX - 1) + DmRelaysRepository.FALLBACK).distinct().take(DmRelaysRepository.MAX)
         mutex.withLock { cache[pubkey] = now() to result }
         return result

@@ -1,6 +1,7 @@
 package com.monostr.nostr.repo
 
 import com.monostr.tips.RelayHosts
+import com.monostr.nostr.Exit
 import com.monostr.nostr.NostrEngine
 import com.monostr.nostr.model.Note
 import com.monostr.nostr.model.NoteMapper
@@ -104,7 +105,7 @@ class NostrQuoteRepository(
             }
             val relays = (held + engine.relayUrls()).distinct()
             if (relays.isNotEmpty()) {
-                quietly { engine.fetchFrom(relays, Filter().kind(Kind(1u)).id(EventId.parse(id)).limit(1u), timeout, attach = false) }
+                quietly { engine.fetchFrom(relays, Filter().kind(Kind(1u)).id(EventId.parse(id)).limit(1u), timeout, attach = false, exit = Exit.AllIds(setOf(id))) }
             }
         } finally {
             engine.detachTemporary(held)

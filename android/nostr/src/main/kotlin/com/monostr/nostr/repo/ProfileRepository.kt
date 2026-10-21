@@ -1,5 +1,6 @@
 package com.monostr.nostr.repo
 
+import com.monostr.nostr.Exit
 import com.monostr.nostr.NostrEngine
 import com.monostr.nostr.model.NoteMapper
 import com.monostr.nostr.model.Profile
@@ -152,7 +153,10 @@ class NostrProfileRepository(
     override suspend fun rawMetadata(pubkey: String, timeout: Duration): String? {
         val filter = Filter().kind(Kind(0u)).author(PublicKey.parse(pubkey)).limit(1u)
         engine.query(filter).firstOrNull()?.let { return it.content() }
-        quietly { engine.fetch(filter, timeout) }
+        // never for the own key: the session deletes pictures from the media server by what this returns, and an older
+        // version from a fast relay would let the current one go
+        val exit = if (pubkey.equals(engine.pubkey, ignoreCase = true)) null else Exit.NewestPerAuthor(setOf(pubkey))
+        quietly { engine.fetch(filter, timeout, exit) }
         engine.query(filter).firstOrNull()?.let { return it.content() }
         fetchFromIndex(listOf(pubkey), timeout)
         return engine.query(filter).firstOrNull()?.content()
@@ -231,7 +235,7 @@ class NostrProfileRepository(
     private suspend fun refresh(batch: List<String>) {
         val before = cache.value.let { m -> batch.mapNotNull { pk -> m[pk]?.let { pk to it } }.toMap() }
         coroutineScope {
-            batch.chunked(AUTHOR_CHUNK).map { chunk -> async { quietly { engine.fetch(metadataFilter(chunk)) } } }.awaitAll()
+            batch.chunked(AUTHOR_CHUNK).map { chunk -> async { quietly { engine.fetch(metadataFilter(chunk), exit = Exit.NewestPerAuthor(chunk.toSet())) } } }.awaitAll()
         }
         var found = readLocal(batch)
         val missing = batch.filter { it !in found }

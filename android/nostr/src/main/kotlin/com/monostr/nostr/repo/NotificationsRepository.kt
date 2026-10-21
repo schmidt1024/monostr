@@ -1,5 +1,6 @@
 package com.monostr.nostr.repo
 
+import com.monostr.nostr.Exit
 import com.monostr.nostr.NostrEngine
 import com.monostr.nostr.model.Nip10
 import com.monostr.nostr.model.Note
@@ -143,7 +144,7 @@ class NostrNotificationsRepository(
             val missing = wanted.filter { it !in result }
             val ask = synchronized(memoLock) { missing.filter { id -> missingAt[id]?.let { t - it >= missingTtlSeconds } ?: true } }
             if (ask.isNotEmpty()) {
-                quietly { engine.fetch(idsFilter(ask)) }
+                quietly { engine.fetch(idsFilter(ask), exit = Exit.AllIds(ask.toSet())) }
                 readStored(ask, result)
             }
             synchronized(memoLock) {
@@ -203,10 +204,10 @@ class NostrNotificationsRepository(
     override fun incoming(): Flow<Unit> = flow {
         var subId: String? = null
         try {
-            engine.events
+            engine.incoming
                 // listening before the REQ goes out: an event the relay sends at once is not missed
                 .onSubscription { subId = subscribeLive() }
-                .filter { LiveMatch.matches(it, me) }
+                .filter { LiveMatch.matches(it.json, me) }
                 .collect { emit(Unit) }
         } finally {
             subId?.let { id -> withContext(NonCancellable) { quietly { engine.unsubscribe(id) } } }
@@ -270,16 +271,12 @@ class NostrNotificationsRepository(
 }
 
 /**
- * Spec perf 3.6: whether a live event is a notification candidate. The kind is one small FFI call; the rest is the
- * event's JSON (one more call) searched in Kotlin, instead of `tags().publicKeys()` and a `toHex` per key for every
- * kind 1/6/7 event of every subscription. Never throws.
+ * Spec perf 3.6 / wave 2 B2: whether a live event is a notification candidate, read from the event the engine
+ * decoded once: the kind and a `p` tag naming the user, no FFI call. Never throws.
  */
 internal object LiveMatch {
     private val KINDS = setOf(1, 6, 7, Kinds.TIP_RECEIPT)
 
-    fun matches(event: Event, me: String): Boolean =
-        runCatching { event.kind().asU16().toInt() in KINDS && namesUser(event.asJson(), me) }.getOrDefault(false)
-
-    /** A `p` tag naming [me] (a relay hint may follow): rust-nostr writes compact JSON, and a quote inside a string is escaped, so only a tag matches. */
-    fun namesUser(json: String, me: String): Boolean = json.contains("[\"p\",\"$me\"")
+    fun matches(event: JsonEvent, me: String): Boolean =
+        event.kind in KINDS && event.tags.any { it.size >= 2 && it[0] == "p" && it[1] == me }
 }

@@ -91,7 +91,8 @@ class NostrSearchRepository(
             // the newest stored kind 0 of the hits, not the raw relay events: a relay may hold someone's old profile
             val remote = storedProfiles(hits)
             people.add(remote)
-            val reachable = relays.map { it.trim().trimEnd('/') }.any { it in engine.connectedRelayUrls() }
+            val connected = engine.connectedRelayUrls()
+            val reachable = relays.map { it.trim().trimEnd('/') }.any { it in connected }
             val error = if (!reachable) SearchRelayUnreachableException() else null
             return SearchOutcome((local + remote).distinctBy { it.pubkey }, error)
         } catch (e: CancellationException) {
@@ -108,7 +109,8 @@ class NostrSearchRepository(
         // See profiles(): releases this call's own fetchFrom attach again.
         try {
             val events = engine.fetchFrom(relays, Filter().kind(Kind(1u)).search(query.trim()).limit(limit.toULong()), timeout)
-            val reachable = relays.map { it.trim().trimEnd('/') }.any { it in engine.connectedRelayUrls() }
+            val connected = engine.connectedRelayUrls()
+            val reachable = relays.map { it.trim().trimEnd('/') }.any { it in connected }
             val error = if (!reachable) SearchRelayUnreachableException() else null
             return SearchOutcome(NoteLoader.notes(engine, events).sortedByDescending { it.createdAt }, error)
         } catch (e: CancellationException) {

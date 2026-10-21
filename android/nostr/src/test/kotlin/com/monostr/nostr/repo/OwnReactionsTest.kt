@@ -1,6 +1,18 @@
 package com.monostr.nostr.repo
 
 import com.monostr.nostr.LocalSigner
+import com.monostr.nostr.ManualGate
+import com.monostr.nostr.SilentWsRelay
+import com.monostr.nostr.SyncMarks
+import com.monostr.nostr.awaitTrue
+import com.monostr.nostr.connectedEngine
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
+import rust.nostr.sdk.Timestamp
+import java.time.Duration
 import com.monostr.nostr.NostrEngine
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -83,5 +95,133 @@ class OwnReactionsTest {
         assertTrue(com.monostr.nostr.awaitTrue { old.id().toHex() in own.liked.value })
         assertEquals("🔥", own.reactions.value[old.id().toHex()])
         e.close()
+    }
+
+    private suspend fun connected(relay: SilentWsRelay) = connectedEngine(dir, relay, me.secretKey().toHex())
+
+    /** One own like in the database (so it is not empty); returns the liked note's id. */
+    private suspend fun storedLike(e: NostrEngine): String {
+        val note = EventBuilder.textNote("liked").signWithKeys(alice).also { e.save(it) }
+        e.save(EventBuilder.reaction(note, "+").customCreatedAt(Timestamp.fromSecs(900_000u)).signWithKeys(me))
+        return note.id().toHex()
+    }
+
+    /** The start fetches (the check fetches carry `#e`, not the limit). */
+    private fun starts(relay: SilentWsRelay) = relay.requests.filter { "\"limit\":2000" in it }
+
+    @Test
+    fun `stored likes show before the startup gate opens, the relays are asked only after it`() = runTest {
+        SilentWsRelay(answerEose = true).use { relay ->
+            val e = connected(relay)
+            try {
+                val liked = storedLike(e)
+                val gate = ManualGate()
+                val own = NostrOwnReactions(e, gate = gate)
+                val load = launch(Dispatchers.IO) { own.load() }
+                assertTrue(awaitTrue { liked in own.liked.value })
+                Thread.sleep(300)
+                assertTrue(relay.requests.isEmpty(), "asked before the gate: ${relay.requests}")
+                gate.open("test")
+                load.join()
+                assertEquals(1, starts(relay).size)
+            } finally {
+                e.close()
+            }
+        }
+    }
+
+    @Test
+    fun `with a stamp for this relay set the start fetch asks from a day before it, and moves the stamp`() = runTest {
+        SilentWsRelay(answerEose = true).use { relay ->
+            val e = connected(relay)
+            try {
+                storedLike(e)
+                val marks = SyncMarks(dir.resolve("marks.json").toFile())
+                val key = NostrOwnReactions.relaySetKey(e.relayUrls())
+                marks.put(key, 1_000_000)
+                NostrOwnReactions(e, marks = marks, now = { 2_000_000 }).load()
+                val req = starts(relay).single()
+                assertTrue("\"since\":${1_000_000 - 86_400}" in req, req)
+                assertEquals(2_000_000L, marks.get(key))
+            } finally {
+                e.close()
+            }
+        }
+    }
+
+    @Test
+    fun `a stamp from a clock that was ahead never puts since in the future`() = runTest {
+        SilentWsRelay(answerEose = true).use { relay ->
+            val e = connected(relay)
+            try {
+                storedLike(e)
+                val marks = SyncMarks(dir.resolve("marks.json").toFile())
+                val key = NostrOwnReactions.relaySetKey(e.relayUrls())
+                marks.put(key, 2_000_000 + 3 * 86_400)
+                NostrOwnReactions(e, marks = marks, now = { 2_000_000 }).load()
+                val req = starts(relay).single()
+                assertTrue("\"since\":${2_000_000 - 86_400}" in req, req)
+            } finally {
+                e.close()
+            }
+        }
+    }
+
+    @Test
+    fun `without stored reactions or for a new relay set the whole window is fetched`() = runTest {
+        SilentWsRelay(answerEose = true).use { relay ->
+            val e = connected(relay)
+            try {
+                val key = NostrOwnReactions.relaySetKey(e.relayUrls())
+                val marks = SyncMarks(dir.resolve("marks.json").toFile()).apply { put(key, 1_000_000) }
+                // a stamp, but the database holds nothing (cleared): the stamp does not count
+                NostrOwnReactions(e, marks = marks, now = { 2_000_000 }).load()
+                assertFalse("\"since\"" in starts(relay).last(), starts(relay).last())
+                storedLike(e)
+                // a stamp of another relay set only: the new relays may hold older reactions
+                val other = SyncMarks(dir.resolve("other.json").toFile()).apply { put(NostrOwnReactions.relaySetKey(listOf("wss://other.example")), 1_000_000) }
+                NostrOwnReactions(e, marks = other, now = { 2_000_000 }).load()
+                assertFalse("\"since\"" in starts(relay).last(), starts(relay).last())
+                assertEquals(2_000_000L, other.get(key), "the completed full fetch stamps this set")
+            } finally {
+                e.close()
+            }
+        }
+    }
+
+    @Test
+    fun `a fetch that ran into its timeout does not move the stamp`() = runTest {
+        SilentWsRelay(recordRequests = true).use { relay ->
+            val e = connected(relay)
+            try {
+                storedLike(e)
+                val marks = SyncMarks(dir.resolve("marks.json").toFile())
+                NostrOwnReactions(e, marks = marks, fetchTimeout = Duration.ofSeconds(1), now = { 2_000_000 }).load()
+                assertEquals(1, starts(relay).size)
+                assertNull(marks.get(NostrOwnReactions.relaySetKey(e.relayUrls())))
+            } finally {
+                e.close()
+            }
+        }
+    }
+
+    @Test
+    fun `check reads the database at once and asks the relays after the gate`() = runTest {
+        SilentWsRelay(answerEose = true).use { relay ->
+            val e = connected(relay)
+            try {
+                val liked = storedLike(e)
+                val gate = ManualGate()
+                val own = NostrOwnReactions(e, scope = CoroutineScope(Dispatchers.IO), gate = gate)
+                own.check(listOf(liked))
+                assertTrue(awaitTrue { liked in own.liked.value })
+                Thread.sleep(300)
+                assertTrue(relay.requests.isEmpty(), "asked before the gate: ${relay.requests}")
+                gate.open("test")
+                assertTrue(awaitTrue { relay.requests.isNotEmpty() })
+            } finally {
+                e.close()
+            }
+        }
     }
 }

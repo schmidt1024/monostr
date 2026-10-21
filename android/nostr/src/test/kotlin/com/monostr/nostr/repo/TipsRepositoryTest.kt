@@ -1,5 +1,7 @@
 package com.monostr.nostr.repo
 
+import kotlinx.coroutines.launch
+import com.monostr.nostr.ManualGate
 import com.monostr.monero.MoneroKeys
 import com.monostr.monero.Network
 import com.monostr.nostr.LocalSigner
@@ -56,6 +58,21 @@ class TipsRepositoryTest {
 
     private fun receipt(by: Keys, noteId: String, recipient: String, amount: Long?, intentId: String, at: Long): Event =
         signed(by, TipReceipt.build(noteId, recipient, me.publicKey().toHex(), amount, intentId, TipType.LIKE, at))
+
+    @Test
+    fun `localReceipts reads what observeReceipts shows first, without a relay`() = runTest {
+        val e = engine()
+        e.save(alicePaymentInfo())
+        val note = EventBuilder.textNote("tip me").signWithKeys(alice); e.save(note)
+        val noteId = note.id().toHex()
+        val aliceHex = alice.publicKey().toHex()
+        val intent = e.signAndSend(TipRequest.prepare(PaymentInfo.parse(RustConvert.toTips(alicePaymentInfo())) as PaymentInfo.Enabled, aliceHex, noteId, 1_000_000_000, TipType.LIKE, "hi", clock).unsignedEvent)
+        e.save(receipt(watcher, noteId, aliceHex, 1_000_000_000, intent.eventId, clock + 1))
+        val repo = NostrTipsRepository(e) { clock }
+        assertEquals(repo.observeReceipts(mapOf(noteId to aliceHex)).first(), repo.localReceipts(mapOf(noteId to aliceHex)))
+        assertEquals(1, repo.localReceipts(mapOf(noteId to aliceHex)).getValue(noteId).count)
+        assertTrue(repo.localReceipts(emptyMap()).isEmpty())
+    }
 
     @Test
     fun `payment info is read from the database and malformed or missing info is disabled`() = runTest {
@@ -405,6 +422,27 @@ class TipsRepositoryTest {
                 assertEquals(PaymentInfo.Disabled, a.await())
                 assertEquals(PaymentInfo.Disabled, b.await())
                 assertEquals(1, relay.requests.count { "10037" in it }, "requests: ${relay.requests}")
+            } finally {
+                e.close()
+            }
+        }
+    }
+
+    @Test
+    fun `receipts show from the database at once, the relays are asked after the startup gate`() = runTest {
+        SilentWsRelay(answerEose = true).use { relay ->
+            val e = connectedEngine(dir, relay)
+            try {
+                val gate = ManualGate()
+                val repo = NostrTipsRepository(e, gate = gate) { clock }
+                val seen = java.util.concurrent.CopyOnWriteArrayList<Map<String, TipSummary>>()
+                val job = launch(Dispatchers.IO) { repo.observeReceipts(mapOf("1".repeat(64) to alice.publicKey().toHex())).collect { seen += it } }
+                assertTrue(awaitTrue { seen.isNotEmpty() }, "the local state waited")
+                Thread.sleep(300)
+                assertTrue(relay.requests.isEmpty(), "asked before the gate: ${relay.requests}")
+                gate.open("test")
+                assertTrue(awaitTrue { relay.requests.size >= 2 }, "fetch and live subscription: ${relay.requests}")
+                job.cancel()
             } finally {
                 e.close()
             }

@@ -33,6 +33,23 @@ class DmRelaysRepositoryTest {
     }
 
     @Test
+    fun `the write relay fallback reads the relay list from every relay`() = runTest {
+        val e = engine()
+        val asked = mutableListOf<String>()
+        val authorRelays = object : AuthorRelaysRepository {
+            override suspend fun writeRelays(pubkey: String): List<String> { asked += "early"; return listOf("wss://old.example") }
+            override suspend fun writeRelaysExact(pubkey: String): List<String> { asked += "exact"; return listOf("wss://w.example") }
+            override suspend fun attach(relays: List<String>) {}
+            override suspend fun detach(relays: List<String>) {}
+            override suspend fun fetchNotes(relays: List<String>, pubkey: String, limit: Int): Set<String> = emptySet()
+        }
+        val repo = NostrDmRelaysRepository(e, authorRelays, indexers = emptyList(), now = { 1000 }, fetchTimeout = java.time.Duration.ofMillis(200))
+        assertEquals(listOf("wss://w.example", DmRelaysRepository.FALLBACK), repo.dmRelays(bob.publicKey().toHex()))
+        assertEquals(listOf("exact"), asked)
+        e.close()
+    }
+
+    @Test
     fun `without 10050 the peer's write relays are used, without both only the fallback`() = runTest {
         val e = engine()
         e.save(list(bob, 10002u, "r", "wss://w.example"))

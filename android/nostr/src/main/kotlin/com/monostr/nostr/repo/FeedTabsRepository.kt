@@ -3,6 +3,7 @@ package com.monostr.nostr.repo
 import com.monostr.nostr.NostrEngine
 import com.monostr.nostr.PublishResult
 import com.monostr.nostr.Signer
+import com.monostr.nostr.StartupGate
 import com.monostr.nostr.model.ListAddress
 import com.monostr.nostr.model.SaveResult
 import kotlinx.coroutines.CancellationException
@@ -94,6 +95,8 @@ class NostrFeedTabsRepository(
     private val now: () -> Long = { System.currentTimeMillis() / 1000 },
     private val send: suspend (EventBuilder) -> PublishResult = { engine.signAndPublish(it) },
     private val fetchTimeout: Duration = Duration.ofSeconds(6),
+    /** Spec perf2 A3: the start reconcile waits until the home feed's first page is in; a change opens it (A2 (5)). */
+    private val gate: StartupGate = StartupGate.OPEN,
 ) : FeedTabsRepository {
     private val privateTags = PrivateTags(signer)
     private val _tabs = MutableStateFlow<CachedTabs?>(null)
@@ -120,7 +123,7 @@ class NostrFeedTabsRepository(
     override fun tabs(): Flow<List<ListAddress>> = flow {
         mutex.withLock { loadLocalLocked() }
         val scope = reconcileScope
-        if (scope != null && reconcileStarted.compareAndSet(false, true)) pendingReconcile = scope.launch { quietly { reconcile() } }
+        if (scope != null && reconcileStarted.compareAndSet(false, true)) pendingReconcile = scope.launch { gate.await(); quietly { reconcile() } }
         emitAll(_tabs.filterNotNull().map { c -> c.tabs.mapNotNull(ListAddress::parse) }.distinctUntilChanged())
     }
 
@@ -200,7 +203,10 @@ class NostrFeedTabsRepository(
 
     /** [f] gives the new tab list, null for a sixth pin. Shown at once; rolled back when no relay accepted it. */
     private suspend fun change(f: (List<String>) -> List<String>?): SaveResult {
-        pendingReconcile?.join()
+        val pending = pendingReconcile
+        // the change waits for the start reconcile; it must not wait for the feed's first page on top of it
+        if (pending != null && !pending.isCompleted) gate.open("write")
+        pending?.join()
         return changeLocked(f)
     }
 

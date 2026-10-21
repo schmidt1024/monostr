@@ -4,8 +4,7 @@ import com.monostr.nostr.LocalSigner
 import com.monostr.nostr.NostrEngine
 import com.monostr.nostr.SilentWsRelay
 import com.monostr.nostr.awaitTrue
-import kotlinx.coroutines.flow.take
-import kotlinx.coroutines.flow.toList
+import com.monostr.nostr.untilFirst
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -61,9 +60,8 @@ class DeletionFetchTest {
         SilentWsRelay(serve = listOf(deletion(bob, reply.id().toHex()).asJson()), answerEose = true).use { relay ->
             val e = engine(relay)
             e.save(root); e.save(reply)
-            val views = NostrThreadRepository(e).observe(root.id().toHex()).take(2).toList()
+            val views = NostrThreadRepository(e).observe(root.id().toHex()).untilFirst { it.replies.isEmpty() }
             assertEquals(1, views.first().replies.size) // local first
-            assertTrue(views.last().replies.isEmpty())
             assertEquals(false, views.last().gone)
             e.close()
         }
@@ -75,9 +73,8 @@ class DeletionFetchTest {
         SilentWsRelay(serve = listOf(deletion(alice, root.id().toHex()).asJson()), answerEose = true).use { relay ->
             val e = engine(relay)
             e.save(root)
-            val views = NostrThreadRepository(e).observe(root.id().toHex()).take(2).toList()
+            val views = NostrThreadRepository(e).observe(root.id().toHex()).untilFirst { it.gone }
             assertEquals(false, views.first().gone) // local first
-            assertEquals(true, views.last().gone)
             e.close()
         }
     }

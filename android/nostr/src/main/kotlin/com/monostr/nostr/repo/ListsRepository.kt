@@ -1,19 +1,25 @@
 package com.monostr.nostr.repo
 
+import com.monostr.nostr.Exit
 import com.monostr.nostr.NostrEngine
 import com.monostr.nostr.PublishResult
 import com.monostr.nostr.RefreshGate
 import com.monostr.nostr.Signer
+import com.monostr.nostr.StartupGate
 import com.monostr.nostr.model.FollowSet
 import com.monostr.nostr.model.ListAddress
-import com.monostr.nostr.model.NoteMapper
 import com.monostr.nostr.model.SaveResult
 import com.monostr.tips.event.Event as JsonEvent
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emitAll
@@ -74,6 +80,8 @@ class NostrListsRepository(
     private val cache: OwnListsCache? = null,
     /** Where the relay reconcile runs after the local lists are shown (session: the engine's background scope); null (tests) = only [reconcileOwn]. */
     private val reconcileScope: CoroutineScope? = null,
+    /** Spec perf2 A3: the relay reconcile waits until the home feed's first page is in; a write opens it (A2 (5)). */
+    private val gate: StartupGate = StartupGate.OPEN,
 ) : ListsRepository {
     private val privateTags = PrivateTags(signer)
 
@@ -100,10 +108,6 @@ class NostrListsRepository(
 
     /** Newest `created_at` of any own list event seen or written: every write is strictly newer (replaceable, NIP-01). */
     @Volatile private var lastCreatedAt = 0L
-
-    /** [filter] from the database, each event read once in Kotlin (spec perf 3.7, F3: the tags went through rust twice). */
-    private suspend fun decodedQuery(filter: Filter): List<JsonEvent> =
-        withContext(engine.ffiDispatcher) { engine.query(filter).map { NoteMapper.decoded(it) } }
 
     private fun kind() = Kind(FollowSetCodec.KIND.toUShort())
     private fun authorFilter(author: String) = Filter().kind(kind()).author(PublicKey.parse(author))
@@ -154,7 +158,7 @@ class NostrListsRepository(
     }
 
     private suspend fun readOwn(): List<FollowSet> {
-        val events = newestPerD(decodedQuery(ownFilter()))
+        val events = newestPerD(engine.queryDecoded(ownFilter()))
         events.forEach { lastCreatedAt = maxOf(lastCreatedAt, it.createdAt) }
         return events.mapNotNull { decodeOwn(it, interactive = false) }.sortedByDescending { it.createdAt }
     }
@@ -182,7 +186,9 @@ class NostrListsRepository(
      */
     private fun startReconcile() {
         val run = ownReconcile?.launchStamped(RECONCILE_KEY) {
+            // the tab titles come from here at once (perf 3.7); only the relays wait
             ensureOwn()
+            gate.await()
             reconcileOwn()
         }
         // replied or not, failed, or cancelled before it began (the scope ended): writes stop waiting for it
@@ -197,6 +203,8 @@ class NostrListsRepository(
      */
     private suspend fun awaitFirstReconcile() {
         if (ownReconcile == null || firstReconcileDone.isCompleted) return
+        // the user's write goes before the feed's first page (opened here, outside the list lock)
+        gate.open("write")
         startReconcile()
         withTimeoutOrNull(fetchTimeout.toMillis()) { firstReconcileDone.await() }
     }
@@ -209,12 +217,12 @@ class NostrListsRepository(
      */
     internal suspend fun reconcileOwn(): Boolean {
         val replied = fetchWide(engine, ownFilter(), defaultRelays, fetchTimeout)
-        val ds = newestPerD(decodedQuery(ownFilter())).mapNotNull { it.firstTagValue("d") }
+        val ds = newestPerD(engine.queryDecoded(ownFilter())).mapNotNull { it.firstTagValue("d") }
         var changed = false
         for (d in ds) {
             lockFor(d).withLock {
                 // read again under the lock: a write that held it has stored its version meanwhile
-                val latest = decodedQuery(ownFilter().identifier(d)).maxByOrNull { it.createdAt } ?: return@withLock
+                val latest = engine.queryDecoded(ownFilter().identifier(d)).maxByOrNull { it.createdAt } ?: return@withLock
                 lastCreatedAt = maxOf(lastCreatedAt, latest.createdAt)
                 val current = _own.value?.firstOrNull { it.address.d == d }
                 if (current != null && latest.createdAt <= current.createdAt) return@withLock
@@ -246,7 +254,7 @@ class NostrListsRepository(
             ensureOwn()
             return _own.value.orEmpty()
         }
-        return newestPerD(decodedQuery(authorFilter(author))).mapNotNull { FollowSetCodec.decode(it, null, interactive = false) }.sortedByDescending { it.createdAt }
+        return newestPerD(engine.queryDecoded(authorFilter(author))).mapNotNull { FollowSetCodec.decode(it, null, interactive = false) }.sortedByDescending { it.createdAt }
     }
 
     override suspend fun of(author: String): List<FollowSet> {
@@ -268,15 +276,15 @@ class NostrListsRepository(
                 _own.value?.firstOrNull { it.address == address }?.let { return@withLock it }
                 val filter = ownFilter().identifier(address.d)
                 fetchWide(engine, filter, defaultRelays, fetchTimeout)
-                val set = decodedQuery(filter).maxByOrNull { it.createdAt }?.let { decodeOwn(it, interactive = false) } ?: return@withLock null
+                val set = engine.queryDecoded(filter).maxByOrNull { it.createdAt }?.let { decodeOwn(it, interactive = false) } ?: return@withLock null
                 putOwn(set)
                 persist()
                 set
             }
         }
         val filter = authorFilter(address.pubkey).identifier(address.d)
-        if (fetch) foreignRefresh.awaitStamped("list:$address") { fetchWide(engine, filter, fetchTimeout) { authorRelays.writeRelays(address.pubkey) + defaultRelays } }
-        return decodedQuery(filter).maxByOrNull { it.createdAt }?.let { FollowSetCodec.decode(it, null, interactive = false) }
+        if (fetch) foreignRefresh.awaitStamped("list:$address") { fetchWide(engine, filter, fetchTimeout, Exit.NewestPerAuthor(setOf(address.pubkey))) { authorRelays.writeRelays(address.pubkey) + defaultRelays } }
+        return engine.queryDecoded(filter).maxByOrNull { it.createdAt }?.let { FollowSetCodec.decode(it, null, interactive = false) }
     }
 
     override suspend fun save(set: FollowSet): SaveResult {
@@ -379,7 +387,7 @@ class NostrListsRepository(
 
     override suspend fun unlock(address: ListAddress): Boolean = lockFor(address.d).withLock {
         ensureOwn()
-        val event = decodedQuery(ownFilter().identifier(address.d)).maxByOrNull { it.createdAt } ?: return@withLock false
+        val event = engine.queryDecoded(ownFilter().identifier(address.d)).maxByOrNull { it.createdAt } ?: return@withLock false
         val set = FollowSetCodec.decode(event, privateTags, interactive = true) ?: return@withLock false
         if (!set.locked) byEventId[event.id] = set
         putOwn(set)
@@ -410,39 +418,71 @@ internal fun newest(events: List<Event>): Event? = events.maxByOrNull { it.creat
  * only for the call (spec §4.2). [extra] is computed inside its own leg, so a slow write relay lookup never holds
  * back the session relays. Never throws except on cancellation. True when a relay answered: events, or an end of
  * stored events before the timeout; false when every leg failed or ran into its timeout (offline, relays down).
+ * With [exit] (spec wave 2 B4, foreign lists only) the first leg that meets it ends the other one; that counts as a reply.
  */
-internal suspend fun fetchWide(engine: NostrEngine, filter: Filter, timeout: Duration, extra: suspend () -> List<String>): Boolean = coroutineScope {
-    val session = async {
+internal suspend fun fetchWide(
+    engine: NostrEngine,
+    filter: Filter,
+    timeout: Duration,
+    exit: Exit? = null,
+    extra: suspend () -> List<String>,
+): Boolean = coroutineScope {
+    val metAny = java.util.concurrent.atomic.AtomicBoolean(false)
+    // an early-exit leg ends at the engine's cap, so an empty end is judged against that, not the full timeout: a silent relay is no reply
+    val replyTimeout = if (exit == null) timeout else engine.earlyExitCap?.let { cap -> if (cap < timeout) cap else timeout } ?: timeout
+    lateinit var session: Deferred<Boolean>
+    lateinit var others: Deferred<Boolean>
+    session = async(start = CoroutineStart.LAZY) {
         var up = false
-        legReplied(timeout, { up }) {
-            val events = engine.fetch(filter, timeout)
+        legReplied(replyTimeout, { up }) {
+            val events = if (exit == null) {
+                engine.fetch(filter, timeout)
+            } else {
+                engine.fetchExit(null, filter, timeout, exit).also { if (it.met) { metAny.set(true); others.cancel() } }.events
+            }
             up = engine.connectedNormalRelayUrls().isNotEmpty()
             events
         }
     }
-    val others = async {
+    others = async(start = CoroutineStart.LAZY) {
         var up = false
-        legReplied(timeout, { up }) {
+        legReplied(replyTimeout, { up }) {
             val urls = extra().map { it.trim().trimEnd('/') }.distinct() - engine.relayUrls().toSet()
             if (urls.isEmpty()) return@legReplied null
-            val held = engine.attachTemporary(urls)
+            // NonCancellable: the other leg may end this one at any moment, and an attach cut off half way would leak its relays
+            val held = withContext(NonCancellable) { engine.attachTemporary(urls) }
             try {
-                engine.fetchFrom(urls, filter, timeout, attach = false).also { up = engine.connectedRelayUrls().any { it in urls } }
+                val events = if (exit == null) {
+                    engine.fetchFrom(urls, filter, timeout, attach = false)
+                } else {
+                    engine.fetchExit(urls, filter, timeout, exit).also { if (it.met) { metAny.set(true); session.cancel() } }.events
+                }
+                events.also { up = engine.connectedRelayUrls().any { it in urls } }
             } finally {
                 engine.detachTemporary(held)
             }
         }
     }
-    val a = session.await()
-    val b = others.await()
-    a || b
+    session.start()
+    others.start()
+    val a = session.awaitReply()
+    val b = others.awaitReply()
+    a || b || metAny.get()
+}
+
+/** A leg's answer; a leg the other one ended (its exit was met) gives no reply of its own. */
+private suspend fun Deferred<Boolean>.awaitReply(): Boolean = try {
+    await()
+} catch (e: CancellationException) {
+    currentCoroutineContext().ensureActive()
+    false
 }
 
 /**
  * One leg of [fetchWide]: events, or returning well before [timeout] while a relay it asked is [connected], count as
  * a reply (an unreachable relay may return empty at once too); [block] null means nothing to ask; a failure is no reply.
  */
-private suspend fun legReplied(timeout: Duration, connected: () -> Boolean, block: suspend () -> List<Event>?): Boolean {
+internal suspend fun legReplied(timeout: Duration, connected: () -> Boolean, block: suspend () -> List<Event>?): Boolean {
     val started = System.nanoTime()
     var replied = false
     quietly {

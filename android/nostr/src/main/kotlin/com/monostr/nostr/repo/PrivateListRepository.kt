@@ -4,6 +4,7 @@ import com.monostr.nostr.Nip44UnsupportedException
 import com.monostr.nostr.NostrEngine
 import com.monostr.nostr.PublishResult
 import com.monostr.nostr.Signer
+import com.monostr.nostr.StartupGate
 import com.monostr.nostr.SigningRejectedException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -57,6 +58,8 @@ class NostrPrivateList(
      * list's mutex, so it must be cheap and must not throw.
      */
     private val onState: (ListState) -> Unit = {},
+    /** Spec perf2 A3: the background refresh of a stored list waits until the home feed's first page is in; the inline fetch without a local copy does not. */
+    private val gate: StartupGate = StartupGate.OPEN,
 ) {
     private val _state = MutableStateFlow(ListState())
     val state: StateFlow<ListState> = _state.asStateFlow()
@@ -157,6 +160,7 @@ class NostrPrivateList(
      */
     private fun refreshLater() {
         (watch ?: engine.backgroundScope).launch {
+            gate.await()
             if (engine.relayUrls().isEmpty()) return@launch
             quietly { engine.fetch(filter(), fetchTimeout) }
             val newest = try {
@@ -183,8 +187,8 @@ class NostrPrivateList(
         runCatching { engine.subscribe(filter()) }.getOrNull() ?: return@withLock
         watching = true
         scope.launch {
-            engine.events.collect { ev ->
-                if (ev.kind().asU16().toInt() == kind && ev.author().toHex() == signer.pubkey) onListEvent(ev)
+            engine.incoming.collect { inc ->
+                if (inc.json.kind == kind && inc.json.pubkey == signer.pubkey) onListEvent(inc.event)
             }
         }
     }

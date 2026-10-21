@@ -16,6 +16,10 @@ import kotlin.concurrent.thread
  * [authOkDelayMs] delays that OK, [answerAuth] = false never sends it. With [refuseUntilAuth] (strfry's behaviour) every REQ
  * on a connection whose AUTH has not been answered with OK yet gets only `["CLOSED", id, refuseUntilAuth]`.
  * With [rejectAuthWith] every AUTH event is answered with `["OK", id, false, rejectAuthWith]` and the connection never counts as authenticated.
+ * Spec wave 2 §6: [serveDelayMs] holds a REQ's events (and its EOSE) back this long, [eoseDelayMs] holds the EOSE back
+ * this long after the events (a relay slow to say it has nothing more). [serveFor] gives the events for one REQ from its
+ * text (a different version per relay, only the matching ids); when set it replaces [serve] and every REQ gets an EOSE.
+ * [okDelayMs] holds back the OK of [acceptEvents]. [closes] records the subscription id of every CLOSE the client sent.
  */
 class SilentWsRelay(
     private val answerEose: Boolean = false,
@@ -38,10 +42,18 @@ class SilentWsRelay(
     private val countWith: Long? = null,
     /** Records every REQ in [requests] although the relay stays silent (without it a silent relay discards frames unread). */
     private val recordRequests: Boolean = false,
+    /** A REQ's events and EOSE go out only after this long (real time). */
+    private val serveDelayMs: Long = 0,
+    /** The EOSE follows a REQ's events only after this long (real time). */
+    private val eoseDelayMs: Long = 0,
+    /** The events for one REQ, given the REQ frame's text; replaces [serve] and always ends with an EOSE. */
+    private val serveFor: ((String) -> List<String>)? = null,
+    /** With [acceptEvents]: the OK goes out only after this long (real time). */
+    private val okDelayMs: Long = 0,
     /** A fixed port, to come back where an earlier relay was shut down; 0 picks a free one. */
     port: Int = 0,
 ) : AutoCloseable {
-    private val answers: Boolean get() = answerEose || closeWith != null || acceptEvents || rejectEvents || serve.isNotEmpty() || authChallenge != null || refuseUntilAuth != null || refuseEventsUntilAuth != null || countWith != null || recordRequests
+    private val answers: Boolean get() = answerEose || closeWith != null || acceptEvents || rejectEvents || serve.isNotEmpty() || authChallenge != null || refuseUntilAuth != null || refuseEventsUntilAuth != null || countWith != null || recordRequests || serveFor != null
     /** Every COUNT frame the client sent, as received. */
     val counts = java.util.concurrent.CopyOnWriteArrayList<String>()
     /** Every AUTH frame the client sent, as received. */
@@ -49,7 +61,9 @@ class SilentWsRelay(
     val requests = java.util.concurrent.CopyOnWriteArrayList<String>()
     /** Every EVENT frame the client sent, as received. */
     val events = java.util.concurrent.CopyOnWriteArrayList<String>()
-    private val server = ServerSocket(port, 50, java.net.InetAddress.getLoopbackAddress())
+    /** The subscription id of every CLOSE frame the client sent. */
+    val closes = java.util.concurrent.CopyOnWriteArrayList<String>()
+    private val server = bindLoopback(port)
     val port: Int = server.localPort
     val url: String = "ws://127.0.0.1:${server.localPort}"
     private val sockets = java.util.concurrent.CopyOnWriteArrayList<java.net.Socket>()
@@ -122,6 +136,11 @@ class SilentWsRelay(
                 send(output, if (countWith != null) "[\"COUNT\",\"$count\",{\"count\":$countWith}]" else "[\"CLOSED\",\"$count\",\"unsupported: this relay does not support NIP-45\"]")
                 continue
             }
+            val close = Regex("^\\[\\s*\"CLOSE\"\\s*,\\s*\"([^\"]*)\"").find(text)?.groupValues?.get(1)
+            if (close != null) {
+                closes += close
+                continue
+            }
             if (req != null) subscriptions += output to req
             val auth = Regex("^\\[\\s*\"AUTH\"\\s*,\\s*\\{.*?\"id\"\\s*:\\s*\"([0-9a-f]{64})\"").find(text)?.groupValues?.get(1)
             if (auth != null) auths += text
@@ -143,13 +162,35 @@ class SilentWsRelay(
                 continue
             }
             val replies = buildList {
-                if (event != null && acceptEvents) add("[\"OK\",\"$event\",true,\"\"]")
+                if (event != null && acceptEvents && okDelayMs == 0L) add("[\"OK\",\"$event\",true,\"\"]")
                 if (event != null && rejectEvents) add("[\"OK\",\"$event\",false,\"blocked: test relay refuses writes\"]")
                 if (req != null && closeWith != null) add("[\"CLOSED\",\"$req\",\"$closeWith\"]")
-                if (req != null) serve.forEach { add("[\"EVENT\",\"$req\",$it]") }
-                if (req != null && (answerEose || serve.isNotEmpty())) add("[\"EOSE\",\"$req\"]")
             }
             for (reply in replies) send(output, reply)
+            if (event != null && acceptEvents && okDelayMs > 0) {
+                val ok = "[\"OK\",\"$event\",true,\"\"]"
+                thread(isDaemon = true) { Thread.sleep(okDelayMs); runCatching { send(output, ok) } }
+            }
+            if (req != null) {
+                val served = serveFor?.invoke(text) ?: serve
+                if (answerEose || served.isNotEmpty() || serveFor != null) {
+                    val frames = served.map { "[\"EVENT\",\"$req\",$it]" }
+                    val eose = "[\"EOSE\",\"$req\"]"
+                    if (serveDelayMs == 0L && eoseDelayMs == 0L) {
+                        for (frame in frames) send(output, frame)
+                        send(output, eose)
+                    } else {
+                        thread(isDaemon = true) {
+                            runCatching {
+                                if (serveDelayMs > 0) Thread.sleep(serveDelayMs)
+                                for (frame in frames) send(output, frame)
+                                if (eoseDelayMs > 0) Thread.sleep(eoseDelayMs)
+                                send(output, eose)
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -172,4 +213,22 @@ suspend fun awaitTrue(timeoutMs: Long = 5000, check: suspend () -> Boolean): Boo
         Thread.sleep(50)
     }
     return check()
+}
+
+/**
+ * A loopback listener on [port] (0: any free one). A fixed port that was just freed can be taken for a moment by the
+ * client itself: its reconnect attempts to a dead port come from the ephemeral range, and one of them may be given the
+ * very number it dials (a self-connect) or the number may be an unrelated socket's. Such a socket is not SO_REUSEADDR,
+ * so the rebind fails with "Address already in use" until it is closed: retry briefly instead of failing the test.
+ */
+fun bindLoopback(port: Int, timeoutMs: Long = 10_000): ServerSocket {
+    val end = System.currentTimeMillis() + timeoutMs
+    while (true) {
+        try {
+            return ServerSocket(port, 50, java.net.InetAddress.getLoopbackAddress())
+        } catch (e: java.net.BindException) {
+            if (port == 0 || System.currentTimeMillis() >= end) throw e
+            Thread.sleep(50)
+        }
+    }
 }

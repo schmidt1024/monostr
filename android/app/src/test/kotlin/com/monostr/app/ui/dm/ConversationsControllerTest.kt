@@ -6,11 +6,13 @@ import com.monostr.app.data.dm.InMemoryDmStore
 import com.monostr.app.dm.DmSyncState
 import com.monostr.app.ui.FakeFeed
 import com.monostr.app.ui.FakeProfiles
+import com.monostr.nostr.RefreshGate
 import com.monostr.nostr.model.Profile
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -42,7 +44,10 @@ class ConversationsControllerTest {
         onRefresh: suspend () -> Unit = {},
         onUnlock: suspend () -> Int = { 0 },
         muted: StateFlow<Set<String>> = MutableStateFlow(emptySet()),
-    ) = ConversationsController(store, profiles, FakeFeed(), syncState, store.pendingCount(), onRefresh, onUnlock, eager(), muted)
+        feed: com.monostr.nostr.repo.FeedRepository = FakeFeed(),
+        followsRefresh: RefreshGate<String>? = null,
+        scope: CoroutineScope = eager(),
+    ) = ConversationsController(store, profiles, feed, syncState, store.pendingCount(), onRefresh, onUnlock, scope, muted, work = UnconfinedTestDispatcher(testScheduler), followsRefresh = followsRefresh)
 
     @Test
     fun `followed peers are conversations, strangers without own reply are requests`() = runTest {
@@ -65,6 +70,57 @@ class ConversationsControllerTest {
         advanceUntilIdle()
         assertEquals(listOf(carol, dave, bob), c.state.value.items.map { it.conversation.peer })
         assertTrue(c.state.value.requests.isEmpty())
+    }
+
+    @Test
+    fun `the list shows at once when no contact list is stored and the network is silent`() = runTest {
+        val store = InMemoryDmStore()
+        store.upsert(msg("1", bob, 100))
+        val network = CompletableDeferred<List<String>>()
+        val feed = object : com.monostr.nostr.repo.FeedRepository by FakeFeed() {
+            override suspend fun followsLocal(): List<String> = emptyList()
+            override suspend fun follows(): List<String> = network.await()
+        }
+        val c = controller(store, feed = feed)
+        c.start()
+        advanceUntilIdle()
+        assertFalse(c.state.value.loading)
+        assertEquals(listOf(bob), c.state.value.requests.map { it.conversation.peer }) // not known as followed yet
+        network.complete(listOf(bob))
+        advanceUntilIdle()
+        assertEquals(listOf(bob), c.state.value.items.map { it.conversation.peer })
+        assertTrue(c.state.value.requests.isEmpty())
+    }
+
+    @Test
+    fun `leaving the tab during the follows lookup does not cancel it, reopening joins it`() = runTest {
+        val store = InMemoryDmStore()
+        store.upsert(msg("1", bob, 100))
+        val network = CompletableDeferred<List<String>>()
+        var lookups = 0
+        var stored = emptyList<String>() // the lookup stores the contact list, as the real one does
+        val feed = object : com.monostr.nostr.repo.FeedRepository by FakeFeed() {
+            override suspend fun followsLocal(): List<String> = stored
+            override suspend fun follows(): List<String> { lookups++; return network.await().also { stored = it } }
+        }
+        val session = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher(testScheduler))
+        val gate = RefreshGate<String>(session, 60) { 0L }
+        val firstScreen = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher(testScheduler))
+        val first = controller(store, feed = feed, followsRefresh = gate, scope = firstScreen)
+        first.start()
+        advanceUntilIdle()
+        assertEquals(listOf(bob), first.state.value.requests.map { it.conversation.peer })
+        // the tab is left: its screen scope ends, the session's lookup runs on
+        firstScreen.cancel()
+        val second = controller(store, feed = feed, followsRefresh = gate)
+        second.start()
+        advanceUntilIdle()
+        assertEquals(1, lookups) // joined, not asked again
+        network.complete(listOf(bob))
+        advanceUntilIdle()
+        assertEquals(listOf(bob), second.state.value.items.map { it.conversation.peer })
+        assertTrue(second.state.value.requests.isEmpty())
+        session.cancel()
     }
 
     @Test

@@ -8,16 +8,22 @@ import com.monostr.app.data.dm.DmStatus
 import com.monostr.app.data.dm.DmStore
 import com.monostr.app.ui.common.UiText
 import com.monostr.app.ui.common.uiText
+import com.monostr.nostr.PerfTrace
 import com.monostr.nostr.model.Note
 import com.monostr.nostr.model.NoteMedia
 import com.monostr.nostr.model.Profile
 import com.monostr.nostr.repo.ProfileRepository
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -35,7 +41,8 @@ data class ChatUiState(
 /**
  * One NIP-17 conversation with [peer]. Rows come from the local store only: [send] and [retry]
  * write SENDING/SENT/FAILED there themselves, so the list follows without extra bookkeeping.
- * While the chat is visible, every emission moves the read marker to [now] (or the newest message, if later, capped at a day ahead).
+ * While the chat is visible, every emission moves the read marker to [now] (or the newest message, if later, capped at a day ahead);
+ * only the newest [PAGE] messages are loaded until [loadOlder].
  */
 class ChatController(
     private val peer: String,
@@ -47,6 +54,8 @@ class ChatController(
     private val scope: CoroutineScope,
     private val now: () -> Long,
     private val mentions: MentionResolver = MentionResolver(profiles, scope),
+    /** Where rows become bubbles (NoteMedia.parse per message): off the main thread (spec perf2 D5). Tests pass theirs. */
+    private val work: CoroutineDispatcher = Dispatchers.Default,
 ) {
     val names: StateFlow<Map<String, String>> get() = mentions.names
     private val sendFn = send
@@ -55,6 +64,19 @@ class ChatController(
     @Volatile private var visible = false
     val state: StateFlow<ChatUiState> = _state.asStateFlow()
 
+    /** How many of the newest messages are loaded; grows by [PAGE] in [loadOlder]. */
+    private val limit = MutableStateFlow(PAGE)
+    /**
+     * The last bubbles by rumor id: an unchanged message keeps its bubble (no second parse). Only the mapping step touches it.
+     * Holds decrypted text in memory for the open chat only; dropped when the collection ends, never logged.
+     */
+    private var bubbles: Map<String, ChatMessageUi> = emptyMap()
+
+    /** Spec perf2 §7.1: the chat's first loaded state is marked once. */
+    private var shownMarked = false
+    private fun markShown() { if (!shownMarked) { shownMarked = true; PerfTrace.mark("chat first messages") } }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
     fun start() {
         mentions.follow(_state.map { s -> s.messages.map { it.note } })
         // subscribed first: the peer's profile can land while the stored one is read (spec perf 3.2)
@@ -66,16 +88,38 @@ class ChatController(
         scope.launch {
             try {
                 // distinct: moving the read marker makes the store emit the same rows again
-                store.messages(peer).distinctUntilChanged().collect { list ->
-                    _state.update { s -> s.copy(messages = list.map { ChatMessageUi(it, it.asNote()) }, loading = false) }
-                    if (visible) markReadNow()
-                }
+                limit.flatMapLatest { n -> store.messages(peer, n) }
+                    .distinctUntilChanged()
+                    .map { list -> bubblesFor(list) }
+                    .flowOn(work)
+                    .collect { rows ->
+                        _state.update { s -> s.copy(messages = rows, loading = false) }
+                        markShown()
+                        if (visible) markReadNow()
+                    }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 _state.update { it.copy(loading = false, message = uiText(R.string.messages_error_load)) }
+                markShown()
+            } finally {
+                bubbles = emptyMap()
             }
         }
+    }
+
+    /** Spec perf2 D5: [PAGE] more older messages, only when the newest page came back full (else everything is loaded). */
+    fun loadOlder() {
+        val shown = _state.value.messages.size
+        limit.update { n -> if (shown >= n) n + PAGE else n }
+    }
+
+    private fun bubblesFor(list: List<DmMessage>): List<ChatMessageUi> {
+        val previous = bubbles
+        val next = HashMap<String, ChatMessageUi>(list.size)
+        val rows = list.map { m -> (previous[m.rumorId]?.takeIf { it.message == m } ?: ChatMessageUi(m, m.asNote())).also { next[m.rumorId] = it } }
+        bubbles = next
+        return rows
     }
 
     /** The screen is started (in the foreground): only then do shown messages count as read. */
@@ -140,5 +184,6 @@ class ChatController(
 
     private companion object {
         const val MAX_SKEW = 86_400L
+        const val PAGE = 100
     }
 }

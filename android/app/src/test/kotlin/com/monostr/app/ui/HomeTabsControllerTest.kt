@@ -1,5 +1,6 @@
 package com.monostr.app.ui
 
+import com.monostr.nostr.StartupGate
 import com.monostr.app.R
 import com.monostr.app.data.FeedSnapshot
 import com.monostr.app.data.ListSnapshots
@@ -51,11 +52,24 @@ class HomeTabsControllerTest {
     private fun TestScope.feed(repo: FakeFeed, scope: CoroutineScope, source: FeedSource = FeedSource.Following, snapshot: FeedSnapshot? = null) =
         FeedController(repo, FakeProfiles(), FakePublish(), decorations(), BookmarkActions(FakeBookmarks(), scope), FakeCounts(), scope, source = source, snapshot = snapshot)
 
-    private fun TestScope.controller(pins: FakeFeedTabs, lists: FakeLists, home: FakeFeed = FakeFeed(), listRepo: FakeFeed = FakeFeed(), snapshots: ListSnapshots? = null): HomeTabsController {
+    private fun TestScope.controller(pins: FakeFeedTabs, lists: FakeLists, home: FakeFeed = FakeFeed(), listRepo: FakeFeed = FakeFeed(), snapshots: ListSnapshots? = null, gate: StartupGate = StartupGate.OPEN): HomeTabsController {
         val scope = eager()
         val following = feed(home, scope)
         following.start()
-        return HomeTabsController(pins, lists, scope, self, following, snapshots) { source, child, snapshot -> built += source; feed(listRepo, child, source, snapshot) }
+        return HomeTabsController(pins, lists, scope, self, following, snapshots, gate) { source, child, snapshot -> built += source; feed(listRepo, child, source, snapshot) }
+    }
+
+    @Test
+    fun `a pinned foreign list comes from the database at once and from the relays after the startup gate`() = runTest {
+        val theirs = followSet("theirs", listOf(bob), author = carol, title = "Theirs")
+        val lists = FakeLists().apply { foreign = mapOf(theirs.address to theirs) }
+        val gate = ManualGate()
+        val c = controller(FakeFeedTabs(listOf(theirs.address)), lists, gate = gate)
+        c.start(); runCurrent()
+        assertEquals(listOf(theirs.address to false), lists.byAddressCalls)
+        assertEquals("Theirs", (c.state.value.tabs[1] as HomeTab.Pinned).title)
+        gate.open("test"); runCurrent()
+        assertEquals(listOf(theirs.address to false, theirs.address to true), lists.byAddressCalls)
     }
 
     @Test

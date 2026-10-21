@@ -1,0 +1,4 @@
+• Die erste frische Seite des Feeds wartet nicht mehr auf Arbeit im Hintergrund und kommt oft früher
+• Likes, Reposts und Antworten erscheinen kurz nach dem Feed, Note für Note
+• Threads zeigen die Antworten über und unter einer Note schneller, auch über einen Link geöffnet
+• Nachrichten öffnen sofort, lange Chats öffnen ohne Ruckeln bei der neuesten Nachricht

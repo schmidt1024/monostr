@@ -3,6 +3,7 @@ package com.monostr.nostr.repo
 import com.monostr.nostr.NostrEngine
 import com.monostr.nostr.PublishResult
 import com.monostr.nostr.Signer
+import com.monostr.nostr.StartupGate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -33,6 +34,7 @@ class NostrMuteRepository(
     fetchTimeout: Duration = Duration.ofSeconds(8),
     refreshTimeout: Duration = Duration.ofSeconds(3),
     watch: CoroutineScope? = null,
+    gate: StartupGate = StartupGate.OPEN,
 ) : MuteRepository {
     private val _muted = MutableStateFlow<Set<String>>(emptySet())
     override val muted: StateFlow<Set<String>> = _muted.asStateFlow()
@@ -44,6 +46,7 @@ class NostrMuteRepository(
         fetchTimeout = fetchTimeout, refreshTimeout = refreshTimeout, watch = watch,
         // another app may have written anything: only foreign 64-hex pubkeys count (a malformed entry
         // would break PublicKey.parse downstream, the own key would hide the user from themselves)
+        gate = gate,
         onState = { s -> _muted.value = s.ids.filter { it.matches(HEX64) && it != signer.pubkey }.toSet() },
     )
     override val state: StateFlow<ListState> get() = list.state

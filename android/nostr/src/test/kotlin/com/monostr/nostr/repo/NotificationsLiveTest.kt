@@ -2,6 +2,8 @@ package com.monostr.nostr.repo
 
 import com.monostr.nostr.SilentWsRelay
 import com.monostr.nostr.connectedEngine
+import com.monostr.nostr.model.NoteMapper
+import com.monostr.tips.event.Event as JsonEvent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -28,31 +30,29 @@ class NotificationsLiveTest {
     @Test
     fun `a p tag naming the user matches, also with a relay hint, but text, other p tags and other kinds do not`() {
         val mine = EventBuilder.textNote("mine").signWithKeys(me)
-        assertTrue(LiveMatch.matches(EventBuilder.reaction(mine, "+").signWithKeys(alice), meHex))
-        assertTrue(LiveMatch.matches(EventBuilder.textNote("hi").tags(listOf(Tag.parse(listOf("p", meHex, "wss://relay.example")))).signWithKeys(alice), meHex))
-        // a quote inside the content is escaped in the JSON: no tag
-        assertFalse(LiveMatch.matches(EventBuilder.textNote("look [\"p\",\"$meHex\"]").signWithKeys(alice), meHex))
+        fun matches(e: rust.nostr.sdk.Event) = LiveMatch.matches(NoteMapper.decoded(e), meHex)
+        assertTrue(matches(EventBuilder.reaction(mine, "+").signWithKeys(alice)))
+        assertTrue(matches(EventBuilder.textNote("hi").tags(listOf(Tag.parse(listOf("p", meHex, "wss://relay.example")))).signWithKeys(alice)))
+        // a tag spelled inside the content is text, not a tag
+        assertFalse(matches(EventBuilder.textNote("look [\"p\",\"$meHex\"]").signWithKeys(alice)))
         // the pubkey only mentioned in the content
-        assertFalse(LiveMatch.matches(EventBuilder.textNote("hello $meHex").signWithKeys(alice), meHex))
-        assertFalse(LiveMatch.matches(EventBuilder.textNote("hi").tags(listOf(Tag.publicKey(alice.publicKey()))).signWithKeys(alice), meHex))
+        assertFalse(matches(EventBuilder.textNote("hello $meHex").signWithKeys(alice)))
+        assertFalse(matches(EventBuilder.textNote("hi").tags(listOf(Tag.publicKey(alice.publicKey()))).signWithKeys(alice)))
         // a contact list naming the user is no notification
-        assertFalse(LiveMatch.matches(EventBuilder.contactList(listOf(Contact(me.publicKey(), null, null))).signWithKeys(alice), meHex))
+        assertFalse(matches(EventBuilder.contactList(listOf(Contact(me.publicKey(), null, null))).signWithKeys(alice)))
     }
 
     @Test
-    fun `namesUser reads the compact tag form only`() {
-        assertTrue(LiveMatch.namesUser("""{"tags":[["e","x"],["p","$meHex"]]}""", meHex))
-        assertTrue(LiveMatch.namesUser("""{"tags":[["p","$meHex","wss://r"]]}""", meHex))
-        // whitespace variants are not what rust-nostr writes: no match (never a false positive)
-        assertFalse(LiveMatch.namesUser("""{"tags":[["p", "$meHex"]]}""", meHex))
-        assertFalse(LiveMatch.namesUser("""{"tags":[[ "p","$meHex"]]}""", meHex))
-        // escaped quotes inside a content string
-        assertFalse(LiveMatch.namesUser("""{"content":"[\"p\",\"$meHex\"]","tags":[]}""", meHex))
-        // a longer key sharing the prefix, another key, an e tag
-        assertFalse(LiveMatch.namesUser("""{"tags":[["p","${meHex}00"]]}""", meHex))
-        assertFalse(LiveMatch.namesUser("""{"tags":[["p","${alice.publicKey().toHex()}"]]}""", meHex))
-        assertFalse(LiveMatch.namesUser("""{"tags":[["e","$meHex"]]}""", meHex))
-        assertFalse(LiveMatch.namesUser("", meHex))
+    fun `only a p tag naming exactly the user counts`() {
+        fun event(vararg tags: List<String>) = JsonEvent("0".repeat(64), alice.publicKey().toHex(), 1, 1, tags.toList(), "", "0".repeat(128))
+        assertTrue(LiveMatch.matches(event(listOf("e", "x"), listOf("p", meHex)), meHex))
+        assertTrue(LiveMatch.matches(event(listOf("p", meHex, "wss://r")), meHex))
+        // a longer key sharing the prefix, another key, an e tag, a bare p
+        assertFalse(LiveMatch.matches(event(listOf("p", "${meHex}00")), meHex))
+        assertFalse(LiveMatch.matches(event(listOf("p", alice.publicKey().toHex())), meHex))
+        assertFalse(LiveMatch.matches(event(listOf("e", meHex)), meHex))
+        assertFalse(LiveMatch.matches(event(listOf("p")), meHex))
+        assertFalse(LiveMatch.matches(event(), meHex))
     }
 
     @Test

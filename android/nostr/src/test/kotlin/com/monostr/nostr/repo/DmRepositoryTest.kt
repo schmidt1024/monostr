@@ -239,6 +239,7 @@ class DmRepositoryTest {
         assertEquals(2, wraps.size)
         // our own copy unwraps back to the same rumor id
         val own = wraps.first { it.tags().toVec().map { t -> t.asVec() }.any { t -> t[0] == "p" && t[1] == alice.publicKey().toHex() } }
+        assertEquals(own.id().toHex(), r.selfWrapId)
         assertEquals(r.rumorId, NostrDmRepository(e).unwrap(own, silent = false).ok().rumorId)
         e.close()
     }

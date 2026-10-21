@@ -80,7 +80,7 @@ class ThreadComposeControllerTest {
     @Test
     fun `compose posts or replies and reports relay state`() = runTest {
         val root = note('1', alice, 100)
-        val threads = FakeThreads(mapOf(root.id to ThreadView(root, root, emptyList())))
+        val threads = FakeThreads(mapOf(root.id to ThreadView(root, root, emptyList())), mapOf(root.id to root))
         val publish = FakePublish()
         val post = ComposeController(null, threads, publish, eager())
         post.start()
@@ -367,6 +367,17 @@ class ThreadComposeControllerTest {
         mutedFlow.value = setOf(alice); advanceUntilIdle()
         assertEquals(listOf(root.id, other.id), c.state.value.items.map { it.note.id })
         assertFalse(c.state.value.closed)
+    }
+
+    @Test
+    fun `the focused note's counts are asked with priority as soon as the thread is known`() = runTest {
+        val root = note('1', alice, 100)
+        val r1 = note('2', bob, 200, replyTo = root.id)
+        val counts = FakeCounts()
+        val c = ThreadController(r1.id, FakeThreads(mapOf(r1.id to ThreadView(root, r1, listOf(r1)))), profiles, FakePublish(), decorations(), BookmarkActions(FakeBookmarks(), eager()), counts, eager())
+        c.start(); advanceUntilIdle()
+        assertEquals(listOf(listOf(r1.id)), counts.priorityRequested)
+        assertTrue(counts.requested.isEmpty(), "nothing else before the list reports what is visible")
     }
 }
 

@@ -1,5 +1,6 @@
 package com.monostr.nostr.repo
 
+import com.monostr.nostr.ManualGate
 import com.monostr.nostr.LocalSigner
 import com.monostr.nostr.NostrEngine
 import com.monostr.nostr.PublishResult
@@ -238,10 +239,12 @@ class OwnListsLocalFirstTest {
         val oldId = sent.single().id().toHex()
         repo(e, cache).save(other)
         val gate = CompletableDeferred<Unit>()
+        val inFlight = CompletableDeferred<Unit>()
         val ok = okSend(e)
         var calls = 0
         val r = repo(e, cache, send = { builder ->
             if (calls++ == 0) {
+                inFlight.complete(Unit)
                 gate.await()
                 PublishResult("", 30000, emptyList(), mapOf("wss://r" to "down")) // no relay took it
             } else {
@@ -249,7 +252,8 @@ class OwnListsLocalFirstTest {
             }
         })
         val failing = async { r.setMember(ListAddress(30000, myPk, d), b, present = true) }
-        runCurrent()
+        // the write reads the database on the engine's thread, so runCurrent() alone may return before it got to the send: the other write could then take the gate
+        inFlight.await()
         assertEquals(SaveResult.Ok, r.setMember(other.address, b, present = true))
         gate.complete(Unit)
         assertEquals(SaveResult.Failed, failing.await())
@@ -273,5 +277,25 @@ class OwnListsLocalFirstTest {
         val tookMs = (System.nanoTime() - started) / 1_000_000
         assertTrue(tookMs < 1_000, "the write waited $tookMs ms for a reconcile that never ran")
         e.close()
+    }
+
+    @Test
+    fun `the own lists show at once, the relays are asked after the startup gate, a write opens it`() = runTest {
+        SilentWsRelay(answerEose = true).use { relay ->
+            val e = connected(relay)
+            try {
+                e.save(privateList(listOf(a), 1000u))
+                val gate = ManualGate()
+                val r = NostrListsRepository(e, signer, NoRelays, now = { 2000 }, send = okSend(e), fetchTimeout = Duration.ofSeconds(2), cache = MemoryCache(), reconcileScope = e.backgroundScope, gate = gate)
+                assertEquals(listOf(a), r.own().first().single().members)
+                Thread.sleep(300)
+                assertTrue(relay.requests.none { "30000" in it }, "asked before the gate: ${relay.requests}")
+                assertEquals(SaveResult.Ok, r.save(newSet(listOf(a, b))))
+                assertTrue("write" in gate.reasons)
+                assertTrue(awaitTrue { relay.requests.any { "30000" in it } })
+            } finally {
+                e.close()
+            }
+        }
     }
 }

@@ -92,7 +92,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -195,7 +194,8 @@ class ComposeController(
         }
         if (replyToId != null) scope.launch {
             try {
-                threads.observe(replyToId).firstOrNull()?.let { v -> _state.update { it.copy(replyTo = v.focused) } }
+                // spec perf2 C6: the reply target is one note; the thread's root, walk and replies are not needed for it
+                threads.note(replyToId)?.let { n -> _state.update { it.copy(replyTo = n) } }
                 if (_state.value.replyTo == null) {
                     _state.update { it.copy(replyUnresolved = true, error = uiText(R.string.compose_error_reply_target)) }
                 }

@@ -338,10 +338,10 @@ class NostrFeedRepository(
             }
         }
         try {
-            engine.events
-                .filter { ev ->
-                    val kind = ev.kind().asU16().toInt()
-                    (kind == 1 || kind == 6 || kind == 5) && ev.author().toHex() in wanted
+            engine.incoming
+                .filter { inc ->
+                    val kind = inc.json.kind
+                    (kind == 1 || kind == 6 || kind == 5) && inc.json.pubkey in wanted
                 }
                 .conflate()
                 .collect { emit(notes(source, limit)) }

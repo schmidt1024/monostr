@@ -1,6 +1,7 @@
 package com.monostr.nostr.repo
 
 import com.monostr.tips.RelayHosts
+import com.monostr.nostr.Exit
 import com.monostr.nostr.NostrEngine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -14,6 +15,8 @@ import java.time.Duration
 interface AuthorRelaysRepository {
     /** Up to three write relays not in the user's own list; empty when unknown. Cached ten minutes, also when empty. */
     suspend fun writeRelays(pubkey: String): List<String>
+    /** [writeRelays] for routing (a DM): asks every relay and takes the newest list, never an early exit on a fast relay's older one. */
+    suspend fun writeRelaysExact(pubkey: String): List<String> = writeRelays(pubkey)
     suspend fun attach(relays: List<String>)
     suspend fun detach(relays: List<String>)
     /** Pulls the author's kind 1/6 from [relays] into the database (spec 5.2); never throws except on cancellation. */
@@ -32,8 +35,14 @@ class NostrAuthorRelaysRepository(
     private val mutex = Mutex()
     private val cache = HashMap<String, Pair<Long, List<String>>>()
 
-    override suspend fun writeRelays(pubkey: String): List<String> {
-        mutex.withLock { cache[pubkey]?.let { (at, list) -> if (at + maxAgeSeconds > now()) return list } }
+    override suspend fun writeRelays(pubkey: String): List<String> = lookup(pubkey, exact = false)
+
+    override suspend fun writeRelaysExact(pubkey: String): List<String> = lookup(pubkey, exact = true)
+
+    /** [exact]: no early exit, and a cache of its own (an early answer must not serve routing). */
+    private suspend fun lookup(pubkey: String, exact: Boolean): List<String> {
+        val key = if (exact) "exact:$pubkey" else pubkey
+        mutex.withLock { cache[key]?.let { (at, list) -> if (at + maxAgeSeconds > now()) return list } }
         val filter = Filter().kind(Kind(10002u)).author(PublicKey.parse(pubkey)).limit(1u)
         var event = engine.query(filter).firstOrNull()
         if (event == null) {
@@ -41,7 +50,7 @@ class NostrAuthorRelaysRepository(
             if (sources.isNotEmpty()) {
                 val held = engine.attachTemporary(sources)
                 try {
-                    quietly { engine.fetchFrom(sources, filter, fetchTimeout, attach = false) }
+                    quietly { engine.fetchFrom(sources, filter, fetchTimeout, attach = false, exit = if (exact) null else Exit.NewestPerAuthor(setOf(pubkey))) }
                 } finally {
                     engine.detachTemporary(held)
                 }
@@ -54,7 +63,7 @@ class NostrAuthorRelaysRepository(
             ?.mapNotNull { runCatching { RelayUrl.parse(it[1].trim()) }.getOrNull()?.toString()?.trimEnd('/') }
             ?.filter { RelayHosts.isPublicWss(it) && it !in own }
             ?.distinct()?.take(limit) ?: emptyList()
-        mutex.withLock { cache[pubkey] = now() to list }
+        mutex.withLock { cache[key] = now() to list }
         return list
     }
 

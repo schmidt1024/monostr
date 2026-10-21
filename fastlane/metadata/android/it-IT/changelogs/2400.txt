@@ -1,0 +1,4 @@
+• La prima pagina aggiornata del feed non aspetta più il lavoro in background e spesso arriva prima
+• Mi piace, repost e risposte compaiono poco dopo il feed, nota per nota
+• Le discussioni mostrano prima le risposte sopra e sotto una nota, anche aperte da un link
+• I messaggi si aprono subito e le chat lunghe si aprono sull’ultimo messaggio senza scatti

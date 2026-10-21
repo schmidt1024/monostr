@@ -1,5 +1,6 @@
 package com.monostr.app.ui.feed
 
+import com.monostr.nostr.StartupGate
 import com.monostr.app.R
 import com.monostr.app.data.FeedSnapshot
 import com.monostr.app.data.ListSnapshots
@@ -69,6 +70,8 @@ class HomeTabsController(
     val following: FeedController,
     /** Spec perf 3.7: a feed snapshot per pinned list; null (tests that do not care) keeps none. */
     private val snapshots: ListSnapshots? = null,
+    /** Spec perf2 A3: a foreign pinned list is read from the database at once, from the relays after the home feed's first page. */
+    private val gate: StartupGate = StartupGate.OPEN,
     private val newFeed: (FeedSource.Authors, CoroutineScope, FeedSnapshot?) -> FeedController,
 ) {
     private val _state = MutableStateFlow(HomeTabsState())
@@ -142,6 +145,7 @@ class HomeTabsController(
         if (!looking.add(key)) return
         scope.launch {
             attempt { lists.byAddress(address, fetch = false) }?.let { set -> found.update { it + (key to set) } }
+            gate.await()
             val fetched = attempt { lists.byAddress(address, fetch = true) }
             found.update { it + (key to (fetched ?: it[key])) } // a failed fetch keeps what the database had
             looking -= key

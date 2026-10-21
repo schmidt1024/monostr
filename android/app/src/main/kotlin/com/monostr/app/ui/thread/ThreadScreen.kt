@@ -80,6 +80,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -155,6 +156,14 @@ class ThreadController(
     val names: StateFlow<Map<String, String>> get() = mentions.names
     /** The thread's first shown content is marked once (spec perf 3.9). */
     private var contentMarked = false
+    private var focusedAsked = false
+    /** Spec perf2 §7.1: each wave 2 thread mark once per screen. */
+    private val marked = HashSet<String>()
+    private fun markOnce(name: String) { if (marked.add(name)) PerfTrace.mark(name) }
+    private fun markFocusedCounts() {
+        val s = _state.value
+        if (s.items.any { it.note.id == s.focusedId && it.counts != null }) markOnce("thread focused counts")
+    }
     private val _state = MutableStateFlow(ThreadUiState())
     val state: StateFlow<ThreadUiState> = _state.asStateFlow()
     private val actions = NoteActions(publish, scope, counts, deletions, afterDelete, own)
@@ -184,16 +193,27 @@ class ThreadController(
         scope.launch { visibility.changes.collect { refilter() } }
         decorations.start()
         scope.launch { decorations.changes.collect { _state.update { s -> s.copy(items = s.items.map(decorations::decorate)) } } }
-        scope.launch { counts.counts.collect { _state.update { s -> s.copy(items = s.items.map(::withCounts)) } } }
+        scope.launch {
+            counts.counts.collect {
+                _state.update { s -> s.copy(items = s.items.map(::withCounts)) }
+                markFocusedCounts()
+            }
+        }
         scope.launch {
             try {
                 var seen = false
-                threads.observe(noteId).collect { view ->
+                // spec perf2 C6: a rebuild never queues behind stale views; the newest one wins
+                threads.observe(noteId).conflate().collect { view ->
                     seen = true
                     if (view.gone) {
                         all = emptyList() // a later refilter must not bring the withdrawn thread back
                         _state.update { it.copy(items = emptyList(), loading = false, notFound = true) }
                         return@collect
+                    }
+                    // spec perf2 A6: the focused note's counts take the priority lane at once, not at the first visible()
+                    if (!focusedAsked) {
+                        focusedAsked = true
+                        counts.request(listOf((view.focused.repostOf ?: view.focused).id), priority = true)
                     }
                     // spec 2026-10-16 §4: the ancestor chain, the focused note, then each direct reply with at most one child
                     val strands = Strands.build(view.focused, view.replies)
@@ -216,7 +236,11 @@ class ThreadController(
                     val items = visibility.visible(all.map(::fresh), keep = view.focused.id)
                     _state.update { it.copy(items = items, rows = rows, focusedId = view.focused.id, loading = false) }
                     if (!contentMarked && items.isNotEmpty()) { contentMarked = true; PerfTrace.mark("thread first content") }
-                    decorations.track(withFocused)
+                    if (view.ancestors.isNotEmpty()) markOnce("thread ancestors shown")
+                    if (view.repliesFetched) markOnce("thread relay replies shown")
+                    markFocusedCounts()
+                    // spec perf2 C6: only new notes start receipts, one fetch per new slice (MAX_LIVE_GROUPS x MAX_NOTES)
+                    decorations.add(withFocused)
                 }
                 if (!seen) _state.update { it.copy(loading = false, notFound = true) }
             } catch (e: CancellationException) {

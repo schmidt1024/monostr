@@ -1,0 +1,4 @@
+• La première page fraîche du fil n’attend plus le travail en arrière-plan et arrive souvent plus tôt
+• Les j’aime, reposts et réponses s’affichent peu après le fil, note par note
+• Les fils de discussion affichent plus vite les réponses au-dessus et en dessous, aussi depuis un lien
+• Les messages s’ouvrent tout de suite, et les longues discussions s’ouvrent sur le dernier message sans saccades

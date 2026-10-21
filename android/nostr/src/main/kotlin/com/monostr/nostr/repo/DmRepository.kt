@@ -7,6 +7,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
 import rust.nostr.sdk.Event
 import rust.nostr.sdk.EventBuilder
 import rust.nostr.sdk.EventId
@@ -41,7 +42,8 @@ sealed class Unwrap {
  */
 data class WrapFetch(val wraps: List<Event>, val completed: Boolean, val authRefused: Map<String, Long> = emptyMap())
 
-data class DmSendResult(val rumorId: String, val createdAt: Long, val sentToPeer: Boolean, val sentToSelf: Boolean)
+/** [selfWrapId]: the id of the own self-copy wrap, so the store knows it and never decrypts it (spec perf2 D4). */
+data class DmSendResult(val rumorId: String, val createdAt: Long, val sentToPeer: Boolean, val sentToSelf: Boolean, val selfWrapId: String? = null)
 
 interface DmRepository {
     /** Builds the rumor once, wraps it for the peer and for ourselves, sends each wrap to its relays. */
@@ -81,7 +83,7 @@ class NostrDmRepository(
         engine.save(forPeer); engine.save(forSelf)
         val toPeer = engine.sendTo(peerRelays, forPeer.id().toHex())
         val toSelf = engine.sendTo(ownRelays, forSelf.id().toHex())
-        return DmSendResult(rumor.id()!!.toHex(), rumor.createdAt().asSecs().toLong(), toPeer.sentToAny, toSelf.sentToAny)
+        return DmSendResult(rumor.id()!!.toHex(), rumor.createdAt().asSecs().toLong(), toPeer.sentToAny, toSelf.sentToAny, selfWrapId = forSelf.id().toHex())
     }
 
     override suspend fun unwrap(wrap: Event, silent: Boolean): Unwrap {
@@ -158,9 +160,9 @@ class NostrDmRepository(
 
     override suspend fun unsubscribe(id: String) = engine.unsubscribe(id)
 
-    override fun incomingWraps(): Flow<Event> = engine.events.filter { ev ->
-        ev.kind().asU16().toInt() == 1059 && ev.tags().toVec().map { it.asVec() }.any { it.size >= 2 && it[0] == "p" && it[1] == me }
-    }
+    override fun incomingWraps(): Flow<Event> = engine.incoming
+        .filter { inc -> inc.json.kind == 1059 && inc.json.tags.any { it.size >= 2 && it[0] == "p" && it[1] == me } }
+        .map { it.event } // DmSync opens the wrap with the rust event
 
     private companion object {
         const val CLOSED_SETTLE_MS = 100L

@@ -1,0 +1,4 @@
+• Akışın ilk taze sayfası artık arka plandaki işleri beklemiyor ve çoğu zaman daha erken geliyor
+• Beğeni, repost ve yanıt sayıları akıştan kısa süre sonra, not not görünür
+• Konuşmalar bir notun üstündeki ve altındaki yanıtları daha hızlı gösterir, bağlantıdan açıldığında da
+• Mesajlar hemen açılır, uzun sohbetler en yeni mesajda takılmadan açılır

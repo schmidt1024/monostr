@@ -1,0 +1,4 @@
+• A primeira página nova do feed não espera mais o trabalho em segundo plano e muitas vezes chega antes
+• Curtidas, reposts e respostas aparecem logo depois do feed, nota por nota
+• As conversas mostram antes as respostas acima e abaixo de uma nota, também quando abertas por um link
+• As mensagens abrem na hora, e chats longos abrem na mensagem mais recente sem travar

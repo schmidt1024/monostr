@@ -121,6 +121,8 @@ class FakeFeed : FeedRepository {
     var loadMoreError: Exception? = null
     /** When set, `refresh` suspends here, to test that local notes do not wait for relays. */
     var refreshGate: CompletableDeferred<Unit>? = null
+    /** When set, `refresh` throws it after the gate (relays unreachable). */
+    var refreshError: Exception? = null
     var followList: List<String> = listOf("a".repeat(64))
     override suspend fun follows() = followList
     override suspend fun followsLocal() = followList
@@ -136,6 +138,7 @@ class FakeFeed : FeedRepository {
         seenSources += source
         refreshCalls++
         refreshGate?.await()
+        refreshError?.let { throw it }
     }
     override suspend fun loadMore(source: FeedSource, before: Long, limit: Int): List<Note> {
         seenSources += source
@@ -195,12 +198,15 @@ class FakeProfiles(known: Map<String, Profile> = emptyMap()) : ProfileRepository
     val prefetched = ArrayList<Collection<String>>()
     /** The keys of every getAll call, in order. */
     val getAllCalls = ArrayList<List<String>>()
+    /** Each getAll waits this long first (virtual time): a slow screen rebuild, for conflation tests. */
+    var getAllDelayMs: Long = 0
     private val _updates = MutableSharedFlow<Map<String, Profile>>(extraBufferCapacity = 16)
     override val updates: SharedFlow<Map<String, Profile>> = _updates
     override fun observe(pubkey: String) = current.map { it[pubkey] ?: Profile.empty(pubkey) }
     override suspend fun get(pubkey: String, maxAgeSeconds: Long): Profile = current.value[pubkey] ?: Profile.empty(pubkey)
     override suspend fun getAll(pubkeys: Collection<String>, maxAgeSeconds: Long): Map<String, Profile> {
         getAllCalls += pubkeys.toList()
+        if (getAllDelayMs > 0) delay(getAllDelayMs)
         return pubkeys.distinct().associateWith { get(it, maxAgeSeconds) }
     }
     override fun prefetch(pubkeys: Collection<String>) { prefetched += pubkeys }
@@ -285,8 +291,13 @@ class FakePublish(var relaysOk: Boolean = true, private val fail: Boolean = fals
     override suspend fun initialRelayList(relays: List<String>) = result(10002).also { calls += "initialrelays:${relays.size}" }
 }
 
-class FakeThreads(private val views: Map<String, ThreadView>, private val notes: Map<String, Note> = emptyMap()) : ThreadRepository {
-    override fun observe(noteId: String): Flow<ThreadView> = flow { views[noteId]?.let { emit(it) } }
+/** [flows]: a thread whose views a test pushes (spec perf2 §6); it wins over [views] for its note. */
+class FakeThreads(
+    private val views: Map<String, ThreadView>,
+    private val notes: Map<String, Note> = emptyMap(),
+    private val flows: Map<String, Flow<ThreadView>> = emptyMap(),
+) : ThreadRepository {
+    override fun observe(noteId: String): Flow<ThreadView> = flows[noteId] ?: flow { views[noteId]?.let { emit(it) } }
     override suspend fun note(id: String) = notes[id]
 }
 
@@ -384,6 +395,12 @@ class FakeTips(
         if (failSend) throw IllegalStateException("boom")
         anonymousResends += eventJson to relays
         return PublishResult("0".repeat(64), 9738, if (relaysOk) relays else emptyList(), emptyMap())
+    }
+    /** Notes of every localReceipts call, in order. */
+    val localObserved = ArrayList<Map<String, String>>()
+    override suspend fun localReceipts(notes: Map<String, String>): Map<String, TipSummary> {
+        localObserved += notes
+        return receipts.value.filterKeys { it in notes }
     }
     /** observeReceipts collections running right now (each one is a live relay subscription in the real repository). */
     var activeReceiptObservers = 0
@@ -646,8 +663,12 @@ class FakeCounts : CountsRepository {
     private val _counts = MutableStateFlow<Map<String, NoteCounts>>(emptyMap())
     override val counts: StateFlow<Map<String, NoteCounts>> = _counts
     val requested = ArrayList<List<String>>()
+    /** Ids asked with priority (a thread's focused note), in order; [requested] holds the normal ones. */
+    val priorityRequested = ArrayList<List<String>>()
     val bumps = ArrayList<Triple<String, Int, Long>>()
-    override fun request(noteIds: Collection<String>) { requested += noteIds.toList() }
+    override fun request(noteIds: Collection<String>, priority: Boolean) {
+        if (priority) priorityRequested += noteIds.toList() else requested += noteIds.toList()
+    }
     override fun bump(noteId: String, kind: Int, delta: Long) { bumps += Triple(noteId, kind, delta) }
     fun set(id: String, c: NoteCounts) { _counts.update { it + (id to c) } }
 }
@@ -935,7 +956,10 @@ class FakeLists(initial: List<FollowSet> = emptyList()) : ListsRepository {
     }
     /** When set, a lookup that fetches from relays throws (offline). */
     var fetchFails = false
+    /** (address, fetch) of every byAddress call, in order. */
+    val byAddressCalls = ArrayList<Pair<ListAddress, Boolean>>()
     override suspend fun byAddress(address: ListAddress, fetch: Boolean): FollowSet? {
+        byAddressCalls += address to fetch
         if (fetch && fetchFails) throw IllegalStateException("offline")
         return ownState.value.firstOrNull { it.address == address } ?: foreign[address]
     }

@@ -1,5 +1,8 @@
 package com.monostr.nostr.repo
 
+import com.monostr.nostr.connectedEngine
+import com.monostr.nostr.SilentWsRelay
+import com.monostr.nostr.ManualGate
 import com.monostr.nostr.LocalSigner
 import com.monostr.nostr.NostrEngine
 import com.monostr.nostr.PublishResult
@@ -236,5 +239,24 @@ class FeedTabsRepositoryTest {
         assertEquals(SaveResult.Ok, r.pin(addr("a")))
         assertTrue(sent.isEmpty())
         e.close()
+    }
+
+    @Test
+    fun `the start reconcile waits for the startup gate, a pin opens it and goes on`() = runTest {
+        SilentWsRelay(answerEose = true).use { relay ->
+            val e = connectedEngine(dir, relay, me.secretKey().toHex())
+            try {
+                val gate = ManualGate()
+                val r = NostrFeedTabsRepository(e, signer, MemoryCache(), reconcileScope = e.backgroundScope, now = { 2000 }, send = okSend(e), gate = gate)
+                assertEquals(emptyList<ListAddress>(), r.tabs().first(), "the local tabs do not wait")
+                Thread.sleep(300)
+                assertTrue(relay.requests.isEmpty(), "reconciled before the gate: ${relay.requests}")
+                assertEquals(SaveResult.Ok, r.pin(addr("a")))
+                assertEquals(listOf("write"), gate.reasons)
+                assertTrue(relay.requests.any { "30078" in it }, "the pin waited for the reconcile it opened")
+            } finally {
+                e.close()
+            }
+        }
     }
 }

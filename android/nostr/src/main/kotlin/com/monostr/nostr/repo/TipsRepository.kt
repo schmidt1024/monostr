@@ -2,10 +2,12 @@ package com.monostr.nostr.repo
 
 import com.monostr.monero.Address
 import com.monostr.nostr.DetachedSender
+import com.monostr.nostr.Exit
 import com.monostr.nostr.NostrEngine
 import com.monostr.nostr.PublishResult
 import com.monostr.nostr.RefreshGate
 import com.monostr.nostr.RustConvert
+import com.monostr.nostr.StartupGate
 import com.monostr.tips.Kinds
 import com.monostr.tips.PaymentInfo
 import com.monostr.tips.Watcher
@@ -73,6 +75,9 @@ interface TipsRepository {
      */
     fun observeReceipts(notes: Map<String, String>): Flow<Map<String, TipSummary>>
 
+    /** What [observeReceipts] emits first: the stored valid receipts of [notes], never a relay round trip (spec perf2 A4). */
+    suspend fun localReceipts(notes: Map<String, String>): Map<String, TipSummary>
+
     /**
      * Intent ids of the valid profile receipts (no `e`; with or without a sender) for [recipient]
      * since [since] (unix seconds): local state at once, again after one relay fetch, then on every
@@ -98,6 +103,8 @@ class NostrTipsRepository(
     private val engine: NostrEngine,
     private val detached: DetachedSender = DetachedSender(engine.ffiDispatcher),
     private val fetchTimeout: Duration = Duration.ofSeconds(8),
+    /** Spec perf2 A3: the receipts' relay part (fetch + subscription) waits until the home feed's first page is in. */
+    private val gate: StartupGate = StartupGate.OPEN,
     private val now: () -> Long = { System.currentTimeMillis() / 1000 },
 ) : TipsRepository {
     /** One payment info fetch per pubkey at a time, shared by every caller; its stamp is the freshness (spec perf 3.4). */
@@ -185,6 +192,9 @@ class NostrTipsRepository(
         return detached.send(event, relays)
     }
 
+    override suspend fun localReceipts(notes: Map<String, String>): Map<String, TipSummary> =
+        if (notes.isEmpty()) emptyMap() else withContext(Dispatchers.IO) { summaries(notes) }
+
     override fun observeReceipts(notes: Map<String, String>): Flow<Map<String, TipSummary>> = flow {
         if (notes.isEmpty()) {
             emit(emptyMap())
@@ -192,6 +202,7 @@ class NostrTipsRepository(
         }
         val filter = receiptFilter(notes.keys)
         emit(summaries(notes))
+        gate.await()
         quietly { engine.fetch(filter) }
         emit(summaries(notes))
         // best-effort: without relays the local receipts stay and no live updates arrive
@@ -203,8 +214,8 @@ class NostrTipsRepository(
             null
         }
         try {
-            engine.events
-                .filter { ev -> ev.kind().asU16().toInt() == Kinds.TIP_RECEIPT && ev.tags().eventIds().any { it.toHex() in notes } }
+            engine.incoming
+                .filter { inc -> inc.json.kind == Kinds.TIP_RECEIPT && inc.json.tagValues("e").any { it in notes } }
                 .conflate()
                 .collect { emit(summaries(notes)) }
         } finally {
@@ -231,8 +242,8 @@ class NostrTipsRepository(
             null
         }
         try {
-            engine.events
-                .filter { ev -> ev.kind().asU16().toInt() == Kinds.TIP_RECEIPT && ev.tags().publicKeys().any { it.toHex() == recipient } }
+            engine.incoming
+                .filter { inc -> inc.json.kind == Kinds.TIP_RECEIPT && recipient in inc.json.tagValues("p") }
                 .conflate()
                 .collect { emit(profileIntentIds(filter, recipient, info)) }
         } finally {
@@ -274,10 +285,12 @@ class NostrTipsRepository(
     override suspend fun tippers(noteId: String, author: String): List<Tipper> {
         val summary = summaries(mapOf(noteId to author))[noteId] ?: return emptyList()
         val intents = HashMap<String, Event>()
-        for (filter in intentFilters(summary.receipts.map { it.intentId }.distinct())) {
+        val intentIds = summary.receipts.map { it.intentId }.distinct()
+        for ((ids, filter) in intentIds.chunked(INTENT_CHUNK).zip(intentFilters(intentIds))) {
             var chunk = engine.query(filter)
             if (chunk.size < filter.idCount()) {
-                quietly { engine.fetch(filter) }
+                // spec wave 2 B4: the sheet fills from the first relays that have every intent
+                quietly { engine.fetch(filter, exit = Exit.AllIds(ids.toSet())) }
                 chunk = engine.query(filter)
             }
             chunk.forEach { intents[it.id().toHex()] = it }

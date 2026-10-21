@@ -1,5 +1,6 @@
 package com.monostr.app.data.dm
 
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -11,9 +12,109 @@ import org.junit.jupiter.api.Test
 /** Behaviour every DmStore must have; the SQLite implementation runs the same cases in an androidTest (Task 11). */
 abstract class DmStoreContractTest {
     abstract fun store(): DmStore
+
+    /** The store's query counter (a test hook of both implementations, spec perf2 §6). */
+    abstract fun queryCount(store: DmStore): Int
+
+    @Test
+    fun `the query counter counts every evaluation of a query flow`() = runTest {
+        val s = store()
+        s.upsert(msg('1', bob, 100))
+        val before = queryCount(s)
+        val list = record(s.conversations())
+        assertEquals(1, list.size)
+        assertTrue(queryCount(s) > before)
+        val afterFirst = queryCount(s)
+        s.upsert(msg('2', bob, 200))
+        assertEquals(2, list.size)
+        assertTrue(queryCount(s) > afterFirst)
+    }
     private val bob = "b".repeat(64); private val carol = "c".repeat(64)
     private fun msg(id: Char, peer: String, at: Long, outgoing: Boolean = false, status: DmStatus = DmStatus.RECEIVED, text: String = "m$id") =
         DmMessage(id.toString().repeat(64), peer, outgoing, text, at, at, status, wrapId = "w$id".padEnd(64, '0'))
+
+    @Test
+    fun `writes that change nothing visible wake no query`() = runTest {
+        val s = store()
+        s.upsert(msg('1', bob, 100)); s.addPendingWrap("p".repeat(64), 1)
+        val chat = record(s.messages(bob)); val list = record(s.conversations()); val pending = record(s.pendingCount())
+        val before = queryCount(s)
+        s.setLastSync(5); s.setLastNotified(6)
+        s.removePendingWrap("x".repeat(64)) // never parked
+        assertFalse(s.upsert(msg('1', bob, 100)), "an echo of a stored row changes nothing")
+        s.setStatus(msg('1', bob, 100).rumorId, DmStatus.RECEIVED) // the same status
+        s.failStaleSending() // nothing is SENDING
+        s.addPendingWrap("p".repeat(64), 2) // one more attempt, the same count
+        assertEquals(before, queryCount(s))
+        assertEquals(1, chat.size); assertEquals(1, list.size); assertEquals(1, pending.size)
+    }
+
+    @Test
+    fun `real changes wake the queries that read them`() = runTest {
+        val s = store()
+        s.upsert(msg('1', bob, 100))
+        val chat = record(s.messages(bob)); val list = record(s.conversations()); val pending = record(s.pendingCount())
+        assertTrue(s.upsert(msg('2', bob, 200)))
+        assertEquals(2, chat.size); assertEquals(2, list.size); assertEquals(1, pending.size)
+        s.setStatus(msg('2', bob, 200).rumorId, DmStatus.FAILED)
+        assertEquals(3, chat.size)
+        assertEquals(2, list.size, "a status is not part of a conversation row")
+        s.addPendingWrap("p".repeat(64), 1)
+        assertEquals(listOf(0, 1), pending); assertEquals(3, chat.size)
+        s.removePendingWrap("p".repeat(64))
+        assertEquals(listOf(0, 1, 0), pending)
+        s.upsert(DmMessage("pending-1", bob, true, "x", 300, 300, DmStatus.SENDING, null))
+        s.replaceId("pending-1", "9".repeat(64), DmStatus.SENT)
+        assertEquals("9".repeat(64), chat.last().last().rumorId)
+        // a self-copy filling a missing wrap id is a change
+        assertTrue(s.upsert(DmMessage("9".repeat(64), bob, true, "x", 300, 300, DmStatus.SENT, "s".repeat(64))))
+        assertEquals("s".repeat(64), chat.last().last().wrapId)
+    }
+
+    @Test
+    fun `markRead wakes the list only when it crosses an incoming message and never the chat`() = runTest {
+        val s = store()
+        s.upsert(msg('1', bob, 100)); s.upsert(msg('2', bob, 300, outgoing = true, status = DmStatus.SENT))
+        val chat = record(s.messages(bob)); val list = record(s.conversations())
+        val before = queryCount(s)
+        s.markRead(bob, 50) // creates the marker before the incoming message: nothing read
+        assertEquals(before, queryCount(s))
+        s.markRead(bob, 150) // crosses message 1
+        assertEquals(0, list.last()[0].unread)
+        val crossed = queryCount(s)
+        s.markRead(bob, 400) // crosses only an own message
+        s.markRead(bob, 120) // backwards: the marker stays at 400
+        assertEquals(crossed, queryCount(s))
+        assertEquals(1, chat.size)
+        // the marker did move: a message dated before it counts as read when it arrives
+        s.upsert(msg('3', bob, 350))
+        assertEquals(0, list.last()[0].unread)
+        assertEquals(400L, list.last()[0].readAt)
+    }
+
+    @Test
+    fun `repeating markRead with a later time that crosses nothing stays silent`() = runTest {
+        val s = store()
+        s.upsert(msg('1', bob, 100))
+        val list = record(s.conversations())
+        s.markRead(bob, 100) // crosses message 1
+        assertEquals(0, list.last()[0].unread)
+        val sizeAfter = list.size; val queries = queryCount(s)
+        s.markRead(bob, 200); s.markRead(bob, 300)
+        assertEquals(queries, queryCount(s)); assertEquals(sizeAfter, list.size)
+    }
+
+    @Test
+    fun `clear empties every reader and wakes them`() = runTest {
+        val s = store()
+        s.upsert(msg('1', bob, 100)); s.addPendingWrap("p".repeat(64), 1)
+        val chat = record(s.messages(bob)); val list = record(s.conversations())
+        val unread = record(s.unreadTotal()); val pending = record(s.pendingCount())
+        assertEquals(1, unread.last()); assertEquals(1, pending.last())
+        s.clear()
+        assertTrue(chat.last().isEmpty()); assertTrue(list.last().isEmpty())
+        assertEquals(0, unread.last()); assertEquals(0, pending.last())
+    }
 
     @Test
     fun `conversations are sorted by last message and count unread incoming messages`() = runTest {
@@ -27,6 +128,25 @@ abstract class DmStoreContractTest {
         assertEquals(1, s.conversations().first()[0].unread)
         s.markRead(bob, 200)
         assertEquals(0, s.unreadTotal().first())
+    }
+
+    @Test
+    fun `the list and every badge share one query per change and a new reader sees the last write`() = runTest {
+        val s = store()
+        s.upsert(msg('1', bob, 100)); s.upsert(msg('2', carol, 200))
+        val muted = MutableStateFlow(setOf(carol))
+        val list = record(s.conversations())
+        val badgeA = record(s.unreadTotalExcept(muted)); val badgeB = record(s.unreadTotalExcept(muted))
+        assertEquals(listOf(1), badgeA)
+        val before = queryCount(s)
+        s.upsert(msg('3', bob, 300))
+        assertEquals(before + 1, queryCount(s))
+        assertEquals(listOf(1, 2), badgeA); assertEquals(listOf(1, 2), badgeB); assertEquals(2, list.size)
+        muted.value = emptySet()
+        assertEquals(listOf(1, 2, 3), badgeA)
+        assertEquals(before + 1, queryCount(s), "muting is applied in Kotlin")
+        s.markRead(carol, 250)
+        assertEquals(0, s.conversations().first().first { it.peer == carol }.unread)
     }
 
     @Test
@@ -153,6 +273,20 @@ abstract class DmStoreContractTest {
     }
 
     @Test
+    fun `replaceId records the self wrap id when the row has none`() = runTest {
+        val s = store()
+        s.upsert(DmMessage("pending-1", bob, true, "x", 200, 200, DmStatus.SENDING, null))
+        s.replaceId("pending-1", "9".repeat(64), DmStatus.SENT, wrapId = "s".repeat(64))
+        assertEquals("s".repeat(64), s.message("9".repeat(64))!!.wrapId)
+        assertTrue(s.isKnownWrap("s".repeat(64)))
+        // a row that already has a wrap id keeps it
+        s.upsert(DmMessage("pending-2", bob, true, "y", 300, 300, DmStatus.SENDING, null))
+        s.upsert(DmMessage("8".repeat(64), bob, true, "y", 300, 300, DmStatus.SENT, "e".repeat(64)))
+        s.replaceId("pending-2", "8".repeat(64), DmStatus.SENT, wrapId = "t".repeat(64))
+        assertEquals("e".repeat(64), s.message("8".repeat(64))!!.wrapId)
+    }
+
+    @Test
     fun `replaceId onto an existing id merges instead of duplicating`() = runTest {
         val s = store()
         // a self-copy echo can upsert the final row (outgoing, SENT) before the sender's own replaceId runs
@@ -205,6 +339,31 @@ abstract class DmStoreContractTest {
         assertFalse(s.pendingSummaryShown())
         assertNull(s.dropReason(a))
     }
+
+    @Test
+    fun `stored and dropped wraps are known from memory until clear`() = runTest {
+        val s = store()
+        val w = msg('1', bob, 100).wrapId!!
+        assertFalse(s.isKnownWrap(w))
+        s.upsert(msg('1', bob, 100))
+        s.markDropped("d".repeat(64), 5)
+        assertTrue(s.isKnownWrap(w)); assertTrue(s.isKnownWrap("d".repeat(64)))
+        assertFalse(s.isKnownWrap("x".repeat(64)))
+        s.clear()
+        assertFalse(s.isKnownWrap(w)); assertFalse(s.isKnownWrap("d".repeat(64)))
+    }
+
+    @Test
+    fun `messages with a limit are the newest ones, oldest first`() = runTest {
+        val s = store()
+        s.upsert(msg('1', bob, 100)); s.upsert(msg('2', bob, 200)); s.upsert(msg('3', bob, 300)); s.upsert(msg('4', carol, 400))
+        assertEquals(listOf(200L, 300L), s.messages(bob, 2).first().map { it.createdAt })
+        assertEquals(listOf(100L, 200L, 300L), s.messages(bob, 10).first().map { it.createdAt })
+        assertEquals(listOf(100L, 200L, 300L), s.messages(bob).first().map { it.createdAt })
+    }
 }
 
-class InMemoryDmStoreTest : DmStoreContractTest() { override fun store() = InMemoryDmStore() }
+class InMemoryDmStoreTest : DmStoreContractTest() {
+    override fun store() = InMemoryDmStore()
+    override fun queryCount(store: DmStore) = (store as InMemoryDmStore).queryCount
+}

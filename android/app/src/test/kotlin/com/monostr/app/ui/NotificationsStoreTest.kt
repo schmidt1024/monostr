@@ -48,6 +48,30 @@ class NotificationsStoreTest {
         known: FakeProfiles = profiles,
     ) = NotificationsStore(n, known, settings, eager(), muted = muted, me = me, now = { clock })
 
+    @Test
+    fun `stored rows and the live REQ do not wait for the startup gate, the first refresh does`() = runTest {
+        val n = FakeNotifications(listOf(item('1', NotificationKind.REPLY, alice, 100)))
+        val gate = ManualGate()
+        val s = NotificationsStore(n, profiles, FakeTipSettings(), eager(), now = { clock }, startupGate = gate)
+        s.start(); advanceUntilIdle()
+        assertEquals(1, s.state.value.rows.size)
+        assertEquals(1, n.subscriptions)
+        assertTrue(n.refreshCalls.isEmpty(), "refreshed before the gate")
+        gate.open("test"); advanceUntilIdle()
+        assertEquals(1, n.refreshCalls.size)
+    }
+
+    @Test
+    fun `a user pull opens the startup gate instead of waiting for it`() = runTest {
+        val n = FakeNotifications(listOf(item('1', NotificationKind.REPLY, alice, 100)))
+        val gate = ManualGate()
+        val s = NotificationsStore(n, profiles, FakeTipSettings(), eager(), now = { clock }, startupGate = gate)
+        s.start(); advanceUntilIdle()
+        s.pull(); advanceUntilIdle()
+        assertTrue(gate.isOpen)
+        assertTrue(n.refreshCalls.isNotEmpty(), "the pull refreshed without waiting")
+    }
+
     private fun item(id: Char, kind: NotificationKind, from: String, at: Long, amount: Long? = null, text: String = "", about: String = mine) =
         NotificationItem(id.toString().repeat(64), kind, from, at, if (kind == NotificationKind.REPLY) id.toString().repeat(64) else about, about, text, amount)
 

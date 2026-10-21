@@ -1,9 +1,11 @@
 package com.monostr.nostr.repo
 
+import com.monostr.nostr.Exit
 import com.monostr.nostr.NostrEngine
 import com.monostr.nostr.PublishResult
 import com.monostr.nostr.RefreshGate
 import com.monostr.nostr.Signer
+import com.monostr.nostr.StartupGate
 import com.monostr.nostr.model.Note
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
@@ -81,8 +83,9 @@ class NostrBookmarksRepository(
     private val missRetrySeconds: Long = 600,
     /** One chunk's relay lookup. */
     private val entriesTimeout: Duration = Duration.ofSeconds(8),
+    gate: StartupGate = StartupGate.OPEN,
 ) : BookmarksRepository {
-    private val list = NostrPrivateList(engine, signer, kind = 10003, tag = "e", now, send, fetchTimeout, refreshTimeout, watch)
+    private val list = NostrPrivateList(engine, signer, kind = 10003, tag = "e", now, send, fetchTimeout, refreshTimeout, watch, gate = gate)
     /** Runs (and joins) the relay lookups on the engine's scope so a left screen does not cancel them (spec 3.1); freshness is [missedAt], not the gate. */
     private val lookups = RefreshGate<String>(engine.backgroundScope, 0, now)
     private val clock = now
@@ -126,7 +129,7 @@ class NostrBookmarksRepository(
                         async {
                             val key = chunk.joinToString(",") { it.first }
                             lookups.awaitStamped(key, force = true) {
-                                quietly { engine.fetch(Filter().ids(chunk.map { it.second }), entriesTimeout) }
+                                quietly { engine.fetch(Filter().ids(chunk.map { it.second }), entriesTimeout, Exit.AllIds(chunk.map { it.first }.toSet())) }
                                 val have = engine.query(Filter().ids(chunk.map { it.second })).map { it.id().toHex().lowercase() }.toSet()
                                 val online = engine.connectedNormalRelayUrls().isNotEmpty()
                                 val stamp = clock()

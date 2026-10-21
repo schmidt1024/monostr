@@ -1,5 +1,6 @@
 package com.monostr.app.ui.notifications
 
+import com.monostr.nostr.StartupGate
 import com.monostr.app.R
 import com.monostr.app.data.TipSettingsStore
 import com.monostr.app.ui.common.MentionNames
@@ -55,6 +56,8 @@ class NotificationsStore(
     private val me: String? = null,
     private val now: () -> Long = { System.currentTimeMillis() / 1000 },
     refreshEverySeconds: Long = REFRESH_EVERY_SECONDS,
+    /** Spec perf2 A3: the relay refresh waits until the home feed's first page is in; the rows and the live REQ do not. */
+    private val startupGate: StartupGate = StartupGate.OPEN,
 ) {
     /** Mention names of the rows' texts and excerpts; scanned on [scope], never on the main thread. */
     private val mentions = MentionResolver(profiles, scope)
@@ -148,6 +151,8 @@ class NotificationsStore(
     /** Pull-to-refresh: always asks the relays (a refresh that runs is shared); a second pull while one runs is ignored. */
     fun pull() {
         start()
+        // a user pull never waits for the startup gate
+        startupGate.open("notifications pull")
         if (!pulling.compareAndSet(false, true)) return
         _state.update { it.copy(refreshing = true) }
         scope.launch {
@@ -173,6 +178,7 @@ class NotificationsStore(
 
     private suspend fun runRefresh() {
         firstLoad.await()
+        startupGate.await()
         _state.update { it.copy(syncing = true) }
         try {
             // also fetches the own payment info (R4b): tip rows can only appear in the reload below

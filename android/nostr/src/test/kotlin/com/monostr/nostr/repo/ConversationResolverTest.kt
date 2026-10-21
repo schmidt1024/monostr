@@ -4,18 +4,21 @@ import com.monostr.nostr.LocalSigner
 import com.monostr.nostr.NostrEngine
 import com.monostr.nostr.SilentWsRelay
 import com.monostr.nostr.awaitTrue
+import com.monostr.nostr.model.Note
 import com.monostr.nostr.model.NoteMapper
-import kotlinx.coroutines.flow.take
-import kotlinx.coroutines.flow.toList
+import com.monostr.nostr.untilFirst
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import rust.nostr.sdk.Event
 import rust.nostr.sdk.EventBuilder
 import rust.nostr.sdk.Keys
+import rust.nostr.sdk.Kind
 import rust.nostr.sdk.Tag
 import rust.nostr.sdk.Timestamp
 import java.nio.file.Path
@@ -200,7 +203,7 @@ class ConversationResolverTest {
         SilentWsRelay(answerEose = true).use { relay ->
             val e = engine(relay)
             val r = root(a, "root").also { e.save(it) }
-            val views = NostrThreadRepository(e, FakeConversations { error("boom") }).observe(r.id().toHex()).take(2).toList()
+            val views = NostrThreadRepository(e, FakeConversations { error("boom") }).observe(r.id().toHex()).untilFirst { it.repliesFetched }
             assertEquals(r.id().toHex(), views.first().focused.id)
             assertTrue(views.all { it.ancestors.isEmpty() })
             e.close()
@@ -213,9 +216,116 @@ class ConversationResolverTest {
             val e = engine(relay)
             val r = root(a, "root").also { e.save(it) }
             val slots = listOf<Slot>(Slot.Unavailable("9".repeat(64)))
-            val views = NostrThreadRepository(e, FakeConversations { slots }).observe(r.id().toHex()).take(2).toList()
+            val views = NostrThreadRepository(e, FakeConversations { slots }).observe(r.id().toHex()).untilFirst { it.ancestors.isNotEmpty() }
             assertTrue(views.first().ancestors.isEmpty())
             assertEquals(slots, views.last().ancestors)
+            e.close()
+        }
+    }
+
+    @Test
+    fun `the walk through the database gives the whole stored chain and asks no relay`() = runTest {
+        SilentWsRelay(answerEose = true, recordRequests = true).use { relay ->
+            val e = engine(relay)
+            val all = chainOf(5).onEach { e.save(it) }
+            val repo = NostrConversationRepository(e)
+            val focused = NoteMapper.note(all.last())!!
+            val walk = repo.localAncestors(focused)
+            assertEquals(listOf("root", "r1", "r2", "r3", "r4"), walk.ancestors!!.map { (it as Slot.Shown).note.content })
+            assertEquals(repo.ancestors(focused), walk.ancestors)
+            assertTrue(walk.missing.isEmpty())
+            assertTrue(relay.requests.isEmpty(), "requests: ${relay.requests}")
+            e.close()
+        }
+    }
+
+    @Test
+    fun `the walk through the database stops at the first hop it does not hold and names it and the root`() = runTest {
+        SilentWsRelay(answerEose = true, recordRequests = true).use { relay ->
+            val e = engine(relay)
+            val all = chainOf(5) // root, r1 ... r5
+            listOf(all[1], all[2], all[3], all[5]).forEach { e.save(it) } // neither the root nor r4
+            val walk = NostrConversationRepository(e).localAncestors(NoteMapper.note(all[5])!!)
+            assertNull(walk.ancestors, "a pending hop is never shown as unavailable")
+            assertEquals(setOf(all[4].id().toHex(), all[0].id().toHex()), walk.missing)
+            assertTrue(relay.requests.isEmpty(), "requests: ${relay.requests}")
+            e.close()
+        }
+    }
+
+    @Test
+    fun `a withdrawn ancestor is unavailable and not asked of the relays`() = runTest {
+        SilentWsRelay(answerEose = true, recordRequests = true).use { relay ->
+            val e = engine(relay)
+            val r = root(a, "root").also { e.save(it) }
+            val p = reply(b, "p", r, r)
+            // the request first, then the note: the database keeps a note that arrives after its deletion request
+            e.save(EventBuilder(Kind(5u), "").tags(listOf(Tag.parse(listOf("e", p.id().toHex())))).signWithKeys(b))
+            e.save(p)
+            val x = reply(a, "x", p, r).also { e.save(it) }
+            val repo = NostrConversationRepository(e)
+            assertEquals(listOf(Slot.Shown(NoteMapper.note(r)!!), Slot.Unavailable(p.id().toHex())), repo.ancestors(NoteMapper.note(x)!!))
+            val walk = repo.localAncestors(NoteMapper.note(x)!!)
+            assertEquals(repo.ancestors(NoteMapper.note(x)!!), walk.ancestors, "a withdrawn but stored hop completes the local walk")
+            assertTrue(walk.missing.isEmpty(), "the withdrawn note is stored: nothing to fetch")
+            assertTrue(relay.requests.none { "\"ids\"" in it }, "requests: ${relay.requests}")
+            e.close()
+        }
+    }
+
+    @Test
+    fun `the mapping of the chains runs on the work dispatcher, not on the caller`() = runTest {
+        SilentWsRelay(answerEose = true).use { relay ->
+            val e = engine(relay)
+            val all = chainOf(2).onEach { e.save(it) }
+            var dispatches = 0
+            val counting = object : kotlinx.coroutines.CoroutineDispatcher() {
+                override fun dispatch(context: kotlin.coroutines.CoroutineContext, block: Runnable) {
+                    dispatches++
+                    kotlinx.coroutines.Dispatchers.Default.dispatch(context, block)
+                }
+            }
+            val r2 = NoteMapper.note(all.last())!!
+            val chain = NostrConversationRepository(e, counting).chains(listOf(r2))[r2.id]
+            assertEquals(listOf("root", "r1"), texts(chain))
+            assertTrue(dispatches > 0, "the work stayed on the caller")
+            e.close()
+        }
+    }
+
+    @Test
+    fun `a malformed parent id does not keep the other parents of the round from the relays`() = runTest {
+        val r = root(a, "root")
+        val p1 = reply(b, "p1", r, r)
+        val x1 = reply(a, "x1", p1, r)
+        // Nip10 checks only the length: a foreign tag can carry 64 characters that are no id
+        val bad = "g".repeat(64)
+        val x2 = Note("9".repeat(64), a.publicKey().toHex(), "x2", 1, 1, bad, bad, null, emptyList())
+        SilentWsRelay(serve = listOf(r.asJson(), p1.asJson())).use { relay ->
+            val e = engine(relay)
+            e.save(x1)
+            val chains = NostrConversationRepository(e).chains(listOf(NoteMapper.note(x1)!!, x2))
+            assertEquals(listOf("root", "p1"), texts(chains[x1.id().toHex()]))
+            assertEquals(listOf<Slot>(Slot.Unavailable(bad)), chains[x2.id]!!.ancestors)
+            e.close()
+        }
+    }
+
+    @Test
+    fun `fetchMissing asks only for what the database does not hold, in one request`() = runTest {
+        val r = root(a, "root")
+        val p = reply(b, "p", r, r)
+        SilentWsRelay(serve = listOf(p.asJson()), recordRequests = true).use { relay ->
+            val e = engine(relay)
+            e.save(r)
+            val repo = NostrConversationRepository(e)
+            assertFalse(repo.fetchMissing(setOf(r.id().toHex())))
+            assertTrue(relay.requests.isEmpty(), "requests: ${relay.requests}")
+            assertTrue(repo.fetchMissing(setOf(r.id().toHex(), p.id().toHex(), "g".repeat(64))))
+            val ids = relay.requests.filter { "\"ids\"" in it }
+            assertEquals(1, ids.size, "requests: ${relay.requests}")
+            assertTrue(p.id().toHex() in ids.single() && r.id().toHex() !in ids.single())
+            assertNotNull(e.eventById(p.id().toHex()))
             e.close()
         }
     }

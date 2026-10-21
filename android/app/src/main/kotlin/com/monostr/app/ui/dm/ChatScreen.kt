@@ -45,6 +45,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -69,6 +70,8 @@ import com.monostr.app.ui.media.NoteMediaRow
 import com.monostr.nostr.model.NoteMedia
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 
 @HiltViewModel
 class ChatViewModel @Inject constructor(session: NostrSession, handle: SavedStateHandle) : ViewModel() {
@@ -109,7 +112,20 @@ fun ChatScreen(
         vm.controller.setVisible(true)
         onStopOrDispose { vm.controller.setVisible(false) }
     }
-    LaunchedEffect(state.messages.size) { if (state.messages.isNotEmpty()) listState.animateScrollToItem(state.messages.size - 1) }
+    // spec perf2 D5: newest first in a reversed list, so a chat opens at the bottom without scrolling through it
+    val shown = remember(state.messages) { state.messages.asReversed() }
+    val newest = state.messages.lastOrNull()?.message
+    LaunchedEffect(newest?.rumorId) {
+        // follow a new message only when the user is at the bottom (index 1 = the previous newest, pushed up) or sent it
+        if (newest != null && (newest.outgoing || listState.firstVisibleItemIndex <= 1)) listState.animateScrollToItem(0)
+    }
+    LaunchedEffect(listState) {
+        snapshotFlow {
+            val info = listState.layoutInfo
+            val last = info.visibleItemsInfo.lastOrNull()?.index ?: -1
+            info.totalItemsCount > 0 && last >= info.totalItemsCount - LOAD_OLDER_AHEAD
+        }.distinctUntilChanged().filter { it }.collect { vm.controller.loadOlder() }
+    }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -133,8 +149,13 @@ fun ChatScreen(
                 if (state.loading) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                 } else {
-                    LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        items(state.messages, key = { it.message.rumorId }) { item ->
+                    LazyColumn(
+                        state = listState, reverseLayout = true,
+                        modifier = Modifier.fillMaxSize().testTag("chat-list"),
+                        // bottom-aligned: a short chat sits right above the input like in common messengers
+                        verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.Bottom),
+                    ) {
+                        items(shown, key = { it.message.rumorId }) { item ->
                             Bubble(item, names, onOpenProfile, onOpenThread, onHashtag, onOpenMedia, onOpenVideo, onRetry = vm.controller::retry)
                         }
                     }
@@ -220,3 +241,6 @@ private fun openPictures(media: List<NoteMedia>, index: Int, onOpenMedia: (List<
     val page = pictures.indexOfFirst { it.url == media.getOrNull(index)?.url }.coerceAtLeast(0)
     if (pictures.isNotEmpty()) onOpenMedia(pictures.map { it.url }, page)
 }
+
+/** Older messages are asked for when the last visible row is this close to the oldest loaded one. */
+private const val LOAD_OLDER_AHEAD = 10

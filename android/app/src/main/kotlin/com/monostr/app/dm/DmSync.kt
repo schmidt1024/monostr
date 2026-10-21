@@ -1,5 +1,6 @@
 package com.monostr.app.dm
 
+import com.monostr.nostr.StartupGate
 import com.monostr.app.data.DmSettingsStore
 import com.monostr.app.data.dm.DmMessage
 import com.monostr.app.data.dm.DmStatus
@@ -75,6 +76,8 @@ class DmSync(
     private val authRejected: Flow<NostrEngine.AuthRejection> = emptyFlow(),
     /** [NostrEngine.authRejection]: the relay's latest refused AUTH, null once it accepted one. */
     private val authRejection: (String) -> NostrEngine.AuthRejection? = { null },
+    /** Spec perf2 A3: the backlog (attach, fetch, subscribe) waits until the home feed's first page is in; live wraps, [sync], [send] and [drainPending] do not. */
+    private val gate: StartupGate = StartupGate.OPEN,
 ) {
     private val _state = MutableStateFlow(DmSyncState())
     val state: StateFlow<DmSyncState> = _state.asStateFlow()
@@ -104,6 +107,12 @@ class DmSync(
     /** Rumor ids replaced by a [retry]: a late self-copy of one must not bring the old row back. */
     private val superseded: MutableSet<String> = java.util.Collections.synchronizedSet(HashSet())
     private val activeSyncs = AtomicInteger(0)
+
+    /**
+     * Spec perf2 D4: locked wraps a silent attempt tried since the last [sync] began. The live subscription
+     * replays the window a round just fetched; skipping those keeps [SILENT_ATTEMPTS] counting rounds.
+     */
+    private val triedThisRound: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
 
     /** Spec 7.2: bumped when the own inbox list changes (adoption or edit); a round begun under an older value discards its result. */
     private val generation = AtomicInteger(0)
@@ -276,6 +285,8 @@ class DmSync(
     private suspend fun setUp(run: Run) {
         // Once per session, before anything else: a SENDING row left by a previous process can never finish.
         if (staleFailed.compareAndSet(false, true)) bestEffort { store.failStaleSending() }
+        // outside every lock (handling, syncMark): the four collectors above already run
+        gate.await()
         val own = settings.relays.first()
         if (own.isEmpty()) return
         // Attach and subscribe are non-cancellable so that a concurrent [stop] always sees exactly
@@ -351,6 +362,7 @@ class DmSync(
         // spec 7.1: the 30-day window is fetched once AUTH works again, not every round while it is refused
         if (_state.value.authBlocked && store.lastSync() == 0L) return emptyList()
         if (activeSyncs.incrementAndGet() == 1) _state.update { it.copy(syncing = true) }
+        triedThisRound.clear() // a new round: every parked wrap may be tried once more
         try {
             val round = generation.get()
             val own = settings.relays.first()
@@ -400,43 +412,53 @@ class DmSync(
     private class Handled(val message: DmMessage, val isNew: Boolean)
 
     /** Null when the wrap was already stored or dropped, or could not be unwrapped. */
-    private suspend fun handle(wrap: Event, interactive: Boolean): Handled? = handling.withLock {
+    private suspend fun handle(wrap: Event, interactive: Boolean): Handled? {
         val wrapId = wrap.id().toHex()
-        // Stored, or known never to yield a message: not decrypted again (spec §3.2).
-        if (store.hasWrap(wrapId) || store.isDropped(wrapId)) return@withLock null
-        // spec 7.4: after SILENT_ATTEMPTS silent failures a parked wrap waits for a user action or a healed AUTH
-        if (!interactive && store.pendingAttempts(wrapId) >= SILENT_ATTEMPTS) return@withLock null
-        val dm = when (val outcome = repo.unwrap(wrap, silent = !interactive)) {
-            is Unwrap.Ok -> outcome.message
-            Unwrap.Locked -> {
-                // Silent: park it for [drainPending]; a wrap parked before keeps its first receipt
-                // time. Interactive: the signer said no; the next silent round parks it again.
-                if (interactive) store.removePendingWrap(wrapId) else store.addPendingWrap(wrapId, now())
-                return@withLock null
+        // spec perf2 D4: a known wrap (a replay of the window, a worker round) is skipped from memory,
+        // so it never queues behind a real decrypt under [handling]
+        if (store.isKnownWrap(wrapId)) return null
+        return handling.withLock {
+            // Stored, or known never to yield a message: not decrypted again (spec §3.2).
+            if (store.hasWrap(wrapId) || store.isDropped(wrapId)) return@withLock null
+            if (!interactive && wrapId in triedThisRound) return@withLock null
+            // spec 7.4: after SILENT_ATTEMPTS silent failures a parked wrap waits for a user action or a healed AUTH
+            if (!interactive && store.pendingAttempts(wrapId) >= SILENT_ATTEMPTS) return@withLock null
+            val dm = when (val outcome = repo.unwrap(wrap, silent = !interactive)) {
+                is Unwrap.Ok -> outcome.message
+                Unwrap.Locked -> {
+                    // Silent: park it for [drainPending]; a wrap parked before keeps its first receipt
+                    // time. Interactive: the signer said no; the next silent round parks it again.
+                    if (interactive) store.removePendingWrap(wrapId) else {
+                        store.addPendingWrap(wrapId, now())
+                        triedThisRound += wrapId
+                    }
+                    return@withLock null
+                }
+                Unwrap.Rejected -> {
+                    // Not a message for us (invalid rumor, forged id, not our key): never "waiting for Amber".
+                    store.markDropped(wrapId, now(), DropReason.REJECTED)
+                    store.removePendingWrap(wrapId)
+                    return@withLock null
+                }
             }
-            Unwrap.Rejected -> {
-                // Not a message for us (invalid rumor, forged id, not our key): never "waiting for Amber".
-                store.markDropped(wrapId, now(), DropReason.REJECTED)
+            if (dm.rumorId in superseded) {
+                store.markDropped(wrapId, now(), DropReason.SUPERSEDED)
                 store.removePendingWrap(wrapId)
                 return@withLock null
             }
-        }
-        if (dm.rumorId in superseded) {
-            store.markDropped(wrapId, now(), DropReason.SUPERSEDED)
+            val receivedAt = now()
+            val message = DmMessage(
+                // A sender controls created_at: one dated far ahead would stay the newest and unread
+                // (read markers are capped at now) for good. At most a day ahead of its receipt.
+                rumorId = dm.rumorId, peer = dm.peer, outgoing = dm.outgoing, content = dm.content, createdAt = minOf(dm.createdAt, receivedAt + DAY),
+                receivedAt = receivedAt, status = if (dm.outgoing) DmStatus.SENT else DmStatus.RECEIVED, wrapId = dm.wrapId,
+            )
+            // spec perf2 D1: upsert says whether the row is new (an incoming row always carries its wrap id,
+            // so for incoming messages "changed" means "inserted"); no read before the write
+            val isNew = store.upsert(message)
             store.removePendingWrap(wrapId)
-            return@withLock null
+            Handled(message, isNew)
         }
-        val isNew = store.message(dm.rumorId) == null
-        val receivedAt = now()
-        val message = DmMessage(
-            // A sender controls created_at: one dated far ahead would stay the newest and unread
-            // (read markers are capped at now) for good. At most a day ahead of its receipt.
-            rumorId = dm.rumorId, peer = dm.peer, outgoing = dm.outgoing, content = dm.content, createdAt = minOf(dm.createdAt, receivedAt + DAY),
-            receivedAt = receivedAt, status = if (dm.outgoing) DmStatus.SENT else DmStatus.RECEIVED, wrapId = dm.wrapId,
-        )
-        store.upsert(message)
-        store.removePendingWrap(wrapId)
-        Handled(message, isNew)
     }
 
     /**
@@ -468,7 +490,7 @@ class DmSync(
         try {
             val result = repo.send(peer, text, relays.dmRelays(peer), settings.relays.first())
             val status = if (result.sentToPeer) DmStatus.SENT else DmStatus.FAILED
-            withContext(NonCancellable) { store.replaceId(rowId, result.rumorId, status) }
+            withContext(NonCancellable) { store.replaceId(rowId, result.rumorId, status, result.selfWrapId) }
             // Our verdict stands even when a self-copy arrived first: it proves nothing about the peer wrap.
             return status
         } catch (e: CancellationException) {

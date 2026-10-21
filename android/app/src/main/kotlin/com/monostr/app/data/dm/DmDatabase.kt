@@ -5,24 +5,40 @@ import android.content.Context
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
  * SQLite-backed [DmStore], one database per account (spec §4). Not written to from the main
  * thread: every read and write hops to [Dispatchers.IO], and query [Flow]s recompute whenever
- * [version] changes.
+ * a table signal of [DmSignals] changes.
  */
 class DmDatabase(context: Context, pubkey: String) :
     SQLiteOpenHelper(context, fileName(pubkey), null, DATABASE_VERSION), DmStore {
 
-    private val version = MutableStateFlow(0L)
-    private fun bump() { version.update { it + 1 } }
+    init {
+        // spec perf2 D6: a real connection pool, readers in parallel to the single writer; the -wal/-shm
+        // files sit beside the database in the app's private dir and go with it at logout
+        setWriteAheadLoggingEnabled(true)
+    }
+
+    private val signals = DmSignals()
+
+    /** Owns the shared conversations flow (spec perf2 D3); cancelled by [close] before the file goes. */
+    private val storeScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val previews = PreviewMemo()
+    private val known = KnownWraps()
+    private val sharedConversations = SharedConversations(storeScope, signals) { withContext(Dispatchers.IO) { counted { queryConversations() } } }
 
     /**
      * Set by [close] (logout closes, then deletes the file). SQLiteOpenHelper would reopen, and so
@@ -35,7 +51,11 @@ class DmDatabase(context: Context, pubkey: String) :
     @Synchronized
     override fun close() {
         if (closed) return // spec 7.3: a failed start and a later logout may both close
-        closed = true
+        // spec perf2 D8: the shared flow and the memo go first, then reads switch to the detached database
+        closed = true // before the cancel: a conversations flow collected from now on never waits on the dead scope
+        storeScope.cancel()
+        previews.clear()
+        known.clear()
         super.close()
     }
 
@@ -81,64 +101,67 @@ class DmDatabase(context: Context, pubkey: String) :
         db.execSQL("ALTER TABLE dropped_wraps ADD COLUMN reason TEXT NOT NULL DEFAULT 'rejected'") // sql
     }
 
-    override fun conversations(): Flow<List<Conversation>> =
-        version.map { withContext(Dispatchers.IO) { queryConversations() } }.flowOn(Dispatchers.IO)
+    /** Query evaluations so far; a test hook (spec perf2 §6), read by DmDatabaseTest. */
+    val queryCount: Int get() = signals.queries.get()
 
-    override fun messages(peer: String): Flow<List<DmMessage>> =
-        version.map { withContext(Dispatchers.IO) { queryMessages(peer) } }.flowOn(Dispatchers.IO)
+    override fun isKnownWrap(wrapId: String): Boolean {
+        if (wrapId in known) return true
+        known.startLoad()?.let { token -> storeScope.launch { loadKnown(token) } }
+        return false
+    }
+
+    private fun loadKnown(token: Int) {
+        try {
+            val all = ArrayList<String>()
+            readableDatabase.rawQuery("SELECT wrap_id FROM messages WHERE wrap_id IS NOT NULL UNION ALL SELECT wrap_id FROM dropped_wraps", null).use { c -> // sql
+                while (c.moveToNext()) all += c.getString(0)
+            }
+            known.loaded(token, all)
+        } catch (e: Exception) {
+            known.failed(token) // the next isKnownWrap tries again; until then misses go the SQL way
+        }
+    }
+
+    private fun <T> counted(block: () -> T): T { signals.queries.incrementAndGet(); return block() }
+
+    /** Checked when collected, not when built: a flow built before [close] and collected after it ends with the empty list, as a closed store reads. */
+    override fun conversations(): Flow<List<Conversation>> = flow {
+        if (closed) emit(withContext(Dispatchers.IO) { queryConversations() }) else emitAll(sharedConversations.conversations)
+    }
+
+    override fun messages(peer: String, limit: Int): Flow<List<DmMessage>> =
+        signals.messages.map { withContext(Dispatchers.IO) { counted { queryMessages(peer, limit) } } }.distinctUntilChanged().flowOn(Dispatchers.IO)
 
     override fun unreadTotal(): Flow<Int> =
-        version.map { withContext(Dispatchers.IO) { queryUnreadTotal() } }.flowOn(Dispatchers.IO)
+        signals.conversationStamp.map { withContext(Dispatchers.IO) { counted { queryUnreadTotal() } } }.distinctUntilChanged().flowOn(Dispatchers.IO)
 
     override fun pendingCount(): Flow<Int> =
-        version.map { withContext(Dispatchers.IO) { queryPendingCount() } }.flowOn(Dispatchers.IO)
+        signals.pending.map { withContext(Dispatchers.IO) { counted { queryPendingCount() } } }.distinctUntilChanged().flowOn(Dispatchers.IO)
 
     private fun queryConversations(): List<Conversation> {
-        val db = readableDatabase
         val result = mutableListOf<Conversation>()
         // The peer set and last_at come from messages (the source of truth); conversations only
         // contributes read_at, and only when a row exists there (a peer never messaged has none).
-        val sql = "SELECT m.peer, MAX(m.created_at) AS last_at, COALESCE(c.read_at, 0) AS read_at " +
-            "FROM messages m LEFT JOIN conversations c ON c.peer = m.peer GROUP BY m.peer ORDER BY last_at DESC" // sql
-        db.rawQuery(sql, null).use { cursor ->
-            while (cursor.moveToNext()) {
-                val peer = cursor.getString(0)
-                val lastAt = cursor.getLong(1)
-                val readAt = cursor.getLong(2)
-                result.add(Conversation(peer, lastAt, readAt, lastTextFor(db, peer), countUnread(db, peer, readAt), hasOutgoingFor(db, peer)))
+        readableDatabase.rawQuery(CONVERSATIONS_SQL, null).use { c ->
+            while (c.moveToNext()) {
+                val peer = c.getString(0)
+                val lastAt = c.getLong(1)
+                result.add(Conversation(peer, lastAt, c.getLong(2), previews.of(peer, lastAt, c.getString(5) ?: ""), c.getInt(3), c.getInt(4) > 0))
             }
         }
         return result
     }
 
-    private fun lastTextFor(db: SQLiteDatabase, peer: String): String {
-        db.rawQuery("SELECT content FROM messages WHERE peer = ? ORDER BY created_at DESC LIMIT 1", arrayOf(peer)).use { c -> // sql
-            return if (c.moveToFirst()) DmText.preview(c.getString(0)) else ""
-        }
-    }
-
-    private fun countUnread(db: SQLiteDatabase, peer: String, readAt: Long): Int {
-        db.rawQuery("SELECT COUNT(*) FROM messages WHERE peer = ? AND outgoing = 0 AND created_at > ?", arrayOf(peer, readAt.toString())).use { c -> // sql
-            c.moveToFirst()
-            return c.getInt(0)
-        }
-    }
-
-    private fun hasOutgoingFor(db: SQLiteDatabase, peer: String): Boolean {
-        db.rawQuery("SELECT EXISTS(SELECT 1 FROM messages WHERE peer = ? AND outgoing = 1)", arrayOf(peer)).use { c -> // sql
-            c.moveToFirst()
-            return c.getInt(0) != 0
-        }
-    }
-
-    private fun queryMessages(peer: String): List<DmMessage> {
-        val result = mutableListOf<DmMessage>()
+    private fun queryMessages(peer: String, limit: Int): List<DmMessage> {
+        val result = ArrayList<DmMessage>()
+        // newest first through the (peer, created_at) index, then turned around: ascending by (created_at, rowid) as before
         readableDatabase.rawQuery(
-            "SELECT rumor_id, peer, outgoing, content, created_at, received_at, status, wrap_id FROM messages WHERE peer = ? ORDER BY created_at ASC", // sql
-            arrayOf(peer),
+            "SELECT rumor_id, peer, outgoing, content, created_at, received_at, status, wrap_id FROM messages WHERE peer = ? ORDER BY created_at DESC, rowid DESC LIMIT ?", // sql
+            arrayOf(peer, limit.toString()),
         ).use { c ->
             while (c.moveToNext()) result.add(messageAt(c))
         }
+        result.reverse()
         return result
     }
 
@@ -187,65 +210,64 @@ class DmDatabase(context: Context, pubkey: String) :
         }
     }
 
-    override suspend fun upsert(message: DmMessage) {
-        withContext(Dispatchers.IO) {
+    override suspend fun upsert(message: DmMessage): Boolean {
+        val changed = withContext(Dispatchers.IO) {
             val db = writableDatabase
             db.beginTransaction()
             try {
-                var peer = message.peer
-                var outgoing = message.outgoing
-                var content = message.content
-                var createdAt = message.createdAt
-                var receivedAt = message.receivedAt
-                var status = message.status
-                var wrapId = message.wrapId
-                db.rawQuery(
-                    "SELECT peer, outgoing, content, created_at, received_at, status, wrap_id FROM messages WHERE rumor_id = ?", // sql
-                    arrayOf(message.rumorId),
-                ).use { c ->
+                var exists = false
+                var existingWrapId: String? = null
+                db.rawQuery("SELECT wrap_id FROM messages WHERE rumor_id = ?", arrayOf(message.rumorId)).use { c -> // sql
                     if (c.moveToFirst()) {
-                        peer = c.getString(0)
-                        outgoing = c.getInt(1) != 0
-                        content = c.getString(2)
-                        createdAt = c.getLong(3)
-                        receivedAt = c.getLong(4)
-                        // the row's status is decided by whoever created it (deliver for an own send); an echo only adds its wrap
-                        status = DmStatus.valueOf(c.getString(5))
-                        val existingWrapId = if (c.isNull(6)) null else c.getString(6)
-                        wrapId = existingWrapId ?: message.wrapId
+                        exists = true
+                        existingWrapId = if (c.isNull(0)) null else c.getString(0)
                     }
                 }
-                val values = ContentValues().apply {
-                    put("rumor_id", message.rumorId)
-                    put("peer", peer)
-                    put("outgoing", if (outgoing) 1 else 0)
-                    put("content", content)
-                    put("created_at", createdAt)
-                    put("received_at", receivedAt)
-                    put("status", status.name)
-                    put("wrap_id", wrapId)
+                val changed = when {
+                    !exists -> {
+                        db.insertWithOnConflict("messages", null, message.values(), SQLiteDatabase.CONFLICT_REPLACE)
+                        true
+                    }
+                    // the row's status is decided by whoever created it (deliver for an own send); an echo only adds its wrap
+                    existingWrapId == null && message.wrapId != null -> {
+                        db.update("messages", ContentValues().apply { put("wrap_id", message.wrapId) }, "rumor_id = ?", arrayOf(message.rumorId))
+                        true
+                    }
+                    else -> false
                 }
-                db.insertWithOnConflict("messages", null, values, SQLiteDatabase.CONFLICT_REPLACE)
                 db.setTransactionSuccessful()
+                changed
             } finally {
                 db.endTransaction()
             }
         }
-        bump()
+        if (changed) { known.add(message.wrapId); signals.messagesChanged() }
+        return changed
+    }
+
+    private fun DmMessage.values() = ContentValues().apply {
+        put("rumor_id", rumorId)
+        put("peer", peer)
+        put("outgoing", if (outgoing) 1 else 0)
+        put("content", content)
+        put("created_at", createdAt)
+        put("received_at", receivedAt)
+        put("status", status.name)
+        put("wrap_id", wrapId)
     }
 
     override suspend fun setStatus(rumorId: String, status: DmStatus) {
-        withContext(Dispatchers.IO) {
-            writableDatabase.execSQL("UPDATE messages SET status = ? WHERE rumor_id = ?", arrayOf(status.name, rumorId)) // sql
+        val rows = withContext(Dispatchers.IO) {
+            writableDatabase.update("messages", ContentValues().apply { put("status", status.name) }, "rumor_id = ? AND status != ?", arrayOf(rumorId, status.name))
         }
-        bump()
+        if (rows > 0) signals.messagesChanged()
     }
 
     override suspend fun failStaleSending() {
-        withContext(Dispatchers.IO) {
-            writableDatabase.execSQL("UPDATE messages SET status = ? WHERE status = ?", arrayOf(DmStatus.FAILED.name, DmStatus.SENDING.name)) // sql
+        val rows = withContext(Dispatchers.IO) {
+            writableDatabase.update("messages", ContentValues().apply { put("status", DmStatus.FAILED.name) }, "status = ?", arrayOf(DmStatus.SENDING.name))
         }
-        bump()
+        if (rows > 0) signals.messagesChanged()
     }
 
     /**
@@ -254,8 +276,8 @@ class DmDatabase(context: Context, pubkey: String) :
      * two rows are merged (the echo's wrap id, [status] from the sender) and the provisional row
      * is dropped instead of leaving a duplicate.
      */
-    override suspend fun replaceId(oldRumorId: String, newRumorId: String, status: DmStatus) {
-        withContext(Dispatchers.IO) {
+    override suspend fun replaceId(oldRumorId: String, newRumorId: String, status: DmStatus, wrapId: String?) {
+        val finalWrap = withContext(Dispatchers.IO) {
             val db = writableDatabase
             db.beginTransaction()
             try {
@@ -274,22 +296,27 @@ class DmDatabase(context: Context, pubkey: String) :
                         if (c.moveToFirst() && !c.isNull(0)) provisionalWrapId = c.getString(0)
                     }
                     // the sender's verdict wins over the echo's SENT: a self-copy says nothing about the peer wrap
-                    val finalWrapId = existingWrapId ?: provisionalWrapId
+                    val finalWrapId = existingWrapId ?: provisionalWrapId ?: wrapId
                     db.execSQL("UPDATE messages SET status = ?, wrap_id = ? WHERE rumor_id = ?", arrayOf(status.name, finalWrapId, newRumorId)) // sql
                     db.execSQL("DELETE FROM messages WHERE rumor_id = ?", arrayOf(oldRumorId)) // sql
                 } else {
-                    db.execSQL("UPDATE messages SET rumor_id = ?, status = ? WHERE rumor_id = ?", arrayOf(newRumorId, status.name, oldRumorId)) // sql
+                    db.execSQL("UPDATE messages SET rumor_id = ?, status = ?, wrap_id = COALESCE(wrap_id, ?) WHERE rumor_id = ?", arrayOf<Any?>(newRumorId, status.name, wrapId, oldRumorId)) // sql
+                }
+                val finalWrap = db.rawQuery("SELECT wrap_id FROM messages WHERE rumor_id = ?", arrayOf(newRumorId)).use { c -> // sql
+                    if (c.moveToFirst() && !c.isNull(0)) c.getString(0) else null
                 }
                 db.setTransactionSuccessful()
+                finalWrap
             } finally {
                 db.endTransaction()
             }
         }
-        bump()
+        known.add(finalWrap)
+        signals.allChanged()
     }
 
     override suspend fun markRead(peer: String, at: Long) {
-        withContext(Dispatchers.IO) {
+        val crossed = withContext(Dispatchers.IO) {
             val db = writableDatabase
             db.beginTransaction()
             try {
@@ -299,19 +326,27 @@ class DmDatabase(context: Context, pubkey: String) :
                     exists = c.moveToFirst()
                     if (exists) current = c.getLong(0)
                 }
+                val moved = if (exists) maxOf(current, at) else at
                 if (exists) {
-                    db.execSQL("UPDATE conversations SET read_at = ? WHERE peer = ?", arrayOf<Any>(maxOf(current, at), peer)) // sql
+                    db.execSQL("UPDATE conversations SET read_at = ? WHERE peer = ?", arrayOf<Any>(moved, peer)) // sql
                 } else {
                     // last_at has no reader (conversations() derives ordering from messages); kept
                     // only because the column is NOT NULL.
                     db.execSQL("INSERT INTO conversations(peer, last_at, read_at) VALUES (?, ?, ?)", arrayOf<Any>(peer, at, at)) // sql
                 }
+                // spec perf2 D2: the unread count changes only when an incoming message lies in (old, new],
+                // the bounds of the unread count (created_at > read_at)
+                val crossed = moved > current && db.rawQuery(
+                    "SELECT EXISTS(SELECT 1 FROM messages WHERE peer = ? AND outgoing = 0 AND created_at > ? AND created_at <= ?)", // sql
+                    arrayOf(peer, current.toString(), moved.toString()),
+                ).use { c -> c.moveToFirst(); c.getInt(0) != 0 }
                 db.setTransactionSuccessful()
+                crossed
             } finally {
                 db.endTransaction()
             }
         }
-        bump()
+        if (crossed) signals.readChanged()
     }
 
     override suspend fun hasWrap(wrapId: String): Boolean = withContext(Dispatchers.IO) {
@@ -322,20 +357,21 @@ class DmDatabase(context: Context, pubkey: String) :
     }
 
     override suspend fun addPendingWrap(wrapId: String, receivedAt: Long) {
-        withContext(Dispatchers.IO) {
+        val inserted = withContext(Dispatchers.IO) {
             val db = writableDatabase
             db.beginTransaction()
             try {
                 val values = ContentValues().apply { put("wrap_id", wrapId); put("received_at", receivedAt); put("attempts", 1) }
-                if (db.insertWithOnConflict("pending_wraps", null, values, SQLiteDatabase.CONFLICT_IGNORE) == -1L) {
-                    db.execSQL("UPDATE pending_wraps SET attempts = attempts + 1 WHERE wrap_id = ?", arrayOf(wrapId)) // sql
-                }
+                val inserted = db.insertWithOnConflict("pending_wraps", null, values, SQLiteDatabase.CONFLICT_IGNORE) != -1L
+                if (!inserted) db.execSQL("UPDATE pending_wraps SET attempts = attempts + 1 WHERE wrap_id = ?", arrayOf(wrapId)) // sql
                 db.setTransactionSuccessful()
+                inserted
             } finally {
                 db.endTransaction()
             }
         }
-        bump()
+        // one more attempt on a parked wrap changes no count
+        if (inserted) signals.pendingChanged()
     }
 
     override suspend fun pendingAttempts(wrapId: String): Int = withContext(Dispatchers.IO) {
@@ -364,10 +400,8 @@ class DmDatabase(context: Context, pubkey: String) :
     }
 
     override suspend fun removePendingWrap(wrapId: String) {
-        withContext(Dispatchers.IO) {
-            writableDatabase.execSQL("DELETE FROM pending_wraps WHERE wrap_id = ?", arrayOf(wrapId)) // sql
-        }
-        bump()
+        val rows = withContext(Dispatchers.IO) { writableDatabase.delete("pending_wraps", "wrap_id = ?", arrayOf(wrapId)) }
+        if (rows > 0) signals.pendingChanged()
     }
 
     override suspend fun markDropped(wrapId: String, at: Long, reason: DropReason) {
@@ -375,6 +409,7 @@ class DmDatabase(context: Context, pubkey: String) :
             val values = ContentValues().apply { put("wrap_id", wrapId); put("at", at); put("reason", reason.code) }
             writableDatabase.insertWithOnConflict("dropped_wraps", null, values, SQLiteDatabase.CONFLICT_IGNORE)
         }
+        known.add(wrapId)
     }
 
     override suspend fun dropReason(wrapId: String): DropReason? = withContext(Dispatchers.IO) {
@@ -400,14 +435,12 @@ class DmDatabase(context: Context, pubkey: String) :
 
     override suspend fun setLastSync(at: Long) {
         withContext(Dispatchers.IO) { writeSyncValue(KEY_LAST_SYNC, at) }
-        bump()
     }
 
     override suspend fun lastNotified(): Long = withContext(Dispatchers.IO) { readSyncValue(KEY_LAST_NOTIFIED) }
 
     override suspend fun setLastNotified(at: Long) {
         withContext(Dispatchers.IO) { writeSyncValue(KEY_LAST_NOTIFIED, at) }
-        bump()
     }
 
     private fun readSyncValue(key: String): Long {
@@ -430,7 +463,9 @@ class DmDatabase(context: Context, pubkey: String) :
             db.execSQL("DELETE FROM dropped_wraps") // sql
             db.execSQL("DELETE FROM sync") // sql
         }
-        bump()
+        known.clear()
+        signals.allChanged()
+        previews.clear()
     }
 
     companion object {
@@ -438,6 +473,14 @@ class DmDatabase(context: Context, pubkey: String) :
         private const val KEY_LAST_SYNC = "last_sync"
         private const val KEY_LAST_NOTIFIED = "last_notified"
         private const val KEY_PENDING_SUMMARY = "pending_summary"
+
+        /** Spec perf2 D3: one statement instead of 3P + 1; unread = incoming with created_at > read_at, as before. */
+        private const val CONVERSATIONS_SQL =
+            "SELECT m.peer, MAX(m.created_at) AS last_at, COALESCE(c.read_at, 0) AS read_at, " +
+                "SUM(m.outgoing = 0 AND m.created_at > COALESCE(c.read_at, 0)) AS unread, " +
+                "SUM(m.outgoing) AS outgoing_n, " +
+                "(SELECT x.content FROM messages x WHERE x.peer = m.peer ORDER BY x.created_at DESC LIMIT 1) AS last_content " +
+                "FROM messages m LEFT JOIN conversations c ON c.peer = m.peer GROUP BY m.peer ORDER BY last_at DESC" // sql
 
         private fun fileName(pubkey: String) = "dms-${pubkey.take(16)}.db"
 

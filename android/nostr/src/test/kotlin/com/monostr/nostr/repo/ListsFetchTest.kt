@@ -1,5 +1,6 @@
 package com.monostr.nostr.repo
 
+import com.monostr.nostr.Exit
 import com.monostr.nostr.LocalSigner
 import com.monostr.nostr.SilentWsRelay
 import com.monostr.nostr.awaitTrue
@@ -9,6 +10,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -178,6 +180,60 @@ class ListsFetchTest {
                 assertTrue(awaitTrue { listRequests(revived).isNotEmpty() }, "an unreachable relay counted as a reply: ${revived.requests}")
             } finally {
                 e.close()
+            }
+        }
+    }
+
+    @Test
+    fun `with an exit, the leg that has the list ends the other one and releases its relays`() = runTest {
+        SilentWsRelay(serve = listOf(picks().asJson())).use { own ->
+            SilentWsRelay(recordRequests = true).use { extra ->
+                val e = connectedEngine(dir, own, me.secretKey().toHex())
+                try {
+                    val filter = Filter().kind(Kind(30000u)).author(bob.publicKey()).identifier("picks")
+                    val replied = withContext(Dispatchers.Default) {
+                        withTimeout(2_500) { fetchWide(e, filter, Duration.ofSeconds(8), Exit.NewestPerAuthor(setOf(bob.publicKey().toHex()))) { listOf(extra.url) } }
+                    }
+                    assertTrue(replied)
+                    assertTrue(e.temporaryRelayUrls().isEmpty(), "still attached: ${e.temporaryRelayUrls()}")
+                } finally {
+                    e.close()
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `a foreign list lookup cut at the cap without an answer is asked again`() = runTest {
+        SilentWsRelay(recordRequests = true).use { own ->
+            val e = connectedEngine(dir, own, me.secretKey().toHex())
+            try {
+                e.earlyExitCap = Duration.ofMillis(800)
+                val repo = NostrListsRepository(e, signer, SlowAuthorRelays(emptyList()), now = { clock }, fetchTimeout = Duration.ofSeconds(3))
+                val address = ListAddress(30000, bob.publicKey().toHex(), "picks")
+                withContext(Dispatchers.Default) {
+                    repo.byAddress(address, fetch = true)
+                    repo.byAddress(address, fetch = true)
+                }
+                assertEquals(2, listRequests(own).size, "a silent relay was stamped as answered: ${own.requests}")
+            } finally {
+                e.close()
+            }
+        }
+    }
+
+    @Test
+    fun `9 a pinned foreign list comes from the fastest leg`() = runTest {
+        SilentWsRelay(serve = listOf(picks().asJson())).use { own ->
+            SilentWsRelay(recordRequests = true).use { extra ->
+                val e = connectedEngine(dir, own, me.secretKey().toHex())
+                try {
+                    val repo = NostrListsRepository(e, signer, SlowAuthorRelays(listOf(extra.url)), now = { clock }, fetchTimeout = Duration.ofSeconds(8))
+                    val set = withContext(Dispatchers.Default) { withTimeout(2_500) { repo.byAddress(ListAddress(30000, bob.publicKey().toHex(), "picks"), fetch = true) } }
+                    assertEquals("Bob picks", set?.title)
+                } finally {
+                    e.close()
+                }
             }
         }
     }

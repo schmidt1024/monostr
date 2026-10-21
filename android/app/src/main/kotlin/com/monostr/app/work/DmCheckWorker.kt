@@ -103,6 +103,8 @@ class DmCheckWorker(context: Context, params: WorkerParameters) : CoroutineWorke
         try {
             session.restore()
             val ready = (session.state.value as? SessionState.Active)?.ready ?: return Result.success()
+            // spec perf2 A2 (4): a worker session has no feed to protect
+            ready.startupGate.open("worker")
             val store = ready.dmStore
             val lastNotified = store.lastNotified()
             try {

@@ -22,6 +22,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import rust.nostr.sdk.Keys
@@ -42,7 +43,7 @@ class ChatControllerTest {
         send: suspend (String, String) -> DmStatus = { _, _ -> DmStatus.SENT },
         retry: suspend (String) -> DmStatus = { DmStatus.SENT },
         now: () -> Long = { 1_000 },
-    ) = ChatController(bob, me, store, profiles, send, retry, eager(), now)
+    ) = ChatController(bob, me, store, profiles, send, retry, eager(), now, work = UnconfinedTestDispatcher(testScheduler))
 
     @Test
     fun `messages are listed chronologically with media parsed`() = runTest {
@@ -165,9 +166,9 @@ class ChatControllerTest {
     @Test
     fun `a failing store ends loading with an error`() = runTest {
         val broken = object : DmStore by InMemoryDmStore() {
-            override fun messages(peer: String): Flow<List<DmMessage>> = flow { throw IllegalStateException("db gone") }
+            override fun messages(peer: String, limit: Int): Flow<List<DmMessage>> = flow { throw IllegalStateException("db gone") }
         }
-        val c = ChatController(bob, me, broken, FakeProfiles(), { _, _ -> DmStatus.SENT }, { DmStatus.SENT }, eager(), { 1_000 })
+        val c = ChatController(bob, me, broken, FakeProfiles(), { _, _ -> DmStatus.SENT }, { DmStatus.SENT }, eager(), { 1_000 }, work = UnconfinedTestDispatcher(testScheduler))
         c.start()
         advanceUntilIdle()
         assertFalse(c.state.value.loading)
@@ -210,5 +211,49 @@ class ChatControllerTest {
         profiles.land(Profile(bob, "bob", "Bob", null, null, null))
         advanceUntilIdle()
         assertEquals("Bob", c.state.value.peer.shownName)
+    }
+
+    @Test
+    fun `a long chat shows the newest 100 and older pages only after a full page`() = runTest {
+        val store = InMemoryDmStore()
+        (1..250).forEach { store.upsert(msg("$it", it.toLong())) }
+        val c = controller(store)
+        c.start(); advanceUntilIdle()
+        assertEquals((151..250).map { "$it" }, c.state.value.messages.map { it.message.rumorId })
+        c.loadOlder(); advanceUntilIdle()
+        assertEquals((51..250).map { "$it" }, c.state.value.messages.map { it.message.rumorId })
+        c.loadOlder(); advanceUntilIdle()
+        assertEquals(250, c.state.value.messages.size)
+        val queries = store.queryCount
+        c.loadOlder(); advanceUntilIdle() // the last page was short: nothing older exists
+        assertEquals(queries, store.queryCount)
+    }
+
+    @Test
+    fun `a new message keeps the loaded pages`() = runTest {
+        val store = InMemoryDmStore()
+        (1..150).forEach { store.upsert(msg("$it", it.toLong())) }
+        val c = controller(store)
+        c.start(); advanceUntilIdle()
+        c.loadOlder(); advanceUntilIdle()
+        assertEquals(150, c.state.value.messages.size)
+        store.upsert(msg("151", 151)); advanceUntilIdle()
+        assertEquals(151, c.state.value.messages.size)
+        assertEquals("151", c.state.value.messages.last().message.rumorId)
+        val queries = store.queryCount
+        c.loadOlder(); advanceUntilIdle() // 151 < 200: still no full page
+        assertEquals(queries, store.queryCount)
+    }
+
+    @Test
+    fun `an unchanged message keeps its bubble when another one changes`() = runTest {
+        val store = InMemoryDmStore()
+        store.upsert(msg("1", 100)); store.upsert(msg("2", 200, outgoing = true, status = DmStatus.SENDING))
+        val c = controller(store)
+        c.start(); advanceUntilIdle()
+        val first = c.state.value.messages[0]
+        store.setStatus("2", DmStatus.FAILED); advanceUntilIdle()
+        assertSame(first, c.state.value.messages[0])
+        assertEquals(DmStatus.FAILED, c.state.value.messages[1].message.status)
     }
 }

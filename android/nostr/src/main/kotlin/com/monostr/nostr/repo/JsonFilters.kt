@@ -29,3 +29,15 @@ internal fun kindsByAuthorsFilter(kinds: List<Int>, authors: Collection<String>)
 } catch (e: Exception) {
     Filter().kinds(kinds.map { Kind(it.toUShort()) }).authors(authors.mapNotNull { runCatching { PublicKey.parse(it) }.getOrNull() })
 }
+
+/**
+ * [kinds] whose `e` tags name any of [ids] (spec perf2 decision 2: a thread asks `#e = [root, focused]`), from
+ * [since] when set. Built from JSON: `Filter.customTag` takes one value only.
+ */
+internal fun taggedFilter(kinds: List<Int>, ids: Collection<String>, since: Long? = null): Filter = Filter.fromJson(
+    buildJsonObject {
+        put("kinds", JsonArray(kinds.map { JsonPrimitive(it) }))
+        put("#e", JsonArray(ids.map { JsonPrimitive(it) }))
+        if (since != null) put("since", JsonPrimitive(since.coerceAtLeast(0)))
+    }.toString(),
+)

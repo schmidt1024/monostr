@@ -82,6 +82,7 @@ class ConversationsViewModel @Inject constructor(session: NostrSession) : ViewMo
         onUnlock = { ready.dms.drainPending() },
         scope = viewModelScope,
         muted = ready.muted,
+        followsRefresh = ready.followsRefresh,
     )
     val dmUnread: StateFlow<Int> = ready.dmStore.unreadTotalExcept(ready.muted).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
     init {

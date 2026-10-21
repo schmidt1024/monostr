@@ -18,6 +18,7 @@ import com.monostr.tips.TipType
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -54,6 +55,50 @@ class FeedControllerTest {
     /** Controllers get an eager scope on the test scheduler; long-lived collectors stay suspended and are dropped with the scope. */
     private fun TestScope.eager(): CoroutineScope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher(testScheduler))
     private fun TestScope.decorations() = TipDecorations(FakeTips(), FakePendingTips(), profiles, FakePublish(), eager()) { 5_000 }
+
+    @Test
+    fun `the home feed opens the startup gate once its first refresh is in, not for the snapshot or the local page`() = runTest {
+        var opened = 0
+        val feed = FakeFeed().apply { current = listOf(note('1', alice, 1000)); refreshGate = CompletableDeferred() }
+        val snapshot = FeedSnapshot(File(snapshotDir, "feed.json"), UnconfinedTestDispatcher(testScheduler))
+        snapshot.write(listOf(FeedSnapshot.Item(note('2', alice, 900), Profile.empty(alice), Profile.empty(alice))))
+        val c = FeedController(feed, profiles, FakePublish(), decorations(), BookmarkActions(FakeBookmarks(), eager()), FakeCounts(), eager(), snapshot = snapshot, onFirstFresh = { opened++ })
+        c.start(); advanceUntilIdle()
+        assertTrue(c.state.value.notes.isNotEmpty(), "snapshot and local page are shown")
+        assertEquals(0, opened)
+        feed.refreshGate!!.complete(Unit); advanceUntilIdle()
+        assertEquals(1, opened)
+        c.refresh(); advanceUntilIdle()
+        assertEquals(1, opened, "a later refresh is no first page")
+    }
+
+    @Test
+    fun `a failed or cancelled first refresh opens the gate too, a list tab never does`() = runTest {
+        var failed = 0
+        FeedController(
+            FakeFeed().apply { refreshError = IllegalStateException("offline") }, profiles, FakePublish(), decorations(),
+            BookmarkActions(FakeBookmarks(), eager()), FakeCounts(), eager(), onFirstFresh = { failed++ },
+        ).start()
+        advanceUntilIdle()
+        assertEquals(1, failed)
+        var cancelled = 0
+        val vm = eager()
+        FeedController(
+            FakeFeed().apply { refreshGate = CompletableDeferred() }, profiles, FakePublish(), decorations(),
+            BookmarkActions(FakeBookmarks(), vm), FakeCounts(), vm, onFirstFresh = { cancelled++ },
+        ).start()
+        advanceUntilIdle()
+        assertEquals(0, cancelled)
+        vm.cancel(); advanceUntilIdle()
+        assertEquals(1, cancelled, "the view model went away while the relays were asked")
+        var list = 0
+        FeedController(
+            FakeFeed(), profiles, FakePublish(), decorations(), BookmarkActions(FakeBookmarks(), eager()), FakeCounts(), eager(),
+            source = FeedSource.Authors(listOf(alice)), onFirstFresh = { list++ },
+        ).start()
+        advanceUntilIdle()
+        assertEquals(0, list)
+    }
 
     @Test
     fun `feed decorates notes with profiles, handles reposts, likes and load more`() = runTest {

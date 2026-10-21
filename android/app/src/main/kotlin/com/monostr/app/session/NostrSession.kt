@@ -53,7 +53,11 @@ import com.monostr.app.work.DmNotifier
 import com.monostr.nostr.LocalSigner
 import com.monostr.nostr.NostrEngine
 import com.monostr.nostr.PerfTrace
+import com.monostr.nostr.RefreshGate
 import com.monostr.nostr.Signer
+import com.monostr.nostr.StartupGate
+import com.monostr.nostr.SyncMarks
+import com.monostr.nostr.TimedStartupGate
 import com.monostr.nostr.model.Note
 import rust.nostr.sdk.Filter
 import rust.nostr.sdk.Kind
@@ -64,6 +68,7 @@ import com.monostr.nostr.nip55.Nip55
 import com.monostr.nostr.nip55.SignerBridge
 import com.monostr.nostr.repo.AuthorRelaysRepository
 import com.monostr.nostr.repo.BookmarksRepository
+import com.monostr.nostr.repo.CountLimiter
 import com.monostr.nostr.repo.CountsRepository
 import com.monostr.nostr.repo.FollowCountsRepository
 import com.monostr.nostr.repo.NostrFollowCountsRepository
@@ -101,6 +106,7 @@ import com.monostr.nostr.repo.PublishRepository
 import com.monostr.nostr.repo.QuoteRepository
 import com.monostr.nostr.repo.SearchRepository
 import com.monostr.nostr.repo.ThreadRepository
+import com.monostr.nostr.repo.storedOrFetched
 import com.monostr.nostr.repo.TipsRepository
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
@@ -180,6 +186,12 @@ class Ready(
     val listSnapshots: ListSnapshots? = null,
     /** Spec perf 3.7: this session's access to the own lists' summary; closed at logout before the file goes. */
     val ownLists: SessionOwnListsCache? = null,
+    /** Spec perf2 A2: this session's background network work waits here until the home feed's first page is in (or 3 s). */
+    val startupGate: StartupGate = StartupGate.OPEN,
+    /** Spec perf2 A5: per-relay-set fetch stamps of this account (timestamps only); deleted at logout (D7). */
+    val syncMarks: SyncMarks? = null,
+    /** Spec perf2 D11: the Messages tab's network follows() lookup; runs on the engine's background scope, so leaving the tab never cancels it. */
+    val followsRefresh: RefreshGate<String> = RefreshGate(engine.backgroundScope, 60),
 ) {
     /** Pubkeys of the muted accounts; every note list filters against them (spec 9.3). */
     val muted: StateFlow<Set<String>> get() = mute.muted
@@ -385,7 +397,7 @@ class NostrSession @Inject constructor(
      * only for a session already persisted, so no record is published for a key that is not stored.
      */
     private fun resumeSetupLater(ready: Ready) {
-        ready.engine.backgroundScope.launch { bestEffort { resumeSetup(ready.engine, ready.pubkey, ready.publish, ready.follows) } }
+        ready.engine.backgroundScope.launch { ready.startupGate.await(); bestEffort { resumeSetup(ready.engine, ready.pubkey, ready.publish, ready.follows) } }
     }
 
     /** Runs [persist]; if it fails, DM sync, engine and DM database of the fresh session are closed before rethrowing. */
@@ -427,6 +439,8 @@ class NostrSession @Inject constructor(
                 bestEffort { DmDatabase.delete(context, ready.pubkey) }
                 // the feed's last page leaves the device with the account too
                 bestEffort { ready.feedSnapshot?.delete() }
+                // spec perf2 D7: nothing about this session stays behind; a re-login does one full fetch
+                bestEffort { ready.syncMarks?.delete() }
                 // the engine's scope (reconcile, list jobs) ended above; a collector of the old session on a screen's
                 // scope may still load or persist the own lists: closed before the summary goes, it cannot bring it back
                 bestEffort { ready.engine.backgroundScope.cancel() } // a no-op unless a step above threw before close
@@ -474,6 +488,7 @@ class NostrSession @Inject constructor(
         // spec perf 3.7: the own lists' summary (decrypted private members) and the list snapshots, also without a running session
         if (pubkey != null) bestEffort { ownListsCache.remove(pubkey) }
         if (pubkey != null) bestEffort { ListSnapshots(listSnapshotsDir(pubkey)).deleteAll() }
+        if (pubkey != null) bestEffort { withContext(Dispatchers.IO) { File(accountDir(context.filesDir, pubkey), SyncMarks.FILE_NAME).delete() } }
         if (pubkey != null) bestEffort { withContext(Dispatchers.IO) { accountDir(context.noBackupFilesDir, pubkey).delete() } } // only when empty
         bestEffort { secrets.remove(KeystoreSecretStore.SECRET_VIEW_KEY) }
         bestEffort { tipSettings.setSetup(null) }
@@ -530,15 +545,17 @@ class NostrSession @Inject constructor(
             engine.close()
             throw e
         }
+        // spec perf2 A2: on the engine's scope, so logout (engine close) ends the timer and every waiter
+        val startupGate = TimedStartupGate(engine.backgroundScope)
         val dmStore = DmDatabase(context, signer.pubkey)
         // spec 7.3: whatever fails from here on, the DM database and the engine are closed again
         try {
-            val tips = NostrTipsRepository(engine)
+            val tips = NostrTipsRepository(engine, gate = startupGate)
             val authorRelays = NostrAuthorRelaysRepository(engine)
             // a collector of this session's own lists may outlive it (a screen's scope): logout closes this view first
             val ownLists = SessionOwnListsCache(ownListsCache)
-            val lists = NostrListsRepository(engine, signer, authorRelays, defaultRelays = PrefsRelayStore.DEFAULT_RELAYS, cache = ownLists, reconcileScope = engine.backgroundScope)
-            val feedTabs = NostrFeedTabsRepository(engine, signer, feedTabsCache, defaultRelays = PrefsRelayStore.DEFAULT_RELAYS, reconcileScope = engine.backgroundScope)
+            val lists = NostrListsRepository(engine, signer, authorRelays, defaultRelays = PrefsRelayStore.DEFAULT_RELAYS, cache = ownLists, reconcileScope = engine.backgroundScope, gate = startupGate)
+            val feedTabs = NostrFeedTabsRepository(engine, signer, feedTabsCache, defaultRelays = PrefsRelayStore.DEFAULT_RELAYS, reconcileScope = engine.backgroundScope, gate = startupGate)
             // NIP-89 "via Monostr": read from the store at publish time (not a stateIn with a seed), so a
             // note published before the first emission cannot carry the tag against the user's choice
             val publish = NostrPublishRepository(engine, indexRelays = NostrAuthorRelaysRepository.INDEXERS, clientTag = { uiSettings.clientTag.first() }, powBits = { uiSettings.powBits.first() })
@@ -547,12 +564,12 @@ class NostrSession @Inject constructor(
                 NostrDmRepository(engine), dmRelays, dmStore, dmSettings, publish,
                 engine::attachTemporary, engine::detachTemporary, engine.closed, engine.backgroundScope,
                 loadWrap = engine::eventById, authOk = engine.authenticated, authOkSeq = engine::authOkSeq,
-                authRejected = engine.authRejected, authRejection = engine::authRejection,
+                authRejected = engine.authRejected, authRejection = engine::authRejection, gate = startupGate,
             )
             // Live DMs and the unread badge from session start on; silent only, so safe for Amber. The
             // own kind 10050 is settled later, where the user opens the Messages tab or a chat.
             dms.start()
-            val mute = NostrMuteRepository(engine, signer, watch = engine.backgroundScope)
+            val mute = NostrMuteRepository(engine, signer, watch = engine.backgroundScope, gate = startupGate)
             // Spec 9.3: the lists filter from the start; silent, so Amber is never asked here (the settings screen asks)
             engine.backgroundScope.launch { bestEffort { mute.ensureLoaded(interactive = false) } }
             // muted accounts are left out at the query, so a flooding account cannot fill the feed's pages
@@ -560,13 +577,16 @@ class NostrSession @Inject constructor(
             val profiles = NostrProfileRepository(engine, indexRelays = NostrProfileRepository.INDEX_RELAYS)
             val notifications = NostrNotificationsRepository(engine, tips)
             // one pipeline for the badge, the screen and the tip check; started by the first of them (spec perf 3.6)
-            val notificationsStore = NotificationsStore(notifications, profiles, tipSettings, engine.backgroundScope, muted = mute.muted, me = signer.pubkey)
+            val notificationsStore = NotificationsStore(notifications, profiles, tipSettings, engine.backgroundScope, muted = mute.muted, me = signer.pubkey, startupGate = startupGate)
             val follows = NostrFollowRepository(engine, feed)
-            // the database at once, the relays' latest behind it (a new install, another client)
-            val ownReactions = NostrOwnReactions(engine, scope = engine.backgroundScope)
+            // the database at once, the relays' latest behind the startup gate and only since the last completed fetch (spec perf2 A5)
+            val syncMarks = SyncMarks(File(dir, SyncMarks.FILE_NAME))
+            val ownReactions = NostrOwnReactions(engine, scope = engine.backgroundScope, gate = startupGate, marks = syncMarks)
             engine.backgroundScope.launch { bestEffort { ownReactions.load() } }
             // followers = the largest NIP-45 COUNT of the relays (0.22.4: no proprietary index any more)
-            val followCounts = NostrFollowCountsRepository(engine)
+            // spec perf2 A6: one COUNT cap per relay for the note and the follower counts
+            val countLimiter = CountLimiter()
+            val followCounts = NostrFollowCountsRepository(engine, limiter = countLimiter)
             // a follow or unfollow changes the own Following number and the target's Followers: counted afresh
             engine.backgroundScope.launch { follows.changes.collect { followCounts.invalidateAll() } }
             val blossom = BlossomClient(http, signer)
@@ -590,8 +610,10 @@ class NostrSession @Inject constructor(
             // spec 2026-10-16 §8: a discarded draft or composer picture stays while a published note or the profile shows it
             val media = BlossomMediaUploader(ImagePreparer(context.contentResolver), blossom, uiSettings, engine.backgroundScope, inUse = pictures::published)
             // spec 2026-10-16 §8.2: drafts untouched for 30 days go with their pictures; silent, best effort, off the start path
-            engine.backgroundScope.launch { bestEffort { expireDrafts(drafts, signer.pubkey, System.currentTimeMillis() / 1000, media) } }
+            engine.backgroundScope.launch { startupGate.await(); bestEffort { expireDrafts(drafts, signer.pubkey, System.currentTimeMillis() / 1000, media) } }
             return Ready(
+                startupGate = startupGate,
+                syncMarks = syncMarks,
                 feedSnapshot = FeedSnapshot(File(dir, "feed-snapshot.json")),
                 // they name the members of possibly private lists: noBackupFilesDir, like the own lists' summary
                 listSnapshots = ListSnapshots(listSnapshotsDir(signer.pubkey)),
@@ -600,9 +622,9 @@ class NostrSession @Inject constructor(
                 feed = feed, threads = NostrThreadRepository(engine, conversations), conversations = conversations,
                 profiles = profiles, publish = publish,
                 tips = tips, notifications = notifications, notificationsStore = notificationsStore, search = NostrSearchRepository(engine, profileUpdates = profiles.updates, scope = engine.backgroundScope),
-                bookmarks = NostrBookmarksRepository(engine, signer, watch = engine.backgroundScope),
+                bookmarks = NostrBookmarksRepository(engine, signer, watch = engine.backgroundScope, gate = startupGate),
                 watchers = WatcherClients(http, signer),
-                counts = NostrCountsRepository(engine, engine.backgroundScope),
+                counts = NostrCountsRepository(engine, engine.backgroundScope, sessionRelays = { engine.relayUrls() }, limiter = countLimiter),
                 authorRelays = authorRelays,
                 dms = dms, dmStore = dmStore, dmRelays = dmRelays,
                 quotes = NostrQuoteRepository(engine),
@@ -635,17 +657,8 @@ class NostrSession @Inject constructor(
         if (pendingSetup.load(pubkey) == null) return
         val author = PublicKey.parse(pubkey)
         val publisher = PendingSetupPublisher(pendingSetup, pubkey, publish, follows, dmSettings, exists = { kind ->
-            val f = Filter().kind(Kind(kind.toUShort())).author(author).limit(1u)
-            engine.query(f).isNotEmpty() || run {
-                try {
-                    engine.fetch(f, Duration.ofSeconds(5))
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    // no answer: only the local store decides
-                }
-                engine.query(f).isNotEmpty()
-            }
+            // spec wave 2 B4 call site 10: existence, so the first relay that has one decides
+            storedOrFetched(engine, Filter().kind(Kind(kind.toUShort())).author(author).limit(1u), Duration.ofSeconds(5))
         })
         if (publisher.run()) return
         delay(SETUP_RETRY_MS)

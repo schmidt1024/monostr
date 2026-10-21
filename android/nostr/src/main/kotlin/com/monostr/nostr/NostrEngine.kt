@@ -2,6 +2,8 @@ package com.monostr.nostr
 
 import com.monostr.nostr.model.RelayInfo
 import com.monostr.nostr.model.RelayState
+import com.monostr.tips.event.EventJson
+import com.monostr.tips.event.Event as JsonEvent
 import android.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -11,9 +13,14 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -49,7 +56,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Thin wrapper around the rust-nostr [Client]: one LMDB database, one relay
- * pool, one signer. Repositories read from [query] and listen on [events];
+ * pool, one signer. Repositories read from [query] and listen on [incoming];
  * they never touch the rust-nostr client directly.
  */
 class NostrEngine private constructor(
@@ -84,11 +91,40 @@ class NostrEngine private constructor(
     fun unwrapSigner(silent: Boolean, onLocked: () -> Unit): NostrSigner? =
         signer?.let { NostrSigner.custom(UnwrapSignerAdapter(it, silent, onLocked)) }
 
-    private val _events = MutableSharedFlow<Event>(extraBufferCapacity = 256, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     private val started = AtomicBoolean(false)
 
-    /** Every event delivered by any subscription. */
-    val events: SharedFlow<Event> = _events
+    /** What [HandleNotification.handle] hands over: nothing read yet (spec wave 2 B2: no FFI and no parsing in the callback). */
+    private class RawIncoming(val relay: RelayUrl, val subscriptionId: String, val event: Event)
+
+    /** Events between the rust callback and the decoder; a burst larger than this drops the oldest (as the old raw flow did). */
+    private val raw = Channel<RawIncoming>(capacity = RAW_CAPACITY, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+
+    private val _incoming = MutableSharedFlow<Incoming>(extraBufferCapacity = INCOMING_BUFFER, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+
+    /** Every event delivered by any subscription or fetch, decoded once (spec wave 2 B2). Collectors filter on [Incoming.json] in Kotlin. */
+    val incoming: SharedFlow<Incoming> = _incoming
+
+    /** How many events the decoder read across the FFI (tests: one per event, whatever the number of collectors). */
+    internal val incomingDecodes = java.util.concurrent.atomic.AtomicLong(0)
+
+    /** The only consumer of [raw]: reads each event's JSON once, in arrival order; an event that does not decode is skipped. */
+    private suspend fun decodeIncoming() {
+        for (r in raw) {
+            incomingDecodes.incrementAndGet()
+            val json = runCatching { EventJson.decode(r.event.asJson()) }.getOrNull() ?: continue
+            val relay = runCatching { r.relay.toString().trimEnd('/') }.getOrDefault("")
+            _incoming.tryEmit(Incoming(r.event, json, relay, r.subscriptionId))
+        }
+    }
+
+    /** Tests only: runs inside [HandleNotification.handle] before the event is queued (a held callback, as in Task 0 (f2)). */
+    @Volatile internal var callbackHold: (suspend () -> Unit)? = null
+
+    /** How often the notification loop was restarted after rust-nostr ended it while the engine was open. */
+    internal val notificationRestarts = java.util.concurrent.atomic.AtomicLong(0)
+
+    /** Set by [close] before the client goes: from then on a returning notification loop is not restarted. */
+    @Volatile private var closing = false
 
     /**
      * Adds relays; a malformed URL (e.g. corrupted stored config) is skipped rather than aborting
@@ -103,7 +139,9 @@ class NostrEngine private constructor(
      * subscriptions to relays added later, so without the replay a relay added after the feed
      * subscribed would never deliver live events.
      */
-    suspend fun addRelays(urls: List<String>): Unit = ffi {
+    suspend fun addRelays(urls: List<String>) {
+        try {
+        ffi {
         urls.forEach { url ->
             val parsed = runCatching { RelayUrl.parse(url) }.getOrNull() ?: return@forEach
             val norm = parsed.toString().trimEnd('/')
@@ -114,11 +152,13 @@ class NostrEngine private constructor(
             val promoted = temporaryMutex.withLock {
                 if (norm !in temporary) return@withLock false
                 val previousRefs = temporaryRefs[norm] ?: 1
+                // unmarked only after the relay left the pool (a refresh in between must not cache it as normal)
+                ignoringErrors { client.forceRemoveRelay(parsed) }
                 temporary.remove(norm)
                 temporaryRefs.remove(norm)
-                ignoringErrors { client.forceRemoveRelay(parsed) }
                 try {
                     client.addRelay(parsed)
+                    poolProbe?.invoke("added")
                     replaySubscriptions(parsed)
                 } catch (e: CancellationException) {
                     throw e
@@ -126,9 +166,10 @@ class NostrEngine private constructor(
                     // Rollback: promotion failed, keep the relay reachable as a temporary one
                     // (with its prior reference count restored) instead of losing it from both
                     // `temporary` and the pool.
-                    ignoringErrors { client.addRelayWithOpts(parsed, RelayOptions().read(true).write(false)) }
+                    // marked before the relay re-enters the pool: no refresh may see it unmarked (spec wave 2 B1)
                     temporary += norm
                     temporaryRefs[norm] = previousRefs
+                    ignoringErrors { client.addRelayWithOpts(parsed, RelayOptions().read(true).write(false)) }
                 }
                 true
             }
@@ -140,8 +181,13 @@ class NostrEngine private constructor(
                 } catch (e: Exception) {
                     false
                 }
+                poolProbe?.invoke("added")
                 if (added) replaySubscriptions(parsed)
             }
+        }
+        }
+        } finally {
+            withContext(NonCancellable) { refreshRelaySet() }
         }
     }
 
@@ -164,7 +210,12 @@ class NostrEngine private constructor(
 
     /** Removes relays; a malformed URL is skipped rather than throwing. */
     suspend fun removeRelays(urls: List<String>) {
-        ffi { urls.forEach { url -> runCatching { client.removeRelay(RelayUrl.parse(url)) } } }
+        try {
+            ffi { urls.forEach { url -> runCatching { client.removeRelay(RelayUrl.parse(url)) } } }
+            poolProbe?.invoke("removed")
+        } finally {
+            withContext(NonCancellable) { refreshRelaySet() }
+        }
     }
 
     /**
@@ -182,20 +233,87 @@ class NostrEngine private constructor(
     /** Reference counts for [temporary], touched only under [temporaryMutex]: a URL is only removed from the pool once its count drops to zero. */
     private val temporaryRefs = HashMap<String, Int>()
 
-    /** Currently configured relay URLs without the temporary search relays, trailing slash normalised. */
-    suspend fun relayUrls(): List<String> = ffi { client.relays() }.keys.map { it.toString().trimEnd('/') }.filter { it !in temporary }
+    /**
+     * Spec wave 2 B1: the pool as the engine last set it up, read once per change instead of once per operation.
+     * [normal]/[parsed]: the normal set (never a temporary relay), in pool order; [pool]: every pool relay by
+     * normalised URL, temporary ones included, never one [sendTo] added for a single send ([transient]).
+     */
+    private class RelaySet(val normal: List<String>, val parsed: List<RelayUrl>, val pool: Map<String, rust.nostr.sdk.Relay>) {
+        val normalSet: Set<String> = normal.toHashSet()
+    }
+
+    @Volatile private var relaySet = RelaySet(emptyList(), emptyList(), emptyMap())
+
+    /** Orders snapshot reads with their writes: the last refresh always reads the pool after every finished change. */
+    private val relaySetMutex = Mutex()
+
+    /** Normalised URLs [sendTo] added to the pool for one send; a refresh in that window leaves them out. */
+    private val transient: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
+    /** Normalised URLs [detachTemporary] is removing: kept out of the normal list until its trailing refresh ran, so a refresh that read the pool before the removal cannot cache them. */
+    private val leaving: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
+    /** Removes [url] from the pool if it is there (harmless when it is not); cancellation cannot interrupt it. For a pool add that was cancelled or failed midway: rust may have inserted the relay already. */
+    private suspend fun dropFromPool(url: RelayUrl) {
+        withContext(NonCancellable + ffiDispatcher) {
+            if (runCatching { client.relay(url) }.isSuccess) ignoringErrors { client.forceRemoveRelay(url) }
+        }
+    }
+
+    /** Set when a refresh failed: the next read recomputes from the pool before it answers ([snapshot]). */
+    @Volatile private var relaySetStale = false
+
+    /** Test hooks: [poolProbe] runs right after a pool change ("added", "removed") and right before a relay is force-removed ("removing"); [failNextRefresh] makes the next refresh throw. */
+    @Volatile internal var poolProbe: (suspend (String) -> Unit)? = null
+    @Volatile internal var failNextRefresh = false
+
+    internal suspend fun refreshRelaySetForTest() = refreshRelaySet()
+
+    /** The cached set; recomputed first when the last refresh failed, so a read never answers from a snapshot the pool has left behind. */
+    private suspend fun snapshot(): RelaySet {
+        if (relaySetStale) refreshRelaySet()
+        return relaySet
+    }
+
+    /** Recomputes [relaySet] from the pool, at the end of every method that changes it (in `finally`, NonCancellable). Never patched; a refresh that fails marks the snapshot stale, the next read retries. */
+    private suspend fun refreshRelaySet() {
+        relaySetMutex.withLock {
+            val next = try {
+                ffi {
+                    if (failNextRefresh) { failNextRefresh = false; throw IllegalStateException("refresh failed") }
+                    val entries = client.relays().entries
+                        .map { (url, relay) -> Triple(url.toString().trimEnd('/'), url, relay) }
+                    poolProbe?.invoke("read")
+                    val entries2 = entries.filter { it.first !in transient }
+                    val normal = entries2.filter { it.first !in temporary && it.first !in leaving }
+                    RelaySet(normal.map { it.first }, normal.map { it.second }, entries2.associate { it.first to it.third })
+                }
+            } catch (e: CancellationException) {
+                relaySetStale = true
+                throw e
+            } catch (e: Exception) {
+                null
+            }
+            if (next != null) { relaySet = next; relaySetStale = false } else relaySetStale = true
+        }
+    }
+
+    /** Currently configured relay URLs without the temporary search relays, trailing slash normalised: the cached set, no FFI (spec wave 2 B1). */
+    suspend fun relayUrls(): List<String> = snapshot().normal
 
     fun temporaryRelayUrls(): List<String> = temporary.toList()
 
-    /** Normalised URLs (trailing slash trimmed) of all pool relays, temporary included, whose status is CONNECTED. */
-    suspend fun connectedRelayUrls(): Set<String> =
-        ffi {
-            client.relays().filterValues { it.status().name == RelayStatus.CONNECTED.name }
-                .keys.map { it.toString().trimEnd('/') }.toSet()
-        }
+    /** Normalised URLs (trailing slash trimmed) of all pool relays, temporary included, whose status is CONNECTED; one `status()` per cached relay. */
+    suspend fun connectedRelayUrls(): Set<String> {
+        val pool = snapshot().pool
+        return ffi { pool.filterValues { it.status().name == RelayStatus.CONNECTED.name }.keys.toSet() }
+    }
 
     /** [connectedRelayUrls] restricted to the normal set ([relayUrls]): a connected search relay never counts. */
-    suspend fun connectedNormalRelayUrls(): Set<String> = connectedRelayUrls() intersect relayUrls().toSet()
+    suspend fun connectedNormalRelayUrls(): Set<String> {
+        val set = snapshot()
+        return ffi { set.pool.filter { (url, relay) -> url in set.normalSet && relay.status().name == RelayStatus.CONNECTED.name }.keys.toSet() }
+    }
 
     /**
      * Adds [urls] as relays that never receive the normal feed's subscriptions and connects them.
@@ -221,30 +339,42 @@ class NostrEngine private constructor(
      * temporary): exactly what the caller must hand to [detachTemporary] later. A URL of the normal
      * set, a malformed one or one that could not be added is not in it.
      */
-    suspend fun attachTemporary(urls: List<String>): List<String> = ffi {
-        val known = client.relays().keys.map { it.toString().trimEnd('/') }.toSet()
-        val held = ArrayList<String>()
+    suspend fun attachTemporary(urls: List<String>): List<String> {
+        val held: List<String>
+        try { held = ffi {
+        val known = snapshot().pool.keys + transient
+        val taken = ArrayList<String>()
         for (raw in urls) {
             val url = runCatching { RelayUrl.parse(raw.trim()) }.getOrNull() ?: continue
             val norm = url.toString().trimEnd('/')
             temporaryMutex.withLock {
-                if (norm in temporary) { temporaryRefs.merge(norm, 1, Int::plus); held += norm; return@withLock }
+                if (norm in temporary) { temporaryRefs.merge(norm, 1, Int::plus); taken += norm; return@withLock }
                 if (norm in known) return@withLock
-                val added = try {
-                    client.addRelayWithOpts(url, RelayOptions().read(true).write(false))
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    false
-                }
-                if (!added) return@withLock
+                // marked before the relay enters the pool: a refresh in between must not cache it as a normal relay
                 temporary += norm
                 temporaryRefs[norm] = 1
-                held += norm
+                val added = try {
+                    client.addRelayWithOpts(url, RelayOptions().read(true).write(false)).also { poolProbe?.invoke("add-returned") }
+                } catch (e: CancellationException) {
+                    // rust may have inserted the relay before the cancellation landed: out of the pool first, unmarked after
+                    dropFromPool(url)
+                    temporary.remove(norm); temporaryRefs.remove(norm)
+                    throw e
+                } catch (e: Exception) {
+                    dropFromPool(url)
+                    false
+                }
+                if (!added) { temporary.remove(norm); temporaryRefs.remove(norm); return@withLock }
+                poolProbe?.invoke("added")
+                taken += norm
                 ignoringErrors { client.connectRelay(url) }
             }
         }
-        held
+        taken
+        } } finally {
+            withContext(NonCancellable) { refreshRelaySet() }
+        }
+        return held
     }
 
     /** Removes those of [urls] that [attachTemporary] added; relays of the normal set are untouched. */
@@ -252,17 +382,28 @@ class NostrEngine private constructor(
         // NonCancellable as a whole: callers release from `finally` blocks, where a cancellable
         // mutex lock() would throw and skip the release, leaking a reference (and the relay).
         withContext(NonCancellable + ffiDispatcher) {
-            for (raw in urls) {
-                val url = runCatching { RelayUrl.parse(raw.trim()) }.getOrNull() ?: continue
-                val norm = url.toString().trimEnd('/')
-                temporaryMutex.withLock {
-                    if (norm !in temporary) return@withLock
-                    val left = temporaryRefs.merge(norm, -1, Int::plus) ?: 0
-                    if (left > 0) return@withLock
-                    temporaryRefs.remove(norm)
-                    temporary.remove(norm)
-                    ignoringErrors { client.forceRemoveRelay(url) }
+            val gone = ArrayList<String>()
+            try {
+                for (raw in urls) {
+                    val url = runCatching { RelayUrl.parse(raw.trim()) }.getOrNull() ?: continue
+                    val norm = url.toString().trimEnd('/')
+                    temporaryMutex.withLock {
+                        if (norm !in temporary) return@withLock
+                        val left = temporaryRefs.merge(norm, -1, Int::plus) ?: 0
+                        if (left > 0) return@withLock
+                        // unmarked only after the relay left the pool: a refresh in between must not cache it as normal;
+                        // `leaving` covers a refresh that read the pool before the removal and filters after the unmark
+                        leaving += norm
+                        gone += norm
+                        poolProbe?.invoke("removing")
+                        ignoringErrors { client.forceRemoveRelay(url) }
+                        temporaryRefs.remove(norm)
+                        temporary.remove(norm)
+                    }
                 }
+                refreshRelaySet()
+            } finally {
+                gone.forEach { leaving.remove(it) }
             }
         }
     }
@@ -283,8 +424,9 @@ class NostrEngine private constructor(
      * what [attachTemporary] took) passes false. Results are stored in the database. Throws when the
      * fetch itself fails (callers treat that as a relay error); cancellation is always propagated.
      */
-    suspend fun fetchFrom(relays: List<String>, filter: Filter, timeout: Duration = Duration.ofSeconds(8), attach: Boolean = true): List<Event> {
+    suspend fun fetchFrom(relays: List<String>, filter: Filter, timeout: Duration = Duration.ofSeconds(8), attach: Boolean = true, exit: Exit? = null): List<Event> {
         if (attach) attachTemporary(relays)
+        if (exit != null) return fetchExit(relays, filter, timeout, exit).events
         val targets = relays.toRelayUrls()
         if (targets.isEmpty()) return emptyList()
         // the client stores every event it receives in the database already (rust-nostr); saving them again here
@@ -320,47 +462,78 @@ class NostrEngine private constructor(
     suspend fun connect() {
         ffi { client.connect() }
         if (started.compareAndSet(false, true)) {
-            notifications = scope.launch(ffiDispatcher) {
-                client.handleNotifications(object : HandleNotification {
-                    override suspend fun handle(relayUrl: RelayUrl, subscriptionId: String, event: Event) {
-                        // Drop oldest if buffer full; repositories re-query the database on any event,
-                        // so dropped notifications are harmless (re-querying always gets all events).
-                        _events.tryEmit(event)
-                    }
+            scope.launch(Dispatchers.Default) { decodeIncoming() }
+            notifications = scope.launch(ffiDispatcher) { runNotifications() }
+        }
+    }
 
-                    override suspend fun handleMsg(relayUrl: RelayUrl, msg: RelayMessage) {
-                        val relay = relayUrl.toString().trimEnd('/')
-                        when (val m = msg.asEnum()) {
-                            is RelayMessageEnum.Closed -> {
-                                // recorded before the emit, so a caller checking closedSince right after its own call sees it
-                                val seq = closedSeq.incrementAndGet()
-                                val auth = isAuthRequired(m.message)
-                                // one write: a reader never sees the CLOSED without its reason (see ClosedSeqs)
-                                lastClosed.compute(relay) { _, old -> ClosedSeqs(seq, if (auth) seq else old?.auth) }
-                                _closed.tryEmit(ClosedSubscription(relay, m.subscriptionId, m.message, seq))
-                            }
-                            is RelayMessageEnum.Ok -> {
-                                // a publish that waits for this event's OKs (signAndPublishUnstored); the seq orders the OK against AUTH OKs
-                                okWaiters[m.eventId.toHex()]?.put(relay, OkAnswer(m.status, m.message, closedSeq.incrementAndGet()))
-                                if (authIds.remove(m.eventId.toHex())) {
-                                    // same counter as the CLOSED frames, so their order is known
-                                    val seq = closedSeq.incrementAndGet()
-                                    if (m.status) {
-                                        authRejections.remove(relay)
-                                        authOkSeq[relay] = seq
-                                        authenticatedSet += relay
-                                        _authenticated.tryEmit(relay)
-                                    } else {
-                                        val rejection = AuthRejection(relay, m.message, seq)
-                                        authRejections[relay] = rejection
-                                        _authRejected.tryEmit(rejection)
-                                    }
-                                }
-                            }
-                            else -> {}
+    /**
+     * Runs rust-nostr's notification loop for as long as the engine is open. rust-nostr 0.44.8 returns from
+     * [Client.handleNotifications] without an error when the callback falls behind its broadcast channel (Task 0
+     * (f2)); a loop that stayed ended would lose every OK, AUTH and live event for the session, so it is started
+     * again at once; only a second quick end in a row waits [RESTART_MIN_MS], doubling up to [RESTART_MAX_MS] (a run that
+     * lasted longer than that starts over with the immediate restart), with one log line per restart. Ends once [close] has begun.
+     */
+    private suspend fun runNotifications() {
+        var wait = 0L // the first restart after a run is immediate
+        while (!closing) {
+            val began = System.currentTimeMillis()
+            val failure = try {
+                client.handleNotifications(notificationHandler)
+                null
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                e
+            }
+            if (closing) return
+            if (System.currentTimeMillis() - began > RESTART_MAX_MS) wait = 0L
+            Log.w(LOG_TAG, "notification loop ended (${failure?.message ?: "returned"}), restarting in $wait ms")
+            if (wait > 0) delay(wait)
+            wait = if (wait == 0L) RESTART_MIN_MS else (wait * 2).coerceAtMost(RESTART_MAX_MS)
+            if (!closing) notificationRestarts.incrementAndGet() // counted when the loop starts again, not when it ended
+        }
+    }
+
+    /** The callback of [runNotifications]; one instance for every (re)start of the loop. */
+    private val notificationHandler = object : HandleNotification {
+        override suspend fun handle(relayUrl: RelayUrl, subscriptionId: String, event: Event) {
+            callbackHold?.invoke()
+            // spec wave 2 B2: no FFI and no parsing here. rust-nostr awaits this callback before it takes the
+            // next notification (CLOSED and OK included); the decoder reads the event on its own coroutine.
+            raw.trySend(RawIncoming(relayUrl, subscriptionId, event))
+        }
+
+        override suspend fun handleMsg(relayUrl: RelayUrl, msg: RelayMessage) {
+            val relay = relayUrl.toString().trimEnd('/')
+            when (val m = msg.asEnum()) {
+                is RelayMessageEnum.Closed -> {
+                    // recorded before the emit, so a caller checking closedSince right after its own call sees it
+                    val seq = closedSeq.incrementAndGet()
+                    val auth = isAuthRequired(m.message)
+                    // one write: a reader never sees the CLOSED without its reason (see ClosedSeqs)
+                    lastClosed.compute(relay) { _, old -> ClosedSeqs(seq, if (auth) seq else old?.auth) }
+                    _closed.tryEmit(ClosedSubscription(relay, m.subscriptionId, m.message, seq))
+                }
+                is RelayMessageEnum.Ok -> {
+                    // a publish that waits for this event's OKs (signAndPublishUnstored); the seq orders the OK against AUTH OKs
+                    okWaiters[m.eventId.toHex()]?.put(relay, OkAnswer(m.status, m.message, closedSeq.incrementAndGet()))
+                    if (authIds.remove(m.eventId.toHex())) {
+                        // same counter as the CLOSED frames, so their order is known
+                        val seq = closedSeq.incrementAndGet()
+                        if (m.status) {
+                            authRejections.remove(relay)
+                            authOkSeq[relay] = seq
+                            authenticatedSet += relay
+                            _authenticated.tryEmit(relay)
+                        } else {
+                            val rejection = AuthRejection(relay, m.message, seq)
+                            authRejections[relay] = rejection
+                            _authRejected.tryEmit(rejection)
                         }
                     }
-                })
+                }
+                else -> {}
             }
         }
     }
@@ -370,7 +543,7 @@ class NostrEngine private constructor(
      * doc comment for why the exclusion happens here rather than via a read/write flag).
      */
     suspend fun subscribe(filter: Filter): String {
-        val targets = relayUrls().toRelayUrls()
+        val targets = snapshot().parsed
         val id = ffi { client.subscribeTo(targets, filter, null) }.id
         active[id] = filter
         return id
@@ -480,6 +653,14 @@ class NostrEngine private constructor(
     /** Local database query. */
     suspend fun query(filter: Filter): List<Event> = ffi { client.database().query(filter).toVec() }
 
+    /** Local database query, each event read once in Kotlin (spec wave 2 B3): one `asJson` per event, no tag reads over the FFI. */
+    suspend fun queryDecoded(filter: Filter): List<JsonEvent> =
+        ffi { client.database().query(filter).toVec().map { EventJson.decode(it.asJson()) } }
+
+    /** [queryDecoded] with each rust event kept beside its decoded form ([com.monostr.nostr.repo.Withdrawn.filterDecoded], NoteMapper). */
+    suspend fun queryBoth(filter: Filter): List<Pair<Event, JsonEvent>> =
+        ffi { client.database().query(filter).toVec().map { it to EventJson.decode(it.asJson()) } }
+
     suspend fun eventById(idHex: String): Event? = ffi { client.database().eventById(rust.nostr.sdk.EventId.parse(idHex)) }
 
     suspend fun save(event: Event) {
@@ -491,11 +672,87 @@ class NostrEngine private constructor(
      * timeout; results are stored in the database. An empty relay list yields an empty result
      * without throwing.
      */
-    suspend fun fetch(filter: Filter, timeout: Duration = Duration.ofSeconds(8)): List<Event> {
-        val targets = relayUrls().toRelayUrls()
+    suspend fun fetch(filter: Filter, timeout: Duration = Duration.ofSeconds(8), exit: Exit? = null): List<Event> {
+        if (exit != null) return fetchExit(null, filter, timeout, exit).events
+        val targets = snapshot().parsed
         if (targets.isEmpty()) return emptyList()
         // stored by the client on receipt, see fetchFrom
         return ffi { client.fetchEventsFrom(targets, filter, timeout).toVec() }
+    }
+
+    /** Cap on an early-exit fetch's timeout (spec D8); tests change it. */
+    @Volatile internal var earlyExitCap: Duration? = EARLY_EXIT_CAP
+
+    /** Early-exit fetches running right now (tests: none left after cancellation or close). */
+    internal val openExitFetches = java.util.concurrent.atomic.AtomicInteger(0)
+
+    /**
+     * Spec wave 2 B4: a fetch that may end before every relay answered, see [Exit]. [relays] null = the normal set
+     * (as [fetch]); otherwise exactly [relays], already attached by the caller. The client stores what arrives, as with
+     * every fetch. [ExitFetch.met]: the condition held (fetchWide ends its other leg on it). The work runs on the
+     * engine's scope, so [close] (logout) ends it; the caller's cancellation ends it too and is rethrown.
+     */
+    internal suspend fun fetchExit(relays: List<String>?, filter: Filter, timeout: Duration, exit: Exit): ExitFetch {
+        val targets = relays?.toRelayUrls() ?: snapshot().parsed
+        if (targets.isEmpty()) return ExitFetch(emptyList(), met = false)
+        val progress = ExitProgress(exit)
+        if (progress.empty) return ExitFetch(ffi { client.fetchEventsFrom(targets, filter, timeout).toVec() }, met = false)
+        val capped = earlyExitCap?.let { cap -> if (cap < timeout) cap else timeout } ?: timeout
+        val work = scope.async(ffiDispatcher) { fetchUntil(targets, filter, capped, exit, progress) }
+        return try {
+            work.await()
+        } catch (e: CancellationException) {
+            // the caller left (rethrown below) or the engine closed (logout): the stream goes now
+            withContext(NonCancellable) { work.cancelAndJoin() }
+            currentCoroutineContext().ensureActive()
+            ExitFetch(emptyList(), met = false)
+        }
+    }
+
+    /** One `next()` of a stream; a null [event] means the stream ended. */
+    private class Next(val event: Event?)
+
+    /**
+     * Spec wave 2 B4, Path S: [targets] over one rust-nostr stream until [progress] is met (for [Exit.NewestPerAuthor]
+     * plus its grace), every relay ended, or [timeout]. Runs on [ffiDispatcher] in the engine scope; the stream is
+     * closed in every case.
+     */
+    private suspend fun fetchUntil(targets: List<RelayUrl>, filter: Filter, timeout: Duration, exit: Exit, progress: ExitProgress): ExitFetch {
+        val started = System.nanoTime()
+        val stream = client.streamEventsFrom(targets, filter, timeout)
+        openExitFetches.incrementAndGet()
+        val events = ArrayList<Event>()
+        var cut = false
+        try {
+            var graceEnd = 0L
+            while (true) {
+                val next: Next? = if (graceEnd == 0L) {
+                    Next(stream.next())
+                } else {
+                    val leftMs = (graceEnd - System.nanoTime()) / 1_000_000
+                    if (leftMs <= 0) null else withTimeoutOrNull(leftMs) { Next(stream.next()) }
+                }
+                if (next == null) {
+                    cut = true // the grace is over
+                    break
+                }
+                val ev = next.event ?: break // every relay ended, or the timeout
+                val json = runCatching { EventJson.decode(ev.asJson()) }.getOrNull() ?: continue
+                if (progress.add(json)) events += ev
+                if (progress.met) {
+                    if (exit !is Exit.NewestPerAuthor) {
+                        cut = true
+                        break
+                    }
+                    if (graceEnd == 0L) graceEnd = System.nanoTime() + exit.grace.toNanos()
+                }
+            }
+        } finally {
+            withContext(NonCancellable) { runCatching { stream.close() } }
+            openExitFetches.decrementAndGet()
+        }
+        if (cut) PerfTrace.mark("early exit ${exit.label} ${(System.nanoTime() - started) / 1_000_000}")
+        return ExitFetch(events, progress.met)
     }
 
     /**
@@ -574,7 +831,7 @@ class NostrEngine private constructor(
         val event = sign(builder)
         val id = event.id().toHex()
         val kind = event.kind().asU16().toInt()
-        val all = relayUrls().toRelayUrls()
+        val all = snapshot().parsed
         wake(all)
         val connected = connectedOnceSettled(all)
         val (ready, skipped) = all.partition { it.toString().trimEnd('/') in connected }
@@ -678,27 +935,37 @@ class NostrEngine private constructor(
     suspend fun sendTo(relays: List<String>, idHex: String, connectTimeout: Duration = Duration.ofSeconds(5)): PublishResult {
         val event = eventById(idHex) ?: return PublishResult(idHex, 0, emptyList(), mapOf("*" to NOTE_NOT_IN_DATABASE))
         val kind = event.kind().asU16().toInt()
-        val known = ffi { client.relays() }.keys.map { it.toString().trimEnd('/') }.toSet()
+        val known = snapshot().pool.keys
         val targets = ArrayList<RelayUrl>()
         val added = ArrayList<RelayUrl>()
-        for (raw in relays) {
-            val url = runCatching { RelayUrl.parse(raw.trim()) }.getOrNull() ?: continue
-            val norm = url.toString().trimEnd('/')
-            // Under the mutex: a concurrent detachTemporary must not remove the relay between the
-            // check and the upgrade (addWriteRelay would then add it back as a permanent relay).
-            val held = temporaryMutex.withLock {
-                if (norm !in temporary) return@withLock false
-                ffi { runCatching { client.addWriteRelay(url) } }
-                true
-            }
-            if (!held && norm !in known) {
-                if (!ffi { runCatching { client.addWriteRelay(url) }.getOrDefault(false) }) continue
-                added += url
-            }
-            targets += url
-        }
-        if (targets.isEmpty()) return PublishResult(idHex, kind, emptyList(), emptyMap())
+        // every relay whose add was tried: cleaned up even when the add was cancelled midway
+        val attempted = ArrayList<RelayUrl>()
+        val attemptedNames = ArrayList<String>()
+        var touched = false
         try {
+            for (raw in relays) {
+                val url = runCatching { RelayUrl.parse(raw.trim()) }.getOrNull() ?: continue
+                val norm = url.toString().trimEnd('/')
+                // Under the mutex: a concurrent detachTemporary must not remove the relay between the
+                // check and the upgrade (addWriteRelay would then add it back as a permanent relay).
+                val held = temporaryMutex.withLock {
+                    if (norm !in temporary) return@withLock false
+                    ffi { runCatching { client.addWriteRelay(url) } }
+                    true
+                }
+                if (!held && norm !in known) {
+                    // spec wave 2 B1 (G9): marked before the pool has it, so no refresh in between takes it into the
+                    // normal set and a concurrent fetch or subscribe never REQs the watcher's relay
+                    transient += norm
+                    touched = true
+                    attempted += url
+                    attemptedNames += norm
+                    if (!ffi { runCatching { client.addWriteRelay(url).also { poolProbe?.invoke("add-returned") } }.getOrDefault(false) }) continue
+                    added += url
+                }
+                targets += url
+            }
+            if (targets.isEmpty()) return PublishResult(idHex, kind, emptyList(), emptyMap())
             val out = ffi {
                 if (added.isNotEmpty()) runCatching { client.tryConnect(connectTimeout) }
                 client.sendEventTo(targets, event)
@@ -709,7 +976,15 @@ class NostrEngine private constructor(
         } catch (e: Exception) {
             return PublishResult(idHex, kind, emptyList(), mapOf("*" to (e.message ?: "send failed")))
         } finally {
-            withContext(NonCancellable + ffiDispatcher) { added.forEach { runCatching { client.forceRemoveRelay(it) } } }
+            withContext(NonCancellable + ffiDispatcher) {
+                try {
+                    attempted.forEach { runCatching { if (runCatching { client.relay(it) }.isSuccess) client.forceRemoveRelay(it) } }
+                    if (touched) refreshRelaySet()
+                } finally {
+                    // unmarked only after the trailing refresh
+                    attemptedNames.forEach { transient.remove(it) }
+                }
+            }
         }
     }
 
@@ -743,7 +1018,7 @@ class NostrEngine private constructor(
      * [sendTo] gave the WRITE flag would receive the user's posts too.
      */
     private suspend fun send(event: Event): PublishResult = try {
-        val all = relayUrls().toRelayUrls()
+        val all = snapshot().parsed
         wake(all)
         // A relay that is not connected only makes the publish wait for its timeout (about 10 s) and
         // fails anyway: leave it out while another relay is there. With none connected the event goes
@@ -770,7 +1045,7 @@ class NostrEngine private constructor(
         val wanted = targets.map { it.toString().trimEnd('/') }.toSet()
         val deadline = System.nanoTime() + CONNECT_GRACE.toNanos()
         while (true) {
-            val states = ffi { client.relays().map { (url, relay) -> url.toString().trimEnd('/') to relay.status().name } }.filter { it.first in wanted }
+            val states = ffi { snapshot().pool.filterKeys { it in wanted }.map { (url, relay) -> url to relay.status().name } }
             if (states.none { it.second in SETTING_UP } || System.nanoTime() >= deadline) {
                 return states.filter { it.second == RelayStatus.CONNECTED.name }.map { it.first }.toSet()
             }
@@ -785,7 +1060,7 @@ class NostrEngine private constructor(
      * Monero setup failed four times with "no relay" right after the user came back from copying
      * the seed). Returns once the relays are connected or [RECONNECT_WAIT] passed.
      */
-    suspend fun reconnectIfLost() = wake(relayUrls().toRelayUrls())
+    suspend fun reconnectIfLost() = wake(snapshot().parsed)
 
     private val wakeMutex = Mutex()
 
@@ -798,7 +1073,7 @@ class NostrEngine private constructor(
         if (wanted.isEmpty()) return
         wakeMutex.withLock {
             ffi {
-                val mine = client.relays().filterKeys { it.toString().trimEnd('/') in wanted }.values
+                val mine = snapshot().pool.filterKeys { it in wanted }.values
                 if (mine.isEmpty() || mine.any { it.isConnected() }) return@ffi
                 // a relay waiting for its next retry ignores a connect request: end that wait first
                 // (one that is connecting right now is left alone)
@@ -857,6 +1132,7 @@ class NostrEngine private constructor(
      * the client goes away.
      */
     suspend fun close() {
+        closing = true
         withContext(NonCancellable + ffiDispatcher) {
             runCatching { client.disconnect() }
             runCatching { client.shutdown() }
@@ -882,7 +1158,16 @@ class NostrEngine private constructor(
         }
 
         private const val AUTH_POLL_MS = 50L
+        /** Undecoded events the callback may queue (spec wave 2 B2). */
+        private const val RAW_CAPACITY = 2048
+        /** Decoded events a slow collector may lag behind. */
+        private const val INCOMING_BUFFER = 512
+        /** Wait before the second quick restart of the notification loop in a row (the first is immediate); doubles up to [RESTART_MAX_MS]. */
+        private const val RESTART_MIN_MS = 100L
+        private const val RESTART_MAX_MS = 5_000L
         private const val CLOSE_JOIN_MS = 2_000L
+        /** Spec D8: an early-exit fetch whose stream sends no CLOSE when dropped ends after at most 5 s (Task 0 results). */
+        internal val EARLY_EXIT_CAP: Duration? = Duration.ofSeconds(5)
         /** How long a publish waits for lost relay connections to come back before it sends. */
         private val RECONNECT_WAIT: Duration = Duration.ofSeconds(5)
         /** How long a publish waits for a relay that is setting its connection up right now. */

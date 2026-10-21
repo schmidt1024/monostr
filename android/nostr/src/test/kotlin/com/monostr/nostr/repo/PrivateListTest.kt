@@ -1,5 +1,6 @@
 package com.monostr.nostr.repo
 
+import com.monostr.nostr.ManualGate
 import com.monostr.nostr.LocalSigner
 import com.monostr.nostr.NostrEngine
 import com.monostr.nostr.PublishResult
@@ -172,6 +173,27 @@ class PrivateListTest {
             val decrypted = signer.nip44Decrypt(signer.pubkey, stored.content())
             assertTrue(decrypted.contains(b) && decrypted.contains(c), "lost an entry: $decrypted")
             e.close()
+        }
+    }
+
+    @Test
+    fun `the stored list is taken at once, the relays' newer copy is asked after the startup gate`() = runTest {
+        SilentWsRelay(serve = listOf(list("""[["p","$b"]]""", 1500u).asJson())).use { relay ->
+            val e = connectedEngine(dir, relay, me.secretKey().toHex())
+            try {
+                e.save(list("""[["p","$a"]]""", 1000u))
+                val gate = ManualGate()
+                val l = NostrPrivateList(e, signer, kind = 10000, tag = "p", now = { 2000 }, send = okSend(e), gate = gate)
+                l.ensureLoaded(interactive = true)
+                assertEquals(listOf(a), l.state.value.ids)
+                Thread.sleep(300)
+                assertTrue(relay.requests.isEmpty(), "asked before the gate: ${relay.requests}")
+                assertEquals(listOf(a), l.state.value.ids)
+                gate.open("test")
+                assertTrue(awaitTrue { l.state.value.ids == listOf(b) }, "the relays' newer list never came: ${l.state.value}")
+            } finally {
+                e.close()
+            }
         }
     }
 }

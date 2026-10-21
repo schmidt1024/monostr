@@ -1,21 +1,34 @@
 package com.monostr.nostr.repo
 
+import com.monostr.nostr.Exit
 import com.monostr.nostr.NostrEngine
+import com.monostr.nostr.RefreshGate
+import com.monostr.nostr.model.Nip10
 import com.monostr.nostr.model.Note
 import com.monostr.nostr.model.NoteMapper
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.onSubscription
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import rust.nostr.sdk.Alphabet
 import rust.nostr.sdk.EventId
 import rust.nostr.sdk.Filter
 import rust.nostr.sdk.Kind
-import rust.nostr.sdk.SingleLetterTag
+import java.time.Duration
+import java.util.concurrent.atomic.AtomicReference
+import com.monostr.tips.event.Event as JsonEvent
 
-/** A thread: the root note and every reply that references it, oldest first. [gone]: the focused note has been withdrawn by its author (NIP-09). */
-data class ThreadView(val root: Note?, val focused: Note, val replies: List<Note>, val gone: Boolean = false, val ancestors: List<Slot> = emptyList())
+/**
+ * A thread: the root note and every reply that references it, oldest first. [gone]: the focused note has been withdrawn by its author (NIP-09).
+ * [repliesFetched]: the relays were asked for the replies (`#e` fetch) before this view was read (spec perf2 A1, mark `thread relay replies shown`).
+ */
+data class ThreadView(val root: Note?, val focused: Note, val replies: List<Note>, val gone: Boolean = false, val ancestors: List<Slot> = emptyList(), val repliesFetched: Boolean = false)
 
 interface ThreadRepository {
     /** Loads the note, resolves its root, fetches replies and keeps listening for new ones. Empty flow when the note cannot be found. */
@@ -28,37 +41,84 @@ interface ThreadRepository {
 class NostrThreadRepository(
     private val engine: NostrEngine,
     private val conversations: ConversationRepository = NostrConversationRepository(engine),
+    /** Timeout of the thread's relay fetches (tests shorten it). */
+    private val fetchTimeout: Duration = Duration.ofSeconds(8),
+    /** Spec perf2 C4: how long a live change waits for more before the thread is read again. */
+    private val windowMs: Long = WINDOW_MS,
+    private val now: () -> Long = { System.currentTimeMillis() / 1000 },
+    /**
+     * Spec perf2 C3/C7: jobs R and D per root on the engine's background scope; leaving does not stop them, a reopen
+     * joins or skips them. The keys `replies:<root>:<focused>` and `deletions:<root>` share one gate (accepted, ruling K10).
+     */
+    private val gate: RefreshGate<String> = RefreshGate(engine.backgroundScope, GATE_TTL_SECONDS),
 ) : ThreadRepository {
-    override fun observe(noteId: String): Flow<ThreadView> = flow {
-        val focused = loadNote(noteId) ?: return@flow
-        val rootId = focused.rootId ?: focused.id
-        val root = if (rootId == focused.id) focused else loadNote(rootId)
-        emit(build(root, focused, repliesOf(rootId), emptyList()))
-        // the chain above may take relay round trips: the thread is already shown, it follows (spec 2026-10-16 §4.1)
-        val ancestors = try {
-            conversations.ancestors(focused)
+
+    /**
+     * Spec perf2 C1: what the jobs found beside the database, written only under [lock]. [ancestors] is set once,
+     * when the walk is done (or in the first view when the database walk was complete), so it is never partial.
+     */
+    private class ThreadState(val focused: Note, val rootId: String, val tagIds: List<String>) {
+        val lock = Mutex()
+        var ancestors: List<Slot> = emptyList()
+        var repliesFetched = false
+    }
+
+    override fun observe(noteId: String): Flow<ThreadView> = channelFlow {
+        val focused = loadNote(noteId) ?: return@channelFlow
+        val rootId = (focused.rootId ?: focused.id).lowercase()
+        // spec perf2 decision 2: replies that tag only the focused note are found too
+        val tagIds = listOf(rootId, focused.id).filter { HEX_ID.matches(it) }.distinct()
+        val s = ThreadState(focused, rootId, tagIds)
+        // the chain through the database only: complete, or not shown before the walk is done (spec perf2 C2.4)
+        val local = try {
+            conversations.localAncestors(focused)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            emptyList()
+            LocalWalk(null, emptySet())
         }
-        if (ancestors.isNotEmpty()) emit(current(root, focused, rootId, ancestors))
-        // replies, and a deletion request that names the root
-        val filter = Filter().kinds(listOf(Kind(1u), Kind(5u))).customTag(SingleLetterTag.lowercase(Alphabet.E), rootId)
-        quietly { engine.fetch(filter) }
-        // deletion requests for everything shown, at most 100 ids per request
-        val shown = (listOf(rootId, focused.id) + repliesOf(rootId).map { it.id }).distinct()
-        for (ids in shown.chunked(100)) quietly { engine.fetch(Filter().kind(Kind(5u)).events(ids.map { EventId.parse(it) })) }
-        emit(current(root, focused, rootId, ancestors))
-        val subId = engine.subscribe(filter)
-        try {
-            engine.events.collect { ev ->
-                val tags = ev.tags().toVec().map { it.asVec() }
-                if (tags.any { it.size >= 2 && it[0] == "e" && it[1] == rootId }) emit(current(root, focused, rootId, ancestors))
+        local.ancestors?.let { s.ancestors = it } // no other coroutine runs yet
+        val pacer = SignalPacer(windowMs)
+        val shown = AtomicReference<Set<String>>(emptySet())
+        var last = current(s)
+        // job R right after the first read (the first view is the database before any fetch of this open), on the
+        // background scope keyed by root: leaving does not cancel it, a reopen of this root joins it (spec perf2 C3)
+        val replies: Job? = gate.launchStamped("replies:$rootId:${focused.id}") {
+            fetchReplies(tagIds).also { asked ->
+                // job D right behind R, also on the background scope
+                if (asked) gate.launchStamped("deletions:$rootId") { fetchDeletions(rootId, focused.id, tagIds) }
             }
-        } finally {
-            withContext(NonCancellable) { quietly { engine.unsubscribe(subId) } }
         }
+        shown.set(last.ids())
+        send(last)
+        launch { live(s, shown, pacer) }
+        // the one emitter: every view is the database view now (Withdrawn and NIP-09 in one place), never a repeat
+        launch {
+            pacer.run {
+                // a failed read must not end the loop (SignalPacer): the next signal reads again
+                val v = try {
+                    current(s)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    return@run
+                }
+                if (v != last) {
+                    last = v
+                    shown.set(v.ids())
+                    send(v)
+                }
+            }
+        }
+        launch {
+            replies?.join()
+            s.lock.withLock { s.repliesFetched = true }
+            pacer.signal(milestone = true)
+            // the D that R started (shared), or a new one when R did not get that far; null when D ran less than a minute ago
+            gate.launchStamped("deletions:$rootId") { fetchDeletions(rootId, focused.id, tagIds) }?.join()
+            pacer.signal(milestone = true)
+        }
+        launch { walk(s, local, replies, pacer) }
     }
 
     override suspend fun note(id: String): Note? = loadNote(id)
@@ -66,23 +126,135 @@ class NostrThreadRepository(
     private suspend fun loadNote(id: String): Note? {
         val local = engine.eventById(id)
         val ev = local ?: run {
-            quietly { engine.fetch(Filter().id(EventId.parse(id))) }
+            quietly { engine.fetch(Filter().id(EventId.parse(id)), fetchTimeout, exit = Exit.AllIds(setOf(id))) }
             engine.eventById(id)
         }
         return ev?.takeUnless { Withdrawn.isWithdrawn(engine, it) }?.let { NoteMapper.note(it) }
     }
 
-    private suspend fun repliesOf(rootId: String): List<Note> =
-        Withdrawn.filter(engine, engine.query(Filter().kind(Kind(1u)).customTag(SingleLetterTag.lowercase(Alphabet.E), rootId)))
+    /** Job R (spec perf2 C3): replies and deletion requests that tag the root or the focused note; true when a connected relay was asked. */
+    private suspend fun fetchReplies(tagIds: List<String>): Boolean {
+        val asked = engine.connectedNormalRelayUrls().isNotEmpty()
+        quietly { engine.fetch(taggedFilter(listOf(1, 5), tagIds), fetchTimeout) }
+        return asked
+    }
+
+    /** Job D (spec perf2 C3): deletion requests for root, focused and every stored reply, 100 ids per request, the requests in parallel; true when a connected relay was asked. */
+    private suspend fun fetchDeletions(rootId: String, focusedId: String, tagIds: List<String>): Boolean = coroutineScope {
+        val asked = engine.connectedNormalRelayUrls().isNotEmpty()
+        val replyIds = try {
+            engine.queryDecoded(taggedFilter(listOf(1), tagIds)).map { it.id }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            emptyList()
+        }
+        val ids = (listOf(rootId, focusedId) + replyIds).filter { HEX_ID.matches(it) }.distinct()
+        for (chunk in ids.chunked(DELETION_CHUNK)) launch {
+            quietly { engine.fetch(Filter().kind(Kind(5u)).events(chunk.map { EventId.parse(it) }), fetchTimeout) }
+        }
+        asked
+    }
+
+    /**
+     * Job W (spec perf2 C3): round 1 (the root when it is not stored, the first missing hop) in one ids request beside
+     * job R; after R the walk again, which finds the hops R stored (NIP-10: they tag the root) and fetches the rest
+     * by id, one request per round. A hop still missing after all rounds is unavailable, the root on top.
+     */
+    private suspend fun walk(s: ThreadState, local: LocalWalk, replies: Job?, pacer: SignalPacer) {
+        try {
+            if (conversations.fetchMissing(local.missing + s.rootId)) pacer.signal()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // the walk below asks again
+        }
+        if (local.ancestors != null) return
+        replies?.join()
+        val ancestors = try {
+            conversations.ancestors(s.focused)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            emptyList()
+        }
+        s.lock.withLock { s.ancestors = ancestors }
+        pacer.signal(milestone = true)
+    }
+
+    /**
+     * Job L (spec perf2 C3): listening before the REQ goes out, so nothing between the fetch and the subscription is
+     * lost; the REQ starts [LIVE_OVERLAP_SECONDS] back (D2: relays do not resend the thread job R fetches). The
+     * collector only signals; the emitter reads.
+     */
+    private suspend fun live(s: ThreadState, shown: AtomicReference<Set<String>>, pacer: SignalPacer) {
+        var subId: String? = null
+        try {
+            engine.incoming
+                .onSubscription {
+                    subId = try {
+                        engine.subscribe(taggedFilter(listOf(1, 5), s.tagIds, since = now() - LIVE_OVERLAP_SECONDS))
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        null // no relay: what other subscriptions bring still lands
+                    }
+                }
+                .collect { inc -> if (ThreadLiveMatch.touches(inc.json, s.tagIds, shown.get())) pacer.signal() }
+        } finally {
+            withContext(NonCancellable) { subId?.let { id -> quietly { engine.unsubscribe(id) } } }
+        }
+    }
+
+    /**
+     * Spec perf2 C1: the thread as the database has it now — root and focused in one read, the replies in one,
+     * one Withdrawn check for all — with the jobs' state. A withdrawn or deleted focused note is [ThreadView.gone].
+     */
+    private suspend fun current(s: ThreadState): ThreadView {
+        val (ancestors, fetched) = s.lock.withLock { s.ancestors to s.repliesFetched }
+        val heads = engine.queryBoth(idsFilter(listOf(s.rootId, s.focused.id).filter { HEX_ID.matches(it) }.distinct()))
+        val tagged = engine.queryBoth(taggedFilter(listOf(1), s.tagIds))
+        val kept = Withdrawn.filterDecoded(engine, heads + tagged).map { it.second }
+        val byId = kept.associateBy { it.id }
+        val taggedIds = tagged.mapTo(HashSet()) { it.second.id }
+        val focusedNow = byId[s.focused.id]
+        val rootNow = if (s.rootId == s.focused.id) focusedNow else byId[s.rootId]
+        val replies = kept
+            .filter { it.id in taggedIds && it.id != s.rootId && s.holds(it) }
+            .distinctBy { it.id }
             .mapNotNull { NoteMapper.note(it) }
-            .filter { it.id != rootId }
             .sortedBy { it.createdAt }
+        return ThreadView(rootNow?.let { NoteMapper.note(it) }, s.focused, replies, gone = focusedNow == null, ancestors = ancestors, repliesFetched = fetched)
+    }
 
-    private fun build(root: Note?, focused: Note, replies: List<Note>, ancestors: List<Slot>) = ThreadView(root, focused, replies, ancestors = ancestors)
+    /** A reply of this thread: it tags the root (any `e` tag, as before), or its NIP-10 reference is the focused note (a mention is not). */
+    private fun ThreadState.holds(ev: JsonEvent): Boolean =
+        ev.tags.any { it.size >= 2 && it[0] == "e" && it[1] == rootId } ||
+            Nip10.parse(ev.tags).let { it.replyToId == focused.id || it.rootId == focused.id }
 
-    /** The thread as the database has it now: a withdrawn root is no longer shown, a withdrawn focused note is reported. */
-    private suspend fun current(root: Note?, focused: Note, rootId: String, ancestors: List<Slot>): ThreadView {
-        val rootNow = root?.takeIf { engine.eventById(it.id) != null }
-        return ThreadView(rootNow, focused, repliesOf(rootId), gone = engine.eventById(focused.id) == null, ancestors = ancestors)
+    private fun ThreadView.ids(): Set<String> = buildSet {
+        root?.let { add(it.id) }
+        add(focused.id)
+        replies.forEach { add(it.id) }
+        ancestors.forEach { add(it.id) }
+    }
+
+    companion object {
+        /** Spec perf2 C4. */
+        const val WINDOW_MS = 150L
+        /** Spec perf2 C3: a root's replies (and deletions) are fetched again at most once a minute in this session. */
+        const val GATE_TTL_SECONDS = 60L
+        /** Spec perf2 D2: the live REQ starts this far back; job R fetches what is older. */
+        const val LIVE_OVERLAP_SECONDS = 60L
+        private const val DELETION_CHUNK = 100
+    }
+}
+
+/** Spec perf2 C3 job L: whether a live event changes an open thread, read from the event the engine decoded (no FFI). */
+internal object ThreadLiveMatch {
+    fun touches(event: JsonEvent, tagIds: Collection<String>, shown: Set<String>): Boolean = when (event.kind) {
+        1 -> event.tags.any { it.size >= 2 && it[0] == "e" && it[1] in tagIds }
+        5 -> event.tags.any { it.size >= 2 && it[0] == "e" && it[1] in shown }
+        else -> false
     }
 }

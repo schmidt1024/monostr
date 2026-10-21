@@ -7,7 +7,9 @@ import com.monostr.app.ui.media.LinkPreviewLoader
 import com.monostr.app.ui.media.LocalLinkPreviewLoader
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.navigation.NavController
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -135,6 +137,14 @@ fun MonostrNavHost(session: NostrSession) {
 @Composable
 private fun LoggedInNavHost(ready: Ready, gate: OnboardingGateViewModel = hiltViewModel(), media: MediaSettingsViewModel = hiltViewModel()) {
     val nav = rememberNavController()
+    // spec perf2 A2 (3): the first screen other than the home feed lets the session's background work go at once
+    DisposableEffect(nav, ready) {
+        val listener = NavController.OnDestinationChangedListener { _, destination, _ ->
+            if (destination.route != Routes.FEED) ready.startupGate.open("navigation")
+        }
+        nav.addOnDestinationChangedListener(listener)
+        onDispose { nav.removeOnDestinationChangedListener(listener) }
+    }
     val showIntro by gate.showIntro.collectAsState()
     val mediaSettings by media.settings.collectAsState()
     // one loader per logged-in account; a new login gets a new Ready and so a new loader

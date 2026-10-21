@@ -15,7 +15,9 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -61,6 +63,35 @@ class TipDecorationsTest {
         assertEquals(2, d.decorate(ui).tips?.count)
         assertFalse(d.decorate(ui).pendingTip, "a receipt for the pending intent settles it")
         assertEquals(listOf("f".repeat(64)), pending.state.value.map { it.intentId }, "only the (expired) other one stays stored")
+    }
+
+    @Test
+    fun `five quick changes of the tracked set make one relay observe, the stored sums follow each at once`() = runTest {
+        val tips = FakeTips()
+        val d = TipDecorations(tips, FakePendingTips(), profiles, FakePublish(), eager()) { 5_000 }
+        d.start(); advanceUntilIdle()
+        val before = tips.observed.size
+        val notes = (1..5).map { note('0' + it, alice, 1000L + it) }
+        tips.receipts.value = mapOf(notes[4].id to TipSummary(3, 1, listOf(receipt(notes[4].id, "e".repeat(64), 3, 4_500))))
+        for (i in 1..5) { d.track(notes.take(i)); advanceTimeBy(100); runCurrent() }
+        assertEquals(3L, d.summaries.value[notes[4].id]?.total, "the stored sums came without the relays")
+        assertEquals(before, tips.observed.size, "no relay observe inside the window")
+        advanceTimeBy(500); runCurrent()
+        assertEquals(before + 1, tips.observed.size)
+        assertEquals(notes.associate { it.id to alice }, tips.observed.last())
+    }
+
+    @Test
+    fun `pending intents are re-sent only after the startup gate opened`() = runTest {
+        val pending = FakePendingTips()
+        pending.add(PendingTip("1234".padStart(64, 'e'), note('1', alice).id, 5, 4_000))
+        val publish = FakePublish()
+        val gate = ManualGate()
+        val d = TipDecorations(FakeTips(), pending, profiles, publish, eager(), gate = gate) { 5_000 }
+        d.start(); advanceUntilIdle()
+        assertTrue(publish.calls.isEmpty())
+        gate.open("test"); advanceUntilIdle()
+        assertEquals(listOf("resend:1234"), publish.calls)
     }
 
     @Test

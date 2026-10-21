@@ -1,0 +1,4 @@
+• The first fresh page of the feed no longer waits behind background work and often arrives sooner
+• Like, repost and reply counts appear soon after the feed, note by note
+• Threads show the replies above and below a note sooner, also when opened from a link
+• Messages open at once, and long chats open at the newest message without stutter

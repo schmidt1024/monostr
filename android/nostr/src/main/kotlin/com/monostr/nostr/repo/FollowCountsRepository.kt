@@ -53,6 +53,8 @@ class NostrFollowCountsRepository(
     private val timeout: Duration = Duration.ofSeconds(6),
     private val now: () -> Long = { System.currentTimeMillis() / 1000 },
     private val maxAgeSeconds: Long = 300,
+    /** Spec perf2 A6: shares the per-relay COUNT cap with the note counts. */
+    private val limiter: CountLimiter = CountLimiter(),
 ) : FollowCountsRepository {
     /** [complete]: every relay answered or timed out; a partial result (the screen left early) is continued at the next open. */
     private class Known(val counts: FollowCounts, val at: Long, val complete: Boolean)
@@ -82,7 +84,8 @@ class NostrFollowCountsRepository(
             var listed = false
             launch { following(author)?.let { n -> publish { listed = true; it.copy(following = n) } } }
             for (relay in relays) launch {
-                val n = engine.countFrom(relay, Filter().kind(Kind(3u)).pubkey(author), timeout, attach = false)?.takeIf { it in 0..MAX_FOLLOWERS } ?: return@launch
+                val n = limiter.withPermit(relay) { engine.countFrom(relay, Filter().kind(Kind(3u)).pubkey(author), timeout, attach = false) }
+                    ?.takeIf { it in 0..MAX_FOLLOWERS } ?: return@launch
                 publish { if (n > (it.followers ?: -1)) it.copy(followers = n) else it }
             }
             for (indexer in indexers) launch {

@@ -124,7 +124,9 @@ class NostrEngineTest {
         assertTrue(dispatches.get() > before, "query did not hop to the ffi dispatcher")
         val beforeUrls = dispatches.get()
         assertEquals(listOf("wss://a.example"), engine.relayUrls())
-        assertTrue(dispatches.get() > beforeUrls, "relayUrls did not hop to the ffi dispatcher")
+        // relayUrls is the cached set since spec wave 2 B1 (EngineRelaySetTest); connectedRelayUrls still reads the pool
+        engine.connectedRelayUrls()
+        assertTrue(dispatches.get() > beforeUrls, "connectedRelayUrls did not hop to the ffi dispatcher")
         engine.close()
     }
 

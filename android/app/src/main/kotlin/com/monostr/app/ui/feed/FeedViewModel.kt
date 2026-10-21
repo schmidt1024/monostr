@@ -152,6 +152,8 @@ class FeedController(
     private val source: FeedSource = FeedSource.Following,
     /** The last first page of this feed (home or a pinned list), shown at once on the next start; null (tests, the list screen) = none. */
     private val snapshot: FeedSnapshot? = null,
+    /** Spec perf2 A2: called once when the home feed's first relay page is in, failed or was cancelled; never for a list (session: opens the startup gate). */
+    private val onFirstFresh: () -> Unit = {},
 ) {
     val names: StateFlow<Map<String, String>> get() = mentions.names
     private val _state = MutableStateFlow(FeedUiState())
@@ -170,6 +172,9 @@ class FeedController(
     private val freshSeen = MutableStateFlow(false)
     /** The home feed's first shown notes are marked once (spec perf 3.9). */
     private var firstNotesMarked = false
+    /** Count targets the home feed reported visible; the first count among them is marked once (spec perf2 §7.1). */
+    private val countsWanted = HashSet<String>()
+    private var countsMarked = false
 
     fun start() {
         // first, so nothing is missed: a profile the background lookup finds replaces the shown one (spec perf 3.2);
@@ -190,7 +195,12 @@ class FeedController(
         scope.launch { deletions.pending.collect { _state.update { s -> s.mapAll(actions::flags) } } }
         decorations.start()
         scope.launch { decorations.changes.collect { _state.update { s -> s.mapAll(decorations::decorate) } } }
-        scope.launch { counts.counts.collect { _state.update { s -> s.mapAll(::withCounts) } } }
+        scope.launch {
+            counts.counts.collect { m ->
+                _state.update { s -> s.mapAll(::withCounts) }
+                markFirstCounts(m)
+            }
+        }
         if (liveOn) startLive()
         // the repository leaves muted accounts out at the query (read once per start). A newly muted account is only
         // hidden (visibility); an unmute, also one reverted after a failed publish, restarts the list like a follow
@@ -211,12 +221,16 @@ class FeedController(
                 feed.refresh(source)
                 val decorated = decorate(feed.notes(source))
                 setFresh(decorated)
+                if (source == FeedSource.Following) PerfTrace.mark("feed fresh page")
                 chainsFor(decorated)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 // relays are best-effort; the live collector still shows the local notes
                 _state.update { it.copy(loading = false) }
+            } finally {
+                // the snapshot and the local page never count: only the first relay page lets the background work go
+                if (source == FeedSource.Following) onFirstFresh()
             }
         }
     }
@@ -453,6 +467,17 @@ class FeedController(
         val withAncestors = wanted + wanted.flatMap { _state.value.chains[it]?.ancestors ?: emptyList() }
         val targets = (_state.value.notes + _state.value.ancestors.values).filter { it.note.id in withAncestors }.map { it.target.id }.distinct()
         if (targets.isNotEmpty()) { counts.request(targets); actions.check(targets) }
+        if (source == FeedSource.Following && !countsMarked) {
+            countsWanted += targets
+            markFirstCounts(counts.counts.value)
+        }
+    }
+
+    private fun markFirstCounts(m: Map<String, NoteCounts>) {
+        if (countsMarked || countsWanted.none { m[it] != null }) return
+        countsMarked = true
+        countsWanted.clear()
+        PerfTrace.mark("feed first counts")
     }
 
     private fun onActionResult(message: UiText) {
@@ -507,12 +532,12 @@ class FeedViewModel @Inject constructor(session: NostrSession, private val facto
     private val ready = session.requireReady()
     val decorations = factory.decorations(viewModelScope)
     val bookmarks = BookmarkActions(ready.bookmarks, viewModelScope, background = ready.engine.backgroundScope)
-    val controller = FeedController(ready.feed, ready.profiles, ready.publish, decorations, bookmarks, ready.counts, viewModelScope, conversations = ready.conversations, mentions = MentionResolver(ready.profiles, viewModelScope, Dispatchers.Default), followChanges = ready.follows.changes, deletions = ready.deletions, visibility = ready.visibility, afterDelete = ready.afterNoteDelete, own = ready.ownReactions, mute = ready.mute, muteScope = ready.engine.backgroundScope, snapshot = ready.feedSnapshot)
+    val controller = FeedController(ready.feed, ready.profiles, ready.publish, decorations, bookmarks, ready.counts, viewModelScope, conversations = ready.conversations, mentions = MentionResolver(ready.profiles, viewModelScope, Dispatchers.Default), followChanges = ready.follows.changes, deletions = ready.deletions, visibility = ready.visibility, afterDelete = ready.afterNoteDelete, own = ready.ownReactions, mute = ready.mute, muteScope = ready.engine.backgroundScope, snapshot = ready.feedSnapshot, onFirstFresh = { ready.startupGate.open("feed fresh page") })
     val deletions = ready.deletions
     val menu = ready.noteMenu(delete = controller::delete, mute = controller::mute)
 
     /** Spec 2026-10-18 §4.3: Following plus one feed per pinned list. */
-    val tabs = HomeTabsController(ready.feedTabs, ready.lists, viewModelScope, ready.pubkey, controller, ready.listSnapshots) { source, scope, snapshot ->
+    val tabs = HomeTabsController(ready.feedTabs, ready.lists, viewModelScope, ready.pubkey, controller, ready.listSnapshots, ready.startupGate) { source, scope, snapshot ->
         ready.listFeed(factory, source, scope, snapshot)
     }
 
