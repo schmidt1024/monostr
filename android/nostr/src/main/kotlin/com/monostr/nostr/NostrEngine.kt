@@ -96,6 +96,9 @@ class NostrEngine private constructor(
     /** [System.nanoTime] of the first [connect]; 0 before it. [fetchSettled] works around rust-nostr's first minute only. */
     @Volatile private var connectedAt = 0L
 
+    /** rust-nostr 0.44 keeps a relay whose connections fail in every fetch for this long after it started (DEFAULT_CONNECTION_TIMEOUT in ensure_operational); tests shorten it. */
+    @Volatile internal var startWindow: Duration = Duration.ofSeconds(60)
+
     /** What [HandleNotification.handle] hands over: nothing read yet (spec wave 2 B2: no FFI and no parsing in the callback). */
     private class RawIncoming(val relay: RelayUrl, val subscriptionId: String, val event: Event)
 
@@ -430,7 +433,7 @@ class NostrEngine private constructor(
     suspend fun fetchFrom(relays: List<String>, filter: Filter, timeout: Duration = Duration.ofSeconds(8), attach: Boolean = true, exit: Exit? = null): List<Event> {
         if (attach) attachTemporary(relays)
         if (exit != null) return fetchExit(relays, filter, timeout, exit).events
-        val targets = relays.toRelayUrls()
+        val targets = reachable(relays.toRelayUrls())
         if (targets.isEmpty()) return emptyList()
         // the client stores every event it receives in the database already (rust-nostr); saving them again here
         // cost a few milliseconds per event on a phone, seconds per refresh (hundreds of known deletion requests)
@@ -678,7 +681,7 @@ class NostrEngine private constructor(
      */
     suspend fun fetch(filter: Filter, timeout: Duration = Duration.ofSeconds(8), exit: Exit? = null): List<Event> {
         if (exit != null) return fetchExit(null, filter, timeout, exit).events
-        val targets = snapshot().parsed
+        val targets = reachable(snapshot().parsed)
         if (targets.isEmpty()) return emptyList()
         // stored by the client on receipt, see fetchFrom
         return ffi { client.fetchEventsFrom(targets, filter, timeout).toVec() }
@@ -688,7 +691,7 @@ class NostrEngine private constructor(
      * [fetch] for a page that should not wait for a relay whose connection failed. rust-nostr 0.44 keeps a relay that
      * refuses every connection in a fetch for the first 60 s after the start, and the fetch then waits for it until
      * [timeout] (Pixel 2026-10-21: the first fresh page after 8.5 s instead of 2 s in half the cold starts). Within
-     * [START_WINDOW] after [connect] this asks the relays of the normal set that are connected once none of them is
+     * [startWindow] after [connect] this asks the relays of the normal set that are connected once none of them is
      * setting its connection up any more (at most [CONNECT_GRACE]); a relay still connecting then is asked in the
      * background once it is connected, within [LATE_WAIT] (stored like every fetch's events, nothing returned). None
      * connected after the grace: every relay that has not failed is asked. After the window it is [fetch]: rust-nostr
@@ -697,7 +700,7 @@ class NostrEngine private constructor(
     suspend fun fetchSettled(filter: Filter, timeout: Duration = Duration.ofSeconds(8)): List<Event> {
         val targets = snapshot().parsed
         val since = connectedAt
-        if (targets.isEmpty() || since == 0L || System.nanoTime() - since > START_WINDOW.toNanos()) return fetch(filter, timeout)
+        if (targets.isEmpty() || since == 0L || System.nanoTime() - since > startWindow.toNanos()) return fetch(filter, timeout)
         val states = settledStates(targets)
         fun state(url: RelayUrl) = states[url.toString().trimEnd('/')]
         val ready = targets.filter { state(it) == RelayStatus.CONNECTED.name }
@@ -744,7 +747,7 @@ class NostrEngine private constructor(
      * engine's scope, so [close] (logout) ends it; the caller's cancellation ends it too and is rethrown.
      */
     internal suspend fun fetchExit(relays: List<String>?, filter: Filter, timeout: Duration, exit: Exit): ExitFetch {
-        val targets = relays?.toRelayUrls() ?: snapshot().parsed
+        val targets = reachable(relays?.toRelayUrls() ?: snapshot().parsed)
         if (targets.isEmpty()) return ExitFetch(emptyList(), met = false)
         val progress = ExitProgress(exit)
         if (progress.empty) return ExitFetch(ffi { client.fetchEventsFrom(targets, filter, timeout).toVec() }, met = false)
@@ -1095,6 +1098,31 @@ class NostrEngine private constructor(
     private suspend fun connectedOnceSettled(targets: List<RelayUrl>): Set<String> =
         settledStates(targets).filterValues { it == RelayStatus.CONNECTED.name }.keys
 
+    /**
+     * [targets] without the relays whose connection failed (DISCONNECTED, TERMINATED, SLEEPING): rust-nostr 0.44 keeps
+     * such a relay in a fetch for the first 60 s after the start, and later too when it was a good relay before it
+     * dropped, and the fetch then waits for it until its timeout. Within [startWindow] after [connect] the states are
+     * read once one of [targets] is connected or none is setting its connection up any more (at most [CONNECT_GRACE]):
+     * nothing can arrive before the first connection, and a refused attempt has failed by then; an early exit is not
+     * held back for the slowest relay. Later one read, no wait. A relay not in the pool stays; none left: [targets].
+     */
+    private suspend fun reachable(targets: List<RelayUrl>): List<RelayUrl> {
+        if (targets.isEmpty()) return targets
+        val keys = targets.map { it.toString().trimEnd('/') }
+        val since = connectedAt
+        val waits = since != 0L && System.nanoTime() - since <= startWindow.toNanos()
+        val deadline = System.nanoTime() + CONNECT_GRACE.toNanos()
+        while (true) {
+            val pool = snapshot().pool
+            val states = ffi { keys.mapNotNull { key -> pool[key]?.let { key to it.status().name } }.toMap() }
+            val settled = states.values.none { it in SETTING_UP } || states.values.any { it == RelayStatus.CONNECTED.name }
+            if (!waits || settled || System.nanoTime() >= deadline) {
+                return targets.filterIndexed { i, _ -> states[keys[i]] !in LOST }.ifEmpty { targets }
+            }
+            delay(REACHABLE_POLL_MS)
+        }
+    }
+
     /** The status of each relay of [targets] in the pool (by normalised URL), read once none of them is setting its connection up any more, at most [CONNECT_GRACE]. */
     private suspend fun settledStates(targets: List<RelayUrl>): Map<String, String> {
         val wanted = targets.map { it.toString().trimEnd('/') }.toSet()
@@ -1226,11 +1254,10 @@ class NostrEngine private constructor(
         /** How long a publish waits for a relay that is setting its connection up right now. */
         private val CONNECT_GRACE: Duration = Duration.ofSeconds(2)
         private const val CONNECT_POLL_MS = 50L
+        private const val REACHABLE_POLL_MS = 100L
         /** How long [fetchSettled] keeps waiting in the background for a relay that was not connected yet (rust retries a refused one after 10 s). */
         private val LATE_WAIT: Duration = Duration.ofSeconds(15)
         private const val LATE_POLL_MS = 250L
-        /** rust-nostr 0.44 keeps a relay whose connections fail in every fetch for this long after it started (DEFAULT_CONNECTION_TIMEOUT in ensure_operational). */
-        private val START_WINDOW: Duration = Duration.ofSeconds(60)
         /** Relay states in which a connection attempt is under way. */
         private val SETTING_UP = setOf(RelayStatus.CONNECTING.name, RelayStatus.PENDING.name)
         /** Relay states in which rust-nostr is not trying to connect right now. */

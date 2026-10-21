@@ -1,0 +1,1 @@
+• Profili, thread, notifiche e liste non aspettano più un relay della tua lista irraggiungibile, anche quando uno cade più tardi

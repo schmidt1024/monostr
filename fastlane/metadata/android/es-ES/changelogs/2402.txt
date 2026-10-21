@@ -1,0 +1,1 @@
+• Perfiles, hilos, notificaciones y listas ya no esperan a un relay de tu lista que no responde, tampoco cuando uno se cae más tarde

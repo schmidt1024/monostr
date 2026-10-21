@@ -1,0 +1,1 @@
+• Profile, Threads, Benachrichtigungen und Listen warten nicht mehr auf ein Relay aus deiner Liste, das nicht erreichbar ist, auch wenn eines später ausfällt

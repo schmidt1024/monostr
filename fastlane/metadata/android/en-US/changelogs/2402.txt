@@ -1,0 +1,1 @@
+• Profiles, threads, notifications and lists no longer wait for a relay in your list that cannot be reached, also when one drops later on

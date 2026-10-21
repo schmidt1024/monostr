@@ -1,0 +1,1 @@
+• Perfis, conversas, notificações e listas não esperam mais um relay da sua lista que não responde, também quando um cai mais tarde
