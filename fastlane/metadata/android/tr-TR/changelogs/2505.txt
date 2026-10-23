@@ -1,0 +1,3 @@
+• Akıştaki yeni notlar araya girmek yerine «Yeni notlar» düğmesinin arkasında bekler; dokunmak veya yenilemek onları en üstte gösterir
+• Yenilemeden sonra en yeni notlar en üstte görünür
+• Bildirimlerdeki beğeniler ve yeniden paylaşımlar tek satırda en fazla 7 profil resmi gösterir

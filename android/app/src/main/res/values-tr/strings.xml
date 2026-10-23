@@ -133,6 +133,7 @@
     <string name="feed_settings">Ayarlar</string>
     <string name="feed_new_note">Yeni not</string>
     <string name="feed_empty">Henüz not yok. Birini takip et ya da ilkini yaz.</string>
+    <string name="feed_new_notes">Yeni notlar</string>
     <string name="feed_error_load">Akış yüklenemedi</string>
     <string name="feed_error_more">Daha fazla not yüklenemedi</string>
 

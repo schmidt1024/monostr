@@ -1,0 +1,3 @@
+• Neue Notes im Feed warten hinter einer «Neue Notes»-Pille statt hineinzuspringen; ein Tipp oder ein Refresh zeigt sie oben
+• Nach einem Refresh sind die neuesten Notes oben sichtbar
+• Likes und Reposts in den Mitteilungen zeigen bis zu 7 Profilbilder in einer Zeile

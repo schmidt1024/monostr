@@ -222,7 +222,10 @@ class FeedConversationsTest {
         c.start(); advanceUntilIdle()
         assertFalse(c.state.value.loading)
         feed.liveUpdates.emit(listOf(other, reply)); advanceUntilIdle()
-        assertEquals(listOf(other.id, reply.id), c.state.value.notes.map { it.note.id }, "live emission applied while the chain is pending")
+        // the live note waits behind the "new notes" pill (newer than the newest shown); it came through all the same
+        assertEquals(listOf(other.id), c.state.value.newAbove.map { it.note.id }, "live emission applied while the chain is pending")
+        c.showNew(); advanceUntilIdle()
+        assertEquals(listOf(other.id, reply.id), c.state.value.notes.map { it.note.id })
         assertEquals(1, convs.calls.count { reply.id in it }, "the reply is walked once while in flight: ${convs.calls}")
         c.loadMore(); advanceUntilIdle()
         assertFalse(c.state.value.loadingMore)

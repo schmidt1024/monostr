@@ -1,0 +1,3 @@
+• Les nouvelles notes du fil attendent derrière une pastille « Nouvelles notes » au lieu de s'insérer ; un toucher ou une actualisation les affiche en haut
+• Après une actualisation, les notes les plus récentes sont visibles en haut
+• Les j'aime et republications dans les notifications montrent jusqu'à 7 photos sur une ligne

@@ -139,6 +139,7 @@
     <string name="feed_settings">Настройки</string>
     <string name="feed_new_note">Новая заметка</string>
     <string name="feed_empty">Заметок пока нет. Подпишитесь на кого-нибудь или напишите первую.</string>
+    <string name="feed_new_notes">Новые заметки</string>
     <string name="feed_error_load">Не удалось загрузить ленту</string>
     <string name="feed_error_more">Не удалось загрузить больше заметок</string>
 

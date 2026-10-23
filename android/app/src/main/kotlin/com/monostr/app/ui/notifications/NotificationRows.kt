@@ -1,5 +1,7 @@
 package com.monostr.app.ui.notifications
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import com.monostr.app.ui.tips.LocalAmountUnit
 import com.monostr.app.ui.media.NoteThumbnail
 import androidx.compose.foundation.layout.Box
@@ -101,10 +103,13 @@ private fun GroupRow(group: NotificationRow.Group, row: NotificationRowUi, names
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Row {
-                for (actor in group.actors.take(3)) {
-                    Avatar(row.pictures[actor], size = 28.dp, modifier = Modifier.clickable { onOpenProfile(actor) }.testTag("notification-avatar-${actor.take(8)}"), contentDescription = stringResource(R.string.avatar_of, row.names[actor] ?: actor.take(8)))
-                    Spacer(Modifier.width(6.dp))
+            // the newest faces fill one line, at most 7 (fewer on a narrow screen), like X; never a second line
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                val fit = ((maxWidth + FACE_GAP) / (FACE + FACE_GAP)).toInt()
+                Row(horizontalArrangement = Arrangement.spacedBy(FACE_GAP)) {
+                    for (actor in group.actors.take(minOf(MAX_FACES, fit))) {
+                        Avatar(row.pictures[actor], size = FACE, modifier = Modifier.clickable { onOpenProfile(actor) }.testTag("notification-avatar-${actor.take(8)}"), contentDescription = stringResource(R.string.avatar_of, row.names[actor] ?: actor.take(8)))
+                    }
                 }
             }
             Spacer(Modifier.height(6.dp))
@@ -217,3 +222,8 @@ private fun Thumbnail(about: AboutNote?) {
     Spacer(Modifier.width(12.dp))
     NoteThumbnail(note.repostOf ?: note)
 }
+
+/** The faces of a grouped notification: up to [MAX_FACES] in one line. */
+private val FACE = 28.dp
+private val FACE_GAP = 6.dp
+private const val MAX_FACES = 7

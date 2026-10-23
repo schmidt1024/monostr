@@ -1,0 +1,3 @@
+• Notas novas no feed esperam atrás de uma pílula «Notas novas» em vez de entrar de repente; um toque ou atualização as mostra no topo
+• Após atualizar, as notas mais novas ficam visíveis no topo
+• Curtidas e reposts nas notificações mostram até 7 fotos em uma linha

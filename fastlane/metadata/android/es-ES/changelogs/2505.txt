@@ -1,0 +1,3 @@
+• Las notas nuevas del feed esperan tras una píldora «Notas nuevas» en lugar de saltar dentro; un toque o una actualización las muestra arriba
+• Tras actualizar, las notas más nuevas se ven arriba
+• Los me gusta y reposts en las notificaciones muestran hasta 7 fotos en una línea

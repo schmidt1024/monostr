@@ -1,0 +1,3 @@
+• Le nuove note nel feed aspettano dietro una pillola «Nuove note» invece di inserirsi; un tocco o un aggiornamento le mostra in cima
+• Dopo un aggiornamento le note più recenti sono visibili in cima
+• Mi piace e repost nelle notifiche mostrano fino a 7 foto su una riga

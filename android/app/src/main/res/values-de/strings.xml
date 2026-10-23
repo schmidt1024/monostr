@@ -133,6 +133,7 @@
     <string name="feed_settings">Einstellungen</string>
     <string name="feed_new_note">Neue Note</string>
     <string name="feed_empty">Noch keine Notes. Folge jemandem oder schreib die erste.</string>
+    <string name="feed_new_notes">Neue Notes</string>
     <string name="feed_error_load">Feed konnte nicht geladen werden</string>
     <string name="feed_error_more">Weitere Notes konnten nicht geladen werden</string>
 

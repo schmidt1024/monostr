@@ -1,34 +1,53 @@
 package com.monostr.app.ui.feed
 
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.monostr.app.R
+import com.monostr.app.ui.common.Avatar
 import com.monostr.app.ui.common.HideOnScrollState
+import com.monostr.app.ui.common.KeepAtTop
 import com.monostr.app.ui.common.MessageSnackbar
 import com.monostr.app.ui.common.NoteCard
 import com.monostr.app.ui.common.NoteMenu
@@ -39,6 +58,7 @@ import com.monostr.app.ui.common.ShowRepliesRow
 import com.monostr.app.ui.common.UnavailableRow
 import com.monostr.app.ui.common.VisibleNotes
 import com.monostr.nostr.model.Note
+import kotlinx.coroutines.launch
 
 /** Where taps in a note list lead: the same on the home feed, its list tabs and the list screen. */
 class NoteNav(
@@ -70,6 +90,7 @@ internal fun FeedList(
     header: LazyListScope.() -> Unit = {},
 ) {
     val state by feed.state.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
     val names by feed.names.collectAsStateWithLifecycle()
     MessageSnackbar(state.message, snackbar, onUnmute = feed::unmute, onShown = feed::clearMessage)
     ShowBarsWhenStuck(hide, listState, hasList = !state.loading && state.entries.isNotEmpty())
@@ -83,6 +104,8 @@ internal fun FeedList(
         } else {
             // backlog 28: muted ancestors the user tapped open, for this screen only (the account stays muted)
             var shownMuted by rememberSaveable { mutableStateOf(emptySet<String>()) }
+            // like the notifications (bug 25): new notes arriving above (live, a refresh, "to the top") show when the list stands at its top
+            KeepAtTop(listState, state.entries.first().note.id)
             LazyColumn(state = listState, modifier = Modifier.fillMaxSize().testTag("feed-list")) {
                 header()
                 items(state.entries, key = { it.note.id }) { n ->
@@ -145,7 +168,46 @@ internal fun FeedList(
                 }
                 item { LaunchedEffect(state.notes.size) { feed.loadMore() } }
             }
+            // X's "new posts": live notes above wait here; a tap shows them on top and takes the list there
+            if (state.newAbove.isNotEmpty()) {
+                NewNotesPill(
+                    state.newAbove,
+                    onClick = {
+                        feed.showNew()
+                        scope.launch { if (listState.firstVisibleItemIndex > 30) listState.scrollToItem(0) else listState.animateScrollToItem(0) }
+                    },
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 8.dp),
+                )
+            }
             VisibleNotes(listState, feed::visible)
+        }
+    }
+}
+
+
+/** X's "new posts" pill: up to three faces of the waiting notes and "New notes"; a tap shows them. */
+@Composable
+private fun NewNotesPill(waiting: List<NoteUi>, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val label = stringResource(R.string.feed_new_notes)
+    Surface(
+        onClick = onClick,
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.primary,
+        contentColor = MaterialTheme.colorScheme.onPrimary,
+        shadowElevation = 4.dp,
+        modifier = modifier.semantics { contentDescription = label }.testTag("feed-new-notes"),
+    ) {
+        Row(Modifier.padding(start = 10.dp, end = 14.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Filled.ArrowUpward, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            // the faces overlap a little, like X
+            Row(horizontalArrangement = Arrangement.spacedBy((-6).dp)) {
+                waiting.map { it.author }.distinctBy { it.pubkey }.take(3).forEach { p ->
+                    Avatar(p.picture, size = 24.dp, modifier = Modifier.border(2.dp, MaterialTheme.colorScheme.primary, CircleShape))
+                }
+            }
+            Spacer(Modifier.width(6.dp))
+            Text(label, style = MaterialTheme.typography.labelLarge)
         }
     }
 }

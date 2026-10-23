@@ -1,0 +1,3 @@
+• New notes in the feed wait behind a "New notes" pill instead of jumping in; a tap or a refresh shows them on top
+• After a refresh the newest notes are in view at the top
+• Likes and reposts in the notifications show up to 7 faces in one line

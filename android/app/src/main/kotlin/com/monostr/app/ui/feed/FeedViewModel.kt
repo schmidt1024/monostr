@@ -113,6 +113,8 @@ data class FeedUiState(
     val pending: Set<String> = emptySet(),
     /** Ancestors only a mute hides: shown as "Note from a muted account", one tap shows the note there. */
     val mutedAncestors: Map<String, NoteUi> = emptyMap(),
+    /** Like X's "new posts": live notes above the newest shown, held back while the user reads; [FeedController.showNew] or a refresh shows them. */
+    val newAbove: List<NoteUi> = emptyList(),
     val loading: Boolean = true,
     val refreshing: Boolean = false,
     val loadingMore: Boolean = false,
@@ -239,6 +241,8 @@ class FeedController(
             } finally {
                 // the snapshot and the local page never count: only the first relay page lets the background work go
                 if (source == FeedSource.Following) onFirstFresh()
+                // from now on a live note above the newest shown waits behind the pill (not at start: no pill flashing up)
+                holdLive = true
             }
         }
     }
@@ -285,7 +289,7 @@ class FeedController(
             try {
                 feed.live(source).collect { notes ->
                     val decorated = decorate(notes)
-                    setFresh(decorated)
+                    setFresh(decorated, live = true)
                     chainsFor(decorated)
                 }
             } catch (e: CancellationException) {
@@ -297,6 +301,8 @@ class FeedController(
     }
 
     fun refresh() {
+        // what waits behind the pill shows at once, the relays bring the rest
+        showNew()
         scope.launch {
             _state.update { it.copy(refreshing = true) }
             try {
@@ -312,6 +318,17 @@ class FeedController(
                 _state.update { it.copy(message = uiText(R.string.feed_error_load).asMessage(), refreshing = false, loading = false) }
             }
         }
+    }
+
+    /** Whether a live note above the newest shown waits behind the pill: from the end of the first relay page on. */
+    private var holdLive = false
+
+    /** The pill (X's "new posts"): the waiting notes go on top of the list. */
+    fun showNew() {
+        val waiting = _state.value.newAbove
+        if (waiting.isEmpty()) return
+        _state.update { it.copy(newAbove = emptyList()) }
+        setNotes { s -> (waiting + s.notes).distinctBy { it.note.id }.sortedByDescending { it.note.createdAt } }
     }
 
     /** Fetches the page before the oldest note; ignored while a previous call is still in flight or there is nothing to page from. */
@@ -453,11 +470,22 @@ class FeedController(
     }
 
     /** A page read from the database or the relays: notes only the snapshot had go, and the new first page is kept for the next start. */
-    private fun setFresh(decorated: List<NoteUi>, refreshing: Boolean? = null) {
+    private fun setFresh(decorated: List<NoteUi>, refreshing: Boolean? = null, live: Boolean = false) {
         val stale = snapshotIds
         snapshotIds = emptySet()
         freshSeen.value = true
-        setNotes(loading = false, refreshing = refreshing) { s -> merge(decorated, if (stale.isEmpty()) s.notes else s.notes.filterNot { it.note.id in stale }) }
+        val shown = _state.value
+        // X's "new posts": a live list brings notes above the newest shown while the user reads; they wait (no jump under the
+        // finger) until the pill or a refresh; a refresh, the first page and an update of what is shown take everything in
+        val held = if (live && holdLive && !shown.refreshing && shown.notes.isNotEmpty()) {
+            val newest = shown.notes.first().note.createdAt
+            val ids = shown.notes.mapTo(HashSet()) { it.note.id }
+            decorated.filter { it.note.id !in ids && it.note.createdAt > newest }
+        } else emptyList()
+        val heldIds = held.mapTo(HashSet()) { it.note.id }
+        val taken = if (held.isEmpty()) decorated else decorated.filterNot { it.note.id in heldIds }
+        _state.update { s -> s.copy(newAbove = if (held.isEmpty() && !live) emptyList() else visibility.visible((held + s.newAbove).distinctBy { it.note.id }.map(::flagged))) }
+        setNotes(loading = false, refreshing = refreshing) { s -> merge(taken, if (stale.isEmpty()) s.notes else s.notes.filterNot { it.note.id in stale }) }
         val snap = snapshot ?: return
         snapshotJob?.cancel()
         snapshotJob = scope.launch {
