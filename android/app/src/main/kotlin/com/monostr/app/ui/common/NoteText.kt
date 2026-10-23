@@ -44,8 +44,10 @@ fun NoteText(
     modifier: Modifier = Modifier,
     names: Map<String, String> = emptyMap(),
     maxLines: Int = Int.MAX_VALUE,
-    /** Spec 5: a text of more than [COLLAPSE_ABOVE] lines shows [COLLAPSED_LINES] and a "Show more" button. */
+    /** Spec 5: a text of more than [collapseAbove] lines shows [collapsedLines] and a "Show more" button. */
     collapsible: Boolean = false,
+    collapseAbove: Int = COLLAPSE_ABOVE,
+    collapsedLines: Int = COLLAPSED_LINES,
     /** What the expanded state hangs on (the note id): it survives scrolling and rotation, not leaving the screen. */
     stateKey: String = content,
     /** Spec 11.5 §3: the focused note of a thread reads larger. */
@@ -71,12 +73,12 @@ fun NoteText(
         }
     }
     var expanded by rememberSaveable(stateKey) { mutableStateOf(false) }
-    // measured with the text itself: laid out with 12 lines first, an overflow there switches to 10 lines plus the button
+    // measured with the text itself: laid out with [collapseAbove] lines first, an overflow there switches to [collapsedLines] plus the button
     var overflowing by remember(stateKey) { mutableStateOf(false) }
     val lines = when {
         !collapsible || expanded -> maxLines
-        overflowing -> COLLAPSED_LINES
-        else -> COLLAPSE_ABOVE
+        overflowing -> collapsedLines
+        else -> collapseAbove
     }
     Column {
         val body: @Composable () -> Unit = {

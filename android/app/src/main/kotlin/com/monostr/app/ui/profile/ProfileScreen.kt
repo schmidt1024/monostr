@@ -11,6 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.map
 import com.monostr.app.ui.common.MentionResolver
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.size
@@ -44,10 +45,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -77,6 +80,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.SavedStateHandle
@@ -682,63 +686,80 @@ fun ProfileScreen(
         val scope = rememberCoroutineScope()
         LazyColumn(state = listState, modifier = Modifier.padding(padding).fillMaxSize()) {
             item {
-                Column(Modifier.padding(16.dp)) {
-                    state.profile.banner?.takeIf { it.isNotBlank() }?.let { url ->
-                        AsyncImage(
-                            model = url, contentDescription = null, contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(12.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant)
-                                .clickable(onClickLabel = stringResource(R.string.profile_show_banner)) { onOpenPicture(url) }
-                                .testTag("profile-banner"),
-                        )
-                        Spacer(Modifier.height(12.dp))
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        val picture = state.profile.picture?.takeIf { it.isNotBlank() }
-                        Avatar(
-                            picture,
-                            modifier = if (picture == null) Modifier else Modifier.clip(CircleShape)
-                                .clickable(onClickLabel = stringResource(R.string.profile_show_picture)) { onOpenPicture(picture) }
-                                .testTag("profile-picture"),
-                        )
-                        Spacer(Modifier.width(12.dp))
-                        Column {
-                            Text(state.profile.shownName, style = MaterialTheme.typography.titleMedium)
-                            state.profile.nip05?.let { Text(it, style = MaterialTheme.typography.labelSmall) }
-                            NpubLine(state.profile.pubkey)
+                Column {
+                    // like X: the banner runs edge to edge in the 3:1 most banners are made for (Nostr fixes no size); without one a
+                    // plain strip keeps the layout; the large avatar sits half on it, the actions to its right
+                    BoxWithConstraints(Modifier.fillMaxWidth()) {
+                        val bannerHeight = maxWidth / 3
+                        val strip = Modifier.fillMaxWidth().height(bannerHeight).background(MaterialTheme.colorScheme.surfaceVariant)
+                        state.profile.banner?.takeIf { it.isNotBlank() }?.let { url ->
+                            AsyncImage(
+                                model = url, contentDescription = null, contentScale = ContentScale.Crop,
+                                modifier = strip.clickable(onClickLabel = stringResource(R.string.profile_show_banner)) { onOpenPicture(url) }.testTag("profile-banner"),
+                            )
+                        } ?: Box(strip)
+                        // the avatar sits half on the banner; the actions stand below it, 12 dp clear of the edge (X: no button on the picture)
+                        Box(Modifier.padding(start = 16.dp, top = bannerHeight - PROFILE_AVATAR / 2)) {
+                            val picture = state.profile.picture?.takeIf { it.isNotBlank() }
+                            val ring = Modifier.border(4.dp, MaterialTheme.colorScheme.surface, CircleShape)
+                            Avatar(
+                                picture,
+                                size = PROFILE_AVATAR,
+                                modifier = if (picture == null) ring else ring.clip(CircleShape)
+                                    .clickable(onClickLabel = stringResource(R.string.profile_show_picture)) { onOpenPicture(picture) }
+                                    .testTag("profile-picture"),
+                            )
+                        }
+                        // one 48 dp row (the touch targets) with the 40 dp buttons centred: their visible lower edge is 4 dp above the
+                        // row's, so the row ends 4 dp below the avatar and both end on one line
+                        Row(
+                            Modifier.align(Alignment.TopEnd).padding(end = 16.dp, top = bannerHeight + PROFILE_AVATAR / 2 + 4.dp - ACTIONS_ROW)
+                                .height(ACTIONS_ROW),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            if (state.isSelf) {
+                                OutlinedButton(onClick = onEditProfile, modifier = Modifier.testTag("profile-edit")) { Text(stringResource(R.string.profile_edit)) }
+                            } else {
+                                OutlinedIconButton(onClick = { onMessage(state.profile.pubkey) }, modifier = Modifier.testTag("profile-message")) {
+                                    Icon(Icons.Outlined.ChatBubbleOutline, contentDescription = stringResource(R.string.profile_message), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                ProfileTipButton(pending = pendingTip, onClick = { vm.tipSheet.open(TipTarget.Profile(state.profile.pubkey)) })
+                                FollowButton(state.follow, busy = state.followBusy, onFollow = vm.controller::follow, onUnfollow = vm.controller::askUnfollow)
+                            }
                         }
                     }
-                    // the bio links like a note: URLs, nostr: mentions and hashtags open
-                    state.profile.about?.takeIf { it.isNotBlank() }?.let {
-                        Spacer(Modifier.height(8.dp))
-                        NoteText(it, onOpen = {}, onHashtag = onHashtag, onOpenProfile = onOpenProfile, onOpenNote = onOpenThread, names = names, modifier = Modifier.testTag("profile-about"))
-                    }
-                    // kind 0 website: a link that reads without the scheme, like links in notes
-                    state.profile.website?.trim()?.takeIf { ProfileEditController.websiteOk(it) && it.isNotEmpty() }?.let { site ->
-                        Spacer(Modifier.height(4.dp))
-                        NoteText(ProfileEditController.website(site), onOpen = {}, onHashtag = {}, onOpenProfile = {}, onOpenNote = {}, modifier = Modifier.testTag("profile-website"))
-                    }
-                    state.followCounts?.let { Spacer(Modifier.height(8.dp)); FollowCountsLine(it) }
-                    Spacer(Modifier.height(8.dp))
-                    if (state.isSelf) {
-                        OutlinedButton(onClick = onEditProfile, modifier = Modifier.testTag("profile-edit")) { Text(stringResource(R.string.profile_edit)) }
-                    } else {
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), itemVerticalAlignment = Alignment.CenterVertically) {
-                            FollowButton(state.follow, busy = state.followBusy, onFollow = vm.controller::follow, onUnfollow = vm.controller::askUnfollow)
-                            ProfileTipButton(pending = pendingTip, onClick = { vm.tipSheet.open(TipTarget.Profile(state.profile.pubkey)) })
-                            OutlinedButton(onClick = { onMessage(state.profile.pubkey) }, modifier = Modifier.testTag("profile-message")) { Text(stringResource(R.string.profile_message)) }
+                    Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp)) {
+                        Text(state.profile.shownName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        // three sizes: name, then the NIP-05 address, then the npub (smaller and grey)
+                        state.profile.nip05?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                        NpubLine(state.profile.pubkey)
+                        // the bio links like a note: URLs, nostr: mentions and hashtags open
+                        state.profile.about?.takeIf { it.isNotBlank() }?.let {
+                            Spacer(Modifier.height(8.dp))
+                            // a long bio folds like a long note, earlier: the header must not push the notes off the screen
+                            NoteText(
+                                it, onOpen = {}, onHashtag = onHashtag, onOpenProfile = onOpenProfile, onOpenNote = onOpenThread, names = names,
+                                collapsible = true, collapseAbove = BIO_COLLAPSE_ABOVE, collapsedLines = BIO_COLLAPSED_LINES, stateKey = "bio-${state.profile.pubkey}",
+                                modifier = Modifier.testTag("profile-about"),
+                            )
                         }
-                    }
-                    if (state.isMuted && !state.isSelf) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(stringResource(R.string.mute_profile_hint), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("profile-muted-hint"))
-                            Spacer(Modifier.width(4.dp))
-                            TextButton(onClick = vm.controller::unmute, modifier = Modifier.testTag("profile-unmute")) { Text(stringResource(R.string.unmute_account)) }
+                        // kind 0 website: a link that reads without the scheme, like links in notes
+                        state.profile.website?.trim()?.takeIf { ProfileEditController.websiteOk(it) && it.isNotEmpty() }?.let { site ->
+                            Spacer(Modifier.height(4.dp))
+                            NoteText(ProfileEditController.website(site), onOpen = {}, onHashtag = {}, onOpenProfile = {}, onOpenNote = {}, modifier = Modifier.testTag("profile-website"))
                         }
-                    }
-                    if (state.extraRelays.isNotEmpty()) {
-                        Spacer(Modifier.height(8.dp))
-                        Text(stringResource(R.string.profile_extra_relays, state.extraRelays.joinToString(", ") { it.removePrefix("wss://") }), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("profile-extra-relays"))
+                        state.followCounts?.let { Spacer(Modifier.height(8.dp)); FollowCountsLine(it) }
+                        if (state.isMuted && !state.isSelf) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(stringResource(R.string.mute_profile_hint), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("profile-muted-hint"))
+                                Spacer(Modifier.width(4.dp))
+                                TextButton(onClick = vm.controller::unmute, modifier = Modifier.testTag("profile-unmute")) { Text(stringResource(R.string.unmute_account)) }
+                            }
+                        }
+                        if (state.extraRelays.isNotEmpty()) {
+                            Spacer(Modifier.height(8.dp))
+                            Text(stringResource(R.string.profile_extra_relays, state.extraRelays.joinToString(", ") { it.removePrefix("wss://") }), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("profile-extra-relays"))
+                        }
                     }
                 }
             }
@@ -872,7 +893,7 @@ private fun NpubLine(pubkey: String) {
     val copied = stringResource(R.string.note_copied)
     val npub = remember(pubkey) { runCatching { Npub.encode(pubkey) }.getOrNull() }
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(npub?.let { it.take(9) + "…" + it.takeLast(4) } ?: Profile.shortPubkey(pubkey), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("profile-npub"))
+        Text(npub?.let { it.take(9) + "…" + it.takeLast(4) } ?: Profile.shortPubkey(pubkey), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("profile-npub"))
         if (npub != null) {
             IconButton(onClick = { copyToClipboard(context, npub, copied) }, modifier = Modifier.size(32.dp).testTag("profile-copy-npub")) {
                 Icon(Icons.Outlined.ContentCopy, contentDescription = stringResource(R.string.profile_copy_npub), tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
@@ -911,6 +932,19 @@ private fun ProfileTipButton(pending: Boolean, onClick: () -> Unit) {
         )
     }
 }
+
+/**
+ * Like X: the profile's avatar, large and half on the banner. One size for every profile; its lower edge lines up with
+ * the buttons' (half of it below the banner = 12 dp gap + 40 dp button).
+ */
+private val PROFILE_AVATAR = 104.dp
+
+/** The header's action row: the 48 dp touch height of its buttons. */
+private val ACTIONS_ROW = 48.dp
+
+/** A bio of up to 7 lines stays whole; a longer one shows 5 and "Show more" (user 2026-10-23). */
+private const val BIO_COLLAPSE_ABOVE = 7
+private const val BIO_COLLAPSED_LINES = 5
 
 private val ProfileSection.label: Int get() = when (this) {
     ProfileSection.POSTS -> R.string.profile_tab_posts

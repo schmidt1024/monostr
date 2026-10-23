@@ -1,0 +1,2 @@
+• Neuer Profilkopf wie auf X: Banner über die volle Breite im Format 3:1, grosses rundes Profilbild darauf, Profil bearbeiten / Folgen daneben, grösserer Name
+• Lange Profilbeschreibungen klappen nach 5 Zeilen mit «Mehr anzeigen» ein

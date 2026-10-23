@@ -1,0 +1,2 @@
+• Nueva cabecera de perfil como en X: banner de ancho completo en 3:1, foto redonda grande encima, Editar perfil / Seguir al lado, nombre más grande
+• Las biografías largas se pliegan tras 5 líneas con Mostrar más

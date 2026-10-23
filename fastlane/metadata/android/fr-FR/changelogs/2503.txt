@@ -1,0 +1,2 @@
+• Nouvel en-tête de profil comme sur X : bannière pleine largeur en 3:1, grande photo ronde dessus, Modifier le profil / Suivre à côté, nom plus grand
+• Les longues bios se replient après 5 lignes avec Afficher plus
