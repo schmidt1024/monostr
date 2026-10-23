@@ -1,0 +1,1 @@
+• New notifications show up at once while the list is open at its top (they were added out of sight above)

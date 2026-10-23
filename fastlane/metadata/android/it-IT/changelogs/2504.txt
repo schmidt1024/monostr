@@ -1,0 +1,1 @@
+• Le nuove notifiche compaiono subito con l'elenco aperto in cima (prima venivano aggiunte fuori vista)

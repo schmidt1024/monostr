@@ -44,6 +44,7 @@ import androidx.lifecycle.viewModelScope
 import com.monostr.app.R
 import com.monostr.app.session.NostrSession
 import com.monostr.app.ui.common.BottomTab
+import com.monostr.app.ui.common.KeepAtTop
 import com.monostr.app.ui.common.LoadingScreen
 import com.monostr.app.ui.common.MonostrBottomBar
 import com.monostr.app.ui.common.HideOnScrollFooter
@@ -115,6 +116,8 @@ fun NotificationsScreen(onFeed: () -> Unit, onSearch: () -> Unit, onBookmarks: (
                     }
                 }
             } else {
+                // bug 25: a live notification or a refresh arriving above shows at once when the list stands at its top
+                KeepAtTop(listState, state.rows.first().row.key)
                 LazyColumn(state = listState, modifier = Modifier.fillMaxSize().testTag("notifications-list")) {
                     items(state.rows, key = { it.row.key }) { row ->
                         NotificationRowItem(row, names, onOpenThread = onOpenThread, onOpenProfile = onOpenProfile)

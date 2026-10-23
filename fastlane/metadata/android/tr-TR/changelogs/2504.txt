@@ -1,0 +1,1 @@
+• Liste en üstte açıkken yeni bildirimler hemen görünür (önceden görünmeyen yere ekleniyordu)

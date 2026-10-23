@@ -1,0 +1,1 @@
+• Neue Mitteilungen erscheinen sofort, wenn die Liste oben geöffnet ist (sie wurden bisher unsichtbar oberhalb eingefügt)

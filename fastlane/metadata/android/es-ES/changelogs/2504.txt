@@ -1,0 +1,1 @@
+• Las notificaciones nuevas aparecen al instante con la lista abierta arriba (antes se añadían fuera de la vista)
