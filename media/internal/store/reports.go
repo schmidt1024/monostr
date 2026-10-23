@@ -66,6 +66,7 @@ type Stats struct {
 	StoredToday   int
 	BytesToday    int64
 	RejectedToday int
+	OpenReviews   int
 	Top           []Uploader
 }
 
@@ -83,6 +84,9 @@ func (s *Store) Stats(dayStart int64) (Stats, error) {
 		return st, err
 	}
 	if err := s.db.QueryRow(`SELECT COUNT(*) FROM uploads WHERE at >= ? AND outcome = ?`, dayStart, OutcomeNSFW).Scan(&st.RejectedToday); err != nil {
+		return st, err
+	}
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM review WHERE closed = 0`).Scan(&st.OpenReviews); err != nil {
 		return st, err
 	}
 	rows, err := s.db.Query(`SELECT o.pubkey, COUNT(*), COALESCE(SUM(b.size), 0) AS bytes FROM owners o JOIN blobs b ON b.sha256 = o.sha256

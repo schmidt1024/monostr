@@ -48,11 +48,18 @@ type Classifier interface {
 
 // Config is what the operator sets.
 type Config struct {
-	PublicURL   string // https://media.monostr.com
-	Limits      limits.Limits
-	Threshold   float64 // an NSFW score at or above it refuses the upload
-	ContactNpub string
-	Version     string
+	PublicURL string // https://media.monostr.com
+	Limits    limits.Limits
+	Threshold float64 // an NSFW score at or above it needs a review (or refuses, without a grey zone)
+	// Reject is the score at or above which an upload is refused. Between
+	// Threshold and Reject the picture is stored and goes to review. 0 means
+	// the same as Threshold: no grey zone.
+	Reject float64
+	// ReviewDMsPerDay bounds the single review notices per UTC day; the rest
+	// is summarised. 0 means DefaultReviewDMsPerDay.
+	ReviewDMsPerDay int
+	ContactNpub     string
+	Version         string
 	// MaxInFlight bounds the uploads worked on at once; each holds its picture
 	// in memory. 0 means DefaultMaxInFlight.
 	MaxInFlight int
@@ -63,6 +70,8 @@ type Config struct {
 const (
 	DefaultMaxInFlight   = 16
 	DefaultBucketTimeout = 60 * time.Second
+	// DefaultReviewDMsPerDay is how many review cases a day get a notice of their own.
+	DefaultReviewDMsPerDay = 20
 	// maxInFlightPerAddress keeps one address from holding every slot.
 	maxInFlightPerAddress = 4
 )
@@ -74,6 +83,9 @@ type Deps struct {
 	Classifier Classifier
 	Logger     *slog.Logger
 	Now        func() time.Time
+	// Notify is called after a review case is stored. It may be nil and must
+	// not block: the upload never waits for Nostr.
+	Notify func()
 }
 
 type server struct {
@@ -84,6 +96,7 @@ type server struct {
 	classifier Classifier
 	log        *slog.Logger
 	now        func() time.Time
+	notify     func()
 	ips        *limits.Daily
 	// one lock per blob: storing it and deleting its last owner must not
 	// interleave, or the bucket and the database part ways
@@ -103,10 +116,19 @@ func New(cfg Config, deps Deps) (http.Handler, error) {
 	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
 		return nil, errors.New("api: PublicURL must be an absolute http(s) URL")
 	}
+	if cfg.Reject == 0 {
+		cfg.Reject = cfg.Threshold
+	}
+	if cfg.Reject < cfg.Threshold || cfg.Reject > 1 {
+		return nil, errors.New("api: Reject must lie between Threshold and 1")
+	}
+	if cfg.ReviewDMsPerDay == 0 {
+		cfg.ReviewDMsPerDay = DefaultReviewDMsPerDay
+	}
 	s := &server{
 		cfg: cfg, host: strings.ToLower(u.Hostname()),
 		store: deps.Store, bucket: deps.Bucket, classifier: deps.Classifier, log: deps.Logger,
-		now: deps.Now, ips: limits.NewDaily(),
+		now: deps.Now, notify: deps.Notify, ips: limits.NewDaily(),
 		maxInFlight: cfg.MaxInFlight, bucketTimeout: cfg.BucketTimeout,
 		pending: pending{byAddress: map[string]int{}, byPubkey: map[string]*reservation{}},
 	}

@@ -78,6 +78,14 @@ Bei 0,60 also rund 7 %. Das ist der Preis dafür, dass Diagramme und einfarbige 
 Was durchrutscht, findet der Betreiber über Meldungen und über `admin near` (angenommene Bilder
 knapp unter der Schwelle) und entfernt es mit `admin ban-hash`.
 
+## Graubereich
+
+Die Schwelle 0,60 lehnt nicht mehr allein ab: ab ihr bis unter `MEDIA_NSFW_REJECT` (0,85) wird ein Bild
+gespeichert und dem Betreiber zur Prüfung gemeldet; erst ab 0,85 wird es abgelehnt. Die rund 7 % Fehlalarme
+bei 0,60 (siehe oben) treffen damit niemanden mehr hart, sie landen beim Betreiber. Den oberen Wert hat
+keine eigene Messung bestätigt; sobald genug Prüffälle zusammen sind, zeigt `admin review --all`, ob er
+passt. Ablauf und Gründe: `docs/superpowers/specs/2026-10-22-media-nsfw-review-design.md`.
+
 ## Geprüft und verworfen
 
 - **Bild mit weißem Rand auf ein Quadrat bringen statt stauchen** (Seitenverhältnis bleibt):

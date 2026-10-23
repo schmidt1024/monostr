@@ -23,8 +23,8 @@ class EngineRelayRestTest {
     private val me = Keys.generate()
 
     /** Accepts every TCP connection and closes it at once: a relay host that drops every attempt, which [connections] counts. */
-    private class DroppingRelay : AutoCloseable {
-        private val server = ServerSocket(0, 50, java.net.InetAddress.getLoopbackAddress())
+    private class DroppingRelay(port: Int = 0) : AutoCloseable {
+        private val server: ServerSocket = bindLoopback(port)
         val connections = AtomicInteger(0)
         val url = "ws://127.0.0.1:${server.localPort}"
         init {
@@ -102,6 +102,40 @@ class EngineRelayRestTest {
                     assertTrue(awaitTrue(10_000) { e.relayStates().first().any { it.url.trimEnd('/') == bad.url && it.resting } }, "it did not rest again")
                 } finally {
                     e.close()
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `a relay renewed by reconnectAll keeps counting as connected once and does not rest`() = runBlocking {
+        // spec 2026-10-23 §7 + 0.24.3: a relay that connected once in the session never rests, also after a network switch
+        SilentWsRelay(answerEose = true).use { good ->
+            val flaky = SilentWsRelay(answerEose = true)
+            DroppingRelay().use { twin ->
+                // the twin never connected in this session: with the same failures it rests (proof the checks run)
+                val e = NostrEngine.create(dir.resolve("lmdb").toString(), LocalSigner(me.secretKey().toHex()), listOf(good.url, flaky.url, twin.url))
+                try {
+                    e.connect()
+                    assertTrue(awaitTrue { e.connectedNormalRelayUrls() == setOf(good.url, flaky.url) }, "connected: ${e.connectedNormalRelayUrls()}")
+                    e.restAttempts = 1
+                    e.restCheckMs = 200
+                    flaky.close() // the new network does not reach it yet
+                    // every new connection to it is accepted and dropped at once: its failed attempts add up
+                    DroppingRelay(flaky.port).use { dropping ->
+                        e.reconnectAll()
+                        assertTrue(awaitTrue { e.connectedRelayUrls() == setOf(good.url) }, "connected: ${e.connectedRelayUrls()}")
+                        assertTrue(awaitTrue(15_000) { e.relayStates().first().any { it.url.trimEnd('/') == twin.url && it.resting } }, "the twin never rested")
+                        assertTrue(awaitTrue(15_000) { dropping.connections.get() >= 1 }, "the renewed relay made no attempt")
+                        delay(3_000) // many rest checks, with the good relay online and the renewed one failing
+                        assertTrue(dropping.connections.get() >= 1)
+                        val info = e.relayStates().first().single { it.url.trimEnd('/') == flaky.url }
+                        assertFalse(info.resting, "a relay that connected before the switch rested: $info (attempts ${dropping.connections.get()})")
+                        assertTrue(info.everConnected, "shown as never connected: $info")
+                    }
+                } finally {
+                    e.close()
+                    flaky.shutdown()
                 }
             }
         }

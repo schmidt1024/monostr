@@ -1,0 +1,2 @@
+• Le risposte la cui nota originale manca sui tuoi relay ora la recuperano dal relay indicato nella risposta o dai relay dell'autore (interruttore: Collega temporaneamente i relay dell'autore)
+• Dopo un passaggio tra Wi-Fi e dati mobili, relay e messaggi in diretta si riconnettono subito

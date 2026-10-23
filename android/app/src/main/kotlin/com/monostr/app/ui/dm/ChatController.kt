@@ -170,7 +170,7 @@ class ChatController(
         return Note(
             rumorId, if (outgoing) me else peer, content, createdAt, 1, null, null, null, emptyList(),
             media = parsed.media, displayContent = parsed.displayContent,
-            quotedId = parsed.quote?.id, quoteRelays = parsed.quote?.relays.orEmpty(),
+            quotedId = parsed.quote?.id, quoteRelays = parsed.quote?.relays.orEmpty(), quoteAuthor = parsed.quote?.author,
         )
     }
 

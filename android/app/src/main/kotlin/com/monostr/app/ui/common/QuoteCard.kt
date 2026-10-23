@@ -80,9 +80,9 @@ class QuoteLoader(
 ) {
     private val found = ConcurrentHashMap<String, QuoteUi.Found>()
 
-    fun cached(id: String): QuoteUi? {
+    fun cached(id: String, author: String? = null): QuoteUi? {
         found[id]?.let { return if (it.note.author in muted.value) QuoteUi.Muted else it }
-        return when (val c = quotes.cached(id)) {
+        return when (val c = quotes.cached(id, author)) {
             is QuoteResult.Missing -> QuoteUi.Missing
             is QuoteResult.Found -> if (c.note.author in muted.value) QuoteUi.Muted else null
             null -> null
@@ -93,10 +93,10 @@ class QuoteLoader(
     fun author(found: QuoteUi.Found): Flow<Profile> =
         profiles.observe(found.note.author).map { if (it == Profile.empty(it.pubkey)) found.author else it }
 
-    suspend fun load(id: String, hints: List<String>): QuoteUi {
+    suspend fun load(id: String, hints: List<String>, author: String? = null): QuoteUi {
         found[id]?.let { return if (it.note.author in muted.value) QuoteUi.Muted else it }
         val result = try {
-            quotes.get(id, hints)
+            quotes.get(id, hints, author)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -149,14 +149,15 @@ fun QuoteCard(
     onOpenProfile: (String) -> Unit,
     modifier: Modifier = Modifier,
     onHashtag: (String) -> Unit = {},
+    author: String? = null,
 ) {
     val loader = LocalQuoteLoader.current
     // keyed, so a reused composition slot never shows the previous id's card
     var ui by remember(quotedId, loader) {
-        mutableStateOf(loader?.cached(quotedId) ?: if (loader == null) QuoteUi.Missing else QuoteUi.Loading)
+        mutableStateOf(loader?.cached(quotedId, author) ?: if (loader == null) QuoteUi.Missing else QuoteUi.Loading)
     }
     LaunchedEffect(quotedId, loader) {
-        if (loader != null && ui == QuoteUi.Loading) ui = loader.load(quotedId, hints)
+        if (loader != null && ui == QuoteUi.Loading) ui = loader.load(quotedId, hints, author)
     }
     val shape = RoundedCornerShape(12.dp)
     Column(

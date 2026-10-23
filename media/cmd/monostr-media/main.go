@@ -10,7 +10,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strconv"
@@ -18,9 +20,13 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/nbd-wtf/go-nostr/nip19"
+
 	"monostr.com/media/internal/api"
 	"monostr.com/media/internal/classify"
 	"monostr.com/media/internal/limits"
+	"monostr.com/media/internal/nostrdm"
+	"monostr.com/media/internal/review"
 	"monostr.com/media/internal/storage"
 	"monostr.com/media/internal/store"
 )
@@ -38,6 +44,35 @@ type config struct {
 	limits      limits.Limits
 	maxInFlight int
 	s3          storage.S3Config
+
+	// reject is where refusal starts; between threshold and reject a picture
+	// is stored and goes to review. It equals threshold when there is no reviewer.
+	reject          float64
+	reviewer        string // the operator's hex pubkey
+	noReviewer      bool   // no MEDIA_REVIEW_NPUB: the grey zone is off
+	nsec            string
+	relays          []string
+	reviewDMsPerDay int
+}
+
+// parseRelays reads a comma separated list of wss:// relay URLs.
+func parseRelays(list string) ([]string, error) {
+	var out []string
+	for _, r := range strings.Split(list, ",") {
+		r = strings.TrimSpace(r)
+		if r == "" {
+			continue
+		}
+		u, err := url.Parse(r)
+		if err != nil || u.Scheme != "wss" || u.Host == "" {
+			return nil, fmt.Errorf("MEDIA_NOSTR_RELAYS: %q is not a wss:// URL", r)
+		}
+		out = append(out, r)
+	}
+	if len(out) == 0 {
+		return nil, errors.New("MEDIA_NOSTR_RELAYS names no relay")
+	}
+	return out, nil
 }
 
 func env(getenv func(string) string, key, def string) string {
@@ -71,9 +106,37 @@ func loadConfig(getenv func(string) string) (config, error) {
 	}
 	c.nsfwURL = env(getenv, "MEDIA_NSFW_URL", "http://127.0.0.1:8081")
 	c.threshold, err = strconv.ParseFloat(env(getenv, "MEDIA_NSFW_THRESHOLD", "0.60"), 64)
-	if err != nil || c.threshold <= 0 || c.threshold > 1 {
+	if err != nil || math.IsNaN(c.threshold) || c.threshold <= 0 || c.threshold > 1 {
 		return c, errors.New("MEDIA_NSFW_THRESHOLD must be a number above 0 and at most 1")
 	}
+	c.reject, err = strconv.ParseFloat(env(getenv, "MEDIA_NSFW_REJECT", "0.85"), 64)
+	if err != nil || math.IsNaN(c.reject) || c.reject > 1 || c.reject < c.threshold {
+		return c, errors.New("MEDIA_NSFW_REJECT must be a number from MEDIA_NSFW_THRESHOLD to 1")
+	}
+	c.nsec = env(getenv, "MEDIA_NOSTR_NSEC", "")
+	if npub := env(getenv, "MEDIA_REVIEW_NPUB", ""); npub != "" {
+		prefix, value, err := nip19.Decode(npub)
+		hex, ok := value.(string)
+		if err != nil || prefix != "npub" || !ok {
+			return c, errors.New("MEDIA_REVIEW_NPUB must be an npub")
+		}
+		if c.nsec == "" {
+			return c, errors.New("MEDIA_NOSTR_NSEC is required when MEDIA_REVIEW_NPUB is set")
+		}
+		c.reviewer = hex
+	} else {
+		// Nobody to look at the grey zone: a picture there is refused as before.
+		c.noReviewer = true
+		c.reject = c.threshold
+	}
+	if c.relays, err = parseRelays(env(getenv, "MEDIA_NOSTR_RELAYS", "wss://relay.monostr.com")); err != nil {
+		return c, err
+	}
+	dms, err := envInt(getenv, "MEDIA_REVIEW_DMS_PER_DAY", api.DefaultReviewDMsPerDay)
+	if err != nil {
+		return c, err
+	}
+	c.reviewDMsPerDay = int(dms)
 	if c.limits.MaxBytes, err = envInt(getenv, "MEDIA_MAX_BYTES", 10<<20); err != nil {
 		return c, err
 	}
@@ -150,12 +213,45 @@ func run(logger *slog.Logger, args []string) error {
 func serve(logger *slog.Logger, cfg config, st *store.Store, bucket storage.Bucket) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	handler, err := api.New(api.Config{
-		PublicURL: cfg.publicURL, Limits: cfg.limits, Threshold: cfg.threshold, ContactNpub: cfg.contactNpub, Version: version,
-		MaxInFlight: cfg.maxInFlight,
-	}, api.Deps{
+	deps := api.Deps{
 		Store: st, Bucket: bucket, Classifier: classify.New(cfg.nsfwURL, 5*time.Second), Logger: logger,
-	})
+	}
+	if cfg.noReviewer {
+		logger.Warn("no review npub: grey zone off")
+	} else {
+		// An upload never waits on Nostr: it only pokes the reviewer, and one
+		// pending poke is as good as many.
+		poke := make(chan struct{}, 1)
+		deps.Notify = func() {
+			select {
+			case poke <- struct{}{}:
+			default:
+			}
+		}
+		client, err := nostrdm.New(ctx, cfg.nsec, cfg.reviewer, cfg.relays, cfg.publicURL, logger)
+		if err != nil {
+			return fmt.Errorf("review messages: %w", err)
+		}
+		npub, _ := nip19.EncodePublicKey(client.PublicKey())
+		logger.Info("review messages on", "server_npub", npub, "relays", cfg.relays)
+		reviewer := review.New(review.Config{PublicURL: cfg.publicURL, Operator: cfg.reviewer}, review.Deps{
+			Store: st, Bucket: bucket, Messenger: client, Logger: logger,
+		})
+		lastWrap := func() int64 {
+			at, err := st.LastWrapAt()
+			if err != nil {
+				logger.Error("last wrap time", "err", err.Error())
+			}
+			return at
+		}
+		go reviewer.Run(ctx, poke)
+		go client.Listen(ctx, lastWrap, reviewer.Handle)
+		go client.AnnounceUntilDone(ctx)
+	}
+	handler, err := api.New(api.Config{
+		PublicURL: cfg.publicURL, Limits: cfg.limits, Threshold: cfg.threshold, Reject: cfg.reject, ReviewDMsPerDay: cfg.reviewDMsPerDay,
+		ContactNpub: cfg.contactNpub, Version: version, MaxInFlight: cfg.maxInFlight,
+	}, deps)
 	if err != nil {
 		return err
 	}
@@ -163,7 +259,7 @@ func serve(logger *slog.Logger, cfg config, st *store.Store, bucket storage.Buck
 	srv := &http.Server{Addr: cfg.listen, Handler: handler, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 5 * time.Minute, WriteTimeout: 5 * time.Minute}
 	errCh := make(chan error, 1)
 	go func() { errCh <- srv.ListenAndServe() }()
-	logger.Info("media server listening", "version", version, "addr", cfg.listen, "public", cfg.publicURL, "threshold", cfg.threshold)
+	logger.Info("media server listening", "version", version, "addr", cfg.listen, "public", cfg.publicURL, "threshold", cfg.threshold, "reject", cfg.reject)
 	select {
 	case <-ctx.Done():
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

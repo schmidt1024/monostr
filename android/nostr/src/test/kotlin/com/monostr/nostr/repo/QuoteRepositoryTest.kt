@@ -2,6 +2,7 @@ package com.monostr.nostr.repo
 
 import com.monostr.nostr.NostrEngine
 import com.monostr.nostr.SilentWsRelay
+import com.monostr.nostr.connectedEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.io.TempDir
 import rust.nostr.sdk.EventBuilder
 import rust.nostr.sdk.Keys
 import rust.nostr.sdk.Kind
+import rust.nostr.sdk.Tag
 import java.nio.file.Path
 import java.time.Duration
 
@@ -126,5 +128,100 @@ class QuoteRepositoryTest {
         assertNull(found.note.quotedId)
         assertEquals("outer\n\n${inner.id().toNostrUri()}", found.note.displayContent)
         e.close()
+    }
+
+    private fun relayList(k: Keys, vararg tags: List<String>) = EventBuilder(Kind(10002u), "").tags(tags.map { Tag.parse(it) }).signWithKeys(k)
+
+    /** A real locator over an own relay that has nothing, the [indexer] serving kind 10002, and foreign relays on loopback. */
+    private suspend fun withLocator(indexer: SilentWsRelay, block: suspend (NostrEngine, NostrQuoteRepository) -> Unit) {
+        val own = SilentWsRelay(answerEose = true)
+        val e = connectedEngine(dir, own)
+        val pool = ForeignRelays(e, io, cap = 8, lingerMs = 500)
+        val authors = NostrAuthorRelaysRepository(e, indexers = listOf(indexer.url), now = { time }, fetchTimeout = Duration.ofSeconds(3), foreign = pool, relayFilter = { true })
+        val locator = NostrEventLocator(e, authors, pool, enabled = { true }, scope = io, now = { time }, timeout = Duration.ofSeconds(3), relayFilter = { true })
+        val r = NostrQuoteRepository(e, scope = io, now = { time }, timeout = Duration.ofSeconds(3), relayFilter = { true }, locator = locator)
+        try {
+            block(e, r)
+        } finally {
+            pool.close()
+            e.close()
+            own.shutdown()
+        }
+    }
+
+    @Test
+    fun `quote found on the author's write relay`() = runTest {
+        val ev = note("from the outbox")
+        val id = ev.id().toHex()
+        SilentWsRelay(serveFor = { req -> if (id in req) listOf(ev.asJson()) else emptyList() }).use { f2 ->
+            SilentWsRelay(serveFor = { req -> if ("10002" in req) listOf(relayList(alice, listOf("r", f2.url, "write")).asJson()) else emptyList() }).use { idx ->
+                withLocator(idx) { _, r ->
+                    val found = r.get(id, author = alice.publicKey().toHex())
+                    assertEquals("from the outbox", (found as QuoteResult.Found).note.content)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `missing is asked again with a new author`() = runTest {
+        val ev = note("late author")
+        val id = ev.id().toHex()
+        SilentWsRelay(serveFor = { req -> if (id in req) listOf(ev.asJson()) else emptyList() }).use { f2 ->
+            SilentWsRelay(serveFor = { req -> if ("10002" in req) listOf(relayList(alice, listOf("r", f2.url, "write")).asJson()) else emptyList() }).use { idx ->
+                withLocator(idx) { _, r ->
+                    assertEquals(QuoteResult.Missing, r.get(id))
+                    assertTrue(r.get(id, author = alice.publicKey().toHex()) is QuoteResult.Found)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `same inputs within ten minutes stay missing`() = runTest {
+        val id = "ef".repeat(32)
+        SilentWsRelay(answerEose = true).use { f2 ->
+            SilentWsRelay(serveFor = { req -> if ("10002" in req) listOf(relayList(alice, listOf("r", f2.url, "write")).asJson()) else emptyList() }).use { idx ->
+                withLocator(idx) { _, r ->
+                    val a = alice.publicKey().toHex()
+                    assertEquals(QuoteResult.Missing, r.get(id, author = a))
+                    val asked = f2.requests.size
+                    val loads = r.loads
+                    assertEquals(QuoteResult.Missing, r.get(id, author = a))
+                    assertEquals(asked, f2.requests.size)
+                    assertEquals(loads, r.loads)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `hint relays are leased within the foreign budget`() = runTest {
+        // spec 2026-10-23 §3/§4.4: a quote's hints count toward the one budget; a full budget asks only the own relays
+        val ev = note("hinted quote")
+        val id = ev.id().toHex()
+        SilentWsRelay().use { blocker ->
+            SilentWsRelay(serve = listOf(ev.asJson())).use { hint ->
+                val e = engine()
+                val pool = ForeignRelays(e, io, cap = 1, lingerMs = 200)
+                try {
+                    val r = NostrQuoteRepository(e, scope = io, now = { time }, timeout = Duration.ofSeconds(3), relayFilter = { true }, foreign = pool)
+                    assertEquals(listOf(blocker.url), pool.lease(listOf(blocker.url)))
+                    assertEquals(QuoteResult.Missing, r.get(id, listOf(hint.url)))
+                    assertEquals(0, hint.requests.size, "asked outside the budget")
+                    assertEquals(setOf(blocker.url), pool.attached())
+                    // a hint that found no room was not asked: no Missing mark, the same input asks again once a slot is free
+                    assertNull(r.cached(id))
+                    pool.release(listOf(blocker.url))
+                    assertTrue(r.get(id, listOf(hint.url)) is QuoteResult.Found)
+                    assertEquals(1, hint.requests.size)
+                    // given back: it lingers, then goes
+                    assertTrue(com.monostr.nostr.awaitTrue(2000) { pool.attached().isEmpty() && e.temporaryRelayUrls().isEmpty() }, "still attached: ${pool.attached()}")
+                } finally {
+                    pool.close()
+                    e.close()
+                }
+            }
+        }
     }
 }

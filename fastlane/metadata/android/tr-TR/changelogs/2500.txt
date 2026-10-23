@@ -1,0 +1,2 @@
+• Asıl notu röleleriniz bulunmayan yanıtlar artık onu yanıtta belirtilen röleden veya yazarın rölelerinden getirir (anahtar: Yazarın rölelerini geçici olarak bağla)
+• Wi-Fi ile mobil veri arasında geçişten sonra röleler ve canlı mesajlar hemen yeniden bağlanır

@@ -47,6 +47,7 @@ import com.monostr.app.ui.common.MessageSnackbar
 import com.monostr.app.ui.common.NoteActions
 import com.monostr.app.ui.common.NoteCard
 import com.monostr.app.ui.common.ShowRepliesRow
+import com.monostr.app.ui.common.PendingRow
 import com.monostr.app.ui.common.UnavailableRow
 import com.monostr.app.ui.common.NoteDeletions
 import com.monostr.app.ui.common.Message
@@ -96,8 +97,8 @@ data class ThreadUiState(val items: List<NoteUi> = emptyList(), val focusedId: S
 sealed interface ThreadRow {
     val id: String
 
-    /** A note above the focused one; its NoteUi comes from items, else it shows as unavailable. */
-    data class Ancestor(override val id: String, val lineAbove: Boolean) : ThreadRow
+    /** A note above the focused one; its NoteUi comes from items, else it shows as unavailable ([pending]: still looked for, spec 2026-10-23 §5.2). */
+    data class Ancestor(override val id: String, val lineAbove: Boolean, val pending: Boolean = false) : ThreadRow
     data class Focused(override val id: String, val lineAbove: Boolean) : ThreadRow
 
     /**
@@ -223,7 +224,7 @@ class ThreadController(
                     val shownAncestors = ancestors.filterIsInstance<Slot.Shown>().map { it.note }
                     val withFocused = (shownAncestors + view.focused + strands.flatMap { listOfNotNull(it.reply, it.child) }).distinctBy { it.id }
                     val rows = buildList {
-                        ancestors.forEachIndexed { i, a -> add(ThreadRow.Ancestor(a.id, lineAbove = i > 0)) }
+                        ancestors.forEachIndexed { i, a -> add(ThreadRow.Ancestor(a.id, lineAbove = i > 0, pending = a is Slot.Pending)) }
                         add(ThreadRow.Focused(view.focused.id, lineAbove = ancestors.isNotEmpty()))
                         for (s in strands) {
                             add(ThreadRow.Reply(s.reply.id, lineBelow = s.child != null, keepWhenHidden = s.child != null, orphan = s.reply.replyToId != view.focused.id))
@@ -366,7 +367,9 @@ fun ThreadScreen(
                                 // the chain runs on into the focused note; a strand's head joins its child only when that child is shown
                                 val lineBelow = row is ThreadRow.Ancestor || (row is ThreadRow.Reply && row.lineBelow && next is ThreadRow.Child)
                                 val n = byId[row.id]
-                                if (n == null) UnavailableRow(lineAbove, lineBelow) else NoteCard(
+                                if (n == null) {
+                                    if (row is ThreadRow.Ancestor && row.pending) PendingRow(lineAbove, lineBelow) else UnavailableRow(lineAbove, lineBelow)
+                                } else NoteCard(
                                     note = n,
                                     replyContext = row is ThreadRow.Reply && row.orphan,
                                     onOpen = { if (n.note.id != state.focusedId) onOpenThread(n.note.id) },

@@ -1,0 +1,2 @@
+• Replies whose original note your relays don't have now fetch it from the relay named in the reply or from the author's relays ("Looking for this note…" while it searches; switch: Connect the author's relays temporarily)
+• After a switch between Wi-Fi and mobile data, relays and live messages reconnect at once

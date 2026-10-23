@@ -240,8 +240,8 @@ class FakeProfiles(known: Map<String, Profile> = emptyMap()) : ProfileRepository
 class FakeQuotes(var notes: Map<String, Note> = emptyMap()) : QuoteRepository {
     /** (id, hints) of every get, in order. */
     val calls = ArrayList<Pair<String, List<String>>>()
-    override fun cached(id: String): QuoteResult? = null
-    override suspend fun get(id: String, hints: List<String>): QuoteResult {
+    override fun cached(id: String, author: String?): QuoteResult? = null
+    override suspend fun get(id: String, hints: List<String>, author: String?): QuoteResult {
         calls += id to hints
         return notes[id]?.let { QuoteResult.Found(it) } ?: QuoteResult.Missing
     }

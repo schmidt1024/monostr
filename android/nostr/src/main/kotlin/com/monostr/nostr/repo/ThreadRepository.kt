@@ -7,8 +7,10 @@ import com.monostr.nostr.model.Nip10
 import com.monostr.nostr.model.Note
 import com.monostr.nostr.model.NoteMapper
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
@@ -41,6 +43,8 @@ interface ThreadRepository {
 class NostrThreadRepository(
     private val engine: NostrEngine,
     private val conversations: ConversationRepository = NostrConversationRepository(engine),
+    /** Spec 2026-10-23 §5.3: replies from the root author's read relays; without one the thread asks only the own relays. */
+    private val locator: EventLocator? = null,
     /** Timeout of the thread's relay fetches (tests shorten it). */
     private val fetchTimeout: Duration = Duration.ofSeconds(8),
     /** Spec perf2 C4: how long a live change waits for more before the thread is read again. */
@@ -48,14 +52,17 @@ class NostrThreadRepository(
     private val now: () -> Long = { System.currentTimeMillis() / 1000 },
     /**
      * Spec perf2 C3/C7: jobs R and D per root on the engine's background scope; leaving does not stop them, a reopen
-     * joins or skips them. The keys `replies:<root>:<focused>` and `deletions:<root>` share one gate (accepted, ruling K10).
+     * joins or skips them. The keys `replies:<root>:<focused>`, `deletions:<root>` and `readrelays:<root>` (spec
+     * 2026-10-23 §5.3) share one gate (accepted, ruling K10).
      */
     private val gate: RefreshGate<String> = RefreshGate(engine.backgroundScope, GATE_TTL_SECONDS),
 ) : ThreadRepository {
 
     /**
-     * Spec perf2 C1: what the jobs found beside the database, written only under [lock]. [ancestors] is set once,
-     * when the walk is done (or in the first view when the database walk was complete), so it is never partial.
+     * Spec perf2 C1: what the jobs found beside the database, written only under [lock]. [ancestors] is set in the first
+     * view when the database walk was complete, else by the walk: spec 2026-10-23 §5.2 lifts perf2's «never partial»,
+     * the chain comes in parts (database and own relays first, then each foreign hop), a gap stage 3 may still fill
+     * shown as [Slot.Pending] until it is found or settled as unavailable.
      */
     private class ThreadState(val focused: Note, val rootId: String, val tagIds: List<String>) {
         val lock = Mutex()
@@ -79,6 +86,12 @@ class NostrThreadRepository(
         }
         local.ancestors?.let { s.ancestors = it } // no other coroutine runs yet
         val pacer = SignalPacer(windowMs)
+        // spec 2026-10-23 §7: the locator forgot its marks (network back, refresh): the walk and the read relays once more
+        val walkAgain = Channel<Unit>(Channel.CONFLATED)
+        val readAgain = Channel<Unit>(Channel.CONFLATED)
+        launch(start = CoroutineStart.UNDISPATCHED) {
+            conversations.retries.collect { walkAgain.trySend(Unit); readAgain.trySend(Unit) }
+        }
         val shown = AtomicReference<Set<String>>(emptySet())
         var last = current(s)
         // job R right after the first read (the first view is the database before any fetch of this open), on the
@@ -118,7 +131,22 @@ class NostrThreadRepository(
             gate.launchStamped("deletions:$rootId") { fetchDeletions(rootId, focused.id, tagIds) }?.join()
             pacer.signal(milestone = true)
         }
-        launch { walk(s, local, replies, pacer) }
+        launch {
+            walk(s, local, replies, pacer)
+            for (retry in walkAgain) walk(s, local, replies, pacer)
+        }
+        // spec 2026-10-23 §5.3: after job R, gated per root like R and D (background scope, once a minute); a retry forces it
+        locator?.let { l ->
+            launch {
+                replies?.join()
+                var retry = false
+                while (true) {
+                    gate.launchStamped("readrelays:$rootId", force = retry) { fetchFromReadRelays(s, l) }?.let { it.join(); pacer.signal() }
+                    readAgain.receive()
+                    retry = true
+                }
+            }
+        }
     }
 
     override suspend fun note(id: String): Note? = loadNote(id)
@@ -159,7 +187,9 @@ class NostrThreadRepository(
     /**
      * Job W (spec perf2 C3): round 1 (the root when it is not stored, the first missing hop) in one ids request beside
      * job R; after R the walk again, which finds the hops R stored (NIP-10: they tag the root) and fetches the rest
-     * by id, one request per round. A hop still missing after all rounds is unavailable, the root on top.
+     * by id, one request per round. Spec 2026-10-23 §5.2/§4.4: that chain is shown at once; its pending gaps go to
+     * stage 3, one round per hop, and the chain is walked and shown again after each, at most [FOREIGN_HOPS] rounds.
+     * A hop still missing after all rounds is unavailable, the root on top.
      */
     private suspend fun walk(s: ThreadState, local: LocalWalk, replies: Job?, pacer: SignalPacer) {
         try {
@@ -171,15 +201,59 @@ class NostrThreadRepository(
         }
         if (local.ancestors != null) return
         replies?.join()
-        val ancestors = try {
-            conversations.ancestors(s.focused)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            emptyList()
+        // spec 2026-10-23 §10: an id that missed on the own relays in this walk is not asked there again after a round
+        val asked = HashSet<String>()
+        var ancestors = ancestorsOrNull(s, asked) ?: emptyList()
+        show(s, ancestors, pacer)
+        var hops = 0
+        while (hops < FOREIGN_HOPS) {
+            val pending = ancestors.filterIsInstance<Slot.Pending>()
+            if (pending.isEmpty()) return
+            try {
+                conversations.resolve(pending)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // the walk below shows what is stored; a gap it still finds pending counts as one hop
+            }
+            hops++
+            ancestors = ancestorsOrNull(s, asked) ?: break
+            show(s, ancestors, pacer)
         }
+        // no further foreign hop (spec §4.4): what is still pending is unavailable
+        val settled = ancestors.map { if (it is Slot.Pending) Slot.Unavailable(it.id) else it }
+        if (settled != ancestors) show(s, settled, pacer)
+    }
+
+    private suspend fun ancestorsOrNull(s: ThreadState, asked: MutableSet<String>): List<Slot>? = try {
+        conversations.ancestors(s.focused, asked)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        null
+    }
+
+    private suspend fun show(s: ThreadState, ancestors: List<Slot>, pacer: SignalPacer) {
         s.lock.withLock { s.ancestors = ancestors }
         pacer.signal(milestone = true)
+    }
+
+    /**
+     * Spec 2026-10-23 §5.3: replies from up to three read relays of the root's author (NIP-65: repliers write there).
+     * The author: the stored root's, else the root hint's of the focused note; true when a relay was asked.
+     */
+    private suspend fun fetchFromReadRelays(s: ThreadState, locator: EventLocator): Boolean = try {
+        rootAuthor(s)?.let { locator.repliesFrom(it, s.tagIds) } == true
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        false
+    }
+
+    private suspend fun rootAuthor(s: ThreadState): String? {
+        if (s.rootId == s.focused.id) return s.focused.author
+        val stored = if (HEX_ID.matches(s.rootId)) engine.queryDecoded(idsFilter(listOf(s.rootId))).firstOrNull { it.kind == 1 }?.pubkey else null
+        return stored ?: s.focused.rootHint?.author
     }
 
     /**
@@ -246,6 +320,8 @@ class NostrThreadRepository(
         const val GATE_TTL_SECONDS = 60L
         /** Spec perf2 D2: the live REQ starts this far back; job R fetches what is older. */
         const val LIVE_OVERLAP_SECONDS = 60L
+        /** Spec 2026-10-23 §4.4: stage 3 rounds of one thread walk (a long chain would take 50 × 5 s otherwise). */
+        const val FOREIGN_HOPS = 3
         private const val DELETION_CHUNK = 100
     }
 }

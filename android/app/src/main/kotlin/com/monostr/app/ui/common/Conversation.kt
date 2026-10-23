@@ -47,7 +47,17 @@ fun ShowRepliesRow(onClick: () -> Unit, modifier: Modifier = Modifier) {
 
 /** A note of the chain that is gone (not found, withdrawn, muted, deleted; spec 2026-10-16 §3): its place stays so the line still connects. */
 @Composable
-fun UnavailableRow(lineAbove: Boolean, lineBelow: Boolean, modifier: Modifier = Modifier) {
+fun UnavailableRow(lineAbove: Boolean, lineBelow: Boolean, modifier: Modifier = Modifier) =
+    PlaceholderRow(stringResource(R.string.conversation_unavailable), "note-unavailable", lineAbove, lineBelow, modifier)
+
+/** Spec 2026-10-23 §5.1/§5.2: a note of the chain foreign relays are still asked for; built like [UnavailableRow] (same height, calm, no spinner). */
+@Composable
+fun PendingRow(lineAbove: Boolean, lineBelow: Boolean, modifier: Modifier = Modifier) =
+    PlaceholderRow(stringResource(R.string.conversation_pending), "note-pending", lineAbove, lineBelow, modifier)
+
+/** The row of a chain note that is not shown: [text] in a muted card, the thread line running through. */
+@Composable
+private fun PlaceholderRow(text: String, tag: String, lineAbove: Boolean, lineBelow: Boolean, modifier: Modifier) {
     val lineColor = MaterialTheme.colorScheme.outlineVariant
     Box(
         modifier.fillMaxWidth()
@@ -58,10 +68,10 @@ fun UnavailableRow(lineAbove: Boolean, lineBelow: Boolean, modifier: Modifier = 
                 if (lineBelow) drawLine(lineColor, Offset(x, size.height - 10.dp.toPx()), Offset(x, size.height), w)
             }
             .padding(horizontal = 16.dp, vertical = 10.dp)
-            .testTag("note-unavailable"),
+            .testTag(tag),
     ) {
         Text(
-            stringResource(R.string.conversation_unavailable),
+            text,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp)).padding(12.dp),

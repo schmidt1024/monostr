@@ -8,6 +8,7 @@ import com.monostr.app.ui.tips.TipDecorations
 import com.monostr.nostr.repo.Slot
 import com.monostr.nostr.repo.ThreadRepository
 import com.monostr.nostr.repo.ThreadView
+import com.monostr.nostr.repo.Wanted
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
@@ -60,6 +61,15 @@ class ThreadStrandsTest {
         val c = threadController(focused.id, FakeThreads(mapOf(focused.id to v)))
         c.start(); advanceUntilIdle()
         assertEquals(ThreadRow.Ancestor(root.id, lineAbove = false), c.state.value.rows.first())
+        assertTrue(c.state.value.items.none { it.note.id == root.id })
+    }
+
+    @Test
+    fun `pending ancestor is a pending row`() = runTest {
+        val v = view().copy(ancestors = listOf(Slot.Pending(root.id, Wanted(root.id))), root = null)
+        val c = threadController(focused.id, FakeThreads(mapOf(focused.id to v)))
+        c.start(); advanceUntilIdle()
+        assertEquals(ThreadRow.Ancestor(root.id, lineAbove = false, pending = true), c.state.value.rows.first())
         assertTrue(c.state.value.items.none { it.note.id == root.id })
     }
 

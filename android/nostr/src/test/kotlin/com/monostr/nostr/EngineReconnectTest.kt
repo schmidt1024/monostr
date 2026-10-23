@@ -192,4 +192,111 @@ class EngineReconnectTest {
             e.close()
         }
     }
+
+    @Test
+    fun `reconnectAll reconnects connected relays and re-subscribes`() = runTest {
+        // spec 2026-10-23 §7: after a switch of the default network a socket can be dead but still marked connected
+        SilentWsRelay(answerEose = true).use { relay ->
+            val e = connectedEngine(dir, relay, sk)
+            try {
+                val id = e.subscribe(Filter().kind(Kind(1u)).limit(5u))
+                assertTrue(awaitTrue { relay.requests.size == 1 }, "subscribed: ${relay.requests}")
+                e.reconnectAll()
+                assertTrue(awaitTrue { relay.connections == 2 }, "connections: ${relay.connections}")
+                // rust-nostr may ask it again itself as well: a second REQ under the same id replaces the first
+                assertTrue(awaitTrue { relay.requests.count { it.contains("\"$id\"") } >= 2 }, "asked again: open=${relay.open} ${relay.requests}")
+                assertTrue(awaitTrue { relay.open == 1 }, "the new connection stays open: ${relay.open}")
+                assertTrue(e.connectedRelayUrls().isNotEmpty(), "connected when the call returns")
+            } finally {
+                e.close()
+            }
+        }
+    }
+
+    @Test
+    fun `subscriptions of a relay that is not back within reconnectAll are asked when it returns`() = runTest {
+        // spec 2026-10-23 §7: a switch to a network that is not usable yet; the relay object is renewed
+        val first = SilentWsRelay(answerEose = true)
+        val e = connectedEngine(dir, first, sk)
+        try {
+            val id = e.subscribe(Filter().kind(Kind(1u)).limit(5u))
+            assertTrue(awaitTrue { first.requests.size == 1 }, "subscribed: ${first.requests}")
+            first.close() // no new connections; the open socket stays, so the relay still reads connected
+            e.reconnectAll()
+            assertTrue(e.connectedRelayUrls().isEmpty(), "the relay was reconnected although it is unreachable")
+            SilentWsRelay(answerEose = true, port = first.port).use { back ->
+                e.reconnectIfLost()
+                assertTrue(awaitTrue(30_000) { back.requests.any { it.contains("\"$id\"") } }, "the feed is silent: ${back.requests}")
+            }
+        } finally {
+            e.close()
+            first.shutdown()
+        }
+    }
+
+    @Test
+    fun `reconnectAll after close does nothing`() = runTest {
+        // a network change racing logout: the closed engine connects no relay again
+        SilentWsRelay(answerEose = true).use { relay ->
+            val e = connectedEngine(dir, relay, sk)
+            assertTrue(awaitTrue { relay.open == 1 }, "connected: ${relay.open}")
+            e.close()
+            e.reconnectAll()
+            e.reconnectIfLost()
+            Thread.sleep(500)
+            assertEquals(1, relay.connections, "reconnected after close")
+        }
+    }
+
+    @Test
+    fun `reconnectAll leaves temporary relays without subscriptions alone`() = runTest {
+        SilentWsRelay(answerEose = true).use { home ->
+            SilentWsRelay(answerEose = true).use { temp ->
+                val e = connectedEngine(dir, home, sk)
+                try {
+                    val held = e.attachTemporary(listOf(temp.url))
+                    assertTrue(awaitTrue { e.connectedRelayUrls().size == 2 }, "temporary relay never connected")
+                    e.reconnectAll()
+                    assertTrue(awaitTrue { home.connections == 2 }, "home: ${home.connections}")
+                    assertEquals(1, temp.connections, "the temporary relay was reconnected")
+                    assertEquals(listOf(temp.url), e.temporaryRelayUrls(), "still held as temporary")
+                    e.detachTemporary(held)
+                } finally {
+                    e.close()
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `reconnectAll renews a temporary relay that carries a subscription and keeps it temporary`() = runTest {
+        // spec 2026-10-23 §7, final review I4: the DM inbox relays (DmSync holds them via attachTemporary and subscribes
+        // the gift wraps there) must come back after a network switch like the normal set
+        SilentWsRelay(answerEose = true).use { home ->
+            SilentWsRelay(answerEose = true).use { inbox ->
+                val e = connectedEngine(dir, home, sk)
+                try {
+                    val first = e.attachTemporary(listOf(inbox.url))
+                    val second = e.attachTemporary(listOf(inbox.url)) // two holders
+                    assertTrue(awaitTrue { e.connectedRelayUrls().size == 2 }, "inbox relay never connected")
+                    val id = e.subscribeTo(listOf(inbox.url), Filter().kind(Kind(1059u)).limit(5u))
+                    assertTrue(awaitTrue { inbox.requests.any { it.contains("\"$id\"") } }, "subscribed: ${inbox.requests}")
+                    e.reconnectAll()
+                    assertTrue(awaitTrue { inbox.connections == 2 }, "inbox: ${inbox.connections}")
+                    assertTrue(awaitTrue { inbox.requests.count { it.contains("\"$id\"") } >= 2 }, "asked again: ${inbox.requests}")
+                    assertTrue(awaitTrue { inbox.open == 1 }, "the new connection stays open: ${inbox.open}")
+                    assertEquals(listOf(inbox.url), e.temporaryRelayUrls(), "still held as temporary")
+                    assertFalse(inbox.url in e.relayUrls(), "joined the normal set")
+                    // the reference count is untouched: the first release keeps it, the second removes it
+                    e.detachTemporary(first)
+                    assertEquals(listOf(inbox.url), e.temporaryRelayUrls())
+                    e.detachTemporary(second)
+                    assertTrue(e.temporaryRelayUrls().isEmpty())
+                    assertFalse(inbox.url in e.connectedRelayUrls(), "still in the pool: ${e.connectedRelayUrls()}")
+                } finally {
+                    e.close()
+                }
+            }
+        }
+    }
 }

@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -73,6 +74,8 @@ type env struct {
 	srv    *httptest.Server
 	now    time.Time
 	log    *bytes.Buffer
+	// notified counts the calls of Deps.Notify
+	notified atomic.Int32
 }
 
 func (e *env) clock() time.Time { return e.now }
@@ -88,7 +91,10 @@ func newEnv(t *testing.T, lim limits.Limits) *env {
 // kept; the address, threshold, contact and version are filled in.
 func newEnvWith(t *testing.T, cfg Config) *env {
 	t.Helper()
-	cfg.PublicURL, cfg.Threshold, cfg.ContactNpub, cfg.Version = publicURL+"/", 0.4, "npub1contact", "test"
+	cfg.PublicURL, cfg.ContactNpub, cfg.Version = publicURL+"/", "npub1contact", "test"
+	if cfg.Threshold == 0 {
+		cfg.Threshold = 0.4
+	}
 	st, err := store.Open(filepath.Join(t.TempDir(), "m.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -97,7 +103,8 @@ func newEnvWith(t *testing.T, cfg Config) *env {
 	e := &env{t: t, store: st, bucket: storagetest.NewMemory(), nsfw: &fakeClassifier{score: 0.05},
 		now: time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC), log: &bytes.Buffer{}}
 	h, err := New(cfg,
-		Deps{Store: st, Bucket: e.bucket, Classifier: e.nsfw, Logger: slog.New(slog.NewTextHandler(e.log, nil)), Now: e.clock})
+		Deps{Store: st, Bucket: e.bucket, Classifier: e.nsfw, Logger: slog.New(slog.NewTextHandler(e.log, nil)), Now: e.clock,
+			Notify: func() { e.notified.Add(1) }})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -674,5 +681,127 @@ func TestConcurrentUploadsOfOnePictureStoreItOnce(t *testing.T) {
 	}
 	if created != 1 || e.nsfw.calls != 1 || e.bucket.Len() != 1 {
 		t.Fatalf("created %d, classifier calls %d, objects %d", created, e.nsfw.calls, e.bucket.Len())
+	}
+}
+
+// greyEnv is an env with the grey zone from 0.60 up to 0.85.
+func greyEnv(t *testing.T) *env {
+	t.Helper()
+	return newEnvWith(t, Config{Limits: generous, Threshold: 0.60, Reject: 0.85})
+}
+
+func TestGreyZoneStoresAndNotifies(t *testing.T) {
+	e := greyEnv(t)
+	u := newUser(t)
+	plain, grey := imagetest.JPEG(40, 30, 1), imagetest.JPEG(40, 30, 2)
+
+	e.nsfw.score = 0.05
+	want := e.put(u, plain, "image/jpeg", nil)
+	e.want(want, 201, "")
+	e.nsfw.score = 0.67
+	got := e.put(u, grey, "image/jpeg", nil)
+	e.want(got, 201, "")
+
+	// the uploader cannot tell: same fields, only hash/url/size differ
+	var a, b map[string]any
+	if json.Unmarshal(want.body, &a) != nil || json.Unmarshal(got.body, &b) != nil {
+		t.Fatalf("bodies: %s / %s", want.body, got.body)
+	}
+	if len(a) != len(b) {
+		t.Fatalf("field sets differ: %s / %s", want.body, got.body)
+	}
+	for k := range a {
+		if _, ok := b[k]; !ok {
+			t.Fatalf("field %q missing: %s", k, got.body)
+		}
+	}
+	if b["type"] != a["type"] {
+		t.Fatalf("type differs: %s / %s", want.body, got.body)
+	}
+	if _, ok, _ := e.store.Blob(hashOf(grey)); !ok || e.bucket.Len() != 2 {
+		t.Fatal("the grey-zone picture is not stored")
+	}
+	cases, err := e.store.OpenReviews(10)
+	if err != nil || len(cases) != 1 || cases[0].SHA256 != hashOf(grey) || cases[0].Delivery != store.DeliverySingle {
+		t.Fatalf("cases: %+v, %v", cases, err)
+	}
+	if n := e.notified.Load(); n != 1 {
+		t.Fatalf("notify called %d times", n)
+	}
+}
+
+func TestScoreAtThresholdIsAReviewCase(t *testing.T) {
+	e := greyEnv(t)
+	e.nsfw.score = 0.60
+	e.want(e.put(newUser(t), imagetest.JPEG(40, 30, 1), "image/jpeg", nil), 201, "")
+	cases, err := e.store.OpenReviews(10)
+	if err != nil || len(cases) != 1 {
+		t.Fatalf("cases: %+v, %v", cases, err)
+	}
+}
+
+func TestRejectBandUnchanged(t *testing.T) {
+	e := greyEnv(t)
+	e.nsfw.score = 0.85
+	r := e.put(newUser(t), imagetest.JPEG(40, 30, 1), "image/jpeg", nil)
+	e.want(r, 403, CodeNSFW)
+	if got := r.header.Get("X-Reason"); got != "this server does not accept adult content" {
+		t.Fatalf("reason: %q", got)
+	}
+	if cases, _ := e.store.OpenReviews(10); len(cases) != 0 || e.notified.Load() != 0 || e.bucket.Len() != 0 {
+		t.Fatalf("a refused picture left cases %+v, notices %d", cases, e.notified.Load())
+	}
+}
+
+func TestBelowThresholdNoCase(t *testing.T) {
+	e := greyEnv(t)
+	e.nsfw.score = 0.59
+	e.want(e.put(newUser(t), imagetest.JPEG(40, 30, 1), "image/jpeg", nil), 201, "")
+	if cases, _ := e.store.OpenReviews(10); len(cases) != 0 || e.notified.Load() != 0 {
+		t.Fatalf("cases %+v, notices %d", cases, e.notified.Load())
+	}
+}
+
+func TestNoGreyZoneWhenRejectUnset(t *testing.T) {
+	e := newEnvWith(t, Config{Limits: generous, Threshold: 0.60})
+	e.nsfw.score = 0.67
+	e.want(e.put(newUser(t), imagetest.JPEG(40, 30, 1), "image/jpeg", nil), 403, CodeNSFW)
+	if cases, _ := e.store.OpenReviews(10); len(cases) != 0 || e.notified.Load() != 0 {
+		t.Fatalf("cases %+v, notices %d", cases, e.notified.Load())
+	}
+}
+
+func TestGreyZoneDuplicateAndAfterWeg(t *testing.T) {
+	e := greyEnv(t)
+	a, b := newUser(t), newUser(t)
+	jpg := imagetest.JPEG(40, 30, 1)
+	e.nsfw.score = 0.67
+
+	e.want(e.put(a, jpg, "image/jpeg", nil), 201, "")
+	e.want(e.put(b, jpg, "image/jpeg", nil), 200, "")
+	if cases, _ := e.store.OpenReviews(10); len(cases) != 1 {
+		t.Fatalf("cases: %+v", cases)
+	}
+	if n := e.notified.Load(); n != 1 {
+		t.Fatalf("notify called %d times", n)
+	}
+
+	// what «weg» does
+	hash := hashOf(jpg)
+	if err := e.store.BanHash(hash, "review", e.now.Unix()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.store.DeleteBlob(hash); err != nil {
+		t.Fatal(err)
+	}
+	e.want(e.put(newUser(t), jpg, "image/jpeg", nil), 403, CodeBannedContent)
+}
+
+func TestNewRejectsRejectBelowThreshold(t *testing.T) {
+	if _, err := New(Config{PublicURL: publicURL, Threshold: 0.6, Reject: 0.5}, Deps{}); err == nil {
+		t.Fatal("Reject below Threshold was accepted")
+	}
+	if _, err := New(Config{PublicURL: publicURL, Threshold: 0.6, Reject: 1.5}, Deps{}); err == nil {
+		t.Fatal("Reject above 1 was accepted")
 	}
 }

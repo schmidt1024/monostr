@@ -187,4 +187,89 @@ func TestUsage(t *testing.T) {
 			t.Errorf("%v: %v", args, err)
 		}
 	}
+	if !strings.Contains(adminUsage, "review [--all] [n]") {
+		t.Error("usage lacks the review command")
+	}
+}
+
+// addReview stores a grey-zone picture and its case.
+func (e *adminEnv) addReview(c, pubkey string, score float64, at time.Time, delivery string) {
+	e.t.Helper()
+	b := store.Blob{SHA256: h(c), Size: 10, Type: "image/png", Width: 4, Height: 3, CreatedAt: at.Unix()}
+	cap := 0
+	if delivery == store.DeliverySingle {
+		cap = 100
+	}
+	if _, err := e.store.AddStoredReview(b, pubkey, score, 0, cap); err != nil {
+		e.t.Fatal(err)
+	}
+	e.bucket.Put(context.Background(), h(c), []byte(c), "image/png")
+}
+
+func TestAdminReview(t *testing.T) {
+	e := newAdminEnv(t)
+	pk := h("7")
+	e.addReview("a", pk, 0.71, e.now.Add(-3*time.Hour), store.DeliverySingle)
+	e.addReview("b", pk, 0.64, e.now.Add(-2*time.Hour), store.DeliverySummary)
+	e.addReview("c", pk, 0.80, e.now.Add(-1*time.Hour), store.DeliverySingle)
+	if err := e.store.NoticeSent(h("a"), e.now.Unix()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.store.RemoveForReview(h("c"), e.now.Unix()); err != nil {
+		t.Fatal(err)
+	}
+
+	out := e.ok("review")
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("two open cases expected:\n%s", out)
+	}
+	if !strings.HasPrefix(lines[0], "bbbb  0.64  summary  ") || !strings.HasPrefix(lines[1], "aaaa  0.71  sent  ") {
+		t.Fatalf("newest first with code, score and state:\n%s", out)
+	}
+	if !strings.Contains(lines[0], "https://media.example/"+h("b")+".png") || !strings.HasSuffix(lines[0], pk) || !strings.Contains(lines[0], "2026-10-02 10:00:00") {
+		t.Fatalf("time, url and npub: %q", lines[0])
+	}
+	if strings.Contains(out, h("c")) {
+		t.Fatalf("a closed case is listed without --all:\n%s", out)
+	}
+
+	e.addReview("d", pk, 0.66, e.now, store.DeliverySingle)
+	if out := e.ok("review", "1"); strings.Count(out, "\n") != 1 || !strings.HasPrefix(out, "dddd  0.66  pending  ") {
+		t.Fatalf("limit and pending state:\n%s", out)
+	}
+
+	out = e.ok("review", "--all")
+	if !strings.Contains(out, "weg") || !strings.Contains(out, h("c")) || strings.Count(out, "\n") != 4 {
+		t.Fatalf("--all lists the closed case with its outcome:\n%s", out)
+	}
+	if _, err := e.run("review", "--all", "0"); err == nil {
+		t.Error("a count of 0 was accepted")
+	}
+}
+
+func TestAdminStatsOpenReviews(t *testing.T) {
+	e := newAdminEnv(t)
+	if out := e.ok("stats"); !strings.Contains(out, "open reviews: 0") {
+		t.Fatalf("stats: %q", out)
+	}
+	e.addReview("a", h("7"), 0.7, e.now, store.DeliverySingle)
+	if out := e.ok("stats"); !strings.Contains(out, "open reviews: 1") {
+		t.Fatalf("stats: %q", out)
+	}
+}
+
+func TestAdminGCPrunesWraps(t *testing.T) {
+	e := newAdminEnv(t)
+	old := e.now.Add(-31 * 24 * time.Hour).Unix()
+	recent := e.now.Add(-29 * 24 * time.Hour).Unix()
+	e.store.WrapSeen("old", old)
+	e.store.WrapSeen("recent", recent)
+	e.ok("gc")
+	if fresh, _ := e.store.WrapSeen("old", e.now.Unix()); !fresh {
+		t.Error("an old wrap was kept")
+	}
+	if fresh, _ := e.store.WrapSeen("recent", e.now.Unix()); fresh {
+		t.Error("a recent wrap was pruned")
+	}
 }

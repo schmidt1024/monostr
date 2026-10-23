@@ -109,6 +109,8 @@ data class FeedUiState(
     val chains: Map<String, ChainUi> = emptyMap(),
     /** Decorated ancestor notes by id; an id of a chain that is missing here is shown as "unavailable" (not found, withdrawn, muted, deleted). */
     val ancestors: Map<String, NoteUi> = emptyMap(),
+    /** Spec 2026-10-23 §5.1: ancestor ids still searched on foreign relays; shown as the pending row, not as "unavailable". */
+    val pending: Set<String> = emptySet(),
     val loading: Boolean = true,
     val refreshing: Boolean = false,
     val loadingMore: Boolean = false,
@@ -154,6 +156,8 @@ class FeedController(
     private val snapshot: FeedSnapshot? = null,
     /** Spec perf2 A2: called once when the home feed's first relay page is in, failed or was cancelled; never for a list (session: opens the startup gate). */
     private val onFirstFresh: () -> Unit = {},
+    /** Spec 2026-10-23 §5.1: pull-to-refresh forgets the "searched, not found" marks before the chains are tried again (session: the locator's forget without a retry signal, so the refresh walks them once). */
+    private val forgetMisses: () -> Unit = {},
 ) {
     val names: StateFlow<Map<String, String>> get() = mentions.names
     private val _state = MutableStateFlow(FeedUiState())
@@ -186,6 +190,8 @@ class FeedController(
             }
         }
         if (snapshot != null) scope.launch { showSnapshot(snapshot) }
+        // spec 2026-10-23 §5.1: a changed relay set or a new search chance walks the open chains again
+        scope.launch { conversations.retries.collect { retryUnavailable() } }
         mentions.follow(_state.map { s -> s.notes.map { it.note } + s.ancestors.values.map { it.note } })
         bookmarks.ensureLoaded()
         scope.launch { bookmarks.changes.collect { _state.update { s -> s.mapAll(bookmarks::flags) } } }
@@ -296,6 +302,7 @@ class FeedController(
                 val decorated = decorate(feed.notes(source))
                 setFresh(decorated, refreshing = false)
                 chainsFor(decorated)
+                forgetMisses()
                 retryUnavailable()
             } catch (e: CancellationException) {
                 throw e
@@ -333,12 +340,18 @@ class FeedController(
     /** Entry ids whose chain a running job is resolving: a second job does not walk them again. */
     private val resolving = HashSet<String>()
 
+    /** Entries a retry asked for while they were in [resolving]: their job walks them once more at its end. */
+    private val retryAgain = HashSet<String>()
+
     private fun chainsFor(page: List<NoteUi>) = resolveChains(page.filter { it.note.id !in _state.value.chains })
 
     /** Spec 2026-10-16 §2.2 Timeouts, §6: a refresh tries the chains again that had unavailable notes (muted ones are loaded, so they stay). */
     private fun retryUnavailable() {
         val s = _state.value
-        resolveChains(s.notes.filter { n -> s.chains[n.note.id]?.ancestors?.any { it !in allAncestors } == true })
+        val open = s.notes.filter { n -> s.chains[n.note.id]?.ancestors?.any { it !in allAncestors } == true }
+        // entries a job is still resolving are walked again when it ends (a retry must not get lost in the stage-3 window)
+        retryAgain += open.map { it.note.id }.filter { it in resolving }
+        resolveChains(open)
     }
 
     /**
@@ -351,29 +364,56 @@ class FeedController(
         val ids = todo.map { it.note.id }
         resolving += ids
         scope.launch {
+            // Pending ids this job put into the state: a failed or cancelled search is finished too, so none stays
+            val added = HashSet<String>()
             try {
-                storeChains(conversations.chains(todo.map { it.note }))
+                var notes = todo.map { it.note }
+                var resolved = emptySet<String>()
+                // spec 2026-10-23 §10 (final review M1): an id that missed on the own relays in this job is not asked there again
+                val asked = HashSet<String>()
+                // bounded: each round needs a new Pending hop, and the locator marks what it did not find
+                repeat(PENDING_ROUNDS) {
+                    val found = conversations.chains(notes, asked)
+                    val pendings = storeChains(found, resolved)
+                    if (pendings.isEmpty()) return@launch
+                    added += pendings.map { it.id }
+                    // spec 2026-10-23 §5.1: the chains are shown already; stage 3 runs behind them and only the affected ones are walked again
+                    conversations.resolve(pendings)
+                    resolved = pendings.mapTo(HashSet()) { it.id }
+                    notes = notes.filter { n -> found[n.id]?.ancestors?.any { it is Slot.Pending && it.id in resolved } == true }
+                }
+                // out of rounds: one last walk, what is still pending after it is shown as unavailable
+                val last = storeChains(conversations.chains(notes, asked), resolved)
+                if (last.isNotEmpty()) storeChains(emptyMap(), last.mapTo(HashSet()) { it.id })
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 // best-effort: the replies stay single; a later refresh tries again
             } finally {
                 resolving -= ids.toSet()
+                if (added.isNotEmpty()) _state.update { s -> if (s.pending.isEmpty()) s else s.copy(pending = s.pending - added) }
+                // a retry signal or refresh that came in while this job held the entries walks them once more
+                val again = ids.filter { retryAgain.remove(it) }
+                if (again.isNotEmpty()) resolveChains(_state.value.notes.filter { it.note.id in again })
             }
         }
     }
 
-    private suspend fun storeChains(found: Map<String, Chain>) {
-        if (found.isEmpty()) return
+    /** Stores [found]; [resolved] ids leave `pending` in the same update. Returns the Pending slots of [found] (no update when there is nothing to store). */
+    private suspend fun storeChains(found: Map<String, Chain>, resolved: Set<String> = emptySet()): List<Slot.Pending> {
+        if (found.isEmpty() && resolved.isEmpty()) return emptyList()
+        val pendings = found.values.flatMap { c -> c.ancestors.filterIsInstance<Slot.Pending>() }.distinctBy { it.id }
         val shown = found.values.flatMap { c -> c.ancestors.filterIsInstance<Slot.Shown>().map { it.note } }.distinctBy { it.id }
         decorate(shown).forEach { allAncestors[it.note.id] = it }
         _state.update { s ->
             s.copy(
                 chains = s.chains + found.mapValues { (_, c) -> ChainUi(c.ancestors.map { it.id }, c.cut) },
                 ancestors = visibleAncestors(),
+                pending = if (resolved.isEmpty() && pendings.isEmpty()) s.pending else s.pending - resolved + pendings.map { it.id },
             )
         }
         trackShown()
+        return pendings
     }
 
     /** Keeps the receipt subscription on everything shown: the entries and their ancestors (track replaces the set). */
@@ -505,6 +545,8 @@ class FeedController(
     companion object {
         /** A burst of pages (live, refresh) writes the snapshot once. */
         const val SNAPSHOT_DELAY_MS = 2_000L
+        /** Spec 2026-10-23 §5.1: at most this many foreign-search hops per chain job. */
+        const val PENDING_ROUNDS = 3
     }
 }
 
@@ -525,6 +567,7 @@ fun Ready.listFeed(factory: TipSheetFactory, source: FeedSource.Authors, scope: 
     conversations = conversations, mentions = MentionResolver(profiles, scope, Dispatchers.Default),
     deletions = deletions, visibility = visibility, afterDelete = afterNoteDelete, own = ownReactions,
     mute = mute, muteScope = engine.backgroundScope, source = source, snapshot = snapshot,
+    forgetMisses = { locator?.forget(notify = false) },
 )
 
 @HiltViewModel
@@ -532,7 +575,7 @@ class FeedViewModel @Inject constructor(session: NostrSession, private val facto
     private val ready = session.requireReady()
     val decorations = factory.decorations(viewModelScope)
     val bookmarks = BookmarkActions(ready.bookmarks, viewModelScope, background = ready.engine.backgroundScope)
-    val controller = FeedController(ready.feed, ready.profiles, ready.publish, decorations, bookmarks, ready.counts, viewModelScope, conversations = ready.conversations, mentions = MentionResolver(ready.profiles, viewModelScope, Dispatchers.Default), followChanges = ready.follows.changes, deletions = ready.deletions, visibility = ready.visibility, afterDelete = ready.afterNoteDelete, own = ready.ownReactions, mute = ready.mute, muteScope = ready.engine.backgroundScope, snapshot = ready.feedSnapshot, onFirstFresh = { ready.startupGate.open("feed fresh page") })
+    val controller = FeedController(ready.feed, ready.profiles, ready.publish, decorations, bookmarks, ready.counts, viewModelScope, conversations = ready.conversations, mentions = MentionResolver(ready.profiles, viewModelScope, Dispatchers.Default), followChanges = ready.follows.changes, deletions = ready.deletions, visibility = ready.visibility, afterDelete = ready.afterNoteDelete, own = ready.ownReactions, mute = ready.mute, muteScope = ready.engine.backgroundScope, snapshot = ready.feedSnapshot, forgetMisses = { ready.locator?.forget(notify = false) }, onFirstFresh = { ready.startupGate.open("feed fresh page") })
     val deletions = ready.deletions
     val menu = ready.noteMenu(delete = controller::delete, mute = controller::mute)
 

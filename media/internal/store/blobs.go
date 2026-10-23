@@ -27,17 +27,23 @@ func (s *Store) Blob(sha256 string) (Blob, bool, error) {
 // log line, in one transaction.
 func (s *Store) AddStored(b Blob, pubkey string, score float64) error {
 	return s.tx(func(tx *sql.Tx) error {
-		if _, err := tx.Exec(`INSERT INTO blobs(sha256, size, type, width, height, created_at) VALUES(?,?,?,?,?,?)`,
-			b.SHA256, b.Size, b.Type, b.Width, b.Height, b.CreatedAt); err != nil {
-			return err
-		}
-		if _, err := tx.Exec(`INSERT INTO owners(pubkey, sha256, created_at) VALUES(?,?,?)`, pubkey, b.SHA256, b.CreatedAt); err != nil {
-			return err
-		}
-		_, err := tx.Exec(`INSERT INTO uploads(pubkey, sha256, size, type, at, outcome, score) VALUES(?,?,?,?,?,?,?)`,
-			pubkey, b.SHA256, b.Size, b.Type, b.CreatedAt, OutcomeStored, score)
-		return err
+		return insertStored(tx, b, pubkey, score, OutcomeStored)
 	})
+}
+
+// insertStored writes the blob, its first owner and the log line with the
+// given outcome; AddStored and AddStoredReview share it.
+func insertStored(tx *sql.Tx, b Blob, pubkey string, score float64, outcome string) error {
+	if _, err := tx.Exec(`INSERT INTO blobs(sha256, size, type, width, height, created_at) VALUES(?,?,?,?,?,?)`,
+		b.SHA256, b.Size, b.Type, b.Width, b.Height, b.CreatedAt); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`INSERT INTO owners(pubkey, sha256, created_at) VALUES(?,?,?)`, pubkey, b.SHA256, b.CreatedAt); err != nil {
+		return err
+	}
+	_, err := tx.Exec(`INSERT INTO uploads(pubkey, sha256, size, type, at, outcome, score) VALUES(?,?,?,?,?,?,?)`,
+		pubkey, b.SHA256, b.Size, b.Type, b.CreatedAt, outcome, score)
+	return err
 }
 
 // AddDuplicate records an upload of a picture the server already holds. A
@@ -96,20 +102,34 @@ func (s *Store) RemoveOwner(pubkey, sha256 string) (wasOwner, blobGone bool, err
 			return nil
 		}
 		blobGone = true
-		_, err = tx.Exec(`DELETE FROM blobs WHERE sha256 = ?`, sha256)
-		return err
+		if _, err = tx.Exec(`DELETE FROM blobs WHERE sha256 = ?`, sha256); err != nil {
+			return err
+		}
+		return closeRemoved(tx, sha256)
 	})
 	return wasOwner, blobGone, err
 }
 
 // DeleteBlob removes a picture and every ownership of it.
 func (s *Store) DeleteBlob(sha256 string) (existed bool, err error) {
-	res, err := s.db.Exec(`DELETE FROM blobs WHERE sha256 = ?`, sha256)
-	if err != nil {
-		return false, err
-	}
-	n, _ := res.RowsAffected()
-	return n > 0, nil
+	err = s.tx(func(tx *sql.Tx) error {
+		res, err := tx.Exec(`DELETE FROM blobs WHERE sha256 = ?`, sha256)
+		if err != nil {
+			return err
+		}
+		n, _ := res.RowsAffected()
+		existed = n > 0
+		return closeRemoved(tx, sha256)
+	})
+	return existed, err
+}
+
+// closeRemoved closes the open review case of a picture whose blob row is
+// gone. The case has no foreign key on purpose, so it outlives the blob; a
+// case the operator closed already keeps its outcome.
+func closeRemoved(tx *sql.Tx, sha256 string) error {
+	_, err := tx.Exec(`UPDATE review SET closed = unixepoch(), outcome = ? WHERE closed = 0 AND sha256 = ?`, ClosedRemoved, sha256)
+	return err
 }
 
 // PurgePubkey removes every ownership of the pubkey and returns the hashes of
@@ -138,6 +158,9 @@ func (s *Store) PurgePubkey(pubkey string) (gone []string, err error) {
 		}
 		for _, h := range gone {
 			if _, err := tx.Exec(`DELETE FROM blobs WHERE sha256 = ?`, h); err != nil {
+				return err
+			}
+			if err := closeRemoved(tx, h); err != nil {
 				return err
 			}
 		}

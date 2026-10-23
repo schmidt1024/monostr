@@ -302,7 +302,7 @@
     <string name="settings_link_previews_hint">Mostra o título e a imagem das páginas vinculadas. Esses sites e os servidores das imagens verão seu endereço IP.</string>
     <string name="link_preview_cd">Pré-visualização do link: %1$s, %2$s</string>
     <string name="settings_author_relays">Conectar temporariamente os relays do autor</string>
-    <string name="settings_author_relays_hint">Ao abrir um perfil, as notas também são buscadas nos relays dessa pessoa. O relay vê seu endereço IP e qual perfil você abre.</string>
+    <string name="settings_author_relays_hint">As notas também são buscadas nos próprios relays de outras pessoas: ao abrir um perfil e quando uma nota responde ou cita uma que seus relays não têm. Esses relays veem seu endereço IP e quais notas você olha.</string>
     <string name="settings_pow">Prova de trabalho</string>
     <string name="settings_pow_hint">Alguns relays só aceitam notas com prova de trabalho (NIP-13). Mais bits são mais aceitos, mas o envio demora mais.</string>
     <string name="settings_pow_off">Não</string>
@@ -551,6 +551,7 @@
     <string name="amounts_prompt_no">Manter públicos</string>
     <string name="conversation_show_replies">Mostrar respostas</string>
     <string name="conversation_unavailable">Esta nota não está disponível</string>
+    <string name="conversation_pending">Procurando esta nota…</string>
     <string name="create_who_monostr">Este app</string>
     <string name="create_who_schmidt">Faz o monostr</string>
     <string name="create_who_fiatjaf">Criou o Nostr</string>

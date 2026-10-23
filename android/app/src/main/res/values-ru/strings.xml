@@ -309,7 +309,7 @@
     <string name="settings_link_previews_hint">Показывает заголовок и картинку страниц по ссылкам. Эти сайты и серверы их картинок увидят ваш IP-адрес.</string>
     <string name="link_preview_cd">Превью ссылки: %1$s, %2$s</string>
     <string name="settings_author_relays">Временно подключать релеи автора</string>
-    <string name="settings_author_relays_hint">При открытии профиля заметки берутся и с собственных релеев этого человека. Релей видит ваш IP-адрес и чей профиль вы открываете.</string>
+    <string name="settings_author_relays_hint">Заметки берутся и с собственных релеев других людей: при открытии профиля и когда заметка отвечает на заметку или цитирует ту, которой нет на ваших релеях. Эти релеи видят ваш IP-адрес и какие заметки вы смотрите.</string>
     <string name="settings_pow">Доказательство работы</string>
     <string name="settings_pow_hint">Некоторые релеи принимают заметки только с доказательством работы (NIP-13). Больше бит — шире приём, но отправка дольше.</string>
     <string name="settings_pow_off">Выкл.</string>
@@ -567,6 +567,7 @@
     <string name="amounts_prompt_no">Оставить публичными</string>
     <string name="conversation_show_replies">Показать ответы</string>
     <string name="conversation_unavailable">Эта заметка недоступна</string>
+    <string name="conversation_pending">Ищем эту заметку…</string>
     <string name="create_who_monostr">Это приложение</string>
     <string name="create_who_schmidt">Делает monostr</string>
     <string name="create_who_fiatjaf">Создал Nostr</string>

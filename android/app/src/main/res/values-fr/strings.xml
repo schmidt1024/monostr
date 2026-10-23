@@ -302,7 +302,7 @@
     <string name="settings_link_previews_hint">Affiche le titre et l’image des pages liées. Ces sites et les serveurs de leurs images voient alors votre adresse IP.</string>
     <string name="link_preview_cd">Aperçu du lien : %1$s, %2$s</string>
     <string name="settings_author_relays">Connecter temporairement les relais de l\'auteur</string>
-    <string name="settings_author_relays_hint">À l\'ouverture d\'un profil, les notes sont aussi récupérées depuis les relais de cette personne. Le relais voit votre adresse IP et quel profil vous ouvrez.</string>
+    <string name="settings_author_relays_hint">Les notes sont aussi récupérées depuis les relais propres d\'autres personnes : à l\'ouverture d\'un profil, et quand une note répond à une note ou en cite une que vos relais n\'ont pas. Ces relais voient votre adresse IP et quelles notes vous consultez.</string>
     <string name="settings_pow">Preuve de travail</string>
     <string name="settings_pow_hint">Certains relais n’acceptent que des notes avec preuve de travail (NIP-13). Plus de bits sont mieux acceptés mais l’envoi est plus long.</string>
     <string name="settings_pow_off">Non</string>
@@ -551,6 +551,7 @@
     <string name="amounts_prompt_no">Laisser public</string>
     <string name="conversation_show_replies">Afficher les réponses</string>
     <string name="conversation_unavailable">Cette note n’est pas disponible</string>
+    <string name="conversation_pending">Recherche de cette note…</string>
     <string name="create_who_monostr">Cette appli</string>
     <string name="create_who_schmidt">Fait monostr</string>
     <string name="create_who_fiatjaf">A créé Nostr</string>

@@ -49,7 +49,7 @@ Image-Digest von Caddy im `compose.yml` ändern, dann deployen. Kein Watchtower.
 
 ## Konfiguration
 
-Alles in `compose.yml` unter `media.environment`, außer dem S3-Zugang (`.env`):
+Alles in `compose.yml` unter `media.environment`, ausser dem S3-Zugang, `MEDIA_REVIEW_NPUB` und `MEDIA_NOSTR_NSEC` (`.env`):
 
 | Variable | Standard | Bedeutung |
 |---|---|---|
@@ -59,7 +59,12 @@ Alles in `compose.yml` unter `media.environment`, außer dem S3-Zugang (`.env`):
 | `MEDIA_IP_UPLOADS_PER_DAY` | 100 | Uploads pro Adresse und UTC-Tag (IPv6 pro /64), nur im Arbeitsspeicher |
 | `MEDIA_GLOBAL_BYTES_PER_DAY` | 5368709120 | neu gespeicherte Bytes pro UTC-Tag insgesamt (Kostenbremse) |
 | `MEDIA_MAX_UPLOADS_IN_FLIGHT` | 16 | Uploads, die gleichzeitig bearbeitet werden (jeder hält sein Bild im Speicher); darüber `503` mit `Retry-After`. Pro Adresse höchstens 4 zugleich |
-| `MEDIA_NSFW_THRESHOLD` | 0.60 | ab diesem Wert wird ein Bild abgelehnt |
+| `MEDIA_NSFW_THRESHOLD` | 0.60 | ab diesem Wert ist ein Bild ein Prüffall (ohne `MEDIA_REVIEW_NPUB`: wird es abgelehnt) |
+| `MEDIA_NSFW_REJECT` | 0.85 | ab diesem Wert wird ein Bild abgelehnt; dazwischen wird es gespeichert und dem Betreiber gemeldet |
+| `MEDIA_REVIEW_NPUB` | – | npub des Betreibers, an den die Meldungen gehen und dessen «weg» zählt (`.env`). Fehlt sie, gibt es keinen Graubereich und der Server warnt beim Start |
+| `MEDIA_NOSTR_NSEC` | – | eigener Schlüssel des Servers für die Meldungen, nur in `.env`; Pflicht mit `MEDIA_REVIEW_NPUB` |
+| `MEDIA_NOSTR_RELAYS` | `wss://relay.monostr.com` | eigene Relays des Servers für DMs (kommagetrennte `wss://`-URLs) |
+| `MEDIA_REVIEW_DMS_PER_DAY` | 20 | einzelne Meldungen pro UTC-Tag; weitere Prüffälle kommen gesammelt, höchstens einmal pro Stunde |
 | `MEDIA_CONTACT_NPUB` | Projekt-npub | Meldeadresse auf der Startseite |
 
 Nach einer Änderung `./deploy.sh up`.
@@ -73,11 +78,25 @@ Nach einer Änderung `./deploy.sh up`.
   - `ban-pubkey <npub|hex> [--purge] [Notiz]` – keine Uploads mehr; `--purge` entfernt seine Bilder,
     soweit kein anderer sie besitzt. `unban-pubkey <npub|hex>`.
   - `log <npub|hex> [n]` – die letzten Uploads und Ablehnungen eines Pubkeys.
-  - `stats` – Anzahl, Belegung, Zahlen des Tages, größte Uploader.
-  - `near <wert> [n]` – angenommene Bilder mit einem NSFW-Wert zwischen `<wert>` und der Schwelle.
-  - `gc` – Objekte im Bucket ohne Datenbankzeile entfernen (älter als eine Stunde; läuft sonntags per Cron).
+  - `stats` – Anzahl, Belegung, Zahlen des Tages, größte Uploader, offene Prüffälle (`open reviews`).
+  - `near <wert> [n]` – angenommene Bilder mit einem NSFW-Wert zwischen `<wert>` und der Schwelle
+    (`MEDIA_NSFW_THRESHOLD`). Prüffälle zeigt `review`.
+  - `review [--all] [n]` – Prüffälle, neueste zuerst: Code, Wert, Meldung (`sent`, `pending`, `summary`),
+    Zeit, Adresse, Pubkey. Der Rückweg, wenn DMs nicht ankommen. `--all` zeigt auch geschlossene Fälle mit
+    Ergebnis (`weg`, `removed`).
+  - `gc` – Objekte im Bucket ohne Datenbankzeile entfernen (älter als eine Stunde; läuft sonntags per Cron)
+    und gemerkte Nachrichten-IDs nach 30 Tagen vergessen.
 - Eine Meldung bearbeiten: Adresse des Bildes ansehen, `ban-hash <sha256> <Notiz>`; bei Wiederholung
   `log <npub>` und `ban-pubkey <npub> --purge`.
+- Graubereich (Spec `docs/superpowers/specs/2026-10-22-media-nsfw-review-design.md`): Bilder mit einem Wert
+  von `MEDIA_NSFW_THRESHOLD` bis unter `MEDIA_NSFW_REJECT` werden gespeichert; der Uploader merkt nichts.
+  Der Server schickt dem Betreiber eine DM (NIP-17) mit Adresse und Code, nach 20 am Tag höchstens stündlich
+  eine Sammelmeldung. Antwort `weg` (das jüngste Bild mit eigener Meldung) oder `weg <code>`: Bild gelöscht und der Hash
+  gesperrt. Ohne Antwort bleibt es stehen. Einrichten: Schlüssel mit `nak key generate` erzeugen,
+  `MEDIA_NOSTR_NSEC` (der nsec) und `MEDIA_REVIEW_NPUB` (die persönliche npub des Betreibers) in `.env` auf
+  dem Host, `./deploy.sh up`. Der Server schreibt seine npub beim Start ins Log (`server_npub`) und
+  veröffentlicht sein Profil und seine DM-Relays selbst. Probe: ein Bild im Graubereich hochladen, DM
+  abwarten, `weg` antworten, dasselbe Bild erneut hochladen (abgelehnt).
 - Schwelle prüfen: nach den ersten Wochen `near 0.40` ansehen. Stehen dort nur harmlose Bilder (Diagramme,
   Comics, einfarbige Flächen), passt die Schwelle; stehen dort bedenkliche, Schwelle senken.
 

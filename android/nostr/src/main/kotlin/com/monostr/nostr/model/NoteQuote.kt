@@ -3,8 +3,8 @@ package com.monostr.nostr.model
 import rust.nostr.sdk.Nip19
 import rust.nostr.sdk.Nip19Enum
 
-/** A quoted note: its id and the relay hints that came with it (q tag, nevent). */
-data class QuoteRef(val id: String, val relays: List<String> = emptyList())
+/** A quoted note: its id, the relay hints that came with it (q tag, nevent) and its author's hex pubkey if known. */
+data class QuoteRef(val id: String, val relays: List<String> = emptyList(), val author: String? = null)
 
 /**
  * Spec 3: which note a note quotes and how its link leaves the text. A NIP-18 `q` tag wins over
@@ -25,7 +25,9 @@ object NoteQuote {
                 .map { it[2].trim().trimEnd('/') }
                 .filter { it.startsWith("wss://") || it.startsWith("ws://") }
             val textHints = refs(content).firstOrNull { it.second.id == id }?.second?.relays.orEmpty()
-            return QuoteRef(id, (tagHints + textHints).distinct())
+            val tagAuthor = tags.firstOrNull { it.size >= 4 && it[0] == "q" && it[1].lowercase() == id && HEX64.matches(it[3].lowercase()) }?.get(3)?.lowercase()
+            val textRef = refs(content).firstOrNull { it.second.id == id }?.second
+            return QuoteRef(id, (tagHints + textHints).distinct(), tagAuthor ?: textRef?.author)
         }
         return refs(content).firstOrNull()?.second
     }
@@ -50,7 +52,7 @@ object NoteQuote {
         val bech32 = link.substringAfter(':').lowercase()
         return when (val e = runCatching { Nip19.fromBech32(bech32).asEnum() }.getOrNull()) {
             is Nip19Enum.Note -> QuoteRef(e.eventId.toHex())
-            is Nip19Enum.Event -> QuoteRef(e.event.eventId().toHex(), e.event.relays().map { it.toString().trimEnd('/') })
+            is Nip19Enum.Event -> QuoteRef(e.event.eventId().toHex(), e.event.relays().map { it.toString().trimEnd('/') }, e.event.author()?.toHex())
             else -> null
         }
     }

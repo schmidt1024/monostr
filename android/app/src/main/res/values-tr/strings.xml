@@ -301,7 +301,7 @@
     <string name="settings_link_previews_hint">Bağlantı verilen sayfaların başlığını ve görselini gösterir. Bu siteler ve görsellerinin sunucuları IP adresinizi görür.</string>
     <string name="link_preview_cd">Bağlantı önizlemesi: %1$s, %2$s</string>
     <string name="settings_author_relays">Yazarın rölelerini geçici olarak bağla</string>
-    <string name="settings_author_relays_hint">Bir profil açıldığında notlar o kişinin kendi rölelerinden de alınır. Röle IP adresinizi ve kimin profilini açtığınızı görür.</string>
+    <string name="settings_author_relays_hint">Notlar başka kişilerin kendi rölelerinden de alınır: bir profil açıldığında ve bir not, rölelerinizde olmayan bir nota yanıt verdiğinde veya onu alıntıladığında. Bu röleler IP adresinizi ve hangi notlara baktığınızı görür.</string>
     <string name="settings_pow">İş ispatı</string>
     <string name="settings_pow_hint">Bazı relay’ler yalnızca iş ispatlı notları kabul eder (NIP-13). Daha çok bit daha yaygın kabul edilir ama gönderim daha uzun sürer.</string>
     <string name="settings_pow_off">Kapalı</string>
@@ -545,6 +545,7 @@
     <string name="amounts_prompt_no">Herkese açık kalsın</string>
     <string name="conversation_show_replies">Yanıtları göster</string>
     <string name="conversation_unavailable">Bu not kullanılamıyor</string>
+    <string name="conversation_pending">Bu not aranıyor…</string>
     <string name="create_who_monostr">Bu uygulama</string>
     <string name="create_who_schmidt">monostr\'u yapıyor</string>
     <string name="create_who_fiatjaf">Nostr\'u yarattı</string>

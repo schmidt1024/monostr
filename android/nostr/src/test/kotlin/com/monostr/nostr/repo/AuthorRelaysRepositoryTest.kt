@@ -115,4 +115,131 @@ class AuthorRelaysRepositoryTest {
             e.close()
         }
     }
+
+    private fun listFor(k: Keys, vararg tags: List<String>) = EventBuilder(rust.nostr.sdk.Kind(10002u), "").tags(tags.map { Tag.parse(it) }).signWithKeys(k)
+    private val any: (String) -> Boolean = { true }
+    private fun authorsReqs(r: SilentWsRelay) = r.requests.filter { "\"authors\"" in it }
+
+    @Test
+    fun `many authors cost one fetch`() = runTest {
+        val keys = List(5) { Keys.generate() }
+        val events = keys.mapIndexed { i, k -> listFor(k, listOf("r", "wss://w$i.example", "write")).asJson() }
+        SilentWsRelay(serve = events, recordRequests = true).use { indexer ->
+            val e = engine()
+            val repo = NostrAuthorRelaysRepository(e, indexers = listOf(indexer.url), now = { 1000 }, fetchTimeout = java.time.Duration.ofSeconds(2), relayFilter = any)
+            val got = repo.writeRelaysMany(keys.map { it.publicKey().toHex() })
+            keys.forEachIndexed { i, k -> assertEquals(listOf("wss://w$i.example"), got[k.publicKey().toHex()]) }
+            val reqs = authorsReqs(indexer)
+            assertEquals(1, reqs.size, reqs.toString())
+            keys.forEach { assertTrue(it.publicKey().toHex() in reqs[0]) }
+            e.close()
+        }
+    }
+
+    @Test
+    fun `stored lists need no fetch`() = runTest {
+        val keys = List(3) { Keys.generate() }
+        SilentWsRelay(recordRequests = true).use { indexer ->
+            val e = engine()
+            keys.forEach { e.save(listFor(it, listOf("r", "wss://w.example", "write"))) }
+            val repo = NostrAuthorRelaysRepository(e, indexers = listOf(indexer.url), now = { 1000 }, relayFilter = any)
+            val got = repo.writeRelaysMany(keys.map { it.publicKey().toHex() })
+            assertEquals(3, got.size)
+            assertTrue(got.values.all { it == listOf("wss://w.example") })
+            assertEquals(0, indexer.requests.size)
+            e.close()
+        }
+    }
+
+    @Test
+    fun `cache is shared with writeRelays`() = runTest {
+        val ev = listFor(alice, listOf("r", "wss://w.example", "write")).asJson()
+        SilentWsRelay(serve = listOf(ev), recordRequests = true).use { indexer ->
+            val e = engine()
+            val repo = NostrAuthorRelaysRepository(e, indexers = listOf(indexer.url), now = { 1000 }, fetchTimeout = java.time.Duration.ofSeconds(2), relayFilter = any)
+            val pk = alice.publicKey().toHex()
+            assertEquals(mapOf(pk to listOf("wss://w.example")), repo.writeRelaysMany(listOf(pk)))
+            val before = indexer.requests.size
+            assertEquals(listOf("wss://w.example"), repo.writeRelays(pk))
+            assertEquals(before, indexer.requests.size)
+            e.close()
+        }
+    }
+
+    @Test
+    fun `read relays take unmarked and read tags`() = runTest {
+        val e = engine()
+        e.save(relayList(
+            listOf("r", "wss://both.example"),
+            listOf("r", "wss://read.example", "read"),
+            listOf("r", "wss://write.example", "write"),
+        ))
+        val repo = NostrAuthorRelaysRepository(e, indexers = emptyList(), now = { 1000 })
+        assertEquals(listOf("wss://both.example", "wss://read.example"), repo.readRelays(alice.publicKey().toHex()))
+        assertEquals(listOf("wss://both.example", "wss://write.example"), repo.writeRelays(alice.publicKey().toHex()))
+        e.close()
+    }
+
+    @Test
+    fun `indexers count toward the foreign budget`() = runTest {
+        val io = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
+        SilentWsRelay().use { held ->
+            SilentWsRelay(recordRequests = true).use { indexer ->
+                val e = engine()
+                val pool = ForeignRelays(e, io, cap = 1, lingerMs = 60_000)
+                assertEquals(listOf(held.url), pool.lease(listOf(held.url)))
+                val repo = NostrAuthorRelaysRepository(e, indexers = listOf(indexer.url), now = { 1000 }, fetchTimeout = java.time.Duration.ofMillis(300), foreign = pool, relayFilter = any)
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { repo.writeRelaysMany(listOf(alice.publicKey().toHex())) }
+                assertEquals(setOf(held.url), pool.attached())
+                assertEquals(0, indexer.requests.size)
+                pool.close()
+                e.close()
+            }
+        }
+    }
+
+    @Test
+    fun `a lookup without room for the indexers is not cached`() = runTest {
+        // spec 2026-10-23 §4.4: a short lease is no answer; the next lookup with a free slot reaches the indexer
+        val io = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
+        val ev = listFor(alice, listOf("r", "wss://w.example", "write")).asJson()
+        SilentWsRelay().use { held ->
+            SilentWsRelay(serve = listOf(ev), recordRequests = true).use { indexer ->
+                val e = engine()
+                val pool = ForeignRelays(e, io, cap = 1, lingerMs = 60_000)
+                assertEquals(listOf(held.url), pool.lease(listOf(held.url)))
+                val repo = NostrAuthorRelaysRepository(e, indexers = listOf(indexer.url), now = { 1000 }, fetchTimeout = java.time.Duration.ofSeconds(2), foreign = pool, relayFilter = any)
+                val pk = alice.publicKey().toHex()
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    assertEquals(emptyList<String>(), repo.writeRelays(pk))
+                    assertEquals(emptyList<String>(), repo.writeRelaysExact(pk))
+                    assertEquals(0, indexer.requests.size)
+                    pool.release(listOf(held.url))
+                    assertEquals(listOf("wss://w.example"), repo.writeRelays(pk))
+                    assertTrue(indexer.requests.isNotEmpty(), "the indexer was not asked")
+                }
+                pool.close()
+                e.close()
+            }
+        }
+    }
+
+    @Test
+    fun `indexers are leased from free capacity and given back`() = runTest {
+        val io = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
+        val ev = listFor(alice, listOf("r", "wss://w.example", "write")).asJson()
+        SilentWsRelay(serve = listOf(ev), recordRequests = true).use { indexer ->
+            val e = engine()
+            val pool = ForeignRelays(e, io, cap = 1, lingerMs = 200)
+            val repo = NostrAuthorRelaysRepository(e, indexers = listOf(indexer.url), now = { 1000 }, fetchTimeout = java.time.Duration.ofSeconds(2), foreign = pool, relayFilter = any)
+            val pk = alice.publicKey().toHex()
+            val got = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { repo.writeRelaysMany(listOf(pk)) }
+            assertEquals(mapOf(pk to listOf("wss://w.example")), got)
+            assertTrue(indexer.requests.isNotEmpty(), "the indexer was not asked")
+            // released: it lingers, then leaves the pool and the engine
+            assertTrue(com.monostr.nostr.awaitTrue(2000) { pool.attached().isEmpty() && e.temporaryRelayUrls().isEmpty() }, "still attached: ${pool.attached()}")
+            pool.close()
+            e.close()
+        }
+    }
 }

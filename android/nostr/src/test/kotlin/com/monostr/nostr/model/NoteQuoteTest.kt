@@ -21,7 +21,7 @@ class NoteQuoteTest {
     @Test
     fun `a trailing nevent becomes the quote with its relay hint and leaves the text`() {
         val p = parse("look at this\n\n${nevent(id, "wss://hint.example")}")
-        assertEquals(QuoteRef(id, listOf("wss://hint.example")), p.quote)
+        assertEquals(QuoteRef(id, listOf("wss://hint.example"), keys.publicKey().toHex()), p.quote)
         assertEquals("look at this", p.displayContent)
     }
 
@@ -48,8 +48,21 @@ class NoteQuoteTest {
     fun `a q tag wins, adds its hint and only its own link leaves the text`() {
         val tags = listOf(listOf("q", id, "wss://q.example/", keys.publicKey().toHex()))
         val p = parse("see ${note1(other)} here\n${nevent(id, "wss://n.example")}", tags)
-        assertEquals(QuoteRef(id, listOf("wss://q.example", "wss://n.example")), p.quote)
+        assertEquals(QuoteRef(id, listOf("wss://q.example", "wss://n.example"), keys.publicKey().toHex()), p.quote)
         assertEquals("see ${note1(other)} here", p.displayContent)
+    }
+
+    @Test
+    fun `q tag author is kept`() {
+        val author = "ef".repeat(32)
+        assertEquals(author, parse("x", listOf(listOf("q", id, "wss://r", author.uppercase()))).quote?.author)
+        assertNull(parse("x", listOf(listOf("q", id, "wss://r", "nope"))).quote?.author)
+    }
+
+    @Test
+    fun `nevent author is kept`() {
+        assertEquals(keys.publicKey().toHex(), NoteQuote.decode(nevent(id))?.author)
+        assertNull(NoteQuote.decode(note1(id))?.author)
     }
 
     @Test

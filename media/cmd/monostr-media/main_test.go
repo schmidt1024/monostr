@@ -1,7 +1,10 @@
 package main
 
 import (
+	"strings"
 	"testing"
+
+	"github.com/nbd-wtf/go-nostr/nip19"
 
 	"monostr.com/media/internal/limits"
 )
@@ -86,5 +89,78 @@ func TestLoadConfigRejects(t *testing.T) {
 		if _, err := loadConfig(getenv(env)); err == nil {
 			t.Errorf("%s accepted", name)
 		}
+	}
+}
+
+// operatorNpub is a valid npub for the review tests.
+var operatorNpub = func() string {
+	n, err := nip19.EncodePublicKey(strings.Repeat("ab", 32))
+	if err != nil {
+		panic(err)
+	}
+	return n
+}()
+
+func TestConfigReject(t *testing.T) {
+	c, err := loadConfig(getenv(with(map[string]string{"MEDIA_REVIEW_NPUB": operatorNpub, "MEDIA_NOSTR_NSEC": "nsec1x"})))
+	if err != nil || c.reject != 0.85 || c.threshold != 0.60 {
+		t.Fatalf("default: %+v %v", c, err)
+	}
+	if _, err := loadConfig(getenv(with(map[string]string{"MEDIA_NSFW_REJECT": "0.5"}))); err == nil {
+		t.Error("a reject below the threshold was accepted")
+	}
+	c, err = loadConfig(getenv(with(map[string]string{"MEDIA_NSFW_REJECT": "0.6"})))
+	if err != nil || c.reject != c.threshold {
+		t.Fatalf("reject equal to the threshold: %+v %v", c, err)
+	}
+	if _, err := loadConfig(getenv(with(map[string]string{"MEDIA_NSFW_THRESHOLD": "NaN"}))); err == nil {
+		t.Error("a NaN threshold was accepted")
+	}
+	for _, bad := range []string{"x", "1.5", "NaN"} {
+		if _, err := loadConfig(getenv(with(map[string]string{"MEDIA_NSFW_REJECT": bad}))); err == nil {
+			t.Errorf("reject %q accepted", bad)
+		}
+	}
+}
+
+func TestConfigReviewNeedsNsec(t *testing.T) {
+	if _, err := loadConfig(getenv(with(map[string]string{"MEDIA_REVIEW_NPUB": operatorNpub}))); err == nil {
+		t.Fatal("a review npub without a server key was accepted")
+	}
+	if _, err := loadConfig(getenv(with(map[string]string{"MEDIA_REVIEW_NPUB": "npub1nonsense", "MEDIA_NOSTR_NSEC": "nsec1x"}))); err == nil {
+		t.Fatal("a broken review npub was accepted")
+	}
+	c, err := loadConfig(getenv(with(map[string]string{"MEDIA_REVIEW_NPUB": operatorNpub, "MEDIA_NOSTR_NSEC": "nsec1x"})))
+	if err != nil || c.reviewer != strings.Repeat("ab", 32) || c.noReviewer {
+		t.Fatalf("configured: %+v %v", c, err)
+	}
+}
+
+func TestConfigWithoutReviewer(t *testing.T) {
+	c, err := loadConfig(getenv(with(map[string]string{"MEDIA_NSFW_REJECT": "0.9"})))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.noReviewer || c.reject != c.threshold {
+		t.Fatalf("without a reviewer the grey zone must be off: %+v", c)
+	}
+}
+
+func TestConfigRelaysAndDMCap(t *testing.T) {
+	c, err := loadConfig(getenv(minimal))
+	if err != nil || len(c.relays) != 1 || c.relays[0] != "wss://relay.monostr.com" || c.reviewDMsPerDay != 20 {
+		t.Fatalf("defaults: %+v %v", c, err)
+	}
+	c, err = loadConfig(getenv(with(map[string]string{"MEDIA_NOSTR_RELAYS": "wss://a.example, wss://b.example", "MEDIA_REVIEW_DMS_PER_DAY": "3"})))
+	if err != nil || len(c.relays) != 2 || c.relays[1] != "wss://b.example" || c.reviewDMsPerDay != 3 {
+		t.Fatalf("override: %+v %v", c, err)
+	}
+	for _, bad := range []string{"http://x", "wss://a.example,ftp://b", ","} {
+		if _, err := loadConfig(getenv(with(map[string]string{"MEDIA_NOSTR_RELAYS": bad}))); err == nil {
+			t.Errorf("relays %q accepted", bad)
+		}
+	}
+	if _, err := loadConfig(getenv(with(map[string]string{"MEDIA_REVIEW_DMS_PER_DAY": "0"}))); err == nil {
+		t.Error("a cap of 0 was accepted")
 	}
 }

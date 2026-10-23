@@ -315,7 +315,7 @@ func (s *server) upload(w http.ResponseWriter, r *http.Request) {
 		reject(w, http.StatusServiceUnavailable, CodeUnavailable, "the content check is unavailable, try again later")
 		return
 	}
-	if score >= s.cfg.Threshold {
+	if score >= s.cfg.Reject {
 		if err := s.store.LogRejected(auth.Pubkey, hash, int64(len(body)), info.Type, score, now.Unix()); err != nil {
 			s.log.Error("log rejected", "err", err.Error())
 		}
@@ -334,10 +334,21 @@ func (s *server) upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	blob := store.Blob{SHA256: hash, Size: int64(len(body)), Type: info.Type, Width: info.Width, Height: info.Height, CreatedAt: now.Unix()}
-	if err := s.store.AddStored(blob, auth.Pubkey, score); err != nil {
+	// a grey-zone picture is stored like any other, so the uploader sees no
+	// difference, and waits in the store for the reviewer
+	grey := score >= s.cfg.Threshold
+	if grey {
+		_, err = s.store.AddStoredReview(blob, auth.Pubkey, score, limits.DayStart(now), s.cfg.ReviewDMsPerDay)
+	} else {
+		err = s.store.AddStored(blob, auth.Pubkey, score)
+	}
+	if err != nil {
 		// the object stays behind without a row; "admin gc" removes it
 		s.internal(w, "add stored", err)
 		return
+	}
+	if grey && s.notify != nil {
+		s.notify()
 	}
 	s.ips.Add(address, now)
 	writeJSON(w, http.StatusCreated, s.describe(blob))

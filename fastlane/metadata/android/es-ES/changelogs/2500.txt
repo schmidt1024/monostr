@@ -1,0 +1,2 @@
+• Las respuestas cuya nota original no tienen tus relays ahora la buscan en el relay indicado en la respuesta o en los relays del autor (interruptor: Conectar temporalmente los relays del autor)
+• Tras cambiar entre wifi y datos móviles, los relays y los mensajes en vivo se reconectan al instante

@@ -113,6 +113,7 @@ class NostrEngine private constructor(
             ignoringErrors {
                 val set = snapshot()
                 resting.keys.retainAll(set.normalSet)
+                connectedOnce.retainAll(set.normalSet)
                 ffi {
                     val relays = set.normal.mapNotNull { key -> set.pool[key]?.let { key to it } }
                     val now = System.nanoTime()
@@ -123,14 +124,14 @@ class NostrEngine private constructor(
                             ignoringErrors { relay.connect() }
                         }
                     }
-                    val online = relays.any { (_, relay) -> relay.stats().success() > 0uL }
+                    val online = relays.any { (key, relay) -> key in connectedOnce || relay.stats().success() > 0uL }
                     if (!online) return@ffi
                     for ((key, relay) in relays) {
                         if (resting.containsKey(key)) continue
                         val status = relay.status()
                         if (status == RelayStatus.TERMINATED || status.name !in LOST) continue
                         val stats = relay.stats()
-                        if (stats.success() == 0uL && stats.attempts() >= restAttempts.toULong()) {
+                        if (stats.success() == 0uL && key !in connectedOnce && stats.attempts() >= restAttempts.toULong()) {
                             resting[key] = now
                             ignoringErrors { relay.disconnect() }
                         }
@@ -143,6 +144,12 @@ class NostrEngine private constructor(
     /** A relay of the normal set rests ([restFailing]) after this many failed attempts without one success in the session; tests lower it. */
     @Volatile internal var restAttempts: Int = REST_ATTEMPTS
 
+    /**
+     * Normalised URLs of normal relays that connected in this session before [renew] replaced their pool relay (whose
+     * stats start over): [restFailing] never rests them and [relayStates] shows them as connected once (spec 2026-10-23 §7).
+     */
+    private val connectedOnce: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
     /** How often [restFailing] looks at the relays; tests shorten it. */
     @Volatile internal var restCheckMs: Long = REST_CHECK_MS
 
@@ -151,6 +158,9 @@ class NostrEngine private constructor(
 
     /** rust-nostr 0.44 keeps a relay whose connections fail in every fetch for this long after it started (DEFAULT_CONNECTION_TIMEOUT in ensure_operational); tests shorten it. */
     @Volatile internal var startWindow: Duration = Duration.ofSeconds(60)
+
+    /** Spec 2026-10-23 §8: how long after [attachTemporary] added a relay [reachable] still waits for it as in [startWindow]; tests shorten it. */
+    @Volatile internal var lateWindow: Duration = Duration.ofSeconds(10)
 
     /** What [HandleNotification.handle] hands over: nothing read yet (spec wave 2 B2: no FFI and no parsing in the callback). */
     private class RawIncoming(val relay: RelayUrl, val subscriptionId: String, val event: Event)
@@ -270,7 +280,8 @@ class NostrEngine private constructor(
     /** Removes relays; a malformed URL is skipped rather than throwing. */
     suspend fun removeRelays(urls: List<String>) {
         try {
-            ffi { urls.forEach { url -> runCatching { client.removeRelay(RelayUrl.parse(url)) } } }
+            // under temporaryMutex: a renew running meanwhile must not add a removed relay back (spec 2026-10-23 §7)
+            temporaryMutex.withLock { ffi { urls.forEach { url -> runCatching { client.removeRelay(RelayUrl.parse(url)) } } } }
             poolProbe?.invoke("removed")
         } finally {
             withContext(NonCancellable) { refreshRelaySet() }
@@ -291,6 +302,9 @@ class NostrEngine private constructor(
 
     /** Reference counts for [temporary], touched only under [temporaryMutex]: a URL is only removed from the pool once its count drops to zero. */
     private val temporaryRefs = HashMap<String, Int>()
+
+    /** When [attachTemporary] added each relay of [temporary] ([System.nanoTime]); read by [reachable] without the mutex (spec 2026-10-23 §8). */
+    private val attachedAt = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
     /**
      * Spec wave 2 B1: the pool as the engine last set it up, read once per change instead of once per operation.
@@ -426,6 +440,7 @@ class NostrEngine private constructor(
                 if (!added) { temporary.remove(norm); temporaryRefs.remove(norm); return@withLock }
                 poolProbe?.invoke("added")
                 taken += norm
+                attachedAt[norm] = System.nanoTime()
                 ignoringErrors { client.connectRelay(url) }
             }
         }
@@ -458,6 +473,7 @@ class NostrEngine private constructor(
                         ignoringErrors { client.forceRemoveRelay(url) }
                         temporaryRefs.remove(norm)
                         temporary.remove(norm)
+                        attachedAt.remove(norm)
                     }
                 }
                 refreshRelaySet()
@@ -482,11 +498,13 @@ class NostrEngine private constructor(
      * temporarily and stay until [detachTemporary]; a caller that attached them itself (and so knows
      * what [attachTemporary] took) passes false. Results are stored in the database. Throws when the
      * fetch itself fails (callers treat that as a relay error); cancellation is always propagated.
+     * [reached] (spec 2026-10-23 §4.3) collects the normalised URLs of [relays] that were connected when the request
+     * went out (after the connection grace of [reachable]): only those were really asked.
      */
-    suspend fun fetchFrom(relays: List<String>, filter: Filter, timeout: Duration = Duration.ofSeconds(8), attach: Boolean = true, exit: Exit? = null): List<Event> {
+    suspend fun fetchFrom(relays: List<String>, filter: Filter, timeout: Duration = Duration.ofSeconds(8), attach: Boolean = true, exit: Exit? = null, reached: MutableSet<String>? = null): List<Event> {
         if (attach) attachTemporary(relays)
-        if (exit != null) return fetchExit(relays, filter, timeout, exit).events
-        val targets = reachable(relays.toRelayUrls())
+        if (exit != null) return fetchExit(relays, filter, timeout, exit, reached).events
+        val targets = reachable(relays.toRelayUrls(), reached)
         if (targets.isEmpty()) return emptyList()
         // the client stores every event it receives in the database already (rust-nostr); saving them again here
         // cost a few milliseconds per event on a phone, seconds per refresh (hundreds of known deletion requests)
@@ -800,8 +818,8 @@ class NostrEngine private constructor(
      * every fetch. [ExitFetch.met]: the condition held (fetchWide ends its other leg on it). The work runs on the
      * engine's scope, so [close] (logout) ends it; the caller's cancellation ends it too and is rethrown.
      */
-    internal suspend fun fetchExit(relays: List<String>?, filter: Filter, timeout: Duration, exit: Exit): ExitFetch {
-        val targets = reachable(relays?.toRelayUrls() ?: snapshot().parsed)
+    internal suspend fun fetchExit(relays: List<String>?, filter: Filter, timeout: Duration, exit: Exit, reached: MutableSet<String>? = null): ExitFetch {
+        val targets = reachable(relays?.toRelayUrls() ?: snapshot().parsed, reached)
         if (targets.isEmpty()) return ExitFetch(emptyList(), met = false)
         val progress = ExitProgress(exit)
         if (progress.empty) return ExitFetch(ffi { client.fetchEventsFrom(targets, filter, timeout).toVec() }, met = false)
@@ -1159,18 +1177,24 @@ class NostrEngine private constructor(
      * read once one of [targets] is connected or none is setting its connection up any more (at most [CONNECT_GRACE]):
      * nothing can arrive before the first connection, and a refused attempt has failed by then; an early exit is not
      * held back for the slowest relay. Later one read, no wait. A relay not in the pool stays; none left: [targets].
+     * [connected] collects the ones of the final read that are connected (the `none left` fallback adds none).
      */
-    private suspend fun reachable(targets: List<RelayUrl>): List<RelayUrl> {
+    private suspend fun reachable(targets: List<RelayUrl>, connected: MutableSet<String>? = null): List<RelayUrl> {
         if (targets.isEmpty()) return targets
         val keys = targets.map { it.toString().trimEnd('/') }
         val since = connectedAt
-        val waits = since != 0L && System.nanoTime() - since <= startWindow.toNanos()
+        val now = System.nanoTime()
+        // spec 2026-10-23 §8: a relay attached a moment ago gets the same grace as the relays right after the start
+        val late = lateWindow.toNanos()
+        val waits = (since != 0L && now - since <= startWindow.toNanos()) ||
+            keys.any { key -> attachedAt[key]?.let { now - it <= late } == true }
         val deadline = System.nanoTime() + CONNECT_GRACE.toNanos()
         while (true) {
             val pool = snapshot().pool
             val states = ffi { keys.mapNotNull { key -> pool[key]?.let { key to it.status().name } }.toMap() }
             val settled = states.values.none { it in SETTING_UP } || states.values.any { it == RelayStatus.CONNECTED.name }
             if (!waits || settled || System.nanoTime() >= deadline) {
+                connected?.addAll(states.filterValues { it == RelayStatus.CONNECTED.name }.keys)
                 return targets.filterIndexed { i, _ -> states[keys[i]] !in LOST }.ifEmpty { targets }
             }
             delay(REACHABLE_POLL_MS)
@@ -1197,26 +1221,44 @@ class NostrEngine private constructor(
      */
     suspend fun reconnectIfLost() = wake(snapshot().parsed)
 
+    /**
+     * Reconnects every relay of the normal set, connected or not, and asks their subscriptions again (spec 2026-10-23
+     * §7): after a switch of the default network sockets can be dead but still marked connected, which
+     * [reconnectIfLost] leaves alone. A temporary relay is renewed too when it carries a subscription (the DM inbox
+     * relays DmSync holds, final review I4), still temporary with its references; the others are not touched. Returns
+     * once the relays are connected or [RECONNECT_WAIT] passed.
+     */
+    suspend fun reconnectAll() = wake(snapshot().parsed, force = true)
+
     private val wakeMutex = Mutex()
 
     /**
      * See [reconnectIfLost]. Nothing happens while any relay of [targets] is connected: a working
-     * connection is never torn down for the sake of a dead relay.
+     * connection is never torn down for the sake of a dead relay. With [force] ([reconnectAll]) every relay of
+     * [targets] is reconnected: a lost one as without [force], any other one is replaced by a fresh one ([renew]).
      */
-    private suspend fun wake(targets: List<RelayUrl>) {
+    private suspend fun wake(targets: List<RelayUrl>, force: Boolean = false) {
         val wanted = targets.map { it.toString().trimEnd('/') }.toSet()
-        if (wanted.isEmpty()) return
+        // a network change racing logout: no relay is renewed or connected while (or after) close() shuts the client down
+        if (wanted.isEmpty() || closing) return
         wakeMutex.withLock {
+            if (closing) return
             ffi {
-                val mine = snapshot().pool.filterKeys { it in wanted }.values
-                if (mine.isEmpty() || mine.any { it.isConnected() }) return@ffi
+                val pool = snapshot().pool
+                val mine = pool.filterKeys { it in wanted }.values
+                if (mine.isEmpty() || (!force && mine.any { it.isConnected() })) return@ffi
+                // forced only: one subscriptions() per temporary relay, those without one (searches, lookups) stay as they are
+                val held = if (!force) emptyList() else pool.filterKeys { it in temporary }.values.filter { relay ->
+                    runCatching { relay.subscriptions().isNotEmpty() }.getOrDefault(false)
+                }
                 // a relay waiting for its next retry ignores a connect request: end that wait first
-                // (one that is connecting right now is left alone)
+                // (one that is connecting right now is left alone, unless forced)
                 val lost = mine.filter { it.status().name in LOST }
                 // From here on the caller's cancellation has to wait (at most RECONNECT_WAIT): a relay whose
                 // retry wait was ended has no retry of its own until connect() hands it back to the pool,
                 // and a tryConnect dropped half way leaves the relay stuck in CONNECTING for good.
                 withContext(NonCancellable) {
+                    if (force) renew(mine.filter { it.status().name !in LOST }, held)
                     lost.forEach { runCatching { it.disconnect() } }
                     try {
                         ignoringErrors { client.tryConnect(RECONNECT_WAIT) }
@@ -1240,6 +1282,63 @@ class NostrEngine private constructor(
         }
     }
 
+    /**
+     * Spec 2026-10-23 §7: replaces each of [relays] (normal set, connected or connecting) by a fresh pool relay with
+     * the same URL and hands it the old one's subscriptions at once, so rust-nostr holds them for every later
+     * connection, also one after [RECONNECT_WAIT]. A `disconnect()` followed by a connect is not enough for a relay
+     * that is connected: in rust-nostr 0.44 the new socket is then sometimes closed at once while the relay keeps
+     * reading CONNECTED (EngineReconnectTest under load), the very state a network switch leaves behind. A relay that
+     * connected before goes to [connectedOnce] (its new stats start at zero). [held]: temporary relays with a
+     * subscription, renewed the same way but added back as temporary ones (read only, as [attachTemporary] adds them),
+     * their [temporary] membership and [temporaryRefs] untouched; one released meanwhile is skipped. Not cancellable by the caller.
+     */
+    private suspend fun renew(relays: List<rust.nostr.sdk.Relay>, held: List<rust.nostr.sdk.Relay> = emptyList()) {
+        if (relays.isEmpty() && held.isEmpty()) return
+        val renewed = ArrayList<Pair<RelayUrl, Map<String, List<Filter>>>>()
+        try {
+            // temporaryMutex: neither a concurrent attachTemporary (taking the URL as a new temporary relay while it is
+            // out of the pool) nor removeRelays (a relay the user removed must not come back) runs in between;
+            // relaySetMutex: no refresh can cache a set without the relay between the removal and the add
+            temporaryMutex.withLock {
+                relaySetMutex.withLock {
+                    for (relay in relays + held) {
+                        val url = relay.url()
+                        val norm = url.toString().trimEnd('/')
+                        val temp = relay in held
+                        if (runCatching { client.relay(url) }.isFailure) continue // removed meanwhile
+                        // a temporary relay detached meanwhile is gone; one promoted to the normal set is no longer ours here
+                        if (temp && norm !in temporary) continue
+                        var stored: Map<String, List<Filter>> = emptyMap()
+                        ignoringErrors { stored = relay.subscriptions() }
+                        if (!temp && runCatching { relay.stats().success() > 0uL }.getOrDefault(false)) connectedOnce += norm
+                        ignoringErrors { client.forceRemoveRelay(url) }
+                        suspend fun add() = runCatching {
+                            if (temp) client.addRelayWithOpts(url, RelayOptions().read(true).write(false)) else client.addRelay(url)
+                        }.isSuccess
+                        var added = add()
+                        if (!added) {
+                            Log.d(LOG_TAG, "renew: re-adding $url failed, retrying once")
+                            added = add()
+                        }
+                        // a renewed temporary relay is a fresh connection: [reachable] gives it the late grace again
+                        if (added && temp) attachedAt[norm] = System.nanoTime()
+                        if (added) renewed += url to stored else Log.d(LOG_TAG, "renew: $url lost from the pool")
+                    }
+                }
+            }
+        } finally {
+            refreshRelaySet()
+        }
+        for ((url, stored) in renewed) {
+            ignoringErrors { client.connectRelay(url) }
+            for ((id, filters) in stored) {
+                // one filter per subscription in this engine; rust stores it and asks it on every connection of the relay
+                val filter = filters.singleOrNull() ?: continue
+                ignoringErrors { client.subscribeWithIdTo(listOf(url), id, filter, null) }
+            }
+        }
+    }
+
     /** Debug builds log where an event went and which relay rejected it and why (URLs + relay message only, never content); R8 strips it in release. */
     private fun logFailures(result: PublishResult) {
         Log.d(LOG_TAG, "publish kind ${result.kind} ${result.eventId.take(8)}: ok=${result.successRelays} failed=${result.failedRelays.keys}")
@@ -1252,7 +1351,8 @@ class NostrEngine private constructor(
             emit(
                 client.relays().filterKeys { it.toString().trimEnd('/') !in temporary }.map { (url, relay) ->
                     val status = relay.status()
-                    RelayInfo(url.toString(), status.toState(), everConnected = relay.stats().success() > 0uL, resting = status == RelayStatus.TERMINATED && resting.containsKey(url.toString().trimEnd('/')))
+                    val key = url.toString().trimEnd('/')
+                    RelayInfo(url.toString(), status.toState(), everConnected = key in connectedOnce || relay.stats().success() > 0uL, resting = status == RelayStatus.TERMINATED && resting.containsKey(url.toString().trimEnd('/')))
                 },
             )
             delay(2000)

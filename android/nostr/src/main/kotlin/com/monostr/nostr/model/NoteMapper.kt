@@ -32,6 +32,8 @@ object NoteMapper {
                     quotedId = parsed.quote?.id,
                     quoteRelays = parsed.quote?.relays.orEmpty(),
                     client = client(tags),
+                    rootHint = refs.rootHint, replyHint = refs.replyHint,
+                    quoteAuthor = parsed.quote?.author,
                 )
             }
             6 -> {

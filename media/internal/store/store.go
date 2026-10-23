@@ -52,6 +52,23 @@ CREATE TABLE IF NOT EXISTS banned_pubkeys (
   at     INTEGER NOT NULL,
   note   TEXT NOT NULL DEFAULT ''
 );
+CREATE TABLE IF NOT EXISTS review (
+  id       INTEGER PRIMARY KEY AUTOINCREMENT,
+  sha256   TEXT NOT NULL,
+  score    REAL NOT NULL,
+  pubkey   TEXT NOT NULL,
+  type     TEXT NOT NULL,
+  at       INTEGER NOT NULL,
+  delivery TEXT NOT NULL,
+  notified INTEGER NOT NULL DEFAULT 0,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  next_try INTEGER NOT NULL DEFAULT 0,
+  closed   INTEGER NOT NULL DEFAULT 0,
+  outcome  TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS review_open ON review(closed, at);
+CREATE UNIQUE INDEX IF NOT EXISTS review_open_sha256 ON review(sha256) WHERE closed = 0;
+CREATE TABLE IF NOT EXISTS seen_wraps (id TEXT PRIMARY KEY, at INTEGER NOT NULL);
 `
 
 // Upload outcomes in the log.
@@ -59,6 +76,7 @@ const (
 	OutcomeStored    = "stored"
 	OutcomeDuplicate = "duplicate"
 	OutcomeNSFW      = "nsfw"
+	OutcomeReview    = "review" // stored, but waiting for the operator's look
 )
 
 // Open creates or opens the database file and applies the schema.

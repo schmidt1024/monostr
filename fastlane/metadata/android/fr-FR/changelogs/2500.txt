@@ -1,0 +1,2 @@
+• Les réponses dont la note d'origine manque sur tes relais la récupèrent maintenant depuis le relais indiqué dans la réponse ou depuis les relais de l'auteur (interrupteur : Connecter temporairement les relais de l'auteur)
+• Après un passage entre Wi-Fi et données mobiles, les relais et les messages en direct se reconnectent aussitôt

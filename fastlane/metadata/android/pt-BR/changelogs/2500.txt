@@ -1,0 +1,2 @@
+• Respostas cuja nota original seus relays não têm agora a buscam no relay indicado na resposta ou nos relays do autor (opção: Conectar temporariamente os relays do autor)
+• Depois de trocar entre Wi-Fi e dados móveis, relays e mensagens ao vivo reconectam na hora

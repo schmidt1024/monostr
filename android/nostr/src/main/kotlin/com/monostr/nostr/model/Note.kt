@@ -31,6 +31,12 @@ data class Note(
     val quoteRelays: List<String> = emptyList(),
     /** NIP-89: the name in the first `client` tag (trimmed, at most [CLIENT_MAX] characters), null without one. */
     val client: String? = null,
+    /** Relay/author hint of the [rootId] `e` tag (spec 2026-10-23 §4.1), null without one. */
+    val rootHint: RefHint? = null,
+    /** Relay/author hint of the [replyToId] `e` tag, null without one. */
+    val replyHint: RefHint? = null,
+    /** Author pubkey of the quoted note from the `q` tag or `nevent`, null if unknown. */
+    val quoteAuthor: String? = null,
 ) {
     val isReply: Boolean get() = replyToId != null
     val isRepost: Boolean get() = kind == 6
@@ -41,6 +47,20 @@ data class Note(
         const val CLIENT_MAX = 32
     }
 }
+
+/** Where to look for a referenced note: a relay (ws/wss, no trailing slash) and/or its author's hex pubkey. */
+@Serializable
+data class RefHint(val relay: String? = null, val author: String? = null)
+
+/**
+ * Pubkeys whose relays may hold the parent: the `e` tag's author hint, else the first three `p` tags
+ * (hex only, lower-cased), spec 2026-10-23 §4.1.
+ */
+fun Note.parentCandidates(): List<String> =
+    replyHint?.author?.let(::listOf)
+        ?: mentionedPubkeys.map { it.lowercase() }.filter { PUBKEY_HEX.matches(it) }.take(3)
+
+private val PUBKEY_HEX = Regex("^[0-9a-f]{64}$") // regex
 
 @Serializable
 data class Profile(

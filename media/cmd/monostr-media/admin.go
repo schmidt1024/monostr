@@ -14,6 +14,7 @@ import (
 	"monostr.com/media/internal/blossom"
 	"monostr.com/media/internal/imagecheck"
 	"monostr.com/media/internal/limits"
+	"monostr.com/media/internal/review"
 	"monostr.com/media/internal/storage"
 	"monostr.com/media/internal/store"
 )
@@ -30,13 +31,24 @@ const adminUsage = `usage: monostr-media admin <command>
   log <npub|hex> [n]               the account's last n uploads and refusals (default 50)
   stats                            totals, today's numbers, largest accounts
   near <score> [n]                 stored pictures scored between <score> and the
-                                   threshold, newest first (default 50)
-  gc                               remove objects in the bucket that no row names
+                                   threshold (MEDIA_NSFW_THRESHOLD), newest first
+                                   (default 50); review cases: see review
+  review [--all] [n]               pictures waiting for a look, newest first (default
+                                   50): code, score, notice (sent, pending, summary),
+                                   time, address, account; --all adds closed cases
+                                   with their outcome
+  gc                               remove objects in the bucket that no row names, and
+                                   forget review messages older than 30 days
 `
 
 // gcGrace protects an object that an upload has put into the bucket but not
 // yet written to the database.
 const gcGrace = time.Hour
+
+// wrapKeep is how long a seen gift wrap is remembered. The reviewer subscribes
+// from two days before the newest wrap and ignores messages older than seven
+// days, so a month is far more than replay protection needs.
+const wrapKeep = 30 * 24 * time.Hour
 
 type admin struct {
 	store     *store.Store
@@ -208,6 +220,7 @@ func (a admin) run(ctx context.Context, args []string) error {
 		}
 		fmt.Fprintf(a.out, "pictures        %d\nbytes           %d\naccounts        %d\nstored today    %d (%d bytes)\nrefused today   %d\n",
 			st.Blobs, st.Bytes, st.Owners, st.StoredToday, st.BytesToday, st.RejectedToday)
+		fmt.Fprintf(a.out, "open reviews: %d\n", st.OpenReviews)
 		for _, u := range st.Top {
 			fmt.Fprintf(a.out, "  %s  %5d pictures  %12d bytes\n", u.Pubkey, u.Blobs, u.Bytes)
 		}
@@ -233,6 +246,19 @@ func (a admin) run(ctx context.Context, args []string) error {
 		}
 		fmt.Fprintf(a.out, "%d pictures scored from %.2f to below %.2f\n", len(lines), from, a.threshold)
 		return nil
+	case "review":
+		all := false
+		if len(rest) > 0 && rest[0] == "--all" {
+			all, rest = true, rest[1:]
+		}
+		if len(rest) > 1 {
+			return errUsage
+		}
+		limit, err := optionalCount(rest)
+		if err != nil {
+			return err
+		}
+		return a.review(all, limit)
 	case "gc":
 		if len(rest) != 0 {
 			return errUsage
@@ -272,7 +298,52 @@ func (a admin) deleteBlob(ctx context.Context, hash string) error {
 	return nil
 }
 
+// review lists the cases newest first. The state column says how the operator
+// heard of an open case; a closed one shows how it ended.
+func (a admin) review(all bool, limit int) error {
+	open, err := a.store.OpenReviews(1 << 30)
+	if err != nil {
+		return err
+	}
+	hashes := make([]string, len(open))
+	for i, c := range open {
+		hashes[i] = c.SHA256
+	}
+	var cases []store.ReviewCase
+	if all {
+		cases, err = a.store.Reviews(limit)
+	} else if len(open) > limit {
+		cases = open[:limit]
+	} else {
+		cases = open
+	}
+	if err != nil {
+		return err
+	}
+	for _, c := range cases {
+		state := c.Outcome
+		if c.Closed == 0 {
+			switch {
+			case c.Delivery == store.DeliverySummary:
+				state = "summary"
+			case c.Notified > 0:
+				state = "sent"
+			default:
+				state = "pending"
+			}
+		}
+		url := a.url(store.Upload{SHA256: c.SHA256, Type: c.Type})
+		fmt.Fprintf(a.out, "%s  %.2f  %s  %s  %s  %s\n", review.Code(c.SHA256, hashes), c.Score, state, stamp(c.At), url, c.Pubkey)
+	}
+	return nil
+}
+
 func (a admin) gc(ctx context.Context) error {
+	pruned, err := a.store.PruneWraps(a.now().Add(-wrapKeep).Unix())
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(a.out, "%d seen messages forgotten\n", pruned)
 	objects, err := a.bucket.List(ctx)
 	if err != nil {
 		return err

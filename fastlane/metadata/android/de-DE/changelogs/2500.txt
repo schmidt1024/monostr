@@ -1,0 +1,2 @@
+• Antworten, deren Ursprungs-Note deine Relays nicht haben, holen sie jetzt vom Relay aus der Antwort oder von den Relays des Autors («Note wird gesucht …» während der Suche; Schalter: Relays des Autors temporär verbinden)
+• Nach einem Wechsel zwischen WLAN und Mobilfunk verbinden sich Relays und Live-Nachrichten sofort neu

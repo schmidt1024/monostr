@@ -29,6 +29,7 @@ import com.monostr.app.ui.common.HideOnScrollState
 import com.monostr.app.ui.common.MessageSnackbar
 import com.monostr.app.ui.common.NoteCard
 import com.monostr.app.ui.common.NoteMenu
+import com.monostr.app.ui.common.PendingRow
 import com.monostr.app.ui.common.ShowBarsWhenStuck
 import com.monostr.app.ui.common.ShowRepliesRow
 import com.monostr.app.ui.common.UnavailableRow
@@ -85,7 +86,8 @@ internal fun FeedList(
                         chain?.ancestors?.forEachIndexed { i, id ->
                             val above = i > 0
                             val a = state.ancestors[id]
-                            if (a == null) UnavailableRow(lineAbove = above, lineBelow = true)
+                            if (a == null && id in state.pending) PendingRow(lineAbove = above, lineBelow = true)
+                            else if (a == null) UnavailableRow(lineAbove = above, lineBelow = true)
                             else NoteCard(
                                 note = a,
                                 onOpen = { nav.onOpenThread(a.target.id) },

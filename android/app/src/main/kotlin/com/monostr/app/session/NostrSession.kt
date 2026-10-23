@@ -87,6 +87,9 @@ import com.monostr.nostr.repo.NostrFollowRepository
 import com.monostr.nostr.repo.NostrNotificationsRepository
 import com.monostr.nostr.repo.NostrProfileRepository
 import com.monostr.nostr.repo.NostrQuoteRepository
+import com.monostr.nostr.repo.EventLocator
+import com.monostr.nostr.repo.ForeignRelays
+import com.monostr.nostr.repo.NostrEventLocator
 import com.monostr.nostr.repo.NostrAuthorRelaysRepository
 import com.monostr.nostr.repo.NostrBookmarksRepository
 import com.monostr.nostr.repo.NostrMuteRepository
@@ -121,6 +124,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -194,6 +199,10 @@ class Ready(
     val relaySeen: SyncMarks? = null,
     /** Spec perf2 D11: the Messages tab's network follows() lookup; runs on the engine's background scope, so leaving the tab never cancels it. */
     val followsRefresh: RefreshGate<String> = RefreshGate(engine.backgroundScope, 60),
+    /** Spec 2026-10-23 §4: stage 3 for missing notes; null in tests that build a [Ready] by hand. */
+    val locator: EventLocator? = null,
+    /** Spec 2026-10-23 §3: the app-wide budget of foreign relays; logout and release give them back. */
+    val foreign: ForeignRelays? = null,
 ) {
     /** Pubkeys of the muted accounts; every note list filters against them (spec 9.3). */
     val muted: StateFlow<Set<String>> get() = mute.muted
@@ -317,6 +326,7 @@ class NostrSession @Inject constructor(
     suspend fun release() = mutex.withLock {
         val ready = (_state.value as? SessionState.Active)?.ready ?: return@withLock
         ready.dms.stop()
+        runCatching { ready.foreign?.close() }
         runCatching { ready.engine.close() }
         runCatching { (ready.dmStore as? DmDatabase)?.close() }
         _state.value = SessionState.Loading
@@ -407,7 +417,7 @@ class NostrSession @Inject constructor(
         try {
             persist()
         } catch (e: Exception) {
-            SessionCleanup.closeAll({ ready.dms.stop() }, { ready.engine.close() }, { (ready.dmStore as? DmDatabase)?.close() })
+            SessionCleanup.closeAll({ ready.dms.stop() }, { ready.foreign?.close() }, { ready.engine.close() }, { (ready.dmStore as? DmDatabase)?.close() })
             throw e
         }
     }
@@ -424,6 +434,8 @@ class NostrSession @Inject constructor(
             // spec 2026-10-16 §8: the drafts leave the device with the account; their pictures go while signer and engine still work
             if (ready != null) bestEffort { withTimeoutOrNull(DRAFT_CLEANUP_MS) { removeDrafts(drafts, ready.pubkey, ready.media) } }
             ready?.dms?.stop()
+            // spec 2026-10-23 §3: the borrowed foreign relays go before the engine
+            ready?.foreign?.let { bestEffort { it.close() } }
             ready?.engine?.close()
         } finally {
             MediaReveals.clear()
@@ -459,6 +471,25 @@ class NostrSession @Inject constructor(
     suspend fun reconnectIfLost() {
         val ready = (_state.value as? SessionState.Active)?.ready ?: return
         bestEffort { ready.engine.reconnectIfLost() }
+    }
+
+    /**
+     * Spec 2026-10-23 §7: the default network changed while the app is in the foreground. A switch reconnects every
+     * relay (their sockets may be dead but still "connected"), a return only the lost ones; either way the "not found"
+     * marks go, so open screens look for their missing notes once more. Lingering foreign relays are dropped first: their
+     * sockets may be dead but still read connected, and the retry must connect afresh (final review I1). Best effort, a
+     * no-op without a session.
+     */
+    suspend fun onNetworkChange(change: NetworkChange) {
+        val ready = (_state.value as? SessionState.Active)?.ready ?: return
+        ready.foreign?.let { bestEffort { it.dropLingering() } }
+        bestEffort {
+            when (change) {
+                NetworkChange.SWITCHED -> ready.engine.reconnectAll()
+                NetworkChange.RETURNED -> ready.engine.reconnectIfLost()
+            }
+        }
+        ready.locator?.forget()
     }
 
     /** Applies a new relay list to the running engine: removes dropped relays, adds new ones, reconnects. */
@@ -555,7 +586,20 @@ class NostrSession @Inject constructor(
         // spec 7.3: whatever fails from here on, the DM database and the engine are closed again
         try {
             val tips = NostrTipsRepository(engine, gate = startupGate)
-            val authorRelays = NostrAuthorRelaysRepository(engine)
+            // spec 2026-10-23 §3/§4.4: one budget of foreign relays for the whole session, the indexers included
+            val foreign = ForeignRelays(engine)
+            val authorRelays = NostrAuthorRelaysRepository(engine, foreign = foreign)
+            // the switch is read at use time (no seeded stateIn), so a lookup never runs against the user's choice
+            val locator = NostrEventLocator(engine, authorRelays, foreign, enabled = { uiSettings.authorRelays.first() })
+            // spec 2026-10-23 §4.3: turning the switch either way clears the marks and retries the open screens (another setting
+            // written re-emits the same value: not a change); turned off, no idle foreign relay stays connected (§3, final
+            // review I3; held ones go when their round ends)
+            engine.backgroundScope.launch {
+                uiSettings.authorRelays.distinctUntilChanged().drop(1).collect { on ->
+                    if (!on) bestEffort { foreign.dropLingering() }
+                    locator.forget()
+                }
+            }
             // a collector of this session's own lists may outlive it (a screen's scope): logout closes this view first
             val ownLists = SessionOwnListsCache(ownListsCache)
             val lists = NostrListsRepository(engine, signer, authorRelays, defaultRelays = PrefsRelayStore.DEFAULT_RELAYS, cache = ownLists, reconcileScope = engine.backgroundScope, gate = startupGate)
@@ -612,7 +656,7 @@ class NostrSession @Inject constructor(
                 draftPictures = { drafts.all(signer.pubkey).flatMap { d -> d.attachments.map { it.sha256 } } },
                 storedProfile = { profiles.local(listOf(signer.pubkey)).flatMap { listOfNotNull(it.picture, it.banner) } },
             )
-            val conversations = NostrConversationRepository(engine)
+            val conversations = NostrConversationRepository(engine, locator = locator)
             // spec 2026-10-16 §8: a discarded draft or composer picture stays while a published note or the profile shows it
             val media = BlossomMediaUploader(ImagePreparer(context.contentResolver), blossom, uiSettings, engine.backgroundScope, inUse = pictures::published)
             // spec 2026-10-16 §8.2: drafts untouched for 30 days go with their pictures; silent, best effort, off the start path
@@ -626,7 +670,7 @@ class NostrSession @Inject constructor(
                 listSnapshots = ListSnapshots(listSnapshotsDir(signer.pubkey)),
                 ownLists = ownLists,
                 pubkey = signer.pubkey, signer = signer, engine = engine,
-                feed = feed, threads = NostrThreadRepository(engine, conversations), conversations = conversations,
+                feed = feed, threads = NostrThreadRepository(engine, conversations, locator = locator), conversations = conversations,
                 profiles = profiles, publish = publish,
                 tips = tips, notifications = notifications, notificationsStore = notificationsStore, search = NostrSearchRepository(engine, profileUpdates = profiles.updates, scope = engine.backgroundScope),
                 bookmarks = NostrBookmarksRepository(engine, signer, watch = engine.backgroundScope, gate = startupGate),
@@ -634,7 +678,7 @@ class NostrSession @Inject constructor(
                 counts = NostrCountsRepository(engine, engine.backgroundScope, sessionRelays = { engine.relayUrls() }, limiter = countLimiter),
                 authorRelays = authorRelays,
                 dms = dms, dmStore = dmStore, dmRelays = dmRelays,
-                quotes = NostrQuoteRepository(engine),
+                quotes = NostrQuoteRepository(engine, locator = locator, foreign = foreign),
                 follows = follows,
                 followCounts = followCounts,
                 deletions = NoteDeletions(engine.backgroundScope),
@@ -648,6 +692,8 @@ class NostrSession @Inject constructor(
                 ownReactions = ownReactions,
                 lists = lists,
                 feedTabs = feedTabs,
+                locator = locator,
+                foreign = foreign,
             )
         } catch (e: Exception) {
             SessionCleanup.closeAll({ dmStore.close() }, { engine.close() })
