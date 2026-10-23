@@ -1,0 +1,3 @@
+• Una nota de una cuenta silenciada encima de una respuesta ahora lo indica y se abre con un toque (Mostrar); la cuenta sigue silenciada
+• Los comentarios (NIP-22) encima de una respuesta se muestran en lugar de «Esta nota no está disponible»
+• Más espacio entre los interruptores y su texto

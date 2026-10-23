@@ -1,0 +1,3 @@
+• Eine Note eines stummgeschalteten Kontos über einer Antwort sagt das jetzt und öffnet sich mit einem Tipp (Anzeigen); das Konto bleibt stumm
+• Kommentare (NIP-22) über einer Antwort werden angezeigt statt «Diese Note ist nicht verfügbar»
+• Mehr Abstand zwischen Schaltern und ihrem Text

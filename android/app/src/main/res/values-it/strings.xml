@@ -459,6 +459,7 @@
     <string name="note_ref_label">nota</string>
     <string name="quote_missing">Nota non trovata</string>
     <string name="mute_quote_placeholder">Nota di un account silenziato</string>
+    <string name="conversation_show_muted">Mostra</string>
     <string name="action_quote">Cita</string>
     <string name="compose_quote_hint">Citazione</string>
     <string name="profile_edit">Modifica profilo</string>

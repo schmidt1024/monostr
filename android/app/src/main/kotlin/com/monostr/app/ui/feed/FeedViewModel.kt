@@ -111,6 +111,8 @@ data class FeedUiState(
     val ancestors: Map<String, NoteUi> = emptyMap(),
     /** Spec 2026-10-23 §5.1: ancestor ids still searched on foreign relays; shown as the pending row, not as "unavailable". */
     val pending: Set<String> = emptySet(),
+    /** Ancestors only a mute hides: shown as "Note from a muted account", one tap shows the note there. */
+    val mutedAncestors: Map<String, NoteUi> = emptyMap(),
     val loading: Boolean = true,
     val refreshing: Boolean = false,
     val loadingMore: Boolean = false,
@@ -196,7 +198,7 @@ class FeedController(
         bookmarks.ensureLoaded()
         scope.launch { bookmarks.changes.collect { _state.update { s -> s.mapAll(bookmarks::flags) } } }
         scope.launch { actions.changes.collect { _state.update { s -> s.mapAll(actions::flags) } } }
-        scope.launch { visibility.changes.collect { _state.update { s -> s.copy(notes = visibility.visible(s.notes), ancestors = visibleAncestors()) } } }
+        scope.launch { visibility.changes.collect { _state.update { s -> s.copy(notes = visibility.visible(s.notes), ancestors = visibleAncestors(), mutedAncestors = mutedAncestors()) } } }
         // a request started on another screen greys the entry here too, and frees it again when it failed
         scope.launch { deletions.pending.collect { _state.update { s -> s.mapAll(actions::flags) } } }
         decorations.start()
@@ -409,6 +411,7 @@ class FeedController(
             s.copy(
                 chains = s.chains + found.mapValues { (_, c) -> ChainUi(c.ancestors.map { it.id }, c.cut) },
                 ancestors = visibleAncestors(),
+                mutedAncestors = mutedAncestors(),
                 pending = if (resolved.isEmpty() && pendings.isEmpty()) s.pending else s.pending - resolved + pendings.map { it.id },
             )
         }
@@ -427,7 +430,12 @@ class FeedController(
         visibility.visible(allAncestors.values.map(::flagged)).associateBy { it.note.id }
 
     /** Applies [f] to every shown note: the entries and the ancestors (flags, counts, tips). */
-    private fun FeedUiState.mapAll(f: (NoteUi) -> NoteUi) = copy(notes = notes.map(f), ancestors = ancestors.mapValues { (_, n) -> f(n) })
+    /** The stored ancestors a mute hides, with the current flags. */
+    private fun mutedAncestors(): Map<String, NoteUi> =
+        visibility.mutedOnly(allAncestors.values.map(::flagged)).associateBy { it.note.id }
+
+    private fun FeedUiState.mapAll(f: (NoteUi) -> NoteUi) =
+        copy(notes = notes.map(f), ancestors = ancestors.mapValues { (_, n) -> f(n) }, mutedAncestors = mutedAncestors.mapValues { (_, n) -> f(n) })
 
     /**
      * Sets the note list and keeps the receipt subscription in step with what is shown. The flags are applied inside the

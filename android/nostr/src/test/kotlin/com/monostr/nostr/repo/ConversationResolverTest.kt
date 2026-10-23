@@ -90,6 +90,26 @@ class ConversationResolverTest {
     }
 
     @Test
+    fun `a NIP-22 comment above a reply is shown, not unavailable`() = runTest {
+        // backlog 26: a kind 1 reply to a kind 1111 comment showed the stored comment as "This note is unavailable"
+        SilentWsRelay(answerEose = true).use { relay ->
+            val e = engine(relay)
+            val r = root(a, "root").also { e.save(it) }
+            val rid = r.id().toHex()
+            val comment = EventBuilder(Kind(1111u), "comment").tags(
+                listOf(listOf("E", rid, "", a.publicKey().toHex()), listOf("K", "1"), listOf("P", a.publicKey().toHex()),
+                    listOf("e", rid, "", a.publicKey().toHex()), listOf("k", "1"), listOf("p", a.publicKey().toHex())).map { Tag.parse(it) },
+            ).customCreatedAt(Timestamp.fromSecs((clock++).toULong())).signWithKeys(b).also { e.save(it) }
+            val answer = EventBuilder.textNote("answer").tags(
+                listOf(listOf("e", rid, "", "root"), listOf("e", comment.id().toHex(), "", "reply")).map { Tag.parse(it) },
+            ).customCreatedAt(Timestamp.fromSecs((clock++).toULong())).signWithKeys(a).also { e.save(it) }
+            val note = NoteMapper.note(answer)!!
+            assertEquals(listOf("root", "comment"), texts(NostrConversationRepository(e).chains(listOf(note))[note.id]))
+            e.close()
+        }
+    }
+
+    @Test
     fun `a root note has no chain`() = runTest {
         SilentWsRelay(answerEose = true).use { relay ->
             val e = engine(relay)

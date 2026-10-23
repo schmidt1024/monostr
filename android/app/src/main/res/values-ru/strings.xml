@@ -474,6 +474,7 @@
     <string name="note_ref_label">заметка</string>
     <string name="quote_missing">Заметка не найдена</string>
     <string name="mute_quote_placeholder">Заметка заглушённого аккаунта</string>
+    <string name="conversation_show_muted">Показать</string>
     <string name="action_quote">Цитировать</string>
     <string name="compose_quote_hint">Цитата</string>
     <string name="profile_edit">Редактировать профиль</string>

@@ -305,6 +305,26 @@ class ThreadComposeControllerTest {
     }
 
     @Test
+    fun `a muted ancestor is offered as muted, the focused reply stays`() = runTest {
+        // backlog 28: "Note from a muted account · Show" instead of "unavailable"
+        val root = note('1', bob, createdAt = 1000)
+        val reply = note('2', alice, createdAt = 2000, replyTo = root.id, root = root.id)
+        val muted = MutableStateFlow(setOf(bob))
+        val deletions = NoteDeletions()
+        val c = ThreadController(
+            reply.id, FakeThreads(mapOf(reply.id to ThreadView(root, reply, emptyList(), ancestors = listOf(Slot.Shown(root))))), profiles, FakePublish(),
+            decorations(), BookmarkActions(FakeBookmarks(), eager()), FakeCounts(), eager(),
+            deletions = deletions, visibility = NoteVisibility(deletions, muted),
+        )
+        c.start(); advanceUntilIdle()
+        assertEquals(listOf(reply.id), c.state.value.items.map { it.note.id })
+        assertEquals(setOf(root.id), c.state.value.muted.keys)
+        muted.value = emptySet(); advanceUntilIdle()
+        assertTrue(c.state.value.muted.isEmpty())
+        assertEquals(setOf(root.id, reply.id), c.state.value.items.map { it.note.id }.toSet())
+    }
+
+    @Test
     fun `a thread that turns out withdrawn stays empty when the muted set changes`() = runTest {
         val root = note('1', bob, createdAt = 1000)
         val reply = note('2', alice, createdAt = 2000, replyTo = root.id, root = root.id)

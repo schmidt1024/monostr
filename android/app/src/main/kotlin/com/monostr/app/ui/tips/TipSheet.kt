@@ -151,7 +151,7 @@ fun TipSheetContent(
                         Text(stringResource(R.string.tip_anonymous_switch), style = MaterialTheme.typography.bodyLarge)
                         Text(stringResource(R.string.tip_anonymous_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Spacer(Modifier.width(12.dp))
+                    Spacer(Modifier.width(16.dp))
                     Switch(checked = state.anonymous, onCheckedChange = null)
                 }
                 if (error != null && !amountError) {

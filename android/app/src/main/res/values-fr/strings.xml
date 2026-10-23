@@ -459,6 +459,7 @@
     <string name="note_ref_label">note</string>
     <string name="quote_missing">Note introuvable</string>
     <string name="mute_quote_placeholder">Note d’un compte masqué</string>
+    <string name="conversation_show_muted">Afficher</string>
     <string name="action_quote">Citer</string>
     <string name="compose_quote_hint">Citation</string>
     <string name="profile_edit">Modifier le profil</string>

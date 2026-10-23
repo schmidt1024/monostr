@@ -24,6 +24,7 @@ import rust.nostr.sdk.Filter
 import rust.nostr.sdk.Kind
 import java.time.Duration
 import java.util.concurrent.atomic.AtomicReference
+import com.monostr.tips.Kinds
 import com.monostr.tips.event.Event as JsonEvent
 
 /**
@@ -252,7 +253,7 @@ class NostrThreadRepository(
 
     private suspend fun rootAuthor(s: ThreadState): String? {
         if (s.rootId == s.focused.id) return s.focused.author
-        val stored = if (HEX_ID.matches(s.rootId)) engine.queryDecoded(idsFilter(listOf(s.rootId))).firstOrNull { it.kind == 1 }?.pubkey else null
+        val stored = if (HEX_ID.matches(s.rootId)) engine.queryDecoded(idsFilter(listOf(s.rootId))).firstOrNull { it.kind == 1 || it.kind == Kinds.COMMENT }?.pubkey else null
         return stored ?: s.focused.rootHint?.author
     }
 

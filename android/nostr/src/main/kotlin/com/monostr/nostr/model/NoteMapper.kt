@@ -1,5 +1,6 @@
 package com.monostr.nostr.model
 
+import com.monostr.tips.Kinds
 import com.monostr.tips.event.EventJson
 import rust.nostr.sdk.Event
 import rust.nostr.sdk.Metadata
@@ -17,12 +18,13 @@ object NoteMapper {
     internal fun note(event: JsonEvent, withQuote: Boolean = true, resolveRepost: (String) -> Event? = { null }): Note? {
         val tags = event.tags
         return when (event.kind) {
-            1 -> {
+            // a NIP-22 comment reads like a note: its lowercase `e` is the parent (an article comment has none)
+            1, Kinds.COMMENT -> {
                 val refs = Nip10.parse(tags)
                 val parsed = NoteMedia.parse(event.content, tags, withQuote)
                 Note(
                     id = event.id, author = event.pubkey, content = event.content,
-                    createdAt = event.createdAt, kind = 1,
+                    createdAt = event.createdAt, kind = event.kind,
                     rootId = refs.rootId, replyToId = refs.replyToId, repostOf = null,
                     mentionedPubkeys = tags.filter { it.size >= 2 && it[0] == "p" }.map { it[1] },
                     media = parsed.media,

@@ -19,6 +19,9 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -29,6 +32,7 @@ import com.monostr.app.ui.common.HideOnScrollState
 import com.monostr.app.ui.common.MessageSnackbar
 import com.monostr.app.ui.common.NoteCard
 import com.monostr.app.ui.common.NoteMenu
+import com.monostr.app.ui.common.MutedRow
 import com.monostr.app.ui.common.PendingRow
 import com.monostr.app.ui.common.ShowBarsWhenStuck
 import com.monostr.app.ui.common.ShowRepliesRow
@@ -77,6 +81,8 @@ internal fun FeedList(
             // scrollable so pull-to-refresh works on the empty state too
             Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(32.dp), contentAlignment = Alignment.Center) { Text(emptyText, textAlign = TextAlign.Center) }
         } else {
+            // backlog 28: muted ancestors the user tapped open, for this screen only (the account stays muted)
+            var shownMuted by rememberSaveable { mutableStateOf(emptySet<String>()) }
             LazyColumn(state = listState, modifier = Modifier.fillMaxSize().testTag("feed-list")) {
                 header()
                 items(state.entries, key = { it.note.id }) { n ->
@@ -85,8 +91,9 @@ internal fun FeedList(
                     Column(Modifier.testTag(if (chain != null) "conversation-${n.note.id.take(8)}" else "entry-${n.note.id.take(8)}")) {
                         chain?.ancestors?.forEachIndexed { i, id ->
                             val above = i > 0
-                            val a = state.ancestors[id]
+                            val a = state.ancestors[id] ?: state.mutedAncestors[id]?.takeIf { id in shownMuted }
                             if (a == null && id in state.pending) PendingRow(lineAbove = above, lineBelow = true)
+                            else if (a == null && id in state.mutedAncestors) MutedRow(lineAbove = above, lineBelow = true, onShow = { shownMuted = shownMuted + id })
                             else if (a == null) UnavailableRow(lineAbove = above, lineBelow = true)
                             else NoteCard(
                                 note = a,

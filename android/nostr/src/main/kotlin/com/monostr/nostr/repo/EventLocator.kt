@@ -1,5 +1,6 @@
 package com.monostr.nostr.repo
 
+import com.monostr.tips.Kinds
 import com.monostr.tips.RelayHosts
 import com.monostr.nostr.Exit
 import com.monostr.nostr.NostrEngine
@@ -258,7 +259,7 @@ class NostrEventLocator(
 
     /** Those of [ids] the database has as kind 1, in one read. */
     private suspend fun inDatabase(ids: Collection<String>): Set<String> =
-        if (ids.isEmpty()) emptySet() else engine.queryDecoded(idsFilter(ids)).filter { it.kind == 1 }.mapTo(HashSet()) { it.id }
+        if (ids.isEmpty()) emptySet() else engine.queryDecoded(idsFilter(ids)).filter { it.kind == 1 || it.kind == Kinds.COMMENT }.mapTo(HashSet()) { it.id }
 
     /** The engine's form of a relay URL (as [ForeignRelays.lease] returns it), null when malformed. */
     private fun normalise(raw: String): String? =

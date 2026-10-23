@@ -2,6 +2,7 @@ package com.monostr.nostr.repo
 
 import com.monostr.nostr.NostrEngine
 import com.monostr.nostr.model.NoteMapper
+import com.monostr.tips.Kinds
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
@@ -17,7 +18,7 @@ import com.monostr.tips.event.Event as JsonEvent
  * request by the note's own author counts; `a` tags are not read.
  */
 object Withdrawn {
-    private val WITHDRAWABLE = setOf(1, 6, 7)
+    private val WITHDRAWABLE = setOf(1, 6, 7, Kinds.COMMENT)
     private val HEX64 = Regex("[0-9a-f]{64}")
     private const val ID_CHUNK = 100
 

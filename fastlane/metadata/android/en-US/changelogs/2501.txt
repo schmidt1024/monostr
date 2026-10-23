@@ -1,0 +1,3 @@
+• A note from a muted account above a reply now says so and opens with one tap (Show); the account stays muted
+• Comments (NIP-22) above a reply are shown instead of "This note is unavailable"
+• More space between switches and their labels

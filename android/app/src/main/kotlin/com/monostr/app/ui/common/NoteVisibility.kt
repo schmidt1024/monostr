@@ -15,6 +15,13 @@ class NoteVisibility(val deletions: NoteDeletions, val muted: StateFlow<Set<Stri
     /** [notes] without deleted notes and without muted accounts; [keep] stays even when its author is muted. */
     fun visible(notes: List<NoteUi>, keep: String? = null): List<NoteUi> = Muted.visible(deletions.visible(notes), muted.value, keep)
 
+    /** The notes of [notes] that only a mute hides (not deleted, not [keep]): a conversation shows them as "Note from a muted account · Show". */
+    fun mutedOnly(notes: List<NoteUi>, keep: String? = null): List<NoteUi> {
+        val m = muted.value
+        if (m.isEmpty()) return emptyList()
+        return deletions.visible(notes).filter { n -> n.note.id != keep && (n.note.author in m || n.note.repostOf?.author in m) }
+    }
+
     // drop(1): the current values are applied when a list is built, only later changes re-filter it
     val changes: Flow<Unit> = merge(deletions.deleted.drop(1), muted.drop(1)).map { }
 }

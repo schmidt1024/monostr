@@ -15,6 +15,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.monostr.app.ui.common.NoteCard
+import com.monostr.app.ui.common.MutedRow
 import com.monostr.app.ui.common.ShowRepliesRow
 import com.monostr.app.ui.common.UnavailableRow
 import com.monostr.app.ui.feed.NoteUi
@@ -36,6 +37,16 @@ class ConversationBlockTest {
     // a reply naming alice: on its own it would carry "Replying to"
     private val reply = Note("2".repeat(64), bob, "the reply", 1000, 1, root.id, root.id, null, listOf(alice), displayContent = "the reply")
     private fun ui(n: Note) = NoteUi(n, Profile.empty(n.author), Profile.empty(n.author))
+
+    @Test
+    fun mutedRowNamesTheMuteAndShowsOnTap() {
+        // backlog 28: a chain note only a mute hides says so; "Show" opens it in place
+        var shown = 0
+        rule.setContent { MaterialTheme { MutedRow(lineAbove = true, lineBelow = true, onShow = { shown++ }) } }
+        rule.onNodeWithText("Note from a muted account").assertIsDisplayed()
+        rule.onNodeWithText("Show").assertIsDisplayed().performClick()
+        rule.runOnIdle { assertEquals(1, shown) }
+    }
 
     @Test
     fun blockShowsLinesGapAndUnavailableRow() {

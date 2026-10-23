@@ -1,0 +1,3 @@
+• Une note d'un compte masqué au-dessus d'une réponse l'indique désormais et s'ouvre d'un toucher (Afficher) ; le compte reste masqué
+• Les commentaires (NIP-22) au-dessus d'une réponse s'affichent au lieu de « Cette note n’est pas disponible »
+• Plus d'espace entre les interrupteurs et leur texte

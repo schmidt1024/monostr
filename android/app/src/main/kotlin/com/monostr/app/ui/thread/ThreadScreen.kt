@@ -47,6 +47,7 @@ import com.monostr.app.ui.common.MessageSnackbar
 import com.monostr.app.ui.common.NoteActions
 import com.monostr.app.ui.common.NoteCard
 import com.monostr.app.ui.common.ShowRepliesRow
+import com.monostr.app.ui.common.MutedRow
 import com.monostr.app.ui.common.PendingRow
 import com.monostr.app.ui.common.UnavailableRow
 import com.monostr.app.ui.common.NoteDeletions
@@ -91,6 +92,8 @@ data class ThreadUiState(val items: List<NoteUi> = emptyList(), val focusedId: S
     val closed: Boolean = false,
     /** The page's layout, top to bottom (spec 2026-10-16 §4.2); each row's note is looked up in [items]. */
     val rows: List<ThreadRow> = emptyList(),
+    /** Notes of [rows] only a mute hides: an ancestor or a kept strand head shows as "Note from a muted account", one tap shows it. */
+    val muted: Map<String, NoteUi> = emptyMap(),
 )
 
 /** One row of the thread page (spec 2026-10-16 §4.2), top to bottom. [id] keys the LazyColumn. */
@@ -235,7 +238,8 @@ class ThreadController(
                     val byKey = profiles.getAll(withFocused.map { it.author })
                     all = withFocused.map { n -> NoteUi(n, byKey.getValue(n.author), byKey.getValue(n.author)) }
                     val items = visibility.visible(all.map(::fresh), keep = view.focused.id)
-                    _state.update { it.copy(items = items, rows = rows, focusedId = view.focused.id, loading = false) }
+                    val muted = visibility.mutedOnly(all.map(::fresh), keep = view.focused.id).associateBy { it.note.id }
+                    _state.update { it.copy(items = items, rows = rows, focusedId = view.focused.id, loading = false, muted = muted) }
                     if (!contentMarked && items.isNotEmpty()) { contentMarked = true; PerfTrace.mark("thread first content") }
                     if (view.ancestors.isNotEmpty()) markOnce("thread ancestors shown")
                     if (view.repliesFetched) markOnce("thread relay replies shown")
@@ -279,7 +283,8 @@ class ThreadController(
     /** Applies [visibility] to [all] again; shown items keep their current flags and counts. */
     private fun refilter() = _state.update { s ->
         val shown = s.items.associateBy { it.note.id }
-        s.copy(items = visibility.visible(all.map { shown[it.note.id] ?: fresh(it) }, keep = s.focusedId ?: noteId))
+        val current = all.map { shown[it.note.id] ?: s.muted[it.note.id] ?: fresh(it) }
+        s.copy(items = visibility.visible(current, keep = s.focusedId ?: noteId), muted = visibility.mutedOnly(current, keep = s.focusedId ?: noteId).associateBy { it.note.id })
     }
 
     /** [ui] with the current bookmark, action, tip and count state. */
@@ -340,7 +345,9 @@ fun ThreadScreen(
             state.notFound -> Text(stringResource(R.string.thread_not_found), Modifier.padding(padding).padding(16.dp))
             else -> Box(Modifier.padding(padding).fillMaxSize()) {
                 val listState = rememberLazyListState()
-                val byId = state.items.associateBy { it.note.id }
+                // backlog 28: muted notes the user tapped open, for this screen only (the account stays muted)
+                var shownMuted by rememberSaveable { mutableStateOf(emptySet<String>()) }
+                val byId = state.items.associateBy { it.note.id } + state.muted.filterKeys { it in shownMuted }
                 val rows = remember(state.rows, byId.keys) { visibleRows(state.rows, byId.keys) }
                 // spec 11.5 §4: the thread opens with the focused note in view, like X's detail view — once;
                 // coming back from a profile or a rotation keeps the position the user scrolled to.
@@ -368,7 +375,9 @@ fun ThreadScreen(
                                 val lineBelow = row is ThreadRow.Ancestor || (row is ThreadRow.Reply && row.lineBelow && next is ThreadRow.Child)
                                 val n = byId[row.id]
                                 if (n == null) {
-                                    if (row is ThreadRow.Ancestor && row.pending) PendingRow(lineAbove, lineBelow) else UnavailableRow(lineAbove, lineBelow)
+                                    if (row is ThreadRow.Ancestor && row.pending) PendingRow(lineAbove, lineBelow)
+                                    else if (row.id in state.muted) MutedRow(lineAbove, lineBelow, onShow = { shownMuted = shownMuted + row.id })
+                                    else UnavailableRow(lineAbove, lineBelow)
                                 } else NoteCard(
                                     note = n,
                                     replyContext = row is ThreadRow.Reply && row.orphan,

@@ -673,6 +673,7 @@ private fun SettingSwitch(title: String, hint: String, checked: Boolean, onChang
             Text(title, style = MaterialTheme.typography.bodyLarge)
             if (hint.isNotEmpty()) Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+        Spacer(Modifier.width(16.dp))
         Switch(checked = checked, onCheckedChange = null, enabled = enabled)
     }
 }

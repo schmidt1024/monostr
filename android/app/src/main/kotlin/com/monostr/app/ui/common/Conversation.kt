@@ -4,15 +4,18 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.PathEffect
@@ -55,9 +58,14 @@ fun UnavailableRow(lineAbove: Boolean, lineBelow: Boolean, modifier: Modifier = 
 fun PendingRow(lineAbove: Boolean, lineBelow: Boolean, modifier: Modifier = Modifier) =
     PlaceholderRow(stringResource(R.string.conversation_pending), "note-pending", lineAbove, lineBelow, modifier)
 
-/** The row of a chain note that is not shown: [text] in a muted card, the thread line running through. */
+/** Backlog 28 (X's rule): a chain note only a mute hides keeps its place, named as such; [onShow] shows it here, the account stays muted. */
 @Composable
-private fun PlaceholderRow(text: String, tag: String, lineAbove: Boolean, lineBelow: Boolean, modifier: Modifier) {
+fun MutedRow(lineAbove: Boolean, lineBelow: Boolean, onShow: () -> Unit, modifier: Modifier = Modifier) =
+    PlaceholderRow(stringResource(R.string.mute_quote_placeholder), "note-muted", lineAbove, lineBelow, modifier, action = stringResource(R.string.conversation_show_muted) to onShow)
+
+/** The row of a chain note that is not shown: [text] in a muted card, the thread line running through; [action] adds a tappable label on the right. */
+@Composable
+private fun PlaceholderRow(text: String, tag: String, lineAbove: Boolean, lineBelow: Boolean, modifier: Modifier, action: Pair<String, () -> Unit>? = null) {
     val lineColor = MaterialTheme.colorScheme.outlineVariant
     Box(
         modifier.fillMaxWidth()
@@ -70,11 +78,18 @@ private fun PlaceholderRow(text: String, tag: String, lineAbove: Boolean, lineBe
             .padding(horizontal = 16.dp, vertical = 10.dp)
             .testTag(tag),
     ) {
-        Text(
-            text,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp)).padding(12.dp),
-        )
+        val card = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
+        if (action == null) {
+            Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = card.padding(12.dp))
+        } else {
+            Row(
+                card.clip(RoundedCornerShape(8.dp)).clickable(role = Role.Button, onClick = action.second).padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                Spacer(Modifier.width(16.dp))
+                Text(action.first, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            }
+        }
     }
 }

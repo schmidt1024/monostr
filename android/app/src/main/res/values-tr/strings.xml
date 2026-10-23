@@ -454,6 +454,7 @@
     <string name="note_ref_label">not</string>
     <string name="quote_missing">Not bulunamadı</string>
     <string name="mute_quote_placeholder">Sessize alınmış bir hesabın notu</string>
+    <string name="conversation_show_muted">Göster</string>
     <string name="action_quote">Alıntıla</string>
     <string name="compose_quote_hint">Alıntı</string>
     <string name="profile_edit">Profili düzenle</string>

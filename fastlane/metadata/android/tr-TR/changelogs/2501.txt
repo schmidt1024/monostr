@@ -1,0 +1,3 @@
+• Bir yanıtın üstündeki sessize alınmış hesabın notu artık bunu belirtir ve tek dokunuşla açılır (Göster); hesap sessizde kalır
+• Bir yanıtın üstündeki yorumlar (NIP-22) «Bu not kullanılamıyor» yerine gösterilir
+• Anahtarlar ile metinleri arasında daha fazla boşluk

@@ -122,6 +122,20 @@ class FeedConversationsTest {
         assertEquals(listOf(reply.id), c.state.value.notes.map { it.note.id })
         assertEquals(listOf(root.id), c.state.value.chains[reply.id]!!.ancestors)
         assertNull(c.state.value.ancestors[root.id], "muted ancestor is not offered for display")
+        // backlog 28: named as muted, one tap away
+        assertEquals(root.id, c.state.value.mutedAncestors[root.id]?.note?.id)
+    }
+
+    @Test
+    fun `an unmute moves the ancestor back from muted to shown`() = runTest {
+        val muted = MutableStateFlow(setOf(root.author))
+        val feed = FakeFeed().apply { current = listOf(reply) }
+        val convs = FakeConversations(mapOf(reply.id to Chain(listOf(Slot.Shown(root)), cut = false)))
+        val c = controller(feed, conversations = convs, muted = muted)
+        c.start(); advanceUntilIdle()
+        muted.value = emptySet(); advanceUntilIdle()
+        assertEquals(root.id, c.state.value.ancestors[root.id]?.note?.id)
+        assertNull(c.state.value.mutedAncestors[root.id])
     }
 
     @Test

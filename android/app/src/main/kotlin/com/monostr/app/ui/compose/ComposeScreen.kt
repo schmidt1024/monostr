@@ -641,6 +641,7 @@ fun ComposeScreen(onDone: () -> Unit, vm: ComposeViewModel = hiltViewModel()) {
                         Text(stringResource(R.string.compose_sensitive), style = MaterialTheme.typography.bodyMedium)
                         Text(stringResource(R.string.compose_sensitive_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
+                    Spacer(Modifier.width(16.dp))
                     Switch(
                         checked = state.sensitive, onCheckedChange = vm.controller::setSensitive,
                         enabled = !state.sending && !state.pendingResend, modifier = Modifier.testTag("compose-sensitive"),
