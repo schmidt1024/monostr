@@ -71,7 +71,8 @@ internal fun FeedTabRow(
     onUnpin: (ListAddress) -> Unit,
     onMove: (ListAddress, Int) -> Unit,
 ) {
-    PrimaryScrollableTabRow(selectedTabIndex = state.selected, edgePadding = 0.dp, modifier = Modifier.testTag("feed-tabs")) {
+    // no 90 dp minimum: a list named with one emoji gets the same 16 dp sides as a word, not a wide gap
+    PrimaryScrollableTabRow(selectedTabIndex = state.selected, edgePadding = 0.dp, minTabWidth = 0.dp, modifier = Modifier.testTag("feed-tabs")) {
         state.tabs.forEachIndexed { i, tab ->
             var menu by remember(tab.key) { mutableStateOf(false) }
             val isSelected = state.selected == i

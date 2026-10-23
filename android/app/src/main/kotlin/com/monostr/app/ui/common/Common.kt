@@ -253,16 +253,16 @@ private fun ListNoteCard(
             }
             Spacer(Modifier.height(4.dp))
         }
-        Row(Modifier.fillMaxWidth()) {
+        // the free space of the card opens the thread, like the text does (also below the avatar, like X) — as a plain
+        // tap, not a clickable: a clickable would merge the children's semantics (the pending-tip text, TalkBack stops) into one node
+        Row(Modifier.fillMaxWidth().pointerInput(onOpen) { detectTapGestures { onOpen() } }.testTag("note-row-$id8")) {
             val openProfile = stringResource(R.string.note_open_profile)
             val avatarPlaced = if (threaded) Modifier.onPlaced { placed.avatar = it } else Modifier
             IconButton(onClick = { onOpenProfile(shown.author) }, modifier = Modifier.size(LIST_AVATAR).then(avatarPlaced).semantics { contentDescription = openProfile }.testTag("note-avatar-$id8")) {
                 Avatar(shownAuthor.picture, size = LIST_AVATAR)
             }
             Spacer(Modifier.width(LIST_GAP))
-            // the free space of the column opens the thread, like the text does — as a plain tap, not a clickable:
-            // a clickable would merge the children's semantics (the pending-tip text, TalkBack stops) into one node
-            Column(Modifier.weight(1f).pointerInput(onOpen) { detectTapGestures { onOpen() } }) {
+            Column(Modifier.weight(1f)) {
                 NoteHeaderLine(note, onOpen = onOpen, onOpenProfile = onOpenProfile, menu = menu.takeIf { showActions })
                 if (replyContext) ReplyContextLine(shown, names, onOpenProfile)
                 if (shown.displayContent.isNotBlank()) {

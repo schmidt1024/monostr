@@ -1,0 +1,3 @@
+• Tap a profile picture or banner to see it large
+• Tapping the free space below a note's avatar opens the note
+• List tabs named with one emoji no longer leave a wide gap

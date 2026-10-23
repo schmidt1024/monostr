@@ -1,0 +1,3 @@
+• Büyük görmek için profil resmine veya afişe dokunun
+• Bir notun avatarının altındaki boş alana dokunmak notu açar
+• Adı tek bir emoji olan liste sekmeleri artık geniş boşluk bırakmaz

@@ -1,0 +1,3 @@
+• Touche une photo de profil ou une bannière pour l'afficher en grand
+• Toucher l'espace libre sous l'avatar d'une note ouvre la note
+• Les onglets de listes nommés d'un seul emoji ne laissent plus de grand vide

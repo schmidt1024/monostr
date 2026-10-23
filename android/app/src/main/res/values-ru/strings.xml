@@ -482,6 +482,8 @@
     <string name="profile_edit_title">Редактировать профиль</string>
     <string name="profile_edit_banner">URL баннера</string>
     <string name="profile_edit_picture">URL изображения</string>
+    <string name="profile_show_picture">Показать фото профиля</string>
+    <string name="profile_show_banner">Показать баннер</string>
     <string name="profile_edit_display_name">Отображаемое имя</string>
     <string name="profile_edit_name">Имя</string>
     <string name="profile_edit_about">О себе</string>

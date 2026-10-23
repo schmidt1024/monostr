@@ -285,6 +285,7 @@ private fun LoggedInNavHost(ready: Ready, gate: OnboardingGateViewModel = hiltVi
                     onOpenList = { nav.navigate(Routes.list(it)) },
                     onCreateList = { nav.navigate(Routes.listEdit()) },
                     onNewListWith = { nav.navigate(Routes.listEdit(add = it)) },
+                    onOpenPicture = { nav.navigate(Routes.mediaUrls(listOf(it))) },
                 )
             }
             composable(Routes.LIST, arguments = listOf(navArgument("address") { type = NavType.StringType })) {

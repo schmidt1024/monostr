@@ -462,6 +462,8 @@
     <string name="profile_edit_title">Profili düzenle</string>
     <string name="profile_edit_banner">Banner URL\'si</string>
     <string name="profile_edit_picture">Resim URL\'si</string>
+    <string name="profile_show_picture">Profil resmini göster</string>
+    <string name="profile_show_banner">Afişi göster</string>
     <string name="profile_edit_display_name">Görünen ad</string>
     <string name="profile_edit_name">Ad</string>
     <string name="profile_edit_about">Hakkında</string>

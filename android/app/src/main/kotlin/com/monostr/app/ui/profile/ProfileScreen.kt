@@ -11,6 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.map
 import com.monostr.app.ui.common.MentionResolver
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.CircularProgressIndicator
@@ -27,6 +28,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
@@ -617,6 +619,8 @@ fun ProfileScreen(
     onOpenList: (ListAddress) -> Unit = {},
     onCreateList: () -> Unit = {},
     onNewListWith: (String) -> Unit = {},
+    /** Backlog 29 (like X): the profile picture or banner, large. */
+    onOpenPicture: (String) -> Unit = {},
     vm: ProfileViewModel = hiltViewModel(),
 ) {
     val state by vm.controller.state.collectAsStateWithLifecycle()
@@ -683,12 +687,20 @@ fun ProfileScreen(
                         AsyncImage(
                             model = url, contentDescription = null, contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(12.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant).testTag("profile-banner"),
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .clickable(onClickLabel = stringResource(R.string.profile_show_banner)) { onOpenPicture(url) }
+                                .testTag("profile-banner"),
                         )
                         Spacer(Modifier.height(12.dp))
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Avatar(state.profile.picture)
+                        val picture = state.profile.picture?.takeIf { it.isNotBlank() }
+                        Avatar(
+                            picture,
+                            modifier = if (picture == null) Modifier else Modifier.clip(CircleShape)
+                                .clickable(onClickLabel = stringResource(R.string.profile_show_picture)) { onOpenPicture(picture) }
+                                .testTag("profile-picture"),
+                        )
                         Spacer(Modifier.width(12.dp))
                         Column {
                             Text(state.profile.shownName, style = MaterialTheme.typography.titleMedium)

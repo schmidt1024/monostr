@@ -1,0 +1,3 @@
+• Profilbild oder Banner antippen zeigt es gross
+• Ein Tipp auf die freie Fläche unter dem Profilbild einer Note öffnet die Note
+• Listen-Tabs, die nur ein Emoji als Namen haben, lassen keine breite Lücke mehr

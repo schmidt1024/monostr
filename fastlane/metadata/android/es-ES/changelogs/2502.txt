@@ -1,0 +1,3 @@
+• Toca una foto de perfil o un banner para verlo en grande
+• Tocar el espacio libre bajo el avatar de una nota abre la nota
+• Las pestañas de listas con un solo emoji ya no dejan un hueco ancho

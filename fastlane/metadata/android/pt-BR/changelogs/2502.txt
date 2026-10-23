@@ -1,0 +1,3 @@
+• Toque numa foto de perfil ou banner para vê-lo grande
+• Tocar no espaço livre abaixo do avatar de uma nota abre a nota
+• Abas de listas com um só emoji não deixam mais um espaço largo

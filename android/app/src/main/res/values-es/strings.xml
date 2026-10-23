@@ -467,6 +467,8 @@
     <string name="profile_edit_title">Editar perfil</string>
     <string name="profile_edit_banner">URL del banner</string>
     <string name="profile_edit_picture">URL de la imagen</string>
+    <string name="profile_show_picture">Mostrar foto de perfil</string>
+    <string name="profile_show_banner">Mostrar banner</string>
     <string name="profile_edit_display_name">Nombre visible</string>
     <string name="profile_edit_name">Nombre</string>
     <string name="profile_edit_about">Biografía</string>
