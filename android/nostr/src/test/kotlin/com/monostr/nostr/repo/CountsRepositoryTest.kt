@@ -90,6 +90,23 @@ class CountsRepositoryTest {
     }
 
     @Test
+    fun `the replies COUNT asks for kind 1 replies and NIP-22 comments in one filter`() = runTest {
+        // backlog 31: Fediverse replies bridged by Mostr are kind 1111
+        val e = engine()
+        val asked = ArrayList<List<Int>>()
+        val repo = NostrCountsRepository(
+            e, this, relays = { listOf("wss://a") },
+            counter = { _, f -> f.asRecord().kinds!!.map { it.asU16().toInt() }.also { synchronized(asked) { asked += listOf(it) } }.let { if (1 in it) 3L else 0L } },
+            now = { 1000 }, batchDelayMs = 0,
+        )
+        repo.request(listOf(id))
+        advanceUntilIdle()
+        assertEquals(3L, repo.counts.value.getValue(id).replies)
+        assertEquals(3, asked.size) // still three requests per note and relay
+        assertTrue(listOf(1, 1111) in asked.map { it.sorted() }, "asked: $asked")
+    }
+
+    @Test
     fun `a relay that keeps failing is left out after two failed rounds in a row and others still count`() = runTest {
         val e = engine()
         val calls = ArrayList<String>()

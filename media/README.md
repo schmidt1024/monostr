@@ -19,9 +19,13 @@ durch. Design: `docs/superpowers/specs/2026-10-02-plan-10e-media-upload-design.m
 | `GET /` | nein | Regeln, Limits, Meldeadresse |
 | `GET /healthz` | nein | prüft Datenbank, Bucket und `nsfw` |
 
-Angenommen werden nur JPEG, PNG, WebP und GIF. Jede Ablehnung trägt `X-Reason` (Text) und
+Angenommen werden JPEG, PNG, WebP und GIF bis 10 MB und MP4-Videos bis 50 MiB (H.264, Ton AAC oder keiner,
+höchstens 125 s, kürzere Seite höchstens 720 px; Spec `docs/superpowers/specs/2026-10-27-video-upload-design.md`).
+Ein Video landet beim Upload in `/data/tmp` (nie im Arbeitsspeicher) und ist danach auf jedem Weg wieder weg.
+Jede Ablehnung trägt `X-Reason` (Text) und
 `X-Monostr-Reason` (festes Kürzel: `auth`, `banned`, `banned-content`, `nsfw`, `hash-mismatch`,
-`length`, `too-large`, `quota`, `type`, `rate`, `unavailable`, `not-found`, `bad-request`, `internal`).
+`length`, `too-large`, `quota`, `type`, `rate`, `unavailable`, `not-found`, `bad-request`, `internal`,
+`video-rate`, `video-too-long`, `video-format`, `video-too-large`).
 
 Der Server speichert keine IP-Adressen: das Limit pro Adresse zählt nur im Arbeitsspeicher,
 das Log nennt Methode, Pfad, Status und Dauer, Caddy schreibt weder ein Zugriffsprotokoll noch das
@@ -53,11 +57,14 @@ Alles in `compose.yml` unter `media.environment`, ausser dem S3-Zugang, `MEDIA_R
 
 | Variable | Standard | Bedeutung |
 |---|---|---|
-| `MEDIA_MAX_BYTES` | 10485760 | größte Datei |
+| `MEDIA_MAX_BYTES` | 10485760 | größtes Bild |
+| `MEDIA_MAX_VIDEO_BYTES` | 52428800 | größtes Video |
+| `MEDIA_PUBKEY_VIDEOS_PER_DAY` | 5 | Videos pro Pubkey und UTC-Tag (zählen auch bei den Uploads mit) |
+| `MEDIA_STORAGE_ALERT_BYTES` | 200000000000 | übersteigt der gesamte Speicher diesen Wert, bekommt der Betreiber einmal eine DM (erst nach einem Absinken wieder); braucht `MEDIA_REVIEW_NPUB` |
 | `MEDIA_PUBKEY_UPLOADS_PER_DAY` | 50 | Uploads pro Pubkey und UTC-Tag (gespeicherte und als NSFW abgelehnte) |
-| `MEDIA_PUBKEY_QUOTA_BYTES` | 524288000 | Kontingent pro Pubkey |
+| `MEDIA_PUBKEY_QUOTA_BYTES` | 2147483648 | Kontingent pro Pubkey (Bilder und Videos) |
 | `MEDIA_IP_UPLOADS_PER_DAY` | 100 | Uploads pro Adresse und UTC-Tag (IPv6 pro /64), nur im Arbeitsspeicher |
-| `MEDIA_GLOBAL_BYTES_PER_DAY` | 5368709120 | neu gespeicherte Bytes pro UTC-Tag insgesamt (Kostenbremse) |
+| `MEDIA_GLOBAL_BYTES_PER_DAY` | 21474836480 | neu gespeicherte Bytes pro UTC-Tag insgesamt (Kostenbremse) |
 | `MEDIA_MAX_UPLOADS_IN_FLIGHT` | 16 | Uploads, die gleichzeitig bearbeitet werden (jeder hält sein Bild im Speicher); darüber `503` mit `Retry-After`. Pro Adresse höchstens 4 zugleich |
 | `MEDIA_NSFW_THRESHOLD` | 0.60 | ab diesem Wert ist ein Bild ein Prüffall (ohne `MEDIA_REVIEW_NPUB`: wird es abgelehnt) |
 | `MEDIA_NSFW_REJECT` | 0.85 | ab diesem Wert wird ein Bild abgelehnt; dazwischen wird es gespeichert und dem Betreiber gemeldet |
@@ -111,6 +118,12 @@ eine Animation, deren Einzelbilder mal Fläche 250 Millionen Pixel übersteigen,
 der Container ein zweites Mal. Antwortet der Container nicht, nimmt der Server nichts an (503); ein fehlgeschlagener
 Prüfversuch zählt für die Adresse, nicht für den Pubkey.
 
+Videos: `POST /video` mit der MP4. Der Container liest die Datei nur als MP4/MOV (keine Formaterkennung, nur das
+Dateiprotokoll, keine externen Verweise, vorher die `ftyp`-Box), verlangt genau eine Videospur, liest die Dauer aus
+den Paketen (höchstens 7500) und bewertet ein Einzelbild je 10 s (mindestens 3, höchstens 12); der höchste Wert zählt,
+ein Einzelbild, das sich nicht ziehen lässt, lässt die Prüfung scheitern. Zwei Videos zugleich, 120 s für alles.
+Der Container hängt nur am internen Netz `scorer` und erreicht nichts ausserhalb.
+
 Die Schwelle und wie sie gemessen wurde: `nsfw/CALIBRATION.md`. Neu messen:
 
 ```
@@ -121,7 +134,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 NSFW_MODEL=marqo-nsfw-384.onnx .venv/bin/python calibrate.py calib scores.csv
 ```
 
-Tests des Containers: `NSFW_MODEL=marqo-nsfw-384.onnx .venv/bin/python -m unittest -v test_server test_hardening`.
+Tests des Containers (ffmpeg und ffprobe im `PATH`): `NSFW_MODEL=marqo-nsfw-384.onnx .venv/bin/python -m unittest -v test_server test_hardening test_video`.
 
 ## Backups
 

@@ -1,5 +1,7 @@
 package com.monostr.app.ui.media
 
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.layout.fillMaxHeight
 import android.graphics.Bitmap
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -14,6 +16,9 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Image
@@ -135,14 +140,42 @@ private fun MediaGrid(media: List<NoteMedia>, tag: String, blurred: Boolean, pla
         }
         return
     }
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        media.chunked(2).forEachIndexed { row, pair ->
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                pair.forEachIndexed { col, m ->
-                    val index = row * 2 + col
-                    MediaCell(m, index, tag, Modifier.weight(1f).aspectRatio(1f).clip(shape), blurred, placeholderOnly, enabled, onOpenMedia, onOpenVideo)
+    // backlog 39: X's arrangement; every cell opens the viewer at its own index (the viewer holds all pictures)
+    val layout = MediaGridLayout.of(media.size)
+    val gap = 4.dp
+    @Composable
+    fun cell(i: Int, modifier: Modifier) = MediaCell(media[i], i, tag, modifier.clip(shape), blurred, placeholderOnly, enabled, onOpenMedia, onOpenVideo)
+    when (layout.kind) {
+        MediaGridLayout.Kind.PAIR -> Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+            cell(0, Modifier.weight(1f).aspectRatio(1f))
+            cell(1, Modifier.weight(1f).aspectRatio(1f))
+        }
+        // three squares: the big side and the small side from the width, so that the gaps do not bend them
+        MediaGridLayout.Kind.BIG_LEFT -> BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val (big, small) = MediaGridLayout.bigLeftSides(maxWidth.value, gap.value)
+            Row(Modifier.fillMaxWidth().height(big.dp), horizontalArrangement = Arrangement.spacedBy(gap)) {
+                cell(0, Modifier.size(big.dp))
+                Column(Modifier.width(small.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(gap)) {
+                    cell(1, Modifier.size(small.dp))
+                    cell(2, Modifier.size(small.dp))
                 }
-                if (pair.size == 1) Box(Modifier.weight(1f))
+            }
+        }
+        else -> Column(Modifier.fillMaxWidth().aspectRatio(MediaGridLayout.BLOCK_RATIO), verticalArrangement = Arrangement.spacedBy(gap)) {
+            for (row in 0..1) Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(gap)) {
+                cell(row * 2, Modifier.weight(1f).fillMaxHeight())
+                Box(Modifier.weight(1f).fillMaxHeight()) {
+                    cell(row * 2 + 1, Modifier.fillMaxSize())
+                    // from five pictures on: «+N» over the fourth, a tap opens the viewer there and swipes on
+                    if (row == 1 && layout.more > 0) {
+                        Box(
+                            Modifier.matchParentSize().clip(shape).background(Color.Black.copy(alpha = 0.6f)).testTag("note-media-more-$tag"),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text("+${layout.more}", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = Color.White)
+                        }
+                    }
+                }
             }
         }
     }

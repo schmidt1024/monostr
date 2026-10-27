@@ -18,6 +18,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import rust.nostr.sdk.EventId
+import com.monostr.tips.Kinds
 import rust.nostr.sdk.Filter
 import rust.nostr.sdk.Kind
 import rust.nostr.sdk.NostrSdkException
@@ -219,7 +220,7 @@ class NostrCountsRepository(
             for (url in targets) for (id in ids) {
                 val eid = runCatching { EventId.parse(id) }.getOrNull() ?: continue
                 launch {
-                    val answers = KINDS.map { k -> async { countOrNull(url, Filter().kind(Kind(k)).event(eid), priority, round) } }.awaitAll()
+                    val answers = KINDS.map { k -> async { countOrNull(url, Filter().kinds(k.map { Kind(it) }).event(eid), priority, round) } }.awaitAll()
                     // a relay that missed one kind gives nothing for this note this round (no half-known counts)
                     if (answers.any { it == null }) { round.missed += id; return@launch }
                     merge(round, id, NoteCounts(answers[0], answers[1], answers[2]))
@@ -368,8 +369,8 @@ class NostrCountsRepository(
     }
 
     private companion object {
-        /** Likes, reposts, replies: the order of [NoteCounts]. */
-        val KINDS = listOf<UShort>(7u, 6u, 1u)
+        /** Likes, reposts, replies (kind 1 and NIP-22 comments, backlog 31): the order of [NoteCounts], one COUNT each. */
+        val KINDS = listOf(listOf<UShort>(7u), listOf<UShort>(6u), listOf<UShort>(1u, Kinds.COMMENT.toUShort()))
         const val MAX_FAILURES = 2
         const val RELAY_POLL_MS = 250L
         val COUNT_TIMEOUT: Duration = Duration.ofSeconds(5)

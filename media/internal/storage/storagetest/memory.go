@@ -58,6 +58,15 @@ func (m *Memory) Put(ctx context.Context, key string, data []byte, _ string) err
 	return nil
 }
 
+// PutStream reads r to the end and stores it like Put.
+func (m *Memory) PutStream(ctx context.Context, key string, r io.Reader, _ int64, contentType string) error {
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return err
+	}
+	return m.Put(ctx, key, data, contentType)
+}
+
 func (m *Memory) Open(_ context.Context, key string) (io.ReadSeekCloser, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

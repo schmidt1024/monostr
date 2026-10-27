@@ -106,6 +106,8 @@ class NostrThreadRepository(
         shown.set(last.ids())
         send(last)
         launch { live(s, shown, pacer) }
+        // backlog 40: an own reply (or deletion) is stored before it is sent, so no relay echo ever signals it
+        launch { engine.published.collect { ev -> if (ThreadLiveMatch.touches(ev, s.tagIds, shown.get())) pacer.signal() } }
         // the one emitter: every view is the database view now (Withdrawn and NIP-09 in one place), never a repeat
         launch {
             pacer.run {
@@ -161,18 +163,27 @@ class NostrThreadRepository(
         return ev?.takeUnless { Withdrawn.isWithdrawn(engine, it) }?.let { NoteMapper.note(it) }
     }
 
-    /** Job R (spec perf2 C3): replies and deletion requests that tag the root or the focused note; true when a connected relay was asked. */
-    private suspend fun fetchReplies(tagIds: List<String>): Boolean {
+    /**
+     * Job R (spec perf2 C3): replies, NIP-22 comments and deletion requests that tag the root or the focused note, and
+     * beside them the comments below those comments (backlog 31: they name the root only as `E`); true when a
+     * connected relay was asked.
+     */
+    private suspend fun fetchReplies(tagIds: List<String>): Boolean = coroutineScope {
         val asked = engine.connectedNormalRelayUrls().isNotEmpty()
-        quietly { engine.fetch(taggedFilter(listOf(1, 5), tagIds), fetchTimeout) }
-        return asked
+        launch { quietly { engine.fetch(rootCommentsFilter(tagIds), fetchTimeout) } }
+        quietly { engine.fetch(taggedFilter(REPLY_KINDS + 5, tagIds), fetchTimeout) }
+        asked
     }
+
+    /** The stored replies of [tagIds]: tagging one of them (`e`), or a comment below one of them (`E`). */
+    private suspend fun storedReplies(tagIds: List<String>) =
+        (engine.queryBoth(taggedFilter(REPLY_KINDS, tagIds)) + engine.queryBoth(rootCommentsFilter(tagIds))).distinctBy { it.second.id }
 
     /** Job D (spec perf2 C3): deletion requests for root, focused and every stored reply, 100 ids per request, the requests in parallel; true when a connected relay was asked. */
     private suspend fun fetchDeletions(rootId: String, focusedId: String, tagIds: List<String>): Boolean = coroutineScope {
         val asked = engine.connectedNormalRelayUrls().isNotEmpty()
         val replyIds = try {
-            engine.queryDecoded(taggedFilter(listOf(1), tagIds)).map { it.id }
+            storedReplies(tagIds).map { it.second.id }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -268,7 +279,7 @@ class NostrThreadRepository(
             engine.incoming
                 .onSubscription {
                     subId = try {
-                        engine.subscribe(taggedFilter(listOf(1, 5), s.tagIds, since = now() - LIVE_OVERLAP_SECONDS))
+                        engine.subscribe(taggedFilter(REPLY_KINDS + 5, s.tagIds, since = now() - LIVE_OVERLAP_SECONDS))
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -288,7 +299,7 @@ class NostrThreadRepository(
     private suspend fun current(s: ThreadState): ThreadView {
         val (ancestors, fetched) = s.lock.withLock { s.ancestors to s.repliesFetched }
         val heads = engine.queryBoth(idsFilter(listOf(s.rootId, s.focused.id).filter { HEX_ID.matches(it) }.distinct()))
-        val tagged = engine.queryBoth(taggedFilter(listOf(1), s.tagIds))
+        val tagged = storedReplies(s.tagIds)
         val kept = Withdrawn.filterDecoded(engine, heads + tagged).map { it.second }
         val byId = kept.associateBy { it.id }
         val taggedIds = tagged.mapTo(HashSet()) { it.second.id }
@@ -302,9 +313,13 @@ class NostrThreadRepository(
         return ThreadView(rootNow?.let { NoteMapper.note(it) }, s.focused, replies, gone = focusedNow == null, ancestors = ancestors, repliesFetched = fetched)
     }
 
-    /** A reply of this thread: it tags the root (any `e` tag, as before), or its NIP-10 reference is the focused note (a mention is not). */
+    /**
+     * A reply of this thread: it tags the root (any `e` tag, as before; a NIP-22 comment also by its `E` scope), or its
+     * NIP-10 reference is the focused note (a mention is not).
+     */
     private fun ThreadState.holds(ev: JsonEvent): Boolean =
         ev.tags.any { it.size >= 2 && it[0] == "e" && it[1] == rootId } ||
+            (ev.kind == Kinds.COMMENT && ev.tags.any { it.size >= 2 && it[0] == "E" && it[1] == rootId }) ||
             Nip10.parse(ev.tags).let { it.replyToId == focused.id || it.rootId == focused.id }
 
     private fun ThreadView.ids(): Set<String> = buildSet {
@@ -324,6 +339,8 @@ class NostrThreadRepository(
         /** Spec 2026-10-23 §4.4: stage 3 rounds of one thread walk (a long chain would take 50 × 5 s otherwise). */
         const val FOREIGN_HOPS = 3
         private const val DELETION_CHUNK = 100
+        /** Kind 1 replies and NIP-22 comments (backlog 31). */
+        private val REPLY_KINDS = listOf(1, Kinds.COMMENT)
     }
 }
 
@@ -331,6 +348,8 @@ class NostrThreadRepository(
 internal object ThreadLiveMatch {
     fun touches(event: JsonEvent, tagIds: Collection<String>, shown: Set<String>): Boolean = when (event.kind) {
         1 -> event.tags.any { it.size >= 2 && it[0] == "e" && it[1] in tagIds }
+        // backlog 31: a comment below a comment names the root only as `E`
+        Kinds.COMMENT -> event.tags.any { it.size >= 2 && (it[0] == "e" || it[0] == "E") && it[1] in tagIds }
         5 -> event.tags.any { it.size >= 2 && it[0] == "e" && it[1] in shown }
         else -> false
     }

@@ -19,6 +19,7 @@ import okhttp3.Request
 import okhttp3.RequestBody
 import okhttp3.Response
 import okio.BufferedSink
+import java.io.File
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
@@ -40,19 +41,32 @@ class BlossomClient(
     // several megabytes over a mobile link outlast the shared client's timeouts
     private val http: OkHttpClient = http.newBuilder().writeTimeout(120, TimeUnit.SECONDS).readTimeout(60, TimeUnit.SECONDS)
         .callTimeout(5, TimeUnit.MINUTES).build() // no call lives forever, but 10 MB on a slow link fits
+    // spec 2026-10-27 video §8: up to 50 MiB, which a slow line needs minutes for
+    // the answer comes after the server checked and stored the video: minutes, not the picture client's 60 s (final review I2)
+    private val videoHttp: OkHttpClient = this.http.newBuilder().writeTimeout(15, TimeUnit.MINUTES).readTimeout(10, TimeUnit.MINUTES)
+        .callTimeout(15, TimeUnit.MINUTES).build()
+    /** Tests: how long a video upload waits for the server's answer. */
+    internal val videoReadTimeoutMillis: Int get() = videoHttp.readTimeoutMillis
     private val json = Json { ignoreUnknownKeys = true }
 
     @Serializable
     private data class Descriptor(val url: String = "", val sha256: String = "", val size: Long = 0, val type: String = "")
 
-    suspend fun upload(server: String, bytes: ByteArray, type: String, sha256: String, onProgress: (Float) -> Unit = {}): BlobDescriptor {
+    suspend fun upload(server: String, bytes: ByteArray, type: String, sha256: String, onProgress: (Float) -> Unit = {}): BlobDescriptor =
+        put(server, ProgressBody(bytes, type.toMediaType(), onProgress), bytes.size.toLong(), type, sha256, http)
+
+    /** Like [upload], but streamed from [file] (a video: too large to hold in memory), with the longer video timeouts. */
+    suspend fun uploadFile(server: String, file: File, type: String, sha256: String, onProgress: (Float) -> Unit = {}): BlobDescriptor =
+        put(server, FileProgressBody(file, type.toMediaType(), onProgress), file.length(), type, sha256, videoHttp)
+
+    private suspend fun put(server: String, body: RequestBody, size: Long, type: String, sha256: String, client: OkHttpClient): BlobDescriptor {
         val base = server.trim().trimEnd('/')
         val request = Request.Builder().url("$base/upload")
             .header("Authorization", BlossomAuth.authorization(signer, BlossomAuth.UPLOAD, sha256, base, now()))
             .header("X-SHA-256", sha256)
-            .put(ProgressBody(bytes, type.toMediaType(), onProgress))
+            .put(body)
             .build()
-        return execute(request) { status, body ->
+        return execute(request, client) { status, body ->
             val d = try {
                 json.decodeFromString(Descriptor.serializer(), body)
             } catch (e: SerializationException) {
@@ -60,7 +74,7 @@ class BlossomClient(
             }
             // spec 5.1: only an answer about the very bytes that were sent, and only a web address, ends up in a note
             if (!isSafeUrl(d.url, base) || d.sha256 != sha256) throw UploadException.Rejected(status)
-            BlobDescriptor(d.url, d.sha256, if (d.size > 0) d.size else bytes.size.toLong(), d.type.ifBlank { type })
+            BlobDescriptor(d.url, d.sha256, if (d.size > 0) d.size else size, d.type.ifBlank { type })
         }
     }
 
@@ -114,9 +128,9 @@ class BlossomClient(
         }
     }
 
-    private suspend fun <T> execute(request: Request, parse: (status: Int, body: String) -> T): T = withContext(Dispatchers.IO) {
+    private suspend fun <T> execute(request: Request, client: OkHttpClient = http, parse: (status: Int, body: String) -> T): T = withContext(Dispatchers.IO) {
         val response = try {
-            http.newCall(request).await()
+            client.newCall(request).await()
         } catch (e: IOException) {
             throw UploadException.Network(e)
         }
@@ -138,7 +152,10 @@ class BlossomClient(
     /** The server's reason code first (spec 4.4); a server without codes is read by its status. */
     private fun failure(status: Int, code: String?): UploadException = when (code) {
         "nsfw" -> UploadException.Nsfw()
-        "too-large" -> UploadException.TooLarge()
+        "too-large", "video-too-large" -> UploadException.TooLarge()
+        "video-too-long" -> UploadException.VideoTooLong()
+        "video-rate" -> UploadException.VideoRate()
+        "video-format" -> UploadException.Type()
         "quota" -> UploadException.Quota()
         "rate" -> UploadException.Rate()
         "type" -> UploadException.Type()
@@ -188,6 +205,32 @@ private class ProgressBody(private val bytes: ByteArray, private val type: Media
             sink.flush() // otherwise everything sits in the buffer and the progress jumps to the end at once
             sent += n
             onProgress(sent.toFloat() / bytes.size)
+        }
+    }
+
+    private companion object {
+        const val CHUNK = 64 * 1024
+    }
+}
+
+/** A file as a request body, read in chunks and reporting how much has been written (spec 2026-10-27 video §8). */
+private class FileProgressBody(private val file: File, private val type: MediaType, private val onProgress: (Float) -> Unit) : RequestBody() {
+    override fun contentType(): MediaType = type
+    override fun contentLength(): Long = file.length()
+
+    override fun writeTo(sink: BufferedSink) {
+        val total = file.length().coerceAtLeast(1)
+        var sent = 0L
+        val buf = ByteArray(CHUNK)
+        file.inputStream().use { input ->
+            while (true) {
+                val n = input.read(buf)
+                if (n < 0) break
+                sink.write(buf, 0, n)
+                sink.flush()
+                sent += n
+                onProgress(sent.toFloat() / total)
+            }
         }
     }
 

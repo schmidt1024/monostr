@@ -32,6 +32,23 @@ class LinkPreviewRulesTest {
     }
 
     @Test
+    fun `a link at the end of the note leaves the text when its card shows`() {
+        val url = "https://getmonero.org/2026/10/27/fcmp-testnet.html"
+        assertEquals("Testnet is up, here is how:", LinkPreviewRules.textWithCard("Testnet is up, here is how:\n$url", url))
+        assertEquals("Testnet is up:", LinkPreviewRules.textWithCard("Testnet is up: $url  \n", url))
+        assertEquals("", LinkPreviewRules.textWithCard(url, url)) // a note of only the link: the card says it all
+    }
+
+    @Test
+    fun `a link inside a sentence stays, and so does an end that is another link`() {
+        val url = "https://getmonero.org/x"
+        assertEquals("See $url for more", LinkPreviewRules.textWithCard("See $url for more", url))
+        assertEquals("$url and https://other.example/y", LinkPreviewRules.textWithCard("$url and https://other.example/y", url))
+        // only the exact link at the very end; a longer one that starts with it stays
+        assertEquals("Read ${url}/more", LinkPreviewRules.textWithCard("Read ${url}/more", url))
+    }
+
+    @Test
     fun `the card names the domain of the link a tap opens`() {
         // security review: the page after redirects may sit elsewhere; the card must not show that domain
         assertEquals("kurz.link", LinkPreviewRules.shownDomain("https://www.kurz.link/x?y=1"))

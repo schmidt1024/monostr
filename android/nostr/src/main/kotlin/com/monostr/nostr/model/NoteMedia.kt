@@ -19,7 +19,10 @@ data class NoteMedia(
     data class Parsed(val media: List<NoteMedia>, val displayContent: String, val quote: QuoteRef? = null)
 
     companion object {
-        const val MAX = 4
+        /** Backlog 39: five and more show as 2 x 2 with «+N»; the viewer holds them all. */
+        const val MAX = 20
+        /** Pictures a note written in monostr can carry (the composer's limit; uploads count against the media server's quota). */
+        const val MAX_ATTACH = 4
         /** `#nsfw` as a whole hashtag, anywhere in the content (spec 3.1). */
         val NSFW = Regex("(?<![\\p{L}\\p{N}_])#nsfw(?![\\p{L}\\p{N}_])", RegexOption.IGNORE_CASE) // regex
         private val URL = Regex("https?://[^\\s<>\"']+") // regex
@@ -85,7 +88,8 @@ data class NoteMedia(
                 val w = d.substringBefore('x').toIntOrNull(); val h = d.substringAfter('x', "").toIntOrNull()
                 if (w != null && h != null && w > 0 && h > 0) w to h else null
             }
-            val poster = attrs?.get("image")?.takeIf { HTTP.containsMatchIn(it) }
+            // `image` (NIP-92/94), else `thumb`, which some clients write instead (spec 2026-10-27 video §5)
+            val poster = attrs?.get("image")?.takeIf { HTTP.containsMatchIn(it) } ?: attrs?.get("thumb")?.takeIf { HTTP.containsMatchIn(it) }
             return NoteMedia(url, kind, poster = poster, blurhash = attrs?.get("blurhash"), alt = attrs?.get("alt"), dim = dim)
         }
 

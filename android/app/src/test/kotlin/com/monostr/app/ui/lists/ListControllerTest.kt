@@ -127,4 +127,48 @@ class ListControllerTest {
         assertSame(feed, c.state.value.feed)
         assertEquals(1, built.size)
     }
+
+    @Test
+    fun `foreign list followAll follows new non-muted members once`() = runTest {
+        val dave = "d".repeat(64)
+        val theirs = followSet("art", listOf(self, bob, carol, dave), author = "a".repeat(64))
+        val lists = FakeLists().also { it.foreign = mapOf(theirs.address to theirs) }
+        val follows = com.monostr.app.ui.FakeFollows(mapOf(bob to com.monostr.nostr.repo.FollowState.Following))
+        val c = ListController(theirs.address, self, lists, FakeFeedTabs(), FakeProfiles(), eager(), follows = follows, mute = com.monostr.app.ui.FakeMute(setOf(dave))) { source, child ->
+            FeedController(FakeFeed(), FakeProfiles(), FakePublish(), decorations(), BookmarkActions(FakeBookmarks(), child), FakeCounts(), child, source = source)
+        }
+        c.start(); runCurrent()
+        assertTrue(c.state.value.canFollow)
+        assertEquals(setOf(bob), c.state.value.followed)
+        follows.gate = kotlinx.coroutines.CompletableDeferred()
+        c.followAll(); c.followAll(); runCurrent() // a double tap while the write is in flight
+        follows.gate!!.complete(Unit); runCurrent()
+        assertEquals(listOf("followAll:1"), follows.calls)
+        assertEquals(setOf(bob, carol), c.state.value.followed)
+    }
+
+    @Test
+    fun `own list offers no follow`() = runTest {
+        val mine = followSet("friends", listOf(bob), author = self)
+        val c = ListController(mine.address, self, FakeLists(listOf(mine)), FakeFeedTabs(), FakeProfiles(), eager(), follows = com.monostr.app.ui.FakeFollows(), mute = com.monostr.app.ui.FakeMute()) { source, child ->
+            FeedController(FakeFeed(), FakeProfiles(), FakePublish(), decorations(), BookmarkActions(FakeBookmarks(), child), FakeCounts(), child, source = source)
+        }
+        c.start(); runCurrent()
+        assertFalse(c.state.value.canFollow)
+    }
+
+    @Test
+    fun `the user and muted members get no follow button and do not keep follow all open`() = runTest {
+        // final review I5
+        val dave = "d".repeat(64)
+        val theirs = followSet("art", listOf(self, bob, dave), author = "a".repeat(64))
+        val lists = FakeLists().also { it.foreign = mapOf(theirs.address to theirs) }
+        val follows = com.monostr.app.ui.FakeFollows(mapOf(bob to com.monostr.nostr.repo.FollowState.Following))
+        val c = ListController(theirs.address, self, lists, FakeFeedTabs(), FakeProfiles(), eager(), follows = follows, mute = com.monostr.app.ui.FakeMute(setOf(dave))) { source, child ->
+            FeedController(FakeFeed(), FakeProfiles(), FakePublish(), decorations(), BookmarkActions(FakeBookmarks(), child), FakeCounts(), child, source = source)
+        }
+        c.start(); runCurrent()
+        assertEquals(setOf(self, dave), c.state.value.notFollowable)
+        assertTrue(c.state.value.allFollowed)
+    }
 }

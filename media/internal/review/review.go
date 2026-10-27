@@ -34,6 +34,9 @@ type Inbound struct {
 type Config struct {
 	PublicURL string
 	Operator  string // hex pubkey
+	// StorageAlertBytes: the operator hears once when all stored bytes pass
+	// it (spec 2026-10-27 video §6); 0 never.
+	StorageAlertBytes int64
 }
 
 // Deps are the collaborators of a Reviewer.
@@ -62,6 +65,7 @@ type Reviewer struct {
 
 	mu          sync.Mutex // Flush and Handle run on different goroutines
 	lastSummary time.Time
+	lastStorage time.Time
 }
 
 // New returns a Reviewer; a nil Logger or Now get defaults.
@@ -101,6 +105,34 @@ func (r *Reviewer) Flush(ctx context.Context) {
 	defer r.mu.Unlock()
 	r.flushNotices(ctx)
 	r.flushSummary(ctx)
+	r.flushStorage(ctx)
+}
+
+// storageEvery: the stored total is looked at once an hour.
+const storageEvery = time.Hour
+
+func (r *Reviewer) flushStorage(ctx context.Context) {
+	now := r.deps.Now()
+	if r.cfg.StorageAlertBytes <= 0 || (!r.lastStorage.IsZero() && now.Sub(r.lastStorage) < storageEvery) {
+		return
+	}
+	r.lastStorage = now
+	due, total, err := r.deps.Store.StorageAlert(r.cfg.StorageAlertBytes)
+	if err != nil {
+		r.deps.Logger.Error("review: storage alert", "err", err)
+		return
+	}
+	if !due {
+		return
+	}
+	if err := r.deps.Messenger.Send(ctx, storageText(r.cfg.PublicURL, total, r.cfg.StorageAlertBytes)); err != nil {
+		// not marked: the next hour tries again
+		r.deps.Logger.Warn("review: storage alert not sent", "err", err)
+		return
+	}
+	if err := r.deps.Store.MarkStorageAlerted(now.Unix()); err != nil {
+		r.deps.Logger.Error("review: storage alert mark", "err", err)
+	}
 }
 
 func (r *Reviewer) flushNotices(ctx context.Context) {

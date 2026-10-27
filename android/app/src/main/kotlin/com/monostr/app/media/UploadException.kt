@@ -25,6 +25,10 @@ sealed class UploadException(message: String, cause: Throwable? = null) : Except
     class Network(cause: Throwable) : UploadException("network", cause)
     /** Anything else: an unknown status, or an answer that does not describe the uploaded bytes. */
     class Rejected(val status: Int) : UploadException("refused: $status")
+    /** A picked video lasts longer than the app takes (spec 2026-10-27 video §3); refused before any work. */
+    class VideoTooLong : UploadException("refused: video too long")
+    /** The daily video limit of the account is reached (server code `video-rate`). */
+    class VideoRate : UploadException("refused: video rate limit")
     /** The picture could not be read or prepared on the device. */
     class Unreadable(cause: Throwable? = null) : UploadException("unreadable picture", cause)
 }

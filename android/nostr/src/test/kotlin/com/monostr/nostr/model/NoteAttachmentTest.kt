@@ -49,4 +49,29 @@ class NoteAttachmentTest {
         assertEquals("LNM}7u}qfQ}q", parsed.media[0].blurhash)
         assertEquals(NoteMedia.Kind.IMAGE, parsed.media[1].kind)
     }
+
+    private val video = NoteAttachment(
+        url = "https://media.monostr.com/${"a".repeat(64)}.mp4", mime = "video/mp4", sha256 = "a".repeat(64), size = 30_000_000,
+        width = 720, height = 1280, blurhash = "LNM}7u}qfQ}q", image = "https://media.monostr.com/${"b".repeat(64)}.jpg", durationSeconds = 61.5,
+    )
+
+    @Test
+    fun `video attachment writes one imeta with image and duration`() {
+        assertEquals(
+            listOf(listOf("imeta", "url ${video.url}", "m video/mp4", "x ${"a".repeat(64)}", "size 30000000", "dim 720x1280",
+                "blurhash LNM}7u}qfQ}q", "image ${video.image}", "duration 61.5")),
+            NoteAttachment.tags(listOf(video), sensitive = false),
+        )
+    }
+
+    @Test
+    fun `a short duration is written without an exponent`() {
+        val tags = NoteAttachment.tags(listOf(video.copy(durationSeconds = 0.000123)), sensitive = false)
+        assertTrue("duration 0.000123" in tags[0], tags.toString())
+    }
+
+    @Test
+    fun `the poster url is not in the content`() {
+        assertEquals("look\n\n${video.url}", NoteAttachment.content("look", listOf(video)))
+    }
 }

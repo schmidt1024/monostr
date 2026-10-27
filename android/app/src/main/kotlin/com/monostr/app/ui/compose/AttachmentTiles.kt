@@ -12,6 +12,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material3.CircularProgressIndicator
@@ -46,7 +48,15 @@ fun AttachmentTiles(attachments: List<Attachment>, enabled: Boolean, onRemove: (
                 Box(
                     Modifier.size(84.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant).testTag("compose-attachment-$i"),
                 ) {
-                    AsyncImage(model = a.source, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                    // a video shows its poster once it is up; before that the tile stays plain (no frame is decoded here)
+                    val model = a.uploaded?.posterUrl ?: a.source.takeUnless { a.video }
+                    if (model != null) AsyncImage(model = model, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                    if (a.video && !a.uploading) {
+                        Icon(
+                            Icons.Filled.PlayArrow, contentDescription = stringResource(R.string.compose_video_tile), tint = Color.White,
+                            modifier = Modifier.align(Alignment.Center).size(36.dp).background(Color.Black.copy(alpha = 0.4f), CircleShape).testTag("compose-attachment-video-$i"),
+                        )
+                    }
                     if (a.uploading) {
                         Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.35f)), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator(
@@ -54,6 +64,12 @@ fun AttachmentTiles(attachments: List<Attachment>, enabled: Boolean, onRemove: (
                                 color = Color.White,
                                 modifier = Modifier.size(32.dp).testTag("compose-attachment-progress-$i"),
                             )
+                            if (a.preparing != null) {
+                                Text(
+                                    stringResource(R.string.compose_video_preparing), style = MaterialTheme.typography.labelSmall, color = Color.White,
+                                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 4.dp).testTag("compose-attachment-preparing-$i"),
+                                )
+                            }
                         }
                     }
                     if (a.error != null) {

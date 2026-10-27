@@ -57,14 +57,15 @@ class ThreadObserveTest {
         return events.filter { ev ->
             val j = NoteMapper.decoded(ev)
             (kinds == null || j.kind in kinds) &&
-                (("\"ids\"" in req && "\"${j.id}\"" in req) || ("\"#e\"" in req && j.tagValues("e").any { "\"$it\"" in req }))
+                (("\"ids\"" in req && "\"${j.id}\"" in req) || ("\"#e\"" in req && j.tagValues("e").any { "\"$it\"" in req }) ||
+                    ("\"#E\"" in req && j.tagValues("E").any { "\"$it\"" in req }))
         }.map { it.asJson() }
     }
 
     private fun relayFor(events: List<Event>) = SilentWsRelay(recordRequests = true, serveFor = { req -> answer(req, events) })
 
     /** Job R's request: replies and deletions by tag, not the live one (it has `since`), not job D's (kinds [5]). */
-    private fun isRepliesRequest(req: String) = "\"#e\"" in req && "\"since\"" !in req && "\"kinds\":[1,5]" in req
+    private fun isRepliesRequest(req: String) = "\"#e\"" in req && "\"since\"" !in req && "\"kinds\":[1,5,1111]" in req
 
     @Test
     fun `a shorter fetch timeout ends the lookup of a note no relay answers sooner`() = runTest {
@@ -162,6 +163,32 @@ class ThreadObserveTest {
         }
     }
 
+    /** NIP-22 comment on [root] (uppercase scope) whose lowercase `e` is [parent]. */
+    private fun comment(text: String, parent: Event, root: Event, keys: Keys = bob) = EventBuilder(Kind(1111u), text).tags(
+        listOf(
+            Tag.parse(listOf("E", root.hex(), "", root.author().toHex())), Tag.parse(listOf("K", "1")),
+            Tag.parse(listOf("e", parent.hex(), "", parent.author().toHex())), Tag.parse(listOf("k", parent.kind().asU16().toString())),
+        ),
+    ).customCreatedAt(Timestamp.fromSecs((clock++).toULong())).signWithKeys(keys)
+
+    @Test
+    fun `NIP-22 comments on the root and comments on those comments are replies`() = runTest {
+        // backlog 31: Fediverse replies bridged by Mostr (ditto.pub) are kind 1111, the nested ones name the root only as `E`
+        val root = root("root")
+        val c1 = comment("c1", root, root)
+        val c2 = comment("c2", c1, root, alice)
+        relayFor(listOf(c1, c2)).use { relay ->
+            val e = connectedEngine(dir, relay)
+            try {
+                e.save(root)
+                val views = NostrThreadRepository(e).observe(root.hex()).untilFirst { v -> v.repliesFetched && v.replies.map { it.content } == listOf("c1", "c2") }
+                assertEquals(listOf("c1", "c2"), views.last().replies.map { it.content })
+            } finally {
+                e.close()
+            }
+        }
+    }
+
     @Test
     fun `a reply that tags only the focused note is shown, a mention of it is not`() = runTest {
         val root = root("root")
@@ -175,6 +202,29 @@ class ThreadObserveTest {
                 val views = NostrThreadRepository(e).observe(focused.hex()).untilFirst { v -> v.repliesFetched && v.replies.any { it.id == onlyToFocused.hex() } }
                 assertTrue(e.eventById(quoting.hex()) != null, "the quote was fetched and stored")
                 assertTrue(views.last().replies.none { it.id == quoting.hex() }, "a mention is no reply")
+            } finally {
+                e.close()
+            }
+        }
+    }
+
+    @Test
+    fun `an own reply sent while the thread is open shows without the relay echoing it`() = runTest {
+        // backlog 40: the relay confirms the write but sends the event to no subscription (or the echo came before the save)
+        val root = root("root")
+        SilentWsRelay(answerEose = true, acceptEvents = true).use { relay ->
+            val e = connectedEngine(dir, relay)
+            try {
+                e.save(root)
+                val views = java.util.concurrent.CopyOnWriteArrayList<ThreadView>()
+                val job = launch(Dispatchers.Default) { NostrThreadRepository(e).observe(root.hex()).collect { views += it } }
+                assertTrue(awaitTrue { views.any { it.repliesFetched } }, "views: $views")
+                // the thread's own jobs (deletions, read relays) are done: no later read can pick the reply up by chance
+                withContext(Dispatchers.Default) { kotlinx.coroutines.delay(1_500) }
+                val sent = withContext(Dispatchers.Default) { e.signAndSend(EventBuilder.textNoteReply("mine", root, root, null)) }
+                assertTrue(sent.sentToAny, "sent: $sent")
+                assertTrue(awaitTrue { views.lastOrNull()?.replies?.any { it.content == "mine" } == true }, "views: ${views.map { v -> v.replies.map { it.content } }}")
+                job.cancelAndJoin()
             } finally {
                 e.close()
             }

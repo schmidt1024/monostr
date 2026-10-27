@@ -173,6 +173,18 @@ class NostrEngine private constructor(
     /** Every event delivered by any subscription or fetch, decoded once (spec wave 2 B2). Collectors filter on [Incoming.json] in Kotlin. */
     val incoming: SharedFlow<Incoming> = _incoming
 
+    private val _published = MutableSharedFlow<JsonEvent>(extraBufferCapacity = 16, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+
+    /**
+     * Backlog 40: every own event right after it was stored locally. The relays' echo of it never reaches [incoming]
+     * (the pool knows the event already), so an open screen that waits for it learns of the event from here.
+     */
+    val published: SharedFlow<JsonEvent> = _published
+
+    private fun announce(event: Event) {
+        runCatching { EventJson.decode(event.asJson()) }.getOrNull()?.let { _published.tryEmit(it) }
+    }
+
     /** How many events the decoder read across the FFI (tests: one per event, whatever the number of collectors). */
     internal val incomingDecodes = java.util.concurrent.atomic.AtomicLong(0)
 
@@ -889,6 +901,7 @@ class NostrEngine private constructor(
     suspend fun signAndSend(builder: EventBuilder): PublishResult {
         val event = sign(builder)
         save(event)
+        announce(event)
         return send(event)
     }
 
@@ -927,6 +940,7 @@ class NostrEngine private constructor(
         }
         if (result.sentToAny) {
             ffi { client.database().saveEvent(event) }
+            announce(event)
         } else {
             withContext(NonCancellable + ffiDispatcher) { rollBack(event, previous) }
         }
@@ -1009,6 +1023,7 @@ class NostrEngine private constructor(
             if (success.isNotEmpty()) {
                 try {
                     ffi { client.database().saveEvent(event) }
+                    announce(event)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -1116,13 +1131,16 @@ class NostrEngine private constructor(
 
     /**
      * The user's NIP-65 relay list (kind 10002): local database first, one relay fetch when
-     * missing. An `r` tag without marker counts for both lists. Null when the user has none.
+     * missing. With [fresh] the relays are asked first, so a list changed in another app wins
+     * over the stored one (backlog 36); the database keeps the newer of the two. An `r` tag
+     * without marker counts for both lists. Null when the user has none.
      */
-    suspend fun ownRelayList(): RelayList? {
+    suspend fun ownRelayList(fresh: Boolean = false): RelayList? {
         val pk = pubkey ?: return null
         val filter = Filter().kind(Kind(10002u)).author(PublicKey.parse(pk)).limit(1u)
+        if (fresh) runCatching { fetch(filter, OWN_LIST_TIMEOUT) }
         var event = query(filter).firstOrNull()
-        if (event == null) {
+        if (event == null && !fresh) {
             runCatching { fetch(filter) }
             event = query(filter).firstOrNull()
         }
@@ -1383,6 +1401,8 @@ class NostrEngine private constructor(
 
     companion object {
         const val LOG_TAG = "Monostr"
+        /** Backlog 36: how long a fresh read of the own relay list waits for the relays (the caller shows busy meanwhile). */
+        private val OWN_LIST_TIMEOUT: Duration = Duration.ofSeconds(5)
 
         /** A CLOSED/OK message prefix that means "authenticate first" (NIP-42) or "not for you". */
         fun isAuthRefusal(message: String): Boolean =

@@ -1,5 +1,10 @@
 package com.monostr.app.ui.profile
 
+import com.monostr.app.ui.lists.DragHandle
+import com.monostr.app.ui.lists.rememberListReorderState
+import com.monostr.app.ui.lists.reorderable
+import androidx.compose.foundation.lazy.itemsIndexed
+import com.monostr.nostr.model.FollowSet
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.ui.platform.LocalContext
 import com.monostr.app.ui.common.copyToClipboard
@@ -630,6 +635,8 @@ fun ProfileScreen(
     val state by vm.controller.state.collectAsStateWithLifecycle()
     val names by vm.controller.names.collectAsStateWithLifecycle()
     val listsState by vm.lists.state.collectAsStateWithLifecycle()
+    val moveUp = stringResource(R.string.list_move_up)
+    val moveDown = stringResource(R.string.list_move_down)
     var listsTab by rememberSaveable { mutableStateOf(false) }
     // restored as true after process death: the new view model must read the lists again (open() is idempotent)
     LaunchedEffect(listsTab) { if (listsTab) vm.lists.open() }
@@ -683,6 +690,7 @@ fun ProfileScreen(
         })
     } }, snackbarHost = { SnackbarHost(snackbar, Modifier.muteUndoTag(state.message)) }) { padding ->
         val listState = rememberLazyListState()
+        val listReorder = rememberListReorderState<FollowSet>(listState) { "list-" + it.address }
         val scope = rememberCoroutineScope()
         LazyColumn(state = listState, modifier = Modifier.padding(padding).fillMaxSize()) {
             item {
@@ -854,6 +862,19 @@ fun ProfileScreen(
                             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.fillMaxWidth().padding(24.dp).testTag("lists-empty"),
                         )
+                    }
+                    // backlog 38: the own lists are dragged into order (long press); the pinned ones follow as home tabs
+                    vm.lists.isSelf -> {
+                        val rows = listReorder.rows(shownLists)
+                        itemsIndexed(rows, key = { _, set -> "list-" + set.address }) { i, set ->
+                            Column(Modifier.reorderable(listReorder, set, shownLists, i, moveUp, moveDown, vm.lists::move)) {
+                                ListRow(
+                                    set, pinned = set.address in listsState.pinned, onOpen = { onOpenList(set.address) }, onPin = { vm.lists.togglePin(set) },
+                                    trailing = { DragHandle(listReorder, set, shownLists, vm.lists::move, Modifier.testTag("list-drag")) },
+                                )
+                                HorizontalDivider()
+                            }
+                        }
                     }
                     else -> items(shownLists, key = { "list-" + it.address }) { set ->
                         ListRow(set, pinned = set.address in listsState.pinned, onOpen = { onOpenList(set.address) }, onPin = { vm.lists.togglePin(set) })

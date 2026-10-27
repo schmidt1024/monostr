@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -145,7 +146,7 @@ func loadConfig(getenv func(string) string) (config, error) {
 		return c, err
 	}
 	c.limits.PubkeyPerDay = int(perDay)
-	if c.limits.PubkeyQuota, err = envInt(getenv, "MEDIA_PUBKEY_QUOTA_BYTES", 500<<20); err != nil {
+	if c.limits.PubkeyQuota, err = envInt(getenv, "MEDIA_PUBKEY_QUOTA_BYTES", 2<<30); err != nil {
 		return c, err
 	}
 	ipPerDay, err := envInt(getenv, "MEDIA_IP_UPLOADS_PER_DAY", 100)
@@ -153,7 +154,18 @@ func loadConfig(getenv func(string) string) (config, error) {
 		return c, err
 	}
 	c.limits.IPPerDay = int(ipPerDay)
-	if c.limits.GlobalBytesPerDay, err = envInt(getenv, "MEDIA_GLOBAL_BYTES_PER_DAY", 5<<30); err != nil {
+	if c.limits.GlobalBytesPerDay, err = envInt(getenv, "MEDIA_GLOBAL_BYTES_PER_DAY", 20<<30); err != nil {
+		return c, err
+	}
+	if c.limits.MaxVideoBytes, err = envInt(getenv, "MEDIA_MAX_VIDEO_BYTES", 50<<20); err != nil {
+		return c, err
+	}
+	videosPerDay, err := envInt(getenv, "MEDIA_PUBKEY_VIDEOS_PER_DAY", 5)
+	if err != nil {
+		return c, err
+	}
+	c.limits.PubkeyVideosPerDay = int(videosPerDay)
+	if c.limits.StorageAlertBytes, err = envInt(getenv, "MEDIA_STORAGE_ALERT_BYTES", 200_000_000_000); err != nil {
 		return c, err
 	}
 	inFlight, err := envInt(getenv, "MEDIA_MAX_UPLOADS_IN_FLIGHT", api.DefaultMaxInFlight)
@@ -234,7 +246,7 @@ func serve(logger *slog.Logger, cfg config, st *store.Store, bucket storage.Buck
 		}
 		npub, _ := nip19.EncodePublicKey(client.PublicKey())
 		logger.Info("review messages on", "server_npub", npub, "relays", cfg.relays)
-		reviewer := review.New(review.Config{PublicURL: cfg.publicURL, Operator: cfg.reviewer}, review.Deps{
+		reviewer := review.New(review.Config{PublicURL: cfg.publicURL, Operator: cfg.reviewer, StorageAlertBytes: cfg.limits.StorageAlertBytes}, review.Deps{
 			Store: st, Bucket: bucket, Messenger: client, Logger: logger,
 		})
 		lastWrap := func() int64 {
@@ -251,6 +263,8 @@ func serve(logger *slog.Logger, cfg config, st *store.Store, bucket storage.Buck
 	handler, err := api.New(api.Config{
 		PublicURL: cfg.publicURL, Limits: cfg.limits, Threshold: cfg.threshold, Reject: cfg.reject, ReviewDMsPerDay: cfg.reviewDMsPerDay,
 		ContactNpub: cfg.contactNpub, Version: version, MaxInFlight: cfg.maxInFlight,
+		// beside the database on the data volume: a video waits there while it is checked
+		TempDir: filepath.Join(filepath.Dir(cfg.dbPath), "tmp"),
 	}, deps)
 	if err != nil {
 		return err

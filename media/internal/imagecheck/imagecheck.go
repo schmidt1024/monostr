@@ -54,8 +54,16 @@ var extensions = map[string]string{
 	"image/gif":  "gif",
 }
 
-// Ext is the file extension for an accepted type, "" for any other.
-func Ext(mediaType string) string { return extensions[mediaType] }
+// VideoMP4 is the one video type the server takes (spec 2026-10-27 video §6).
+const VideoMP4 = "video/mp4"
+
+// Ext is the file extension for an accepted type (pictures and VideoMP4), "" for any other.
+func Ext(mediaType string) string {
+	if mediaType == VideoMP4 {
+		return "mp4"
+	}
+	return extensions[mediaType]
+}
 
 // Normalize reduces a Content-Type header to an accepted media type
 // ("image/jpg" counts as "image/jpeg"); ok is false for anything else.

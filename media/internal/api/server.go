@@ -7,15 +7,20 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	"monostr.com/media/internal/blossom"
+	"monostr.com/media/internal/classify"
 	"monostr.com/media/internal/limits"
 	"monostr.com/media/internal/storage"
 	"monostr.com/media/internal/store"
@@ -38,11 +43,17 @@ const (
 	CodeNotFound      = "not-found"
 	CodeBadRequest    = "bad-request"
 	CodeInternal      = "internal"
+	// videos (spec 2026-10-27 video §6)
+	CodeVideoRate     = "video-rate"
+	CodeVideoTooLong  = "video-too-long"
+	CodeVideoFormat   = "video-format"
+	CodeVideoTooLarge = "video-too-large"
 )
 
-// Classifier scores a picture; classify.Client is the real one.
+// Classifier scores a picture or a video; classify.Client is the real one.
 type Classifier interface {
 	Score(ctx context.Context, data []byte) (float64, error)
+	Video(ctx context.Context, r io.Reader, size int64) (classify.VideoInfo, error)
 	Health(ctx context.Context) error
 }
 
@@ -65,6 +76,8 @@ type Config struct {
 	MaxInFlight int
 	// BucketTimeout bounds one write or delete at the bucket. 0 means DefaultBucketTimeout.
 	BucketTimeout time.Duration
+	// TempDir holds a video while it is checked (on disk, never in memory). "" means os.TempDir().
+	TempDir string
 }
 
 const (
@@ -104,6 +117,7 @@ type server struct {
 
 	maxInFlight   int
 	bucketTimeout time.Duration
+	tempDir       string
 	// mu guards pending: what uploads in flight hold against the limits
 	mu      sync.Mutex
 	pending pending
@@ -140,6 +154,19 @@ func New(cfg Config, deps Deps) (http.Handler, error) {
 	}
 	if s.bucketTimeout <= 0 {
 		s.bucketTimeout = DefaultBucketTimeout
+	}
+	s.tempDir = cfg.TempDir
+	if s.tempDir == "" {
+		s.tempDir = os.TempDir()
+	}
+	if err := os.MkdirAll(s.tempDir, 0o700); err != nil {
+		return nil, fmt.Errorf("api: temp dir: %w", err)
+	}
+	// what a crash left behind: no upload is in flight while the server starts
+	if stale, err := filepath.Glob(filepath.Join(s.tempDir, tempPattern)); err == nil {
+		for _, f := range stale {
+			os.Remove(f)
+		}
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", s.page)

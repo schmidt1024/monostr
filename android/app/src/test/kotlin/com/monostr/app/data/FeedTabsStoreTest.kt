@@ -37,6 +37,17 @@ class FeedTabsStoreTest {
     }
 
     @Test
+    fun `the own list order loads back`() = runTest {
+        // backlog 38
+        val scope = scope()
+        val s = PrefsFeedTabsStore(dataStore(scope))
+        val withOrder = tabs.copy(order = listOf("30000:${"a".repeat(64)}:x", "30000:${"a".repeat(64)}:y"))
+        s.save(alice, withOrder)
+        assertEquals(withOrder, s.load(alice))
+        scope.cancel()
+    }
+
+    @Test
     fun `remove drops that account only (logout)`() = runTest {
         val scope = scope()
         val s = PrefsFeedTabsStore(dataStore(scope))

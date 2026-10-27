@@ -102,3 +102,9 @@ func summaryText(count int, oldest, now time.Time) string {
 	}
 	return fmt.Sprintf(summaryFmt, count, o.Format(layout))
 }
+
+// storageText warns the operator that the stored total passed the threshold.
+func storageText(publicURL string, total, threshold int64) string {
+	host := strings.TrimPrefix(strings.TrimPrefix(publicURL, "https://"), "http://")
+	return fmt.Sprintf("%s speichert %d GB (Warnschwelle %d GB)", host, total/1_000_000_000, threshold/1_000_000_000)
+}

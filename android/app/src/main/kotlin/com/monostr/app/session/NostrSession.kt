@@ -1,5 +1,8 @@
 package com.monostr.app.session
 
+import com.monostr.app.ui.discover.DiscoverDecision
+import com.monostr.nostr.repo.DiscoverRepository
+import com.monostr.nostr.repo.NostrDiscoverRepository
 import com.monostr.app.data.FeedSnapshot
 import com.monostr.app.data.FileOwnListsCache
 import com.monostr.app.data.ListSnapshots
@@ -39,6 +42,7 @@ import com.monostr.app.data.isValidRelayUrl
 import com.monostr.app.media.BlossomClient
 import com.monostr.app.media.BlossomMediaUploader
 import com.monostr.app.media.ImagePreparer
+import com.monostr.app.media.TransformerVideoPreparer
 import com.monostr.app.media.MediaUploader
 import com.monostr.app.media.OwnPictures
 import com.monostr.app.ui.common.NoteDeletions
@@ -183,6 +187,10 @@ class Ready(
     val lists: ListsRepository,
     /** Spec 2026-10-18 §3.3: the lists pinned as home feed tabs. */
     val feedTabs: FeedTabsRepository,
+    /** Spec 2026-10-27 §3: the curated lists of the monostr account (the app's default relays asked beside the user's). */
+    val discover: DiscoverRepository = NostrDiscoverRepository(engine, PrefsRelayStore.DEFAULT_RELAYS),
+    /** Spec 2026-10-27 §4: whether the home feed shows the discover block, decided once per session. */
+    val discoverDecision: DiscoverDecision = DiscoverDecision(),
     /** The home feed's last first page, shown at once on the next start (2026-10-19); deleted on logout. */
     val feedSnapshot: FeedSnapshot? = null,
     /** Spec perf 3.5: the last 20 profiles as shown, for an instant reopen; this session only. */
@@ -658,7 +666,7 @@ class NostrSession @Inject constructor(
             )
             val conversations = NostrConversationRepository(engine, locator = locator)
             // spec 2026-10-16 §8: a discarded draft or composer picture stays while a published note or the profile shows it
-            val media = BlossomMediaUploader(ImagePreparer(context.contentResolver), blossom, uiSettings, engine.backgroundScope, inUse = pictures::published)
+            val media = BlossomMediaUploader(ImagePreparer(context.contentResolver), blossom, uiSettings, engine.backgroundScope, inUse = pictures::published, videos = TransformerVideoPreparer(context))
             // spec 2026-10-16 §8.2: drafts untouched for 30 days go with their pictures; silent, best effort, off the start path
             engine.backgroundScope.launch { startupGate.await(); bestEffort { expireDrafts(drafts, signer.pubkey, System.currentTimeMillis() / 1000, media) } }
             return Ready(
@@ -734,7 +742,8 @@ class NostrSession @Inject constructor(
     /** Replaces the relay list with the user's NIP-65 list; false when the user has none. */
     suspend fun adoptRelayList(): Boolean {
         val ready = (_state.value as? SessionState.Active)?.ready ?: return false
-        val list = ready.engine.ownRelayList() ?: return false
+        // backlog 36: the list as the relays have it now, not one stored before an edit in another app
+        val list = ready.engine.ownRelayList(fresh = true) ?: return false
         val relays = (list.read + list.write).distinct().filter { isValidRelayUrl(it) }
         if (relays.isEmpty()) return false
         applyRelays(relays)

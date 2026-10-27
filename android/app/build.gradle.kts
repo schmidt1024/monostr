@@ -94,6 +94,8 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.work.runtime); implementation(libs.core.ktx); implementation(libs.zxing.core); implementation(libs.core.splashscreen)
     implementation(libs.media3.exoplayer); implementation(libs.media3.ui)
+    // spec 2026-10-27 video §4: a picked video is encoded on the device
+    implementation(libs.media3.transformer); implementation(libs.media3.effect)
     testImplementation(libs.rustnostr.jvm); testImplementation(libs.junit.jupiter); testImplementation(libs.kotlinx.coroutines.test); testImplementation(libs.turbine); testRuntimeOnly(libs.junit.platform.launcher)
     testImplementation(libs.okhttp.mockwebserver)
     androidTestImplementation(platform(libs.compose.bom)); androidTestImplementation(libs.compose.ui.test.junit4); androidTestImplementation(libs.androidx.test.runner); androidTestImplementation(libs.androidx.test.ext.junit); androidTestImplementation(libs.espresso.core)

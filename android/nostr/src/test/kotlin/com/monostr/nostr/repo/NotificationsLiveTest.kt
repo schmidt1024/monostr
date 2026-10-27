@@ -53,6 +53,9 @@ class NotificationsLiveTest {
         assertFalse(LiveMatch.matches(event(listOf("e", meHex)), meHex))
         assertFalse(LiveMatch.matches(event(listOf("p")), meHex))
         assertFalse(LiveMatch.matches(event(), meHex))
+        // backlog 31: a NIP-22 comment naming the user (Mostr bridges Fediverse replies as kind 1111)
+        val comment = JsonEvent("0".repeat(64), alice.publicKey().toHex(), 1, 1111, listOf(listOf("e", "x"), listOf("p", meHex)), "", "0".repeat(128))
+        assertTrue(LiveMatch.matches(comment, meHex))
     }
 
     @Test

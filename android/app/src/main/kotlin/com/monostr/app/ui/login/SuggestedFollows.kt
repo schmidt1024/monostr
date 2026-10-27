@@ -6,7 +6,7 @@ import com.monostr.app.R
 /** One account of the fixed follow list; [name] is only a fallback label before login (spec 2026-10-17 §5, §11). */
 data class SuggestedFollow(val pubkey: String, val name: String, @StringRes val who: Int)
 
-/** The 14 suggested accounts in the approved order (spec 2026-10-17 §5). */
+/** The 14 suggested accounts (spec 2026-10-17 §5; 2026-10-27: monostr, Schmidt, then members of the Monero list in its order). */
 object SuggestedFollows {
     val all: List<SuggestedFollow> = listOf(
         SuggestedFollow(
@@ -20,63 +20,63 @@ object SuggestedFollows {
             R.string.create_who_schmidt,
         ),
         SuggestedFollow(
-            "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
-            "fiatjaf",
-            R.string.create_who_fiatjaf,
-        ),
-        SuggestedFollow(
-            "32e1827635450ebb3c5a7d12c1f8e7b2b514439ac10a67eef3d9fd9c5c68e245",
-            "jb55",
-            R.string.create_who_jb55,
-        ),
-        SuggestedFollow(
-            "460c25e682fda7832b52d1f22d3d22b3176d972f60dcdc3212ed8c92ef85065c",
-            "VitorPamplona",
-            R.string.create_who_vitor,
-        ),
-        SuggestedFollow(
-            "7579076d9aff0a4cfdefa7e2045f2486c7e5d8bc63bfc6b45397233e1bbfcb19",
-            "greenart7c3",
-            R.string.create_who_greenart,
-        ),
-        SuggestedFollow(
-            "266815e0c9210dfa324c6cba3573b14bee49da4209a9456f9484e5106cd408a5",
-            "hzrd149",
-            R.string.create_who_hzrd,
-        ),
-        SuggestedFollow(
-            "3f770d65d3a764a9c5cb503ae123e62ec7598ad035d836e2a810f3877a745b24",
-            "Derek Ross",
-            R.string.create_who_derek,
-        ),
-        SuggestedFollow(
-            "04c915daefee38317fa734444acee390a8269fe5810b2241e5e6dd343dfbecc9",
-            "ODELL",
-            R.string.create_who_odell,
-        ),
-        SuggestedFollow(
-            "82341f882b6eabcd2ba7f1ef90aad961cf074af15b9ef44a09f9d2a8fbfbe6a2",
-            "jack",
-            R.string.create_who_jack,
-        ),
-        SuggestedFollow(
-            "78ce6faa72264387284e647ba6938995735ec8c7d5c5a65737e55130f026307d",
-            "Zapstore",
-            R.string.create_who_zapstore,
-        ),
-        SuggestedFollow(
-            "0f22c06eac1002684efcc68f568540e8342d1609d508bcd4312c038e6194f8b6",
-            "nos.social",
-            R.string.create_who_nos,
-        ),
-        SuggestedFollow(
             "dbe791bf6b9221eaf517e43c030cdff6c0c7e9b561c6228773e194d08eb8ddf7",
-            "MoneroResearchLab",
+            "Monero Research Lab",
             R.string.create_who_mrl,
         ),
         SuggestedFollow(
             "a6038971d542950c13c4da295bcaa37c7985195b12b0fa95f6886fe608050bb9",
             "OrangeFren",
+            R.string.create_who_orangefren,
+        ),
+        SuggestedFollow(
+            "d54c85fa6483639e306db3efa0f8c6bf3f79ca61df1fc58bbc3e9c9d1e8504f5",
+            "Rotten",
+            R.string.create_who_rotten,
+        ),
+        SuggestedFollow(
+            "465eb13404d7219cd91c2b4a8a7e308ad4e09bc1298dc08c5eec852e9bf5da09",
+            "shortwavesurfer2009",
+            R.string.create_who_shortwave,
+        ),
+        SuggestedFollow(
+            "7dc18ff0eec577704b3b8bdf8c85e30e3c9573939d2eafe0c331dc18b378181e",
+            "CyberSatoshi",
+            R.string.create_who_cybersatoshi,
+        ),
+        SuggestedFollow(
+            "5cde0d3cb27cc59bbc4132fffa5c6e74c75e7e64a5af592e1d5c6e0e8dcc9e46",
+            "MrWonderland",
+            R.string.create_who_orangefren,
+        ),
+        SuggestedFollow(
+            "8027a1877f39e603dafc63279e004b4ed9df861d18ce81d9c43c7d7135da8f65",
+            "Bisq",
+            R.string.create_who_bisq,
+        ),
+        SuggestedFollow(
+            "ecbff9758417655ad8ba123d9e08d60d767045da22472ede86cfea8e9a2cd17c",
+            "AilliA",
+            R.string.create_who_aillia,
+        ),
+        SuggestedFollow(
+            "5e60b49b811061e2b2479e22075d6360e45c20884f04b85e27f4040b9a37ce5f",
+            "TheFuzzStone",
+            R.string.create_who_fuzzstone,
+        ),
+        SuggestedFollow(
+            "2786c134148537aa3142222cccc1b6fcf4863643ca78a9625d91aa9748d0e478",
+            "Sam Bent",
+            R.string.create_who_sambent,
+        ),
+        SuggestedFollow(
+            "877308276be50ce9bafa7e5e374e4fcbf5e9859a21918f34baefd000746b7d35",
+            "rafael_xmr",
+            R.string.create_who_orangefren,
+        ),
+        SuggestedFollow(
+            "1222aa72b4100d9f822185cc5e5341dae474c345c93cf35d8497fb7d7b4f0211",
+            "1984",
             R.string.create_who_orangefren,
         ),
     )

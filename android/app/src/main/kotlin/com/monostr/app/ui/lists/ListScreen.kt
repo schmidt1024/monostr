@@ -1,5 +1,7 @@
 package com.monostr.app.ui.lists
 
+import com.monostr.app.ui.discover.FollowPill
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -79,7 +81,7 @@ import javax.inject.Inject
 class ListViewModel @Inject constructor(session: NostrSession, handle: SavedStateHandle, factory: TipSheetFactory) : ViewModel() {
     private val ready = session.requireReady()
     val address: ListAddress = checkNotNull(ListAddress.parse(checkNotNull(handle.get<String>("address"))))
-    val controller = ListController(address, ready.pubkey, ready.lists, ready.feedTabs, ready.profiles, viewModelScope, writeScope = ready.engine.backgroundScope) { source, scope ->
+    val controller = ListController(address, ready.pubkey, ready.lists, ready.feedTabs, ready.profiles, viewModelScope, writeScope = ready.engine.backgroundScope, follows = ready.follows, mute = ready.mute) { source, scope ->
         ready.listFeed(factory, source, scope)
     }
     val tipSheet = factory.tipSheet(viewModelScope)
@@ -155,7 +157,7 @@ fun ListScreen(
                 state.loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
                 state.unavailable || set == null -> Text(stringResource(R.string.list_unavailable), Modifier.align(Alignment.Center).padding(32.dp).testTag("list-unavailable"), textAlign = TextAlign.Center)
                 set.locked -> Text(stringResource(R.string.list_locked), Modifier.align(Alignment.Center).clickable(onClick = vm.controller::unlock).padding(32.dp).testTag("list-locked"))
-                state.tab == ListTab.MEMBERS -> MemberList(state.members, memberState, own = state.isOwn, onOpenProfile = onOpenProfile, onRemove = vm.controller::removeMember)
+                state.tab == ListTab.MEMBERS -> MemberList(state.members, memberState, own = state.isOwn, onOpenProfile = onOpenProfile, onRemove = vm.controller::removeMember, followed = state.followed.takeIf { state.canFollow }, notFollowable = state.notFollowable, allFollowed = state.allFollowed, onFollow = vm.controller::follow, onFollowAll = vm.controller::followAll)
                 feed == null -> Text(stringResource(R.string.list_no_members), Modifier.align(Alignment.Center).padding(32.dp))
                 else -> {
                     val menu = remember(feed) { vm.menuFor(feed) }
@@ -187,13 +189,26 @@ private fun ListHeader(set: FollowSet, author: Profile?, onOpenProfile: (String)
 }
 
 @Composable
-private fun MemberList(members: List<Profile>, listState: LazyListState, own: Boolean, onOpenProfile: (String) -> Unit, onRemove: (String) -> Unit) {
+private fun MemberList(
+    members: List<Profile>, listState: LazyListState, own: Boolean, onOpenProfile: (String) -> Unit, onRemove: (String) -> Unit,
+    /** Spec 2026-10-27 §5: someone else's list shows follow buttons and «Follow all»; null hides them. */
+    followed: Set<String>? = null, notFollowable: Set<String> = emptySet(), allFollowed: Boolean = false,
+    onFollow: (String) -> Unit = {}, onFollowAll: () -> Unit = {},
+) {
     LazyColumn(Modifier.fillMaxSize().testTag("list-members"), state = listState) {
+        if (followed != null) item(key = "follow-all") {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = onFollowAll, enabled = !allFollowed, modifier = Modifier.testTag("list-follow-all")) {
+                    Text(stringResource(if (allFollowed) R.string.discover_all_followed else R.string.discover_follow_all))
+                }
+            }
+        }
         items(members, key = { it.pubkey }) { p ->
             Row(Modifier.fillMaxWidth().clickable { onOpenProfile(p.pubkey) }.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                 Avatar(p.picture)
                 Spacer(Modifier.width(12.dp))
                 Text(p.shownName, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (followed != null && p.pubkey !in notFollowable) FollowPill(p.pubkey in followed, onClick = { onFollow(p.pubkey) }, tag = "list-member-follow-${p.pubkey.take(8)}")
                 if (own) {
                     IconButton(onClick = { onRemove(p.pubkey) }, modifier = Modifier.testTag("list-member-remove")) {
                         Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.list_member_remove, p.shownName))

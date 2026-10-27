@@ -574,16 +574,6 @@
     <string name="conversation_pending">Ищем эту заметку…</string>
     <string name="create_who_monostr">Это приложение</string>
     <string name="create_who_schmidt">Делает monostr</string>
-    <string name="create_who_fiatjaf">Создал Nostr</string>
-    <string name="create_who_jb55">Сделал Damus</string>
-    <string name="create_who_vitor">Делает Amethyst</string>
-    <string name="create_who_greenart">Делает Amber</string>
-    <string name="create_who_hzrd">Делает Blossom и noStrudel</string>
-    <string name="create_who_derek">Евангелист Nostr</string>
-    <string name="create_who_odell">Биткоин и свобода</string>
-    <string name="create_who_jack">Сооснователь Twitter</string>
-    <string name="create_who_zapstore">Магазин приложений на Nostr</string>
-    <string name="create_who_nos">Приложение Nostr</string>
     <string name="create_who_mrl">Исследования Monero</string>
     <string name="create_who_orangefren">Сообщество Monero</string>
     <string name="login_create">Впервые в Nostr? Создайте аккаунт</string>
@@ -654,4 +644,30 @@
     <string name="list_public_confirm">Сделать публичным</string>
     <string name="profile_menu_lists">Добавить в список</string>
     <string name="add_to_list_new">Новый список…</string>
+    <string name="discover_hint">Подпишитесь на нескольких людей, и лента заполнится.</string>
+    <string name="discover_title">Обзор</string>
+    <string name="discover_follow">Подписаться</string>
+    <string name="discover_following">Вы подписаны</string>
+    <string name="discover_follow_all">Подписаться на всех</string>
+    <string name="discover_all_followed">Подписаны на всех</string>
+    <string name="discover_show_all">Показать всех</string>
+    <string name="discover_failed">Не удалось загрузить</string>
+    <string name="discover_retry">Повторить</string>
+    <string name="discover_dismiss">Скрыть предложения</string>
+    <string name="create_who_rotten">Новости Monero (Revuo)</string>
+    <string name="create_who_shortwave">Пользователь Monero, тестирует приложения</string>
+    <string name="create_who_cybersatoshi">Курс Monero</string>
+    <string name="create_who_bisq">P2P-биржа</string>
+    <string name="create_who_aillia">Волюнтарист, Monero</string>
+    <string name="create_who_fuzzstone">Агорист, свободное ПО</string>
+    <string name="create_who_sambent">Приватность и OPSEC</string>
+    <string name="list_move_up">Переместить вверх</string>
+    <string name="list_move_down">Переместить вниз</string>
+    <!-- spec 2026-10-27 video upload -->
+    <string name="compose_add_video">Добавить видео</string>
+    <string name="compose_video_preparing">Подготовка…</string>
+    <string name="compose_video_too_long">Видео до 2 минут. Сначала обрежьте его в галерее.</string>
+    <string name="upload_video_too_large">Видео слишком большое. Попробуйте клип покороче.</string>
+    <string name="upload_video_rate">Дневной лимит видео исчерпан, попробуйте завтра</string>
+    <string name="compose_video_tile">Видео</string>
 </resources>

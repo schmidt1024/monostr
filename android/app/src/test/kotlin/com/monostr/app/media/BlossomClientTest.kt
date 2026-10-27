@@ -78,6 +78,41 @@ class BlossomClientTest {
     }
 
     @Test
+    fun `uploadFile streams the file and reports progress`(@org.junit.jupiter.api.io.TempDir dir: java.io.File) = runTest {
+        val file = java.io.File(dir, "v.mp4").apply { writeBytes(bytes) }
+        server.enqueue(MockResponse().setResponseCode(201).setBody(descriptor(url = "$base/$hash.mp4").replace("image/jpeg", "video/mp4")))
+        val progress = ArrayList<Float>()
+        val d = client.uploadFile(base, file, "video/mp4", hash) { progress += it }
+
+        assertEquals(BlobDescriptor("$base/$hash.mp4", hash, bytes.size.toLong(), "video/mp4"), d)
+        val request = server.takeRequest()
+        assertEquals("video/mp4", request.getHeader("Content-Type"))
+        assertEquals(bytes.size.toString(), request.getHeader("Content-Length"))
+        assertArrayEquals(bytes, request.body.readByteArray())
+        assertEquals(hash, authOf(request.getHeader("Authorization")!!).firstTagValue("x"))
+        assertTrue(progress.size > 1 && progress.last() == 1f && progress == progress.sorted(), progress.toString())
+    }
+
+    @Test
+    fun `a video upload waits minutes for the server's answer`() {
+        // final review I2: after the body the server probes and scores the video and writes it to the bucket
+        // before its first byte; the picture client's 60 s read timeout would give up while it works
+        assertTrue(client.videoReadTimeoutMillis >= 5 * 60_000, "read timeout ${client.videoReadTimeoutMillis} ms")
+    }
+
+    @Test
+    fun `the video reason codes have their own kinds`() = runTest {
+        val cases = mapOf(
+            "video-too-long" to UploadException.VideoTooLong::class.java, "video-format" to UploadException.Type::class.java,
+            "video-too-large" to UploadException.TooLarge::class.java, "video-rate" to UploadException.VideoRate::class.java,
+        )
+        for ((code, type) in cases) {
+            server.enqueue(MockResponse().setResponseCode(403).setHeader("X-Monostr-Reason", code).setBody("""{"message":"x"}"""))
+            assertInstanceOf(type, failure { client.upload(base, bytes, "video/mp4", hash) }, code)
+        }
+    }
+
+    @Test
     fun `a duplicate answered with 200 is a success too`() = runTest {
         server.enqueue(MockResponse().setResponseCode(200).setBody(descriptor()))
         assertEquals(hash, client.upload(base, bytes, "image/jpeg", hash).sha256)

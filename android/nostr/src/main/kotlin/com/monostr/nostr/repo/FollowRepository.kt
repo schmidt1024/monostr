@@ -47,6 +47,16 @@ interface FollowRepository {
     suspend fun follow(pubkey: String)
     suspend fun unfollow(pubkey: String)
     /**
+     * Spec 2026-10-27 §4: the `p` set of the newest own kind 3; null while no list is stored and no completed fetch
+     * proved there is none. Emits again after every accepted write.
+     */
+    fun followed(): Flow<Set<String>?>
+    /**
+     * Spec 2026-10-27 §5: one kind 3 adding every pubkey of [pubkeys] not yet followed (the own key is skipped);
+     * returns how many were added, 0 = nothing written. Same errors as [follow].
+     */
+    suspend fun followAll(pubkeys: Collection<String>): Int
+    /**
      * Spec 2026-10-17 §4: the first kind 3 of a new account, one `p` per entry of [pubkeys] in order,
      * empty content; never empty. Throws [FollowError.NotAccepted] when no relay took it.
      */
@@ -96,9 +106,23 @@ class NostrFollowRepository(
         )
     }
 
-    override suspend fun follow(pubkey: String) = write(pubkey, add = true)
+    override fun followed(): Flow<Set<String>?> = flow {
+        val loaded = mutex.withLock { load() }
+        snapshot.value = loaded
+        emitAll(snapshot.filterNotNull().map { s -> s.followed.takeIf { s.known } }.distinctUntilChanged())
+    }
 
-    override suspend fun unfollow(pubkey: String) = write(pubkey, add = false)
+    override suspend fun follow(pubkey: String) {
+        require(pubkey != self) { "the own pubkey is never a follow target" }
+        write(listOf(pubkey), add = true)
+    }
+
+    override suspend fun unfollow(pubkey: String) {
+        require(pubkey != self) { "the own pubkey is never a follow target" }
+        write(listOf(pubkey), add = false)
+    }
+
+    override suspend fun followAll(pubkeys: Collection<String>): Int = write(pubkeys.filter { it != self }.distinct(), add = true)
 
     // no fetch: a brand-new account has no list to build on (spec 2026-10-17 §7 checks for one before)
     override suspend fun setInitial(pubkeys: List<String>) {
@@ -166,9 +190,10 @@ class NostrFollowRepository(
 
     private fun pTags(tags: List<List<String>>): Set<String> = tags.filter { it.size >= 2 && it[0] == "p" }.map { it[1] }.toSet()
 
-    private suspend fun write(target: String, add: Boolean) {
-        require(target != self) { "the own pubkey is never a follow target" }
-        val wrote = mutex.withLock {
+    /** Adds or removes [targets] in one kind 3; returns how many `p` tags changed (0 = nothing published). */
+    private suspend fun write(targets: List<String>, add: Boolean): Int {
+        if (targets.isEmpty()) return 0
+        val changed = mutex.withLock {
             val fetch = fetchList()
             val base = engine.query(filter()).firstOrNull()
             val fresh = fetch.found || feed.contactsFetchedAt?.let { now() - it < localMaxAgeSeconds } == true
@@ -176,12 +201,14 @@ class NostrFollowRepository(
             if (base != null && !fresh) throw FollowError.NoList()
             if (base == null && !fetch.completed) throw FollowError.NoList()
             val tags = base?.tags()?.toVec()?.map { it.asVec() } ?: emptyList()
-            val has = tags.any { it.size >= 2 && it[0] == "p" && it[1] == target }
-            if (add == has) {
+            val present = pTags(tags)
+            val todo = targets.filter { (it in present) != add }
+            if (todo.isEmpty()) {
                 snapshot.value = if (base != null) snapshotOf(base) else Snapshot(emptySet(), known = true)
-                return@withLock false
+                return@withLock 0
             }
-            val next = if (add) tags + listOf(listOf("p", target)) else tags.filterNot { it.size >= 2 && it[0] == "p" && it[1] == target }
+            val drop = todo.toSet()
+            val next = if (add) tags + todo.map { listOf("p", it) } else tags.filterNot { it.size >= 2 && it[0] == "p" && it[1] in drop }
             // kind 3 is replaceable: the new list must be strictly newer than the one it replaces
             val createdAt = maxOf(now(), (base?.createdAt()?.asSecs()?.toLong() ?: 0L) + 1)
             val builder = EventBuilder(Kind(3u), base?.content() ?: "")
@@ -189,9 +216,10 @@ class NostrFollowRepository(
                 .customCreatedAt(Timestamp.fromSecs(createdAt.toULong()))
             if (!send(builder).sentToAny) throw FollowError.NotAccepted()
             engine.query(filter()).firstOrNull()?.let { snapshot.value = snapshotOf(it) }
-            true
+            todo.size
         }
-        if (wrote) _changes.tryEmit(Unit)
+        if (changed > 0) _changes.tryEmit(Unit)
+        return changed
     }
 
     private companion object {

@@ -16,6 +16,10 @@ type Limits struct {
 	PubkeyQuota       int64 // bytes one pubkey may hold
 	IPPerDay          int   // uploads per address and UTC day
 	GlobalBytesPerDay int64 // newly stored bytes per UTC day, all users
+
+	MaxVideoBytes      int64 // one video (spec 2026-10-27 video §6)
+	PubkeyVideosPerDay int   // videos per pubkey and UTC day; they count toward PubkeyPerDay too
+	StorageAlertBytes  int64 // the operator hears once when all stored bytes pass this; 0 = never
 }
 
 // DayStart is the unix time at which now's UTC day began.

@@ -115,6 +115,54 @@ class FollowRepositoryTest {
     }
 
     @Test
+    fun `followed is null without a stored list and before a completed fetch, then the p set`() = runTest {
+        val e = engine() // no relay: the fetch can never complete
+        val repo = NostrFollowRepository(e, feed(e, 2_000, ago = 10), now = { 2_000 }, send = okSend(e), fetchTimeout = Duration.ofMillis(200))
+        assertNull(repo.followed().first())
+        e.save(kind3(listOf(listOf("p", bob), listOf("t", "x"))))
+        assertEquals(setOf(bob), repo.followed().first())
+        e.close()
+    }
+
+    @Test
+    fun `followAll adds only new pubkeys in one event`() = runTest {
+        val e = engine()
+        e.save(kind3(listOf(listOf("p", bob))))
+        val repo = NostrFollowRepository(e, feed(e, 2_000, ago = 10), now = { 2_000 }, send = okSend(e))
+        val dave = Keys.generate().publicKey().toHex()
+        val emitted = async(start = CoroutineStart.UNDISPATCHED) { repo.changes.first() }
+        assertEquals(2, repo.followAll(listOf(bob, carol, dave, pk)))
+        assertEquals(1, sends)
+        assertEquals(listOf(listOf("p", bob), listOf("p", carol), listOf("p", dave)), newest(e)!!.tagList())
+        emitted.await()
+        assertEquals(setOf(bob, carol, dave), repo.followed().first())
+        e.close()
+    }
+
+    @Test
+    fun `followAll keeps old tags and content`() = runTest {
+        val e = engine()
+        val old = listOf(listOf("p", bob, "wss://bob.example", "bob"), listOf("t", "x"))
+        e.save(kind3(old))
+        val repo = NostrFollowRepository(e, feed(e, 2_000, ago = 10), now = { 2_000 }, send = okSend(e))
+        repo.followAll(listOf(carol))
+        val next = newest(e)!!
+        assertEquals(old + listOf(listOf("p", carol)), next.tagList())
+        assertEquals(relayJson, next.content())
+        e.close()
+    }
+
+    @Test
+    fun `followAll with nothing new writes nothing`() = runTest {
+        val e = engine()
+        e.save(kind3(listOf(listOf("p", bob))))
+        val repo = NostrFollowRepository(e, feed(e, 2_000, ago = 10), now = { 2_000 }, send = okSend(e))
+        assertEquals(0, repo.followAll(listOf(bob, pk)))
+        assertEquals(0, sends)
+        e.close()
+    }
+
+    @Test
     fun `no double p, unfollowing someone not followed is a no-op without publish, never the own key`() = runTest {
         val e = engine()
         e.save(kind3(listOf(listOf("p", bob))))

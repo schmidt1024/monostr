@@ -1,0 +1,7 @@
+• Post a video up to 2 minutes; it is made smaller on your phone, without location data
+• Discover: curated lists of people to follow in Search and for new accounts
+• Link cards show title and site on the picture; a link at the end leaves the text
+• Sort your lists by dragging; pinned tabs follow
+• Three pictures as three squares, five or more with "+N"
+• Replies from the Fediverse (NIP-22) show in threads and notifications
+• Fixes: own reply shows at once, following count at once

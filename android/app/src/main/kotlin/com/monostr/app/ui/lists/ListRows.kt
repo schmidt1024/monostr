@@ -31,7 +31,7 @@ import com.monostr.nostr.model.FollowSet
 
 /** Spec 2026-10-18 §2.2: title (lock when private), member count, pin toggle; a tap opens the list. A locked list is shown disabled. */
 @Composable
-internal fun ListRow(set: FollowSet, pinned: Boolean, onOpen: () -> Unit, onPin: () -> Unit) {
+internal fun ListRow(set: FollowSet, pinned: Boolean, onOpen: () -> Unit, onPin: () -> Unit, trailing: (@Composable () -> Unit)? = null) {
     val enabled = !set.locked
     Row(
         Modifier.fillMaxWidth()
@@ -56,6 +56,7 @@ internal fun ListRow(set: FollowSet, pinned: Boolean, onOpen: () -> Unit, onPin:
             }
         }
         PinButton(pinned, onPin) // a pinned locked list stays unpinnable (spec §5)
+        trailing?.invoke() // backlog 38: the drag grip of the own lists
     }
 }
 

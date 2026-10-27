@@ -177,17 +177,27 @@ func (s *Store) Usage(pubkey string) (int64, error) {
 }
 
 // UploadsSince counts the pubkey's uploads that count against the daily limit
-// (stored ones and those the classifier refused) at or after since.
+// (stored ones, grey-zone ones waiting for review, and those the classifier refused) at or after since.
 func (s *Store) UploadsSince(pubkey string, since int64) (int, error) {
 	var n int
-	err := s.db.QueryRow(`SELECT COUNT(*) FROM uploads WHERE pubkey = ? AND at >= ? AND outcome IN (?, ?)`,
-		pubkey, since, OutcomeStored, OutcomeNSFW).Scan(&n)
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM uploads WHERE pubkey = ? AND at >= ? AND outcome IN (?, ?, ?)`,
+		pubkey, since, OutcomeStored, OutcomeReview, OutcomeNSFW).Scan(&n)
+	return n, err
+}
+
+// VideosSince counts the pubkey's video uploads that count against the daily
+// video limit (stored and refused by the classifier, as UploadsSince) at or after since.
+func (s *Store) VideosSince(pubkey string, since int64) (int, error) {
+	var n int
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM uploads WHERE pubkey = ? AND at >= ? AND type = ? AND outcome IN (?, ?, ?)`,
+		pubkey, since, "video/mp4", OutcomeStored, OutcomeReview, OutcomeNSFW).Scan(&n)
 	return n, err
 }
 
 // StoredBytesSince is the size of everything newly stored at or after since.
 func (s *Store) StoredBytesSince(since int64) (int64, error) {
 	var n int64
-	err := s.db.QueryRow(`SELECT COALESCE(SUM(size), 0) FROM uploads WHERE at >= ? AND outcome = ?`, since, OutcomeStored).Scan(&n)
+	// a grey-zone upload waiting for review is stored too (final review I6)
+	err := s.db.QueryRow(`SELECT COALESCE(SUM(size), 0) FROM uploads WHERE at >= ? AND outcome IN (?, ?)`, since, OutcomeStored, OutcomeReview).Scan(&n)
 	return n, err
 }

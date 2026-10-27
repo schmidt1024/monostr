@@ -822,6 +822,19 @@ class FakeFollows(initial: Map<String, FollowState> = emptyMap()) : FollowReposi
     override fun state(pubkey: String): Flow<FollowState> = states.map { it[pubkey] ?: FollowState.Unknown }
     override suspend fun follow(pubkey: String) = write(pubkey, FollowState.Following, "follow")
     override suspend fun unfollow(pubkey: String) = write(pubkey, FollowState.NotFollowing, "unfollow")
+    /** When false, [followed] answers null (no contact list known yet). */
+    var known = true
+    override fun followed(): Flow<Set<String>?> = states.map { m -> if (known) m.filterValues { it == FollowState.Following }.keys else null }
+    override suspend fun followAll(pubkeys: Collection<String>): Int {
+        val todo = pubkeys.distinct().filter { states.value[it] != FollowState.Following }
+        calls += "followAll:${todo.size}"
+        gate?.await()
+        error?.let { throw it }
+        if (todo.isEmpty()) return 0
+        states.update { it + todo.associateWith { FollowState.Following } }
+        _changes.tryEmit(Unit)
+        return todo.size
+    }
     override suspend fun setInitial(pubkeys: List<String>) {
         calls += "initial:${pubkeys.size}"
         error?.let { throw it }
@@ -861,6 +874,27 @@ class FakeMediaUploader : MediaUploader {
         completed += "$target:$source"
         val hash = sameHash ?: n.toString().padStart(64, '0')
         return UploadedMedia("https://media.test", "https://media.test/$hash.jpg", "image/jpeg", hash, 1000L * n, 400, 300, "LNM}7u}qfQ}q", fresh)
+    }
+
+    /** The length every video source reports (spec 2026-10-27 video §3). */
+    var videoDurationMs = 30_000L
+    /** Holds every video upload after its encode reported half way. */
+    var videoGate: CompletableDeferred<Unit>? = null
+    /** Sources of the videos uploaded, in order. */
+    val videoUploads = ArrayList<String>()
+
+    override suspend fun videoDurationMs(source: String): Long = videoDurationMs
+
+    override suspend fun uploadVideo(source: String, onPreparing: (Float) -> Unit, onProgress: (Float) -> Unit): UploadedMedia {
+        videoUploads += source
+        onPreparing(0.5f)
+        videoGate?.await()
+        failure?.let { throw it }
+        onPreparing(1f)
+        onProgress(1f)
+        val hash = videoUploads.size.toString().padStart(64, 'v')
+        return UploadedMedia("https://media.test", "https://media.test/$hash.mp4", "video/mp4", hash, 3_000_000, 720, 1280, "LNM}7u}qfQ}q", fresh,
+            posterUrl = "https://media.test/${hash.replace('v', 'p')}.jpg", posterSha256 = hash.replace('v', 'p'), posterFresh = fresh, durationMs = 30_000)
     }
 
     override fun discard(media: UploadedMedia) {
@@ -998,9 +1032,16 @@ class FakeLists(initial: List<FollowSet> = emptyList()) : ListsRepository {
 
 class FakeFeedTabs(initial: List<ListAddress> = emptyList()) : FeedTabsRepository {
     val state = MutableStateFlow(initial)
+    val orderState = MutableStateFlow<List<ListAddress>>(emptyList())
     var result: SaveResult = SaveResult.Ok
     val calls = ArrayList<String>()
     override fun tabs(): Flow<List<ListAddress>> = state
+    override fun order(): Flow<List<ListAddress>> = orderState
+    override suspend fun reorder(order: List<ListAddress>): SaveResult {
+        calls += "reorder:" + order.joinToString(",") { it.d }
+        if (result == SaveResult.Ok) orderState.value = order
+        return result
+    }
     override suspend fun pin(address: ListAddress): SaveResult {
         calls += "pin:${address.d}"
         if (address in state.value) return SaveResult.Ok
@@ -1021,5 +1062,19 @@ class FakeFeedTabs(initial: List<ListAddress> = emptyList()) : FeedTabsRepositor
         if (i >= 0) l.add((i + delta).coerceIn(0, l.lastIndex), l.removeAt(i))
         state.value = l
         return SaveResult.Ok
+    }
+}
+
+/** Spec 2026-10-27: [stored] is what local() answers; refresh() moves [remote] into it (when set) and answers whether anything is stored. */
+class FakeDiscover(var stored: List<FollowSet> = emptyList(), var remote: List<FollowSet>? = null) : com.monostr.nostr.repo.DiscoverRepository {
+    var refreshes = 0
+    /** When set, refresh() suspends here first. */
+    var gate: CompletableDeferred<Unit>? = null
+    override suspend fun local(): List<FollowSet> = stored
+    override suspend fun refresh(): Boolean {
+        refreshes++
+        gate?.await()
+        remote?.let { stored = it }
+        return stored.isNotEmpty()
     }
 }

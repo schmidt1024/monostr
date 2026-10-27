@@ -1,6 +1,8 @@
 package com.monostr.app.ui.common
 
 import com.monostr.app.ui.media.NoteLinkPreview
+import com.monostr.app.ui.media.LinkPreviewRules
+import com.monostr.app.ui.media.rememberNoteLink
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -265,15 +267,17 @@ private fun ListNoteCard(
             Column(Modifier.weight(1f)) {
                 NoteHeaderLine(note, onOpen = onOpen, onOpenProfile = onOpenProfile, menu = menu.takeIf { showActions })
                 if (replyContext) ReplyContextLine(shown, names, onOpenProfile)
-                if (shown.displayContent.isNotBlank()) {
+                val link = rememberNoteLink(shown)
+                val text = link?.let { LinkPreviewRules.textWithCard(shown.displayContent, it.url) } ?: shown.displayContent
+                if (text.isNotBlank()) {
                     Spacer(Modifier.height(2.dp))
-                    NoteText(shown.displayContent, onOpen = onOpen, onHashtag = onHashtag, onOpenProfile = onOpenProfile, onOpenNote = onOpenNote, names = names, collapsible = collapsed, stateKey = shown.id, modifier = Modifier.fillMaxWidth().testTag("note-text-$id8"))
+                    NoteText(text, onOpen = onOpen, onHashtag = onHashtag, onOpenProfile = onOpenProfile, onOpenNote = onOpenNote, names = names, collapsible = collapsed, stateKey = shown.id, modifier = Modifier.fillMaxWidth().testTag("note-text-$id8"))
                 }
                 shown.quotedId?.let { qid ->
                     QuoteCard(qid, shown.quoteRelays, names, onOpenNote = onOpenNote, onOpenProfile = onOpenProfile, onHashtag = onHashtag, modifier = Modifier.padding(top = 8.dp), author = shown.quoteAuthor)
                 }
                 NoteMediaRow(shown, onOpenMedia = { i -> onOpenMedia(shown.id, i) }, onOpenVideo = onOpenVideo)
-                NoteLinkPreview(shown)
+                NoteLinkPreview(shown, link)
                 if (showActions) {
                     Spacer(Modifier.height(4.dp))
                     NoteActionRow(note, shown, onReply, onRepost, onQuote, onLike, onBookmark, onTip, onShowTippers, onReact = onReact)
@@ -337,15 +341,17 @@ private fun DetailNoteCard(
     ) {
         NoteDetailHeader(note, onOpenProfile = onOpenProfile, menu = menu.takeIf { showActions }, avatarModifier = if (lineAbove) Modifier.onPlaced { placed.avatar = it } else Modifier)
         Spacer(Modifier.height(12.dp))
-        if (shown.displayContent.isNotBlank()) {
+        val link = rememberNoteLink(shown)
+        val text = link?.let { LinkPreviewRules.textWithCard(shown.displayContent, it.url) } ?: shown.displayContent
+        if (text.isNotBlank()) {
             // spec 2026-10-16 §4: the focused note is already open; its text selects instead of opening anything
-            NoteText(shown.displayContent, onOpen = onOpen, onHashtag = onHashtag, onOpenProfile = onOpenProfile, onOpenNote = onOpenNote, names = names, style = MaterialTheme.typography.bodyLarge, selectable = true, modifier = Modifier.fillMaxWidth().testTag("note-text-$id8"))
+            NoteText(text, onOpen = onOpen, onHashtag = onHashtag, onOpenProfile = onOpenProfile, onOpenNote = onOpenNote, names = names, style = MaterialTheme.typography.bodyLarge, selectable = true, modifier = Modifier.fillMaxWidth().testTag("note-text-$id8"))
         }
         shown.quotedId?.let { qid ->
             QuoteCard(qid, shown.quoteRelays, names, onOpenNote = onOpenNote, onOpenProfile = onOpenProfile, onHashtag = onHashtag, modifier = Modifier.padding(top = 8.dp), author = shown.quoteAuthor)
         }
         NoteMediaRow(shown, onOpenMedia = { i -> onOpenMedia(shown.id, i) }, onOpenVideo = onOpenVideo)
-        NoteLinkPreview(shown)
+        NoteLinkPreview(shown, link)
         Spacer(Modifier.height(12.dp))
         Text(detailTimeLine(fullTime(shown.createdAt), shown.client, stringResource(R.string.note_via)), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("note-time-$id8"))
         HorizontalDivider(Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)

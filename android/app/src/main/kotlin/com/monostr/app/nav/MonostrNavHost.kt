@@ -256,6 +256,7 @@ private fun LoggedInNavHost(ready: Ready, gate: OnboardingGateViewModel = hiltVi
                     onSettings = { nav.navigate(Routes.SETTINGS) },
                     onOpenMedia = onOpenMedia,
                     onOpenVideo = onOpenVideo,
+                    onOpenList = { nav.navigate(Routes.list(it)) },
                 )
             }
             composable("thread/{id}", arguments = listOf(navArgument("id") { type = NavType.StringType })) {

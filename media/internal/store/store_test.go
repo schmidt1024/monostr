@@ -256,3 +256,77 @@ func TestReopenKeepsData(t *testing.T) {
 		t.Fatal("blob lost over a reopen")
 	}
 }
+
+func TestVideosSinceCountsOnlyVideos(t *testing.T) {
+	s := openTemp(t)
+	const day = int64(86400)
+	video := func(c string, at int64) Blob {
+		b := blob(c, 1000, at)
+		b.Type = "video/mp4"
+		return b
+	}
+	must(t, s.AddStored(video("a", day-1), h("1"), 0)) // yesterday
+	must(t, s.AddStored(video("b", day), h("1"), 0))
+	must(t, s.AddStored(blob("c", 100, day+1), h("1"), 0)) // a picture
+	must(t, s.AddStored(video("d", day+2), h("2"), 0))     // someone else
+	must(t, s.LogRejected(h("1"), h("e"), 900, "video/mp4", 0.9, day+3))
+	if n, err := s.VideosSince(h("1"), day); err != nil || n != 2 { // stored b + rejected e
+		t.Fatalf("videos of 1 today: %d, %v", n, err)
+	}
+}
+
+func TestStorageAlertOnceAboveThreshold(t *testing.T) {
+	s := openTemp(t)
+	must(t, s.AddStored(blob("a", 600, 1), h("1"), 0))
+	if due, _, err := s.StorageAlert(1000); err != nil || due {
+		t.Fatalf("below the threshold: due %v, %v", due, err)
+	}
+	must(t, s.AddStored(blob("b", 600, 2), h("1"), 0))
+	due, total, err := s.StorageAlert(1000)
+	if err != nil || !due || total != 1200 {
+		t.Fatalf("above: due %v, total %d, %v", due, total, err)
+	}
+	must(t, s.MarkStorageAlerted(3))
+	if due, _, _ := s.StorageAlert(1000); due {
+		t.Fatal("alerted twice for one crossing")
+	}
+}
+
+func TestStorageAlertAgainAfterDroppingBelow(t *testing.T) {
+	s := openTemp(t)
+	must(t, s.AddStored(blob("a", 1200, 1), h("1"), 0))
+	if due, _, _ := s.StorageAlert(1000); !due {
+		t.Fatal("not due above the threshold")
+	}
+	must(t, s.MarkStorageAlerted(2))
+	if _, err := s.DeleteBlob(h("a")); err != nil {
+		t.Fatal(err)
+	}
+	if due, _, _ := s.StorageAlert(1000); due { // below again: clears the mark
+		t.Fatal("due below the threshold")
+	}
+	must(t, s.AddStored(blob("b", 1200, 3), h("1"), 0))
+	if due, _, _ := s.StorageAlert(1000); !due {
+		t.Fatal("a second crossing was not due")
+	}
+}
+
+func TestGreyZoneUploadsCountTowardTheDailyLimits(t *testing.T) {
+	// final review I6: a stored upload waiting for review counts like any stored one
+	s := openTemp(t)
+	const day = int64(86400)
+	b := blob("a", 700, day+1)
+	b.Type = "video/mp4"
+	if _, err := s.AddStoredReview(b, h("1"), 0.7, day, 20); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := s.UploadsSince(h("1"), day); n != 1 {
+		t.Fatalf("uploads: %d", n)
+	}
+	if n, _ := s.VideosSince(h("1"), day); n != 1 {
+		t.Fatalf("videos: %d", n)
+	}
+	if n, _ := s.StoredBytesSince(day); n != 700 {
+		t.Fatalf("stored bytes: %d", n)
+	}
+}

@@ -415,3 +415,36 @@ func TestSummaryShowsDateWhenNotToday(t *testing.T) {
 		t.Fatalf("texts: %q", e.m.texts)
 	}
 }
+
+func TestStorageAlertIsSentOnceAnHourAtMost(t *testing.T) {
+	e := newEnv(t)
+	e.r.cfg.StorageAlertBytes = 1000
+	if err := e.s.AddStored(store.Blob{SHA256: h("a"), Size: 1500, Type: "video/mp4", Width: 720, Height: 1280, CreatedAt: e.now.Unix()}, h("1"), 0); err != nil {
+		t.Fatal(err)
+	}
+	e.r.Flush(context.Background())
+	if len(e.m.texts) != 1 || !strings.Contains(e.m.texts[0], "Warnschwelle") {
+		t.Fatalf("texts: %q", e.m.texts)
+	}
+	e.now = e.now.Add(2 * time.Hour)
+	e.r.Flush(context.Background())
+	if len(e.m.texts) != 1 {
+		t.Fatalf("alerted again for the same crossing: %q", e.m.texts)
+	}
+}
+
+func TestStorageAlertRetriesWhenTheMessageFails(t *testing.T) {
+	e := newEnv(t)
+	e.r.cfg.StorageAlertBytes = 1000
+	if err := e.s.AddStored(store.Blob{SHA256: h("a"), Size: 1500, Type: "video/mp4", Width: 720, Height: 1280, CreatedAt: e.now.Unix()}, h("1"), 0); err != nil {
+		t.Fatal(err)
+	}
+	e.m.fail = true
+	e.r.Flush(context.Background())
+	e.m.fail = false
+	e.now = e.now.Add(2 * time.Hour)
+	e.r.Flush(context.Background())
+	if len(e.m.texts) != 1 {
+		t.Fatalf("texts: %q", e.m.texts)
+	}
+}

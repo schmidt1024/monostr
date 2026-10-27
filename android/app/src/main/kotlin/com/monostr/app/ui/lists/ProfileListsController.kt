@@ -1,5 +1,9 @@
 package com.monostr.app.ui.lists
 
+import kotlinx.coroutines.flow.combine
+import com.monostr.nostr.model.SaveResult
+import com.monostr.app.R
+import com.monostr.app.ui.common.uiText
 import com.monostr.app.ui.common.Message
 import com.monostr.app.ui.common.attempt
 import com.monostr.app.ui.profile.ProfileCache
@@ -28,7 +32,7 @@ class ProfileListsController(
     private val lists: ListsRepository,
     private val pins: FeedTabsRepository,
     private val scope: CoroutineScope,
-    writeScope: CoroutineScope = scope,
+    private val writeScope: CoroutineScope = scope,
     /** Spec perf 3.5/3.7: the session's last profiles, their lists too; null (tests that do not care) keeps nothing. */
     private val cache: ProfileCache? = null,
 ) {
@@ -45,7 +49,9 @@ class ProfileListsController(
         scope.launch { pins.tabs().collect { p -> _state.update { it.copy(pinned = p.toSet()) } } }
         scope.launch {
             if (isSelf) {
-                lists.own().collect { l -> _state.update { it.copy(lists = l) } }
+                // backlog 38: in the order the user dragged (the pinned ones as tabs follow it)
+                combine(lists.own(), pins.order(), pins.tabs()) { own, order, tabs -> ListOrder.arrange(own, order, tabs) }
+                    .collect { l -> _state.update { it.copy(lists = l) } }
             } else {
                 // spec perf 3.7: the session's last view, then the database, then the relays (~16 s before, one after
                 // another). With nothing stored the spinner stays until the relays answered: "No public lists" before
@@ -67,4 +73,17 @@ class ProfileListsController(
     fun togglePin(set: FollowSet) = pinActions.toggle(set.address, set.address in _state.value.pinned)
 
     fun clearMessage() = _state.update { it.copy(message = null) }
+
+    /** Backlog 38: the own list at [from] dropped at [to]; stores the whole shown order (one write), says so when no relay took it. */
+    fun move(from: Int, to: Int) {
+        if (!isSelf) return
+        val shown = _state.value.lists?.map { it.address } ?: return
+        val next = ListOrder.move(shown, from, to)
+        if (next == shown) return
+        writeScope.launch {
+            if (pins.reorder(next) != SaveResult.Ok) {
+                _state.update { it.copy(message = Message(uiText(R.string.list_save_failed), retry = { move(from, to) })) }
+            }
+        }
+    }
 }

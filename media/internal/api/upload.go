@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"strconv"
 	"strings"
@@ -37,8 +38,9 @@ func (s *server) describe(b store.Blob) descriptor {
 
 // reservation is what one pubkey's uploads in flight hold against its limits.
 type reservation struct {
-	count int   // uploads that will count for the day
-	bytes int64 // bytes that will count against the quota
+	count  int   // uploads that will count for the day
+	videos int   // of those, videos
+	bytes  int64 // bytes that will count against the quota
 }
 
 // pending is what the uploads in flight have reserved. A limit is checked and
@@ -104,13 +106,20 @@ func (s *server) admit(w http.ResponseWriter, r *http.Request, a admission) (str
 		reject(w, http.StatusLengthRequired, CodeLength, "Content-Length is required")
 		return "", none, false
 	}
-	if a.length > lim.MaxBytes {
-		reject(w, http.StatusRequestEntityTooLarge, CodeTooLarge, fmt.Sprintf("file larger than %d bytes", lim.MaxBytes))
+	mediaType, ok := imagecheck.Normalize(a.contentType)
+	video := !ok && isVideo(a.contentType)
+	if video {
+		mediaType = imagecheck.VideoMP4
+	} else if !ok {
+		reject(w, http.StatusUnsupportedMediaType, CodeType, "only JPEG, PNG, WebP and GIF pictures and MP4 videos are accepted")
 		return "", none, false
 	}
-	mediaType, ok := imagecheck.Normalize(a.contentType)
-	if !ok {
-		reject(w, http.StatusUnsupportedMediaType, CodeType, "only JPEG, PNG, WebP and GIF pictures are accepted")
+	if video && a.length > lim.MaxVideoBytes {
+		reject(w, http.StatusRequestEntityTooLarge, CodeVideoTooLarge, fmt.Sprintf("video larger than %d bytes", lim.MaxVideoBytes))
+		return "", none, false
+	}
+	if !video && a.length > lim.MaxBytes {
+		reject(w, http.StatusRequestEntityTooLarge, CodeTooLarge, fmt.Sprintf("file larger than %d bytes", lim.MaxBytes))
 		return "", none, false
 	}
 
@@ -161,6 +170,17 @@ func (s *server) admit(w http.ResponseWriter, r *http.Request, a admission) (str
 			reject(w, http.StatusTooManyRequests, CodeRate, "daily upload limit of this pubkey reached")
 			return "", none, false
 		}
+		if video {
+			videos, err := s.store.VideosSince(a.pubkey, day)
+			if err != nil {
+				s.internal(w, "video count", err)
+				return "", none, false
+			}
+			if videos+mine.videos >= lim.PubkeyVideosPerDay {
+				reject(w, http.StatusTooManyRequests, CodeVideoRate, "daily video limit of this pubkey reached")
+				return "", none, false
+			}
+		}
 	}
 	if s.ips.Count(address, a.now)+s.pending.byAddress[address] >= lim.IPPerDay {
 		reject(w, http.StatusTooManyRequests, CodeRate, "daily upload limit of this address reached")
@@ -196,6 +216,9 @@ func (s *server) admit(w http.ResponseWriter, r *http.Request, a admission) (str
 	var newBytes int64
 	if !known {
 		held.count, newBytes = 1, a.length
+		if video {
+			held.videos = 1
+		}
 	}
 	if !owner {
 		held.bytes = a.length
@@ -204,6 +227,7 @@ func (s *server) admit(w http.ResponseWriter, r *http.Request, a admission) (str
 	s.pending.byAddress[address]++
 	s.pending.newBytes += newBytes
 	mine.count += held.count
+	mine.videos += held.videos
 	mine.bytes += held.bytes
 	s.pending.byPubkey[a.pubkey] = mine
 	release := func() {
@@ -216,6 +240,7 @@ func (s *server) admit(w http.ResponseWriter, r *http.Request, a admission) (str
 		s.pending.newBytes -= newBytes
 		if m := s.pending.byPubkey[a.pubkey]; m != nil {
 			m.count -= held.count
+			m.videos -= held.videos
 			m.bytes -= held.bytes
 			if m.count <= 0 && m.bytes <= 0 {
 				delete(s.pending.byPubkey, a.pubkey)
@@ -241,6 +266,10 @@ func (s *server) upload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer release()
 	address := limits.IPKey(clientIP(r))
+	if mediaType == imagecheck.VideoMP4 {
+		s.uploadVideo(w, r, auth, address, now)
+		return
+	}
 
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, s.cfg.Limits.MaxBytes))
 	if err != nil {
@@ -254,39 +283,13 @@ func (s *server) upload(w http.ResponseWriter, r *http.Request) {
 	}
 	sum := sha256.Sum256(body)
 	hash := hex.EncodeToString(sum[:])
-	if !auth.Covers(hash) {
-		reject(w, http.StatusConflict, CodeHashMismatch, "the authorization does not name the uploaded bytes")
-		return
-	}
-	if claimed := r.Header.Get("X-SHA-256"); claimed != "" && strings.ToLower(claimed) != hash {
-		reject(w, http.StatusConflict, CodeHashMismatch, "X-SHA-256 does not match the uploaded bytes")
-		return
-	}
-	banned, err := s.store.HashBanned(hash)
-	if err != nil {
-		s.internal(w, "hash ban lookup", err)
-		return
-	}
-	if banned {
-		reject(w, http.StatusForbidden, CodeBannedContent, "this file may not be stored here")
+	if !s.hashAllowed(w, r, auth, hash) {
 		return
 	}
 
 	defer s.blobs.lock(hash)()
 
-	existing, found, err := s.store.Blob(hash)
-	if err != nil {
-		s.internal(w, "blob lookup", err)
-		return
-	}
-	if found {
-		if _, err := s.store.AddDuplicate(existing, auth.Pubkey, now.Unix()); err != nil {
-			s.internal(w, "add duplicate", err)
-			return
-		}
-		// a replay stores nothing, but it is not free either: it counts for the address
-		s.ips.Add(address, now)
-		writeJSON(w, http.StatusOK, s.describe(existing))
+	if s.duplicate(w, auth, hash, address, now) {
 		return
 	}
 
@@ -334,9 +337,59 @@ func (s *server) upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	blob := store.Blob{SHA256: hash, Size: int64(len(body)), Type: info.Type, Width: info.Width, Height: info.Height, CreatedAt: now.Unix()}
-	// a grey-zone picture is stored like any other, so the uploader sees no
+	s.record(w, auth, blob, score, address, now)
+}
+
+// hashAllowed: the authorization and X-SHA-256 name these bytes and they are
+// not banned. It writes the rejection itself.
+func (s *server) hashAllowed(w http.ResponseWriter, r *http.Request, auth blossom.Auth, hash string) bool {
+	if !auth.Covers(hash) {
+		reject(w, http.StatusConflict, CodeHashMismatch, "the authorization does not name the uploaded bytes")
+		return false
+	}
+	if claimed := r.Header.Get("X-SHA-256"); claimed != "" && strings.ToLower(claimed) != hash {
+		reject(w, http.StatusConflict, CodeHashMismatch, "X-SHA-256 does not match the uploaded bytes")
+		return false
+	}
+	banned, err := s.store.HashBanned(hash)
+	if err != nil {
+		s.internal(w, "hash ban lookup", err)
+		return false
+	}
+	if banned {
+		reject(w, http.StatusForbidden, CodeBannedContent, "this file may not be stored here")
+		return false
+	}
+	return true
+}
+
+// duplicate answers an upload of bytes the server already has (the caller
+// holds the blob's lock); true when it did.
+func (s *server) duplicate(w http.ResponseWriter, auth blossom.Auth, hash, address string, now time.Time) bool {
+	existing, found, err := s.store.Blob(hash)
+	if err != nil {
+		s.internal(w, "blob lookup", err)
+		return true
+	}
+	if !found {
+		return false
+	}
+	if _, err := s.store.AddDuplicate(existing, auth.Pubkey, now.Unix()); err != nil {
+		s.internal(w, "add duplicate", err)
+		return true
+	}
+	// a replay stores nothing, but it is not free either: it counts for the address
+	s.ips.Add(address, now)
+	writeJSON(w, http.StatusOK, s.describe(existing))
+	return true
+}
+
+// record files a blob that is in the bucket now and answers 201.
+func (s *server) record(w http.ResponseWriter, auth blossom.Auth, blob store.Blob, score float64, address string, now time.Time) {
+	// a grey-zone upload is stored like any other, so the uploader sees no
 	// difference, and waits in the store for the reviewer
 	grey := score >= s.cfg.Threshold
+	var err error
 	if grey {
 		_, err = s.store.AddStoredReview(blob, auth.Pubkey, score, limits.DayStart(now), s.cfg.ReviewDMsPerDay)
 	} else {
@@ -352,6 +405,12 @@ func (s *server) upload(w http.ResponseWriter, r *http.Request) {
 	}
 	s.ips.Add(address, now)
 	writeJSON(w, http.StatusCreated, s.describe(blob))
+}
+
+// isVideo: the Content-Type names the one video type the server takes.
+func isVideo(contentType string) bool {
+	t, _, err := mime.ParseMediaType(contentType)
+	return err == nil && strings.ToLower(t) == imagecheck.VideoMP4
 }
 
 // preflight is HEAD /upload (BUD-06): would this upload be taken? It counts

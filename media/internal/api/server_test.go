@@ -10,8 +10,10 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -36,13 +38,16 @@ const publicURL = "https://media.example"
 // delay makes every call take that long; a gate holds every call until it is
 // closed, so that a test can look at uploads in flight.
 type fakeClassifier struct {
-	mu     sync.Mutex
-	score  float64
-	err    error
-	health error
-	calls  int
-	delay  time.Duration
-	gate   chan struct{}
+	mu sync.Mutex
+	// video is what Video answers (its Score is taken from score); videoErr fails it
+	video    classify.VideoInfo
+	videoErr error
+	score    float64
+	err      error
+	health   error
+	calls    int
+	delay    time.Duration
+	gate     chan struct{}
 }
 
 func (f *fakeClassifier) Score(context.Context, []byte) (float64, error) {
@@ -55,6 +60,18 @@ func (f *fakeClassifier) Score(context.Context, []byte) (float64, error) {
 	}
 	time.Sleep(delay)
 	return score, err
+}
+
+func (f *fakeClassifier) Video(_ context.Context, r io.Reader, size int64) (classify.VideoInfo, error) {
+	f.mu.Lock()
+	f.calls++
+	info, err, score := f.video, f.videoErr, f.score
+	f.mu.Unlock()
+	if n, _ := io.Copy(io.Discard, r); n != size {
+		return classify.VideoInfo{}, fmt.Errorf("read %d of %d bytes", n, size)
+	}
+	info.Score = score
+	return info, err
 }
 
 // waiting is the number of calls so far, for tests that wait for uploads to reach the classifier.
@@ -72,6 +89,7 @@ type env struct {
 	bucket *storagetest.Memory
 	nsfw   *fakeClassifier
 	srv    *httptest.Server
+	tmp    string // the server's temp dir for videos
 	now    time.Time
 	log    *bytes.Buffer
 	// notified counts the calls of Deps.Notify
@@ -80,7 +98,8 @@ type env struct {
 
 func (e *env) clock() time.Time { return e.now }
 
-var generous = limits.Limits{MaxBytes: 1 << 20, PubkeyPerDay: 50, PubkeyQuota: 10 << 20, IPPerDay: 100, GlobalBytesPerDay: 100 << 20}
+var generous = limits.Limits{MaxBytes: 1 << 20, PubkeyPerDay: 50, PubkeyQuota: 10 << 20, IPPerDay: 100, GlobalBytesPerDay: 100 << 20,
+	MaxVideoBytes: 3 << 20, PubkeyVideosPerDay: 5}
 
 func newEnv(t *testing.T, lim limits.Limits) *env {
 	t.Helper()
@@ -100,8 +119,12 @@ func newEnvWith(t *testing.T, cfg Config) *env {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { st.Close() })
-	e := &env{t: t, store: st, bucket: storagetest.NewMemory(), nsfw: &fakeClassifier{score: 0.05},
-		now: time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC), log: &bytes.Buffer{}}
+	if cfg.TempDir == "" {
+		cfg.TempDir = t.TempDir()
+	}
+	e := &env{t: t, store: st, bucket: storagetest.NewMemory(), tmp: cfg.TempDir,
+		nsfw: &fakeClassifier{score: 0.05, video: goodVideo},
+		now:  time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC), log: &bytes.Buffer{}}
 	h, err := New(cfg,
 		Deps{Store: st, Bucket: e.bucket, Classifier: e.nsfw, Logger: slog.New(slog.NewTextHandler(e.log, nil)), Now: e.clock,
 			Notify: func() { e.notified.Add(1) }})
@@ -561,7 +584,8 @@ func TestPreflight(t *testing.T) {
 	e.want(head(u, "1000", "image/png"), 200, "")
 	e.want(head(u, "5000", "image/png"), 413, CodeTooLarge)
 	e.want(head(u, "", "image/png"), 411, CodeLength)
-	e.want(head(u, "1000", "video/mp4"), 415, CodeType)
+	e.want(head(u, "1000", "video/mp4"), 200, "")
+	e.want(head(u, "1000", "video/webm"), 415, CodeType)
 	e.want(e.request(http.MethodHead, "/upload", nil, nil), 401, CodeAuth)
 	e.want(e.request(http.MethodHead, "/upload", nil, map[string]string{
 		"Authorization": blossomtest.Auth(u.sk, "upload", hash, e.now.Unix()), "X-SHA-256": strings.Repeat("b", 64),
@@ -803,5 +827,261 @@ func TestNewRejectsRejectBelowThreshold(t *testing.T) {
 	}
 	if _, err := New(Config{PublicURL: publicURL, Threshold: 0.6, Reject: 1.5}, Deps{}); err == nil {
 		t.Fatal("Reject above 1 was accepted")
+	}
+}
+
+// videoLimits: small numbers so that no test sends megabytes; a video may be larger than a picture.
+func videoLimits() limits.Limits {
+	lim := generous
+	lim.MaxBytes = 1000
+	lim.MaxVideoBytes = 3000
+	lim.PubkeyVideosPerDay = 5
+	return lim
+}
+
+func TestVideoOverMaxVideoBytesIsTooLarge(t *testing.T) {
+	e := newEnv(t, videoLimits())
+	e.want(e.put(newUser(t), bytes.Repeat([]byte{1}, 3001), "video/mp4", nil), 413, CodeVideoTooLarge)
+}
+
+func TestPictureStillCappedAtMaxBytes(t *testing.T) {
+	e := newEnv(t, videoLimits())
+	e.want(e.put(newUser(t), bytes.Repeat([]byte{1}, 1001), "image/jpeg", nil), 413, CodeTooLarge)
+}
+
+func TestSixthVideoOfTheDayIsRefused(t *testing.T) {
+	e := newEnv(t, videoLimits())
+	u := newUser(t)
+	for i := 0; i < 5; i++ {
+		b := store.Blob{SHA256: hashOf([]byte{byte(i)}), Size: 10, Type: "video/mp4", Width: 720, Height: 1280, CreatedAt: e.now.Unix()}
+		if err := e.store.AddStored(b, u.pk, 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	e.want(e.put(u, bytes.Repeat([]byte{7}, 100), "video/mp4", nil), 429, CodeVideoRate)
+	if e.nsfw.waiting() != 0 {
+		t.Fatal("a refused video reached the classifier")
+	}
+}
+
+func TestVideosCountTowardTheDailyUploads(t *testing.T) {
+	lim := videoLimits()
+	lim.PubkeyPerDay = 2
+	e := newEnv(t, lim)
+	u := newUser(t)
+	for i := 0; i < 2; i++ {
+		b := store.Blob{SHA256: hashOf([]byte{byte(i)}), Size: 10, Type: "video/mp4", Width: 720, Height: 1280, CreatedAt: e.now.Unix()}
+		if err := e.store.AddStored(b, u.pk, 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	e.want(e.put(u, imagetest.JPEG(40, 30, 1), "image/jpeg", nil), 429, CodeRate)
+}
+
+func TestTypeRefusalNamesVideos(t *testing.T) {
+	e := newEnv(t, videoLimits())
+	res := e.put(newUser(t), []byte("plain"), "text/plain", nil)
+	e.want(res, 415, CodeType)
+}
+
+// goodVideo is what the scorer sees in a video the app made (spec 2026-10-27 video §4).
+var goodVideo = classify.VideoInfo{Width: 720, Height: 1280, Duration: 61, VideoCodec: "h264", AudioCodec: "aac", Container: "mp4"}
+
+func (e *env) tempFiles() []string {
+	entries, _ := os.ReadDir(e.tmp)
+	var names []string
+	for _, x := range entries {
+		names = append(names, x.Name())
+	}
+	return names
+}
+
+func TestVideoUploadIsStoredAndServedWithRange(t *testing.T) {
+	e := newEnv(t, videoLimits())
+	clip := bytes.Repeat([]byte("mp4 "), 500)
+	res := e.put(newUser(t), clip, "video/mp4", nil)
+	e.want(res, 201, "")
+	var d descriptor
+	if err := json.Unmarshal(res.body, &d); err != nil || d.Type != "video/mp4" || !strings.HasSuffix(d.URL, hashOf(clip)+".mp4") || d.Size != int64(len(clip)) {
+		t.Fatalf("descriptor %+v, %v", d, err)
+	}
+	b, ok, _ := e.store.Blob(hashOf(clip))
+	if !ok || b.Width != 720 || b.Height != 1280 || b.Type != "video/mp4" {
+		t.Fatalf("blob %+v", b)
+	}
+	got := e.request(http.MethodGet, "/"+hashOf(clip)+".mp4", nil, map[string]string{"Range": "bytes=0-9"})
+	if got.status != http.StatusPartialContent || string(got.body) != "mp4 mp4 mp" || got.header.Get("Content-Type") != "video/mp4" {
+		t.Fatalf("ranged get: %d %q %q", got.status, got.body, got.header.Get("Content-Type"))
+	}
+	if left := e.tempFiles(); len(left) != 0 {
+		t.Fatalf("temp files left: %v", left)
+	}
+}
+
+func TestVideoLengthLimit(t *testing.T) {
+	e := newEnv(t, videoLimits())
+	u := newUser(t)
+	e.nsfw.video.Duration = 124.9 // the app took 121 s; encoding may add a little
+	e.want(e.put(u, []byte("video one"), "video/mp4", nil), 201, "")
+	e.nsfw.video.Duration = 126
+	e.want(e.put(u, []byte("video two"), "video/mp4", nil), 413, CodeVideoTooLong)
+}
+
+func TestVideoFormatChecks(t *testing.T) {
+	e := newEnv(t, videoLimits())
+	u := newUser(t)
+	try := func(i int, change func(*classify.VideoInfo), status int, code string) {
+		t.Helper()
+		e.nsfw.video = goodVideo
+		change(&e.nsfw.video)
+		e.want(e.put(u, []byte(fmt.Sprintf("video %d", i)), "video/mp4", nil), status, code)
+	}
+	try(1, func(v *classify.VideoInfo) { v.VideoCodec = "hevc" }, 415, CodeVideoFormat)
+	try(2, func(v *classify.VideoInfo) { v.AudioCodec = "opus" }, 415, CodeVideoFormat)
+	try(3, func(v *classify.VideoInfo) { v.Container = "matroska" }, 415, CodeVideoFormat)
+	try(4, func(v *classify.VideoInfo) { v.Width, v.Height = 1280, 1280 }, 413, CodeVideoFormat)
+	try(5, func(v *classify.VideoInfo) { v.Width, v.Height = 1280, 720 }, 201, "")
+	try(6, func(v *classify.VideoInfo) { v.AudioCodec = "" }, 201, "") // no sound is fine
+}
+
+func TestVideoThatIsNoVideoIsRefused(t *testing.T) {
+	e := newEnv(t, videoLimits())
+	e.nsfw.videoErr = classify.ErrUnreadable
+	e.want(e.put(newUser(t), []byte("not a video"), "video/mp4", nil), 415, CodeVideoFormat)
+}
+
+func TestVideoNSFWRejectedAndGreyZoneReviewed(t *testing.T) {
+	e := newEnvWith(t, Config{Limits: videoLimits(), Threshold: 0.60, Reject: 0.85})
+	u := newUser(t)
+	e.nsfw.score = 0.9
+	e.want(e.put(u, []byte("explicit video"), "video/mp4", nil), 403, CodeNSFW)
+	if e.bucket.Len() != 0 {
+		t.Fatal("a refused video was stored")
+	}
+	e.nsfw.score = 0.7
+	e.want(e.put(u, []byte("grey video"), "video/mp4", nil), 201, "")
+	open, _ := e.store.OpenReviews(10)
+	if len(open) != 1 || e.notified.Load() != 1 {
+		t.Fatalf("reviews %d, notified %d", len(open), e.notified.Load())
+	}
+}
+
+func TestVideoTempFileIsRemovedOnEveryPath(t *testing.T) {
+	e := newEnv(t, videoLimits())
+	u := newUser(t)
+	// stored
+	e.want(e.put(u, []byte("video ok"), "video/mp4", nil), 201, "")
+	// the authorization names other bytes
+	e.want(e.put(u, []byte("video x"), "video/mp4", map[string]string{"Authorization": blossomtest.Auth(u.sk, "upload", hashOf([]byte("other")), e.now.Unix())}), 409, CodeHashMismatch)
+	// the scorer is down
+	e.nsfw.videoErr = classify.ErrUnavailable
+	e.want(e.put(u, []byte("video y"), "video/mp4", nil), 503, CodeUnavailable)
+	e.nsfw.videoErr = nil
+	// the bucket is down
+	e.bucket.FailPut = true
+	e.want(e.put(u, []byte("video z"), "video/mp4", nil), 503, CodeUnavailable)
+	e.bucket.FailPut = false
+	// the client goes away in the middle of the body
+	data := bytes.Repeat([]byte{9}, 2000)
+	conn, err := net.Dial("tcp", strings.TrimPrefix(e.srv.URL, "http://"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Fprintf(conn, "PUT /upload HTTP/1.1\r\nHost: x\r\nAuthorization: %s\r\nContent-Type: video/mp4\r\nContent-Length: %d\r\n\r\n",
+		blossomtest.Auth(u.sk, "upload", hashOf(data), e.now.Unix()), len(data))
+	conn.Write(data[:500])
+	time.Sleep(100 * time.Millisecond)
+	conn.Close()
+	deadline := time.Now().Add(2 * time.Second)
+	for len(e.tempFiles()) != 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if left := e.tempFiles(); len(left) != 0 {
+		t.Fatalf("temp files left: %v", left)
+	}
+}
+
+func TestSlowVideoBodyIsCut(t *testing.T) {
+	clock := time.Unix(0, 0)
+	r := &rateReader{r: strings.NewReader(strings.Repeat("x", 100)), min: 10, grace: time.Second, now: func() time.Time { return clock }}
+	r.start = clock
+	buf := make([]byte, 5)
+	if _, err := r.Read(buf); err != nil {
+		t.Fatalf("within the grace: %v", err)
+	}
+	clock = clock.Add(2 * time.Second) // 5 bytes in 2 s: below 10 bytes/s
+	if _, err := r.Read(buf); !errors.Is(err, errTooSlow) {
+		t.Fatalf("slow body: %v", err)
+	}
+}
+
+func TestStartClearsWhatACrashLeftInTheTempDir(t *testing.T) {
+	dir := t.TempDir()
+	stale := filepath.Join(dir, "video-123.mp4")
+	other := filepath.Join(dir, "keep.txt")
+	os.WriteFile(stale, []byte("half a video"), 0o600)
+	os.WriteFile(other, []byte("not ours"), 0o600)
+	newEnvWith(t, Config{Limits: videoLimits(), TempDir: dir})
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Fatal("a stale video stayed")
+	}
+	if _, err := os.Stat(other); err != nil {
+		t.Fatal("a file that is not ours was removed")
+	}
+}
+
+func TestEveryVideoReadHasAStallDeadline(t *testing.T) {
+	clock := time.Unix(100, 0)
+	var deadlines []time.Time
+	r := &rateReader{r: strings.NewReader("abc"), min: 1, grace: time.Minute, now: func() time.Time { return clock }, start: clock,
+		stall: 30 * time.Second, setDeadline: func(d time.Time) error { deadlines = append(deadlines, d); return nil }}
+	r.Read(make([]byte, 1))
+	clock = clock.Add(time.Second)
+	r.Read(make([]byte, 1))
+	if len(deadlines) != 2 || !deadlines[0].Equal(time.Unix(130, 0)) || !deadlines[1].Equal(time.Unix(131, 0)) {
+		t.Fatalf("deadlines: %v", deadlines)
+	}
+}
+
+func TestAStalledVideoCountsForTheAddress(t *testing.T) {
+	lim := videoLimits()
+	lim.IPPerDay = 1
+	e := newEnv(t, lim)
+	u := newUser(t)
+	data := bytes.Repeat([]byte{9}, 2000)
+	conn, err := net.Dial("tcp", strings.TrimPrefix(e.srv.URL, "http://"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Fprintf(conn, "PUT /upload HTTP/1.1\r\nHost: x\r\nAuthorization: %s\r\nContent-Type: video/mp4\r\nContent-Length: %d\r\n\r\n",
+		blossomtest.Auth(u.sk, "upload", hashOf(data), e.now.Unix()), len(data))
+	conn.Write(data[:100])
+	time.Sleep(100 * time.Millisecond)
+	conn.Close()
+	deadline := time.Now().Add(2 * time.Second)
+	for len(e.tempFiles()) != 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	time.Sleep(50 * time.Millisecond)
+	// the broken upload used the address's one upload of the day
+	e.want(e.put(u, imagetest.JPEG(40, 30, 1), "image/jpeg", nil), 429, CodeRate)
+}
+
+func TestAVideoBodyHasAnAbsoluteEnd(t *testing.T) {
+	clock := time.Unix(100, 0)
+	var deadlines []time.Time
+	// a minute's grace: only the end can stop these reads
+	r := &rateReader{r: strings.NewReader(strings.Repeat("x", 1000)), min: 1, grace: time.Minute, now: func() time.Time { return clock }, start: clock,
+		stall: 30 * time.Second, end: clock.Add(40 * time.Second), setDeadline: func(d time.Time) error { deadlines = append(deadlines, d); return nil }}
+	clock = clock.Add(20 * time.Second)
+	if _, err := r.Read(make([]byte, 100)); err != nil {
+		t.Fatal(err)
+	}
+	if !deadlines[0].Equal(time.Unix(140, 0)) { // the end comes before now + stall
+		t.Fatalf("deadline %v", deadlines[0])
+	}
+	clock = clock.Add(25 * time.Second) // past the end, however fast
+	if _, err := r.Read(make([]byte, 100)); !errors.Is(err, errTooSlow) {
+		t.Fatalf("past the end: %v", err)
 	}
 }

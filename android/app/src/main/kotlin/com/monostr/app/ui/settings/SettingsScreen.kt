@@ -248,7 +248,7 @@ class SettingsViewModel @Inject constructor(
     private fun readPublished() = viewModelScope.launch {
         val engine = session.requireReady().engine
         val asked = runCatching { engine.connectedNormalRelayUrls().isNotEmpty() }.getOrDefault(false)
-        val list = runCatching { engine.ownRelayList() }.getOrNull()
+        val list = runCatching { engine.ownRelayList(fresh = true) }.getOrNull()
         published.value = list
         publishedRead.value = list != null || asked
     }

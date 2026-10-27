@@ -39,5 +39,7 @@ fun Throwable.uploadMessage(): UiText = when (this) {
     is UploadException.Unavailable -> uiText(R.string.upload_error_unavailable)
     is UploadException.Network -> uiText(R.string.upload_error_network)
     is UploadException.Unreadable -> uiText(R.string.upload_error_unreadable)
+    is UploadException.VideoTooLong -> uiText(R.string.compose_video_too_long)
+    is UploadException.VideoRate -> uiText(R.string.upload_video_rate)
     else -> uiText(R.string.upload_error_failed)
 }

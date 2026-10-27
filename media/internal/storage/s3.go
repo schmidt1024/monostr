@@ -71,6 +71,11 @@ func (b *s3Bucket) Put(ctx context.Context, key string, data []byte, contentType
 	return err
 }
 
+func (b *s3Bucket) PutStream(ctx context.Context, key string, r io.Reader, size int64, contentType string) error {
+	_, err := b.client.PutObject(ctx, b.bucket, key, r, size, minio.PutObjectOptions{ContentType: contentType})
+	return err
+}
+
 func (b *s3Bucket) Open(ctx context.Context, key string) (io.ReadSeekCloser, error) {
 	obj, err := b.client.GetObject(ctx, b.bucket, key, minio.GetObjectOptions{})
 	if err != nil {

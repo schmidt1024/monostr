@@ -21,6 +21,8 @@ type Object struct {
 // Bucket is what the server needs from the object store.
 type Bucket interface {
 	Put(ctx context.Context, key string, data []byte, contentType string) error
+	// PutStream stores size bytes read from r (a video, too large to hold in memory).
+	PutStream(ctx context.Context, key string, r io.Reader, size int64, contentType string) error
 	// Open returns a seekable reader over the object; ErrNotFound when it is missing.
 	Open(ctx context.Context, key string) (io.ReadSeekCloser, error)
 	// Delete removes the object; a missing object is no error.

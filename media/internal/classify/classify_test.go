@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -94,5 +95,73 @@ func TestHealth(t *testing.T) {
 	sick := scorer(t, func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(500) })
 	if err := sick.Health(context.Background()); !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("sick: %v", err)
+	}
+}
+
+func TestVideoSendsTheStreamAndReadsTheProbe(t *testing.T) {
+	var got []byte
+	var length int64
+	c := scorer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/video" {
+			t.Errorf("request: %s %s", r.Method, r.URL.Path)
+		}
+		length = r.ContentLength
+		got, _ = io.ReadAll(r.Body)
+		w.Write([]byte(`{"score": 0.12, "frames": 3, "width": 720, "height": 1280, "duration": 61.5, "video_codec": "h264", "audio_codec": null, "container": "mp4"}`))
+	})
+	info, err := c.Video(context.Background(), strings.NewReader("movie"), 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := VideoInfo{Score: 0.12, Width: 720, Height: 1280, Duration: 61.5, VideoCodec: "h264", AudioCodec: "", Container: "mp4"}
+	if info != want || string(got) != "movie" || length != 5 {
+		t.Fatalf("info %+v, body %q, length %d", info, got, length)
+	}
+}
+
+func TestVideoErrors(t *testing.T) {
+	cases := map[string]struct {
+		status int
+		body   string
+		want   error
+	}{
+		"unreadable": {422, `{"error":"unreadable video"}`, ErrUnreadable},
+		"fault":      {500, `{"error":"scorer fault"}`, ErrUnavailable},
+		"bad score":  {200, `{"score": 1.5, "width": 1, "height": 1}`, ErrUnavailable},
+		"no score":   {200, `{"width": 1, "height": 1}`, ErrUnavailable},
+		"not json":   {200, `oops`, ErrUnavailable},
+		"no size":    {200, `{"score": 0.1}`, ErrUnavailable},
+	}
+	for name, tc := range cases {
+		c := scorer(t, func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(tc.status)
+			w.Write([]byte(tc.body))
+		})
+		if _, err := c.Video(context.Background(), strings.NewReader("x"), 1); !errors.Is(err, tc.want) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
+
+// closeRecorder is a body that notes whether it was closed.
+type closeRecorder struct {
+	io.Reader
+	closed bool
+}
+
+func (c *closeRecorder) Close() error { c.closed = true; return nil }
+
+func TestVideoLeavesTheCallersFileOpen(t *testing.T) {
+	// the server rewinds its temp file after the check to store it: the HTTP client must not close it
+	c := scorer(t, func(w http.ResponseWriter, r *http.Request) {
+		io.Copy(io.Discard, r.Body)
+		w.Write([]byte(`{"score": 0.1, "width": 720, "height": 1280, "duration": 3, "video_codec": "h264", "container": "mp4"}`))
+	})
+	body := &closeRecorder{Reader: strings.NewReader("movie")}
+	if _, err := c.Video(context.Background(), body, 5); err != nil {
+		t.Fatal(err)
+	}
+	if body.closed {
+		t.Fatal("the scorer client closed the caller's reader")
 	}
 }

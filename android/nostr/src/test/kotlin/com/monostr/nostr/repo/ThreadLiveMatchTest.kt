@@ -23,6 +23,14 @@ class ThreadLiveMatchTest {
     }
 
     @Test
+    fun `a NIP-22 comment on the root, the focused note or below the root touches the thread`() {
+        assertTrue(ThreadLiveMatch.touches(ev(1111, listOf("E", root), listOf("e", root)), tagIds, shown))
+        assertTrue(ThreadLiveMatch.touches(ev(1111, listOf("E", root), listOf("e", focused)), tagIds, shown))
+        assertTrue(ThreadLiveMatch.touches(ev(1111, listOf("E", root), listOf("e", other)), tagIds, shown))
+        assertFalse(ThreadLiveMatch.touches(ev(1111, listOf("E", other), listOf("e", other)), tagIds, shown))
+    }
+
+    @Test
     fun `other notes, other deletions, likes and p tags do not`() {
         assertFalse(ThreadLiveMatch.touches(ev(1, listOf("e", other)), tagIds, shown))
         assertFalse(ThreadLiveMatch.touches(ev(5, listOf("e", other)), tagIds, shown))

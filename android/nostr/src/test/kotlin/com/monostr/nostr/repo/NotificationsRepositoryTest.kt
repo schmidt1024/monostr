@@ -124,6 +124,26 @@ class NotificationsRepositoryTest {
     }
 
     @Test
+    fun `a NIP-22 comment on my note is a reply, and a comment parent is found`() = runTest {
+        // backlog 31: Fediverse replies bridged by Mostr (ditto.pub) are kind 1111
+        val e = NostrEngine.create(dir.resolve("lmdb").toString(), LocalSigner(me.secretKey().toHex()), emptyList())
+        val mine = EventBuilder.textNote("my note").customCreatedAt(Timestamp.fromSecs(100u)).signWithKeys(me); e.save(mine)
+        fun comment(text: String, parent: rust.nostr.sdk.Event, at: Long) = EventBuilder(Kind(1111u), text).tags(
+            listOf("E", mine.id().toHex()).let { scope ->
+                listOf(Tag.parse(scope), Tag.parse(listOf("K", "1")), Tag.parse(listOf("e", parent.id().toHex())), Tag.parse(listOf("k", parent.kind().asU16().toString())),
+                    Tag.parse(listOf("p", me.publicKey().toHex())))
+            },
+        ).customCreatedAt(Timestamp.fromSecs(at.toULong())).signWithKeys(alice)
+        val first = comment("from the fediverse", mine, 200); e.save(first)
+        val second = comment("below a comment", first, 300); e.save(second)
+        val repo = NostrNotificationsRepository(e, NostrTipsRepository(e) { 1000 }) { 1000 }
+        val items = repo.list()
+        assertEquals(listOf(NotificationKind.REPLY, NotificationKind.REPLY), items.map { it.kind })
+        assertEquals(listOf(first.id().toHex(), mine.id().toHex()), items.map { it.aboutId })
+        assertTrue(repo.notes(setOf(first.id().toHex()))[first.id().toHex()] is AboutNote.Found)
+    }
+
+    @Test
     fun `a withdrawn reply leaves the list`() = runTest {
         val e = NostrEngine.create(dir.resolve("lmdb").toString(), LocalSigner(me.secretKey().toHex()), emptyList())
         val mine = EventBuilder.textNote("my note").customCreatedAt(Timestamp.fromSecs(100u)).signWithKeys(me); e.save(mine)

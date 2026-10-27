@@ -259,4 +259,60 @@ class FeedTabsRepositoryTest {
             }
         }
     }
+
+    // backlog 38: the own lists' order, dragged in the profile, decides the order of the pinned own lists
+    private val other = Keys.generate().publicKey().toHex()
+    private fun foreign(d: String) = ListAddress(30000, other, d)
+
+    @Test
+    fun `reorder stores the own list order in the tabs event and own pinned tabs follow it, foreign ones after`() = runTest {
+        val e = engine()
+        val cache = MemoryCache()
+        val r = repo(e, cache)
+        listOf(addr("a"), foreign("f"), addr("b"), addr("c")).forEach { r.pin(it) }
+        assertEquals(SaveResult.Ok, r.reorder(listOf(addr("c"), addr("x"), addr("a"), addr("b"))))
+        assertEquals(listOf(addr("c"), addr("a"), addr("b"), foreign("f")), r.tabs().first())
+        assertEquals(listOf(addr("c"), addr("x"), addr("a"), addr("b")), r.order().first())
+        val payload = Json.parseToJsonElement(signer.nip44Decrypt(pk, sent.last().content())).jsonObject
+        assertEquals(1, payload["v"]!!.jsonPrimitive.int)
+        assertEquals(listOf("c", "x", "a", "b").map { addr(it).toString() }, payload["order"]!!.jsonArray.map { it.jsonPrimitive.content })
+        assertEquals(listOf("c", "x", "a", "b").map { addr(it).toString() }, cache.map[pk]!!.order)
+        e.close()
+    }
+
+    @Test
+    fun `without an order the tabs keep their pin order`() = runTest {
+        val e = engine()
+        val r = repo(e)
+        listOf(foreign("f"), addr("b"), addr("a")).forEach { r.pin(it) }
+        assertEquals(listOf(foreign("f"), addr("b"), addr("a")), r.tabs().first())
+        assertEquals(emptyList<ListAddress>(), r.order().first())
+        e.close()
+    }
+
+    @Test
+    fun `an own pinned list missing from the order comes first among the own ones`() = runTest {
+        val e = engine()
+        val r = repo(e)
+        listOf(addr("a"), addr("b")).forEach { r.pin(it) }
+        r.reorder(listOf(addr("b"), addr("a")))
+        r.pin(addr("new"))
+        assertEquals(listOf(addr("new"), addr("b"), addr("a")), r.tabs().first())
+        e.close()
+    }
+
+    @Test
+    fun `a newer relay event brings its order, a failed reorder rolls back`() = runTest {
+        val e = engine()
+        val cache = MemoryCache()
+        relayEvent(e, """{"v":1,"tabs":["${addr("a")}","${addr("b")}"],"order":["${addr("b")}","${addr("a")}"]}""", 1800)
+        val r = repo(e, cache)
+        r.reconcile()
+        assertEquals(listOf(addr("b"), addr("a")), r.tabs().first())
+        val failing = NostrFeedTabsRepository(e, signer, cache, now = { 2000 }, send = failSend)
+        failing.reconcile()
+        assertEquals(SaveResult.Failed, failing.reorder(listOf(addr("a"), addr("b"))))
+        assertEquals(listOf(addr("b"), addr("a")), failing.order().first())
+        e.close()
+    }
 }

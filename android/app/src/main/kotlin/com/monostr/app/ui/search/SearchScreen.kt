@@ -1,5 +1,9 @@
 package com.monostr.app.ui.search
 
+import com.monostr.app.ui.discover.DiscoverController
+import com.monostr.app.ui.discover.discoverItems
+import com.monostr.nostr.PerfTrace
+import com.monostr.nostr.model.ListAddress
 import com.monostr.app.data.dm.unreadTotalExcept
 import com.monostr.app.ui.common.MentionResolver
 import kotlinx.coroutines.Dispatchers
@@ -97,8 +101,11 @@ class SearchViewModel @Inject constructor(session: NostrSession, factory: TipShe
     val menu = ready.noteMenu(delete = controller::delete, mute = controller::mute)
     val tipSheet = factory.tipSheet(viewModelScope)
     val dmUnread: StateFlow<Int> = ready.dmStore.unreadTotalExcept(ready.muted).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+    /** Spec 2026-10-27 §6: «Entdecken» while the field is empty, for every account. */
+    val discover = DiscoverController(ready.discover, ready.follows, ready.profiles, ready.mute, ready.pubkey, viewModelScope, writeScope = ready.engine.backgroundScope)
     init {
         controller.start()
+        discover.start()
         handle.get<String>("q")?.let { controller.onQueryChange(it); controller.submit() }
     }
     override fun onCleared() { controller.close() }
@@ -118,12 +125,16 @@ fun SearchScreen(
     onOpenMedia: (String, Int) -> Unit = { _, _ -> },
     onOpenVideo: (String) -> Unit = {},
     onQuote: (String) -> Unit = {},
+    onOpenList: (ListAddress) -> Unit = {},
     vm: SearchViewModel = hiltViewModel(),
 ) {
     val state by vm.controller.state.collectAsStateWithLifecycle()
     val names by vm.controller.names.collectAsStateWithLifecycle()
     val dmUnread by vm.dmUnread.collectAsStateWithLifecycle()
+    val discoverUi by vm.discover.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
+    discoverUi.message?.let { m -> val text = m.asString(); LaunchedEffect(m) { snackbar.showSnackbar(text); vm.discover.clearMessage() } }
+    if (state.mode == SearchMode.IDLE && state.query.isBlank() && discoverUi.sections.any { it.rows.isNotEmpty() }) LaunchedEffect(Unit) { PerfTrace.mark("discover shown") }
     var tippersFor by remember { mutableStateOf<Note?>(null) }
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { vm.controller.nav.collect { when (it) { is SearchNav.Profile -> onOpenProfile(it.pubkey); is SearchNav.Thread -> onOpenThread(it.noteId) } } }
@@ -170,7 +181,8 @@ fun SearchScreen(
             state.error?.let { err -> item { Text(err.asString(), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) } }
             when (state.mode) {
                 // spec 11.4 §2: the last searches, only while the field is empty; typing hides them
-                SearchMode.IDLE -> if (state.recent.isNotEmpty() && state.query.isBlank()) {
+                SearchMode.IDLE -> if (state.query.isBlank()) {
+                  if (state.recent.isNotEmpty()) {
                     item(key = "recent-title") {
                         Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(stringResource(R.string.search_recent_title), style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
@@ -191,6 +203,13 @@ fun SearchScreen(
                             }
                         }
                     }
+                  }
+                  // spec 2026-10-27 §6: the curated lists below the recent searches
+                  item(key = "discover-title") { SectionHeader(stringResource(R.string.discover_title)) }
+                  discoverItems(
+                      discoverUi, showHint = false, onDismiss = {}, onFollow = vm.discover::follow, onFollowAll = vm.discover::followAll,
+                      onShowAll = onOpenList, onOpenProfile = onOpenProfile, onRetry = vm.discover::retry,
+                  )
                 }
                 SearchMode.TEXT -> {
                     if (state.people.isNotEmpty()) {

@@ -40,8 +40,8 @@ interface FollowCountsRepository {
  * largest answer counts, because each relay only knows the contact lists it stores (always a lower
  * bound), and it is shown as soon as the first relay answers. [indexers] (if any) have seen
  * every list and give the number other clients show; it takes the maximum over the counts. An answer above [MAX_FOLLOWERS] (or negative: a u64 that wrapped) is a lying relay and is
- * dropped. Following: the distinct `p` tags of the profile's newest kind 3 from the database, fetched
- * from [indexRelays] when there is none or the stored one is older than a day. A result is kept for
+ * dropped. Following: the distinct `p` tags of the profile's newest kind 3 from the database, shown at once,
+ * then fetched from the normal relays and [indexRelays] when there is none or the stored one is older than a day. A result is kept for
  * [maxAgeSeconds] per pubkey, from its first emission on; the COUNT relays stay attached for the session.
  */
 class NostrFollowCountsRepository(
@@ -82,7 +82,7 @@ class NostrFollowCountsRepository(
             }
             // the own list is exact: once it is counted, an indexer's following number never replaces it
             var listed = false
-            launch { following(author)?.let { n -> publish { listed = true; it.copy(following = n) } } }
+            launch { following(author) { n -> publish { listed = true; it.copy(following = n) } } }
             for (relay in relays) launch {
                 val n = limiter.withPermit(relay) { engine.countFrom(relay, Filter().kind(Kind(3u)).pubkey(author), timeout, attach = false) }
                     ?.takeIf { it in 0..MAX_FOLLOWERS } ?: return@launch
@@ -120,26 +120,28 @@ class NostrFollowCountsRepository(
         synchronized(known) { known.clear() }
     }
 
-    private suspend fun following(author: PublicKey): Int? {
+    /**
+     * Hands the stored list's count to [found] at once (backlog 41: it waited for the index relays before), then,
+     * when there is none or it is old, the count of what the relays bring (normal and index), if that differs.
+     */
+    private suspend fun following(author: PublicKey, found: suspend (Int) -> Unit) {
         val filter = Filter().kind(Kind(3u)).author(author).limit(1u)
         var list = engine.query(filter).firstOrNull()
+        val storedCount = list?.let(::followed)
+        storedCount?.let { found(it) }
         val stale = list == null || now() - list.createdAt().asSecs().toLong() > LIST_MAX_AGE_SECONDS
-        if (stale && indexRelays.isNotEmpty()) {
-            // the index relays are asked whether or not they are the user's own; attachTemporary takes
-            // a reference only on the ones it added, and NonCancellable keeps that reference from
-            // being lost to a cancellation that lands on the attach's own return
-            val held = withContext(NonCancellable) { engine.attachTemporary(indexRelays) }
+        if (stale) {
+            // the normal relays too, not the index relays alone: purplepag.es lacks some lists every normal relay has
+            // (backlog 41); the index relays are asked beside them as temporary relays
             try {
-                engine.fetchFrom(indexRelays, filter, timeout, attach = false)
+                fetchWide(engine, filter, timeout) { indexRelays }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-            } finally {
-                engine.detachTemporary(held)
             }
             list = engine.query(filter).firstOrNull()
         }
-        return list?.let(::followed)
+        list?.let(::followed)?.takeIf { it != storedCount }?.let { found(it) }
     }
 
     /** Distinct well-formed `p` tags, read in Kotlin (0.3–2 s through rust for 300–1500 tags). */

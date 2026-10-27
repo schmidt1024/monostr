@@ -9,6 +9,8 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -93,6 +95,21 @@ class LinkPreviewTest {
         rule.onNodeWithText(server.hostName).assertIsDisplayed()
         rule.onNodeWithText("Monero news").performClick()
         assertEquals(listOf(server.url("/story").toString()), opened)
+    }
+
+    @Test
+    fun the_link_at_the_end_leaves_the_text_while_its_card_shows() {
+        set(note(), on = true)
+        waitForCard()
+        rule.onNodeWithText("read", substring = false).assertIsDisplayed()
+        rule.onAllNodesWithText(server.url("/story").toString().removePrefix("http://"), substring = true).assertCountEquals(0)
+    }
+
+    @Test
+    fun without_a_card_the_link_stays_in_the_text() {
+        set(note(), on = false)
+        rule.onNodeWithText("read", substring = true).assertIsDisplayed()
+        rule.onAllNodesWithText(server.hostName, substring = true).assertCountEquals(1)
     }
 
     @Test

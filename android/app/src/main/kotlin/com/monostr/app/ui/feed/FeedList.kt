@@ -88,6 +88,10 @@ internal fun FeedList(
     snackbar: SnackbarHostState,
     hide: HideOnScrollState,
     header: LazyListScope.() -> Unit = {},
+    /** Spec 2026-10-27 §5: with no notes the [header] stands alone instead of [emptyText] (the discover block). */
+    headerWhenEmpty: Boolean = false,
+    /** The key of the header's first row when it has one: a header that appears above the notes keeps the list at its top. */
+    headerTopKey: Any? = null,
 ) {
     val state by feed.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
@@ -98,6 +102,8 @@ internal fun FeedList(
     PullToRefreshBox(isRefreshing = state.refreshing && !state.loading, onRefresh = feed::refresh, modifier = Modifier.fillMaxSize().testTag("feed-refresh")) {
         if (state.loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+        } else if (state.entries.isEmpty() && headerWhenEmpty) {
+            LazyColumn(state = listState, modifier = Modifier.fillMaxSize().testTag("feed-list")) { header() }
         } else if (state.entries.isEmpty()) {
             // scrollable so pull-to-refresh works on the empty state too
             Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(32.dp), contentAlignment = Alignment.Center) { Text(emptyText, textAlign = TextAlign.Center) }
@@ -105,7 +111,7 @@ internal fun FeedList(
             // backlog 28: muted ancestors the user tapped open, for this screen only (the account stays muted)
             var shownMuted by rememberSaveable { mutableStateOf(emptySet<String>()) }
             // like the notifications (bug 25): new notes arriving above (live, a refresh, "to the top") show when the list stands at its top
-            KeepAtTop(listState, state.entries.first().note.id)
+            KeepAtTop(listState, headerTopKey ?: state.entries.first().note.id)
             LazyColumn(state = listState, modifier = Modifier.fillMaxSize().testTag("feed-list")) {
                 header()
                 items(state.entries, key = { it.note.id }) { n ->

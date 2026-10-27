@@ -34,7 +34,9 @@ func TestLoadConfigDefaultsAreTheSpecLimits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := limits.Limits{MaxBytes: 10 << 20, PubkeyPerDay: 50, PubkeyQuota: 500 << 20, IPPerDay: 100, GlobalBytesPerDay: 5 << 30}
+	// spec 2026-10-27 video §6: 2 GiB per pubkey, 20 GiB a day, videos up to 50 MiB, 5 a day, a word at 200 GB
+	want := limits.Limits{MaxBytes: 10 << 20, PubkeyPerDay: 50, PubkeyQuota: 2 << 30, IPPerDay: 100, GlobalBytesPerDay: 20 << 30,
+		MaxVideoBytes: 50 << 20, PubkeyVideosPerDay: 5, StorageAlertBytes: 200_000_000_000}
 	if c.limits != want {
 		t.Fatalf("limits: %+v", c.limits)
 	}
@@ -62,12 +64,14 @@ func TestLoadConfigOverridesAndS3(t *testing.T) {
 	c, err := loadConfig(getenv(with(map[string]string{
 		"MEDIA_MAX_BYTES": "2048", "MEDIA_PUBKEY_UPLOADS_PER_DAY": "3", "MEDIA_PUBKEY_QUOTA_BYTES": "4096",
 		"MEDIA_IP_UPLOADS_PER_DAY": "5", "MEDIA_GLOBAL_BYTES_PER_DAY": "8192", "MEDIA_NSFW_THRESHOLD": "0.33",
+		"MEDIA_MAX_VIDEO_BYTES": "16384", "MEDIA_PUBKEY_VIDEOS_PER_DAY": "2", "MEDIA_STORAGE_ALERT_BYTES": "32768",
 		"S3_ENDPOINT": "https://s3.example", "S3_REGION": "hel1", "S3_BUCKET": "b", "S3_ACCESS_KEY": "a", "S3_SECRET_KEY": "s",
 	})))
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := limits.Limits{MaxBytes: 2048, PubkeyPerDay: 3, PubkeyQuota: 4096, IPPerDay: 5, GlobalBytesPerDay: 8192}
+	want := limits.Limits{MaxBytes: 2048, PubkeyPerDay: 3, PubkeyQuota: 4096, IPPerDay: 5, GlobalBytesPerDay: 8192,
+		MaxVideoBytes: 16384, PubkeyVideosPerDay: 2, StorageAlertBytes: 32768}
 	if c.limits != want || c.threshold != 0.33 || c.s3.Bucket != "b" || c.s3.Endpoint != "https://s3.example" {
 		t.Fatalf("config: %+v", c)
 	}

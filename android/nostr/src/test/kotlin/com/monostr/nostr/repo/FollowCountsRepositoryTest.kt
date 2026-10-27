@@ -116,6 +116,51 @@ class FollowCountsRepositoryTest {
     }
 
     @Test
+    fun `a stored list shows its following at once, also when it is old and the index relay is slow`() = runTest {
+        // backlog 41: the followers came at once, the following only after the index relays' timeout
+        val e = engine()
+        e.save(contacts("d".repeat(64), "e".repeat(64), at = 10)) // last changed long ago, as most lists are
+        SilentWsRelay().use { silent ->
+            val repo = NostrFollowCountsRepository(e, countRelays = emptyList(), indexRelays = listOf(silent.url), timeout = Duration.ofSeconds(5),
+                now = { 10L * 86_400 })
+            val first = withContext(Dispatchers.Default) { withTimeout(1_500) { repo.counts(pk).first() } }
+            assertEquals(2, first.following)
+        }
+        e.close()
+    }
+
+    @Test
+    fun `a newer list from the index relay replaces the stored count`() = runTest {
+        val e = engine()
+        e.save(contacts("d".repeat(64), at = 10))
+        val newer = contacts("d".repeat(64), "e".repeat(64), "f".repeat(64), at = 20)
+        SilentWsRelay(serve = listOf(newer.asJson())).use { index ->
+            val repo = NostrFollowCountsRepository(e, countRelays = emptyList(), indexRelays = listOf(index.url), timeout = Duration.ofSeconds(3),
+                now = { 10L * 86_400 })
+            val all = repo.counts(pk).toList()
+            assertEquals(listOf(1, 3), all.map { it.following })
+        }
+        e.close()
+    }
+
+    @Test
+    fun `following comes from the normal relays when the index relay does not have the list`() = runTest {
+        // backlog 41: purplepag.es lacks some lists that every normal relay has; then the line never showed a following
+        val list = contacts("d".repeat(64), "e".repeat(64))
+        SilentWsRelay(serveFor = { req -> if ("\"kinds\":[3]" in req) listOf(list.asJson()) else emptyList() }).use { normal ->
+            SilentWsRelay(answerEose = true).use { index ->
+                val e = com.monostr.nostr.connectedEngine(dir, normal)
+                try {
+                    val repo = NostrFollowCountsRepository(e, countRelays = emptyList(), indexRelays = listOf(index.url), timeout = Duration.ofSeconds(3), now = { 1000 })
+                    assertEquals(2, repo.counts(pk).last().following)
+                } finally {
+                    e.close()
+                }
+            }
+        }
+    }
+
+    @Test
     fun `following comes from the index relay when nothing is stored`() = runTest {
         val e = engine()
         val list = contacts("d".repeat(64))

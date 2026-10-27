@@ -9,8 +9,10 @@
 }
 
 {$MEDIA_DOMAIN:media.monostr.com} {
+	# a video may be 50 MiB = 52 428 800 bytes (spec 2026-10-27 video §6); Caddy reads "MB" as 10^6, so 55MB
+	# leaves room for the request around the body; the server caps videos and pictures exactly itself
 	request_body {
-		max_size 11MB
+		max_size 55MB
 	}
 	reverse_proxy media:8080
 }

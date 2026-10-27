@@ -26,7 +26,8 @@ export JAVA_HOME=/pfad/zum/jdk-17-oder-neuer
 
 ## Medien, Zähler und Outbox-Profil
 
-- Medien in Notes: Bilder aus `imeta`-Tags werden inline gezeigt (maximal 4), ein Tipp öffnet den Vollbild-Viewer; Videos zeigen einen Platzhalter und spielen auf Tippen im media3-Player. Als sensibel markierte Notes (NIP-36 Content Warning oder `#nsfw`) zeigen die Bilder verschwommen, bis man tippt; abschaltbar unter Settings → „Medien".
+- Video-Upload (Spec `docs/superpowers/specs/2026-10-27-video-upload-design.md`): genau ein Video pro Note, nicht mit Bildern gemischt, Quelle höchstens 2 Minuten. Das Gerät kodiert mit media3 Transformer auf H.264/AAC, kürzere Seite höchstens 720 px, ohne Standort und andere Metadaten; ein Vorschaubild (nach 1 s) geht als `image` ins `imeta`, dazu `duration`.
+- Medien in Notes: Bilder aus `imeta`-Tags werden inline gezeigt (bis zu 4, ab 5 mit «+N»; drei als Quadrate), ein Tipp öffnet den Vollbild-Viewer; Videos zeigen einen Platzhalter und spielen auf Tippen im media3-Player. Als sensibel markierte Notes (NIP-36 Content Warning oder `#nsfw`) zeigen die Bilder verschwommen, bis man tippt; abschaltbar unter Settings → „Medien".
 - Zähler: Likes, Reposts und Antworten zeigen die Anzahl unter dem Icon in der Aktionszeile (NIP-45 COUNT, Maximum über alle verbundenen Relays), sobald sie größer null ist.
 - Outbox im Profil: Beim Öffnen eines fremden Profils werden vorübergehend bis zu drei eigene Write-Relays dieser Person hinzugezogen, Zeile „Notes auch von …" zeigt die Domain; abschaltbar unter Settings → „Relays des Autors temporär verbinden".
 - „Amber-Berechtigungen erneuern" in Settings stellt fehlende NIP-55-Berechtigungen (z. B. nach App-Update von Amber) über einen erneuten Amber-Dialog wieder her.

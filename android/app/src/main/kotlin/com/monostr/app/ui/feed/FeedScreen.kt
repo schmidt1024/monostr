@@ -1,5 +1,8 @@
 package com.monostr.app.ui.feed
 
+import com.monostr.app.ui.common.asString
+import com.monostr.app.ui.discover.discoverItems
+import com.monostr.nostr.PerfTrace
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -106,8 +109,12 @@ fun FeedScreen(
     val dmUnread by vm.dmUnread.collectAsStateWithLifecycle()
     val self by vm.self.collectAsStateWithLifecycle()
     val supportHint by vm.supportHint.collectAsStateWithLifecycle()
+    val discoverShown by vm.discoverShown.collectAsStateWithLifecycle()
+    val discoverUi by vm.discover.state.collectAsStateWithLifecycle()
+    if (discoverShown && discoverUi.sections.any { it.rows.isNotEmpty() }) LaunchedEffect(Unit) { PerfTrace.mark("discover block shown") }
     val amountsPrompt by vm.amountsPrompt.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
+    discoverUi.message?.let { m -> val text = m.asString(); LaunchedEffect(m) { snackbar.showSnackbar(text); vm.discover.clearMessage() } }
     val scope = rememberCoroutineScope()
     val hide = rememberHideOnScroll()
     val current = tabs.current
@@ -222,12 +229,20 @@ fun FeedScreen(
                         snackbar = snackbar,
                         hide = hide,
                         header = {
+                            if (pinned == null && discoverShown) {
+                                discoverItems(
+                                    discoverUi, showHint = true, onDismiss = vm::dismissDiscover, onFollow = vm.discover::follow,
+                                    onFollowAll = vm.discover::followAll, onShowAll = onOpenList, onOpenProfile = onOpenProfile, onRetry = vm.discover::retry,
+                                )
+                            }
                             if (pinned == null && supportHint) {
                                 item(key = "support-hint") {
                                     SupportHintCard(onSupport = { vm.dismissSupportHint(); onSupport() }, onDismiss = vm::dismissSupportHint)
                                 }
                             }
                         },
+                        headerWhenEmpty = pinned == null && discoverShown,
+                        headerTopKey = if (pinned == null && discoverShown) "discover-hint" else null,
                     )
                 }
             }

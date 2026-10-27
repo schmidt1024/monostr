@@ -81,4 +81,10 @@ func TestNormalizeAndExt(t *testing.T) {
 	if imagecheck.Ext("image/webp") != "webp" || imagecheck.Ext("text/plain") != "" {
 		t.Error("Ext")
 	}
+	if imagecheck.Ext("video/mp4") != "mp4" {
+		t.Error("Ext of video/mp4")
+	}
+	if _, ok := imagecheck.Normalize("video/mp4"); ok {
+		t.Error("Normalize is for pictures; videos are recognised by the api")
+	}
 }

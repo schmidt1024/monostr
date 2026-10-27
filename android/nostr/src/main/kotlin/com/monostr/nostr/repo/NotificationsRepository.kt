@@ -161,13 +161,13 @@ class NostrNotificationsRepository(
     }
 
     /**
-     * Stored notes (kind 1, or a kind 6 — a like of my repost names the repost) of [ids] into [into]: found, or
+     * Stored notes (kind 1, a NIP-22 comment, or a kind 6 — a like of my repost names the repost) of [ids] into [into]: found, or
      * withdrawn when the author's kind 5 names them. A failing read leaves the ids out (they end up Missing): the
      * list must not die of one bad lookup.
      */
     private suspend fun readStored(ids: List<String>, into: MutableMap<String, AboutNote>) {
         try {
-            val stored = engine.query(idsFilter(ids).kinds(listOf(Kind(1u), Kind(6u)))).map { it to NoteMapper.decoded(it) }
+            val stored = engine.query(idsFilter(ids).kinds(listOf(Kind(1u), Kind(6u), Kind(Kinds.COMMENT.toUShort())))).map { it to NoteMapper.decoded(it) }
             if (stored.isEmpty()) return
             val kept = Withdrawn.filterDecoded(engine, stored).mapTo(HashSet()) { it.second.id }
             val byId = stored.associate { it.second.id to it.first }
@@ -230,7 +230,8 @@ class NostrNotificationsRepository(
         val at = event.createdAt
         val tags = event.tags
         return when (event.kind) {
-            1 -> {
+            // backlog 31: a NIP-22 comment reads like a note (Mostr bridges Fediverse replies as kind 1111)
+            1, Kinds.COMMENT -> {
                 val refs = Nip10.parse(tags)
                 val quoted = tags.firstOrNull { it.size >= 2 && it[0] == "q" && HEX64.matches(it[1]) }?.get(1)
                 when {
@@ -261,7 +262,7 @@ class NostrNotificationsRepository(
     }
 
     private companion object {
-        val KINDS = listOf(1, 6, 7, Kinds.TIP_RECEIPT)
+        val KINDS = listOf(1, 6, 7, Kinds.TIP_RECEIPT, Kinds.COMMENT)
         const val MEMO_CAPACITY = 200
         const val LIVE_LIMIT = 100
         /** Deletion requests are rare: a short wait keeps the refresh from doubling on a slow relay. */
@@ -275,7 +276,7 @@ class NostrNotificationsRepository(
  * decoded once: the kind and a `p` tag naming the user, no FFI call. Never throws.
  */
 internal object LiveMatch {
-    private val KINDS = setOf(1, 6, 7, Kinds.TIP_RECEIPT)
+    private val KINDS = setOf(1, 6, 7, Kinds.TIP_RECEIPT, Kinds.COMMENT)
 
     fun matches(event: JsonEvent, me: String): Boolean =
         event.kind in KINDS && event.tags.any { it.size >= 2 && it[0] == "p" && it[1] == me }

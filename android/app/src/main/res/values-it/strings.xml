@@ -558,16 +558,6 @@
     <string name="conversation_pending">Cerco questa nota…</string>
     <string name="create_who_monostr">Questa app</string>
     <string name="create_who_schmidt">Crea monostr</string>
-    <string name="create_who_fiatjaf">Ha creato Nostr</string>
-    <string name="create_who_jb55">Ha fatto Damus</string>
-    <string name="create_who_vitor">Crea Amethyst</string>
-    <string name="create_who_greenart">Crea Amber</string>
-    <string name="create_who_hzrd">Crea Blossom e noStrudel</string>
-    <string name="create_who_derek">Evangelista di Nostr</string>
-    <string name="create_who_odell">Bitcoin e libertà</string>
-    <string name="create_who_jack">Cofondatore di Twitter</string>
-    <string name="create_who_zapstore">App store su Nostr</string>
-    <string name="create_who_nos">App Nostr</string>
     <string name="create_who_mrl">Ricerca su Monero</string>
     <string name="create_who_orangefren">Community Monero</string>
     <string name="login_create">Nuovo su Nostr? Crea un account</string>
@@ -637,4 +627,30 @@
     <string name="list_public_confirm">Rendi pubblica</string>
     <string name="profile_menu_lists">Aggiungi a una lista</string>
     <string name="add_to_list_new">Nuova lista…</string>
+    <string name="discover_hint">Segui qualche persona e il tuo feed si riempirà.</string>
+    <string name="discover_title">Scopri</string>
+    <string name="discover_follow">Segui</string>
+    <string name="discover_following">Segui già</string>
+    <string name="discover_follow_all">Segui tutti</string>
+    <string name="discover_all_followed">Segui tutti già</string>
+    <string name="discover_show_all">Mostra tutti</string>
+    <string name="discover_failed">Impossibile caricare</string>
+    <string name="discover_retry">Riprova</string>
+    <string name="discover_dismiss">Nascondi suggerimenti</string>
+    <string name="create_who_rotten">Notizie Monero (Revuo)</string>
+    <string name="create_who_shortwave">Utente Monero, prova app</string>
+    <string name="create_who_cybersatoshi">Prezzo di Monero</string>
+    <string name="create_who_bisq">Exchange P2P</string>
+    <string name="create_who_aillia">Volontarista, Monero</string>
+    <string name="create_who_fuzzstone">Agorista, software libero</string>
+    <string name="create_who_sambent">Privacy e OPSEC</string>
+    <string name="list_move_up">Sposta su</string>
+    <string name="list_move_down">Sposta giù</string>
+    <!-- spec 2026-10-27 video upload -->
+    <string name="compose_add_video">Aggiungi video</string>
+    <string name="compose_video_preparing">Preparazione…</string>
+    <string name="compose_video_too_long">Video fino a 2 minuti. Taglialo prima nella tua app galleria.</string>
+    <string name="upload_video_too_large">Questo video è troppo grande. Prova una clip più corta.</string>
+    <string name="upload_video_rate">Limite giornaliero di video raggiunto, riprova domani</string>
+    <string name="compose_video_tile">Video</string>
 </resources>

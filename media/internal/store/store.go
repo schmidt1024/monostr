@@ -69,6 +69,7 @@ CREATE TABLE IF NOT EXISTS review (
 CREATE INDEX IF NOT EXISTS review_open ON review(closed, at);
 CREATE UNIQUE INDEX IF NOT EXISTS review_open_sha256 ON review(sha256) WHERE closed = 0;
 CREATE TABLE IF NOT EXISTS seen_wraps (id TEXT PRIMARY KEY, at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS alerts (name TEXT PRIMARY KEY, at INTEGER NOT NULL);
 `
 
 // Upload outcomes in the log.

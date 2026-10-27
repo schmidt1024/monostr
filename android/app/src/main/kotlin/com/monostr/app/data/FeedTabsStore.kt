@@ -33,7 +33,12 @@ class PrefsFeedTabsStore(private val store: DataStore<Preferences>) : FeedTabsCa
         val raw = data.first()[key(pubkey)] ?: return null
         return try {
             val o = Json.parseToJsonElement(raw).jsonObject
-            CachedTabs(o.getValue("tabs").jsonArray.map { it.jsonPrimitive.content }, o.getValue("createdAt").jsonPrimitive.long)
+            CachedTabs(
+                o.getValue("tabs").jsonArray.map { it.jsonPrimitive.content },
+                o.getValue("createdAt").jsonPrimitive.long,
+                // backlog 38: absent in copies written before the order existed
+                o["order"]?.jsonArray?.map { it.jsonPrimitive.content }.orEmpty(),
+            )
         } catch (e: Exception) {
             null
         }
@@ -43,6 +48,7 @@ class PrefsFeedTabsStore(private val store: DataStore<Preferences>) : FeedTabsCa
         val raw = buildJsonObject {
             put("tabs", JsonArray(tabs.tabs.map { JsonPrimitive(it) }))
             put("createdAt", tabs.createdAt)
+            if (tabs.order.isNotEmpty()) put("order", JsonArray(tabs.order.map { JsonPrimitive(it) }))
         }.toString()
         store.edit { it[key(pubkey)] = raw }
     }

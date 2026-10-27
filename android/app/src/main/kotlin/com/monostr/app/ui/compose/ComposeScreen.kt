@@ -32,6 +32,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.VideoLibrary
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -68,6 +69,8 @@ import com.monostr.app.data.DraftTargets
 import com.monostr.app.media.ImageTarget
 import com.monostr.app.media.MediaUploader
 import com.monostr.app.media.UploadedMedia
+import com.monostr.app.media.UploadException
+import com.monostr.app.media.VideoRules
 import com.monostr.app.session.NostrSession
 import com.monostr.app.ui.common.Avatar
 import com.monostr.app.ui.common.QuoteCard
@@ -104,6 +107,10 @@ data class Attachment(
     val progress: Float = 0f,
     val uploaded: UploadedMedia? = null,
     val error: UiText? = null,
+    /** Spec 2026-10-27 video §3: the one video of the note. */
+    val video: Boolean = false,
+    /** The video's encode on the device, 0..1, while it runs; null otherwise. */
+    val preparing: Float? = null,
 ) {
     val uploading: Boolean get() = uploaded == null && error == null
 }
@@ -132,7 +139,11 @@ data class ComposeUiState(
     /** Every picture is on the server: nothing uploading, nothing failed. */
     val attachmentsReady: Boolean get() = attachments.all { it.uploaded != null }
     /** Room for another picture, and the note is not frozen. */
-    val canAttach: Boolean get() = attachments.size < NoteMedia.MAX && !sending && !pendingResend
+    val canAttach: Boolean get() = attachments.size < NoteMedia.MAX_ATTACH && !sending && !pendingResend
+    /** Spec 2026-10-27 video §3: pictures, unless the note has its video. */
+    val canAttachPictures: Boolean get() = canAttach && attachments.none { it.video }
+    /** Spec 2026-10-27 video §3: one video, on a note without pictures. */
+    val canAttachVideo: Boolean get() = attachments.isEmpty() && !sending && !pendingResend
 }
 
 class ComposeController(
@@ -232,7 +243,7 @@ class ComposeController(
                 if (s.attachments.isNotEmpty()) s // the user was faster than the disk: keep what is on screen
                 else {
                     // only the server copy is kept: the tile shows the uploaded picture, a local copy is long gone
-                    val restored = draft.attachments.map { m -> Attachment(nextAttachmentId++, m.url, progress = 1f, uploaded = m) }
+                    val restored = draft.attachments.map { m -> Attachment(nextAttachmentId++, m.url, progress = 1f, uploaded = m, video = m.isVideo) }
                     s.copy(attachments = restored, sensitive = draft.sensitive && restored.isNotEmpty())
                 }
             }
@@ -343,10 +354,10 @@ class ComposeController(
     /** Spec 5.2: the picked pictures join the note, as far as there is room, and start uploading at once. */
     fun attach(sources: List<String>) {
         val up = uploader
-        val taken = if (up == null || _state.value.pendingResend || _state.value.sending) {
+        val taken = if (up == null || !_state.value.canAttachPictures) {
             emptyList()
         } else {
-            val free = (NoteMedia.MAX - _state.value.attachments.size).coerceAtLeast(0)
+            val free = (NoteMedia.MAX_ATTACH - _state.value.attachments.size).coerceAtLeast(0)
             // a picture already on the note, or twice in the pick, is taken once
             val known = _state.value.attachments.mapTo(HashSet()) { it.source }
             sources.filter { known.add(it) }.take(free)
@@ -357,6 +368,58 @@ class ComposeController(
             startUpload(up!!, id, source)
         }
         sources.filterNot { it in taken || _state.value.attachments.any { a -> a.source == it } }.forEach(release)
+    }
+
+    /**
+     * Spec 2026-10-27 video §3: the picked video, when the note has room for it and it lasts at most two minutes (else
+     * the message, and no tile); it is encoded and uploaded at once.
+     */
+    fun attachVideo(source: String) {
+        val up = uploader
+        if (up == null || !_state.value.canAttachVideo) {
+            release(source)
+            return
+        }
+        scope.launch {
+            val duration = try {
+                up.videoDurationMs(source)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(error = e.uploadMessage()) }
+                release(source)
+                return@launch
+            }
+            if (VideoRules.tooLong(duration)) {
+                _state.update { it.copy(error = uiText(R.string.compose_video_too_long)) }
+                release(source)
+                return@launch
+            }
+            if (!_state.value.canAttachVideo) return@launch release(source) // something got on the note meanwhile
+            val id = nextAttachmentId++
+            _state.update { it.copy(attachments = it.attachments + Attachment(id, source, video = true, preparing = 0f), error = null) }
+            startVideoUpload(up, id, source)
+        }
+    }
+
+    /** The tile's progress is half encode, half upload. */
+    private fun startVideoUpload(up: MediaUploader, id: Long, source: String) {
+        uploads[id] = scope.launch {
+            try {
+                val media = up.uploadVideo(
+                    source,
+                    onPreparing = { p -> patch(id) { it.copy(preparing = p, progress = p / 2) } },
+                    onProgress = { p -> patch(id) { it.copy(preparing = null, progress = 0.5f + p / 2) } },
+                )
+                patch(id) { it.copy(uploaded = media, preparing = null, progress = 1f) }
+                scheduleSave()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                val message = if (e is UploadException.TooLarge) uiText(R.string.upload_video_too_large) else e.uploadMessage()
+                patch(id) { it.copy(error = message, preparing = null) }
+            }
+        }
     }
 
     private fun startUpload(up: MediaUploader, id: Long, source: String) {
@@ -383,7 +446,7 @@ class ComposeController(
         val a = _state.value.attachments.firstOrNull { it.id == id } ?: return
         if (a.error == null) return
         patch(id) { it.copy(error = null, progress = 0f) }
-        startUpload(up, id, a.source)
+        if (a.video) startVideoUpload(up, id, a.source) else startUpload(up, id, a.source)
     }
 
     /** Takes a picture off the note; one that is already on the server is deleted there (spec 5.2). */
@@ -540,7 +603,7 @@ fun ComposeScreen(onDone: () -> Unit, vm: ComposeViewModel = hiltViewModel()) {
         val dir = ReceivedImages.dir(context)
         ReceiveContentListener { content ->
             val now = vm.controller.state.value
-            var room = if (now.canAttach) NoteMedia.MAX - now.attachments.size else 0
+            var room = if (now.canAttachPictures) NoteMedia.MAX_ATTACH - now.attachments.size else 0
             val picked = ArrayList<String>()
             val rest = content.consume { item ->
                 val uri = item.uri ?: return@consume false
@@ -574,11 +637,14 @@ fun ComposeScreen(onDone: () -> Unit, vm: ComposeViewModel = hiltViewModel()) {
     val onPicked: (List<Uri>) -> Unit = { uris -> if (uris.isNotEmpty()) vm.controller.attach(uris.map { it.toString() }) }
     // spec 5.2: the picker offers exactly the free places, so one launcher per possible count, all registered
     // at every composition (key: each its own saved registry key); the multi picker cannot be asked for one
-    val pickMany = (2..NoteMedia.MAX).associateWith { n ->
+    val pickMany = (2..NoteMedia.MAX_ATTACH).associateWith { n ->
         key(n) { rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(n), onPicked) }
     }
     val pickOne = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> onPicked(listOfNotNull(uri)) }
     val imagesOnly = remember { PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly) }
+    // spec 2026-10-27 video §3: exactly one video
+    val pickVideo = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let { vm.controller.attachVideo(it.toString()) } }
+    val videoOnly = remember { PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly) }
     Scaffold(topBar = {
         TopAppBar(
             title = { Text(stringResource(if (state.replyTo != null) R.string.compose_title_reply else R.string.compose_title_new)) },
@@ -651,14 +717,21 @@ fun ComposeScreen(onDone: () -> Unit, vm: ComposeViewModel = hiltViewModel()) {
             Row {
                 IconButton(
                     onClick = {
-                        val free = NoteMedia.MAX - state.attachments.size
+                        val free = NoteMedia.MAX_ATTACH - state.attachments.size
                         val many = pickMany[free]
                         if (many != null) many.launch(imagesOnly) else pickOne.launch(imagesOnly)
                     },
-                    enabled = state.canAttach,
+                    enabled = state.canAttachPictures,
                     modifier = Modifier.testTag("compose-attach"),
                 ) {
                     Icon(Icons.Outlined.Image, contentDescription = stringResource(R.string.compose_attach))
+                }
+                IconButton(
+                    onClick = { pickVideo.launch(videoOnly) },
+                    enabled = state.canAttachVideo,
+                    modifier = Modifier.testTag("compose-attach-video"),
+                ) {
+                    Icon(Icons.Outlined.VideoLibrary, contentDescription = stringResource(R.string.compose_add_video))
                 }
             }
             Spacer(Modifier.height(12.dp))

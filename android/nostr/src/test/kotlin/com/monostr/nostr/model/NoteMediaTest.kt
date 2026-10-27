@@ -46,11 +46,15 @@ class NoteMediaTest {
     }
 
     @Test
-    fun `more than four stay links in the text`() {
-        val urls = (1..6).map { "https://x.example/$it.jpg" }
-        val p = parse(urls.joinToString(" "))
-        assertEquals(4, p.media.size)
-        assertEquals(urls.drop(4).joinToString(" "), p.displayContent)
+    fun `up to twenty pictures are media, more stay links in the text`() {
+        // backlog 39: five and more show as 2 x 2 with «+N», the viewer holds all of them
+        val six = (1..6).map { "https://x.example/$it.jpg" }
+        assertEquals(6, parse(six.joinToString(" ")).media.size)
+        assertEquals("", parse(six.joinToString(" ")).displayContent)
+        val many = (1..22).map { "https://x.example/$it.jpg" }
+        val p = parse(many.joinToString(" "))
+        assertEquals(20, p.media.size)
+        assertEquals(many.drop(20).joinToString(" "), p.displayContent)
     }
 
     @Test
@@ -104,5 +108,18 @@ class NoteMediaTest {
         assertTrue(NoteMedia.NSFW.containsMatchIn("late #NSFW post"))
         assertTrue(!NoteMedia.NSFW.containsMatchIn("#nsfwart"))
         assertTrue(!NoteMedia.NSFW.containsMatchIn("nsfw"))
+    }
+
+    @Test
+    fun `thumb is the poster when image is missing`() {
+        val p = parse("https://v.example/a.mp4", listOf(listOf("imeta", "url https://v.example/a.mp4", "m video/mp4", "thumb https://v.example/t.jpg")))
+        assertEquals("https://v.example/t.jpg", p.media.single().poster)
+    }
+
+    @Test
+    fun `image wins over thumb`() {
+        val p = parse("https://v.example/a.mp4", listOf(listOf("imeta", "url https://v.example/a.mp4", "m video/mp4",
+            "thumb https://v.example/t.jpg", "image https://v.example/i.jpg")))
+        assertEquals("https://v.example/i.jpg", p.media.single().poster)
     }
 }

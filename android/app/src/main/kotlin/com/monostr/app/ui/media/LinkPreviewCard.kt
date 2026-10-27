@@ -38,6 +38,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.monostr.app.R
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import com.monostr.app.data.linkpreview.LinkPreview
 import com.monostr.app.data.linkpreview.LinkPreviews
 import com.monostr.app.ui.common.NoteLinks
@@ -54,6 +57,19 @@ object LinkPreviewRules {
 
     /** The domain the card names: the one a tap opens, never the page the fetch ended on after redirects. */
     fun shownDomain(url: String): String = url.toHttpUrlOrNull()?.host?.removePrefix("www.") ?: NoteLinks.shownUrl(url)
+
+    /**
+     * The note's text while [url]'s card shows: a link that ends the note leaves it, the card opens it (like X);
+     * a link inside a sentence stays, so the sentence stays whole.
+     */
+    fun textWithCard(text: String, url: String): String {
+        val trimmed = text.trimEnd()
+        if (!trimmed.endsWith(url)) return text
+        val before = trimmed.dropLast(url.length)
+        // only the whole link: "…/x" is not the end of "…/x/more"
+        if (before.isNotEmpty() && !before.last().isWhitespace()) return text
+        return before.trimEnd()
+    }
 
     fun firstPreviewUrl(note: Note): String? {
         if (note.media.isNotEmpty() || note.quotedId != null) return null
@@ -83,15 +99,27 @@ val LocalLinkPreviewLoader = staticCompositionLocalOf<LinkPreviewLoader?> { null
 /** The guarded image loader for preview pictures (security review); without one no picture loads. */
 val LocalPreviewImageLoader = staticCompositionLocalOf<ImageLoader?> { null }
 
-/** The card under a note's text (spec 2), or nothing: setting off, no loader, no qualifying link, no data. */
+/** A note's previewed link and its card data, once loaded. */
+class NoteLink(val url: String, val preview: LinkPreview)
+
+/**
+ * The card of a note (spec 2), or null: setting off, no loader, no qualifying link, no data (yet). The note's text and
+ * its card read the same one, so the text leaves out the link only while the card shows it.
+ */
 @Composable
-fun NoteLinkPreview(note: Note) {
-    if (!LocalMediaSettings.current.linkPreviews) return
-    val loader = LocalLinkPreviewLoader.current ?: return
-    val url = remember(note.id, note.displayContent) { LinkPreviewRules.firstPreviewUrl(note) } ?: return
+fun rememberNoteLink(note: Note): NoteLink? {
+    if (!LocalMediaSettings.current.linkPreviews) return null
+    val loader = LocalLinkPreviewLoader.current ?: return null
+    val url = remember(note.id, note.displayContent) { LinkPreviewRules.firstPreviewUrl(note) } ?: return null
     var preview by remember(url) { mutableStateOf(loader.cached(note, url)) }
     LaunchedEffect(url) { if (preview == null) preview = loader.load(note, url) }
-    preview?.let { LinkPreviewCard(note, url, it) }
+    return preview?.let { NoteLink(url, it) }
+}
+
+/** The card under a note's text, for [rememberNoteLink]'s result. */
+@Composable
+fun NoteLinkPreview(note: Note, link: NoteLink?) {
+    link?.let { LinkPreviewCard(note, it.url, it.preview) }
 }
 
 @Composable
@@ -108,8 +136,21 @@ fun LinkPreviewCard(note: Note, url: String, preview: LinkPreview) {
     val textPart = Modifier.clickable(onClickLabel = cd, onClick = open).semantics { contentDescription = cd }.padding(12.dp)
     Column(Modifier.fillMaxWidth().padding(top = 8.dp).clip(shape).border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape).testTag("link-preview-$id8")) {
         if (preview.large && image != null) {
-            PreviewImage(image, note, covered, waiting, open, onFailed = { imageFailed = true }, Modifier.fillMaxWidth().aspectRatio(1.91f))
-            PreviewText(domain, preview.title, Modifier.fillMaxWidth().then(textPart))
+            // the domain and the title on a dark gradient over the picture's lower edge: one block, nothing under it
+            Box(Modifier.fillMaxWidth().aspectRatio(1.91f)) {
+                PreviewImage(image, note, covered, waiting, open, onFailed = { imageFailed = true }, Modifier.fillMaxSize())
+                Column(
+                    Modifier.align(Alignment.BottomStart).fillMaxWidth()
+                        // dark well before the text starts: the title stays readable on bright pictures full of their own text
+                        .background(Brush.verticalGradient(0f to Color.Transparent, 0.35f to Color.Black.copy(alpha = 0.62f), 1f to Color.Black.copy(alpha = 0.88f)))
+                        .clickable(onClickLabel = cd, onClick = open).semantics { contentDescription = cd }
+                        .padding(start = 12.dp, end = 12.dp, top = 36.dp, bottom = 10.dp)
+                        .testTag("link-preview-overlay-$id8"),
+                ) {
+                    Text(domain, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.8f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(preview.title, style = MaterialTheme.typography.titleSmall, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
+            }
         } else {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 image?.let { PreviewImage(it, note, covered, waiting, open, onFailed = { imageFailed = true }, Modifier.size(72.dp)) }

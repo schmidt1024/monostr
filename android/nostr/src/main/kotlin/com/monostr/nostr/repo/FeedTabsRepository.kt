@@ -38,8 +38,11 @@ import java.util.concurrent.atomic.AtomicBoolean
 /** At most this many pinned lists (spec 2026-10-18 §2.1). */
 const val MAX_TABS = 5
 
-/** The local copy of the pinned tabs: addresses in tab order, [createdAt] of the event it matches (0 before any). */
-data class CachedTabs(val tabs: List<String>, val createdAt: Long)
+/**
+ * The local copy of the pinned tabs: addresses in pin order, [createdAt] of the event it matches (0 before any), and
+ * (backlog 38) the order of the user's own lists as dragged in the profile, empty until the first drag.
+ */
+data class CachedTabs(val tabs: List<String>, val createdAt: Long, val order: List<String> = emptyList())
 
 /** Where the app keeps [CachedTabs] per account (DataStore); it leaves the device with the account at logout. */
 interface FeedTabsCache {
@@ -50,7 +53,12 @@ interface FeedTabsCache {
 
 /** The lists pinned as home feed tabs (spec §3.3). Every change shows at once and is rolled back when no relay took it. */
 interface FeedTabsRepository {
+    /** The pinned lists in tab order: the own ones as [order] has them, then foreign ones in pin order (pin order without an [order]). */
     fun tabs(): Flow<List<ListAddress>>
+    /** Backlog 38: the order of the own lists the user dragged in the profile; empty until the first drag. */
+    fun order(): Flow<List<ListAddress>>
+    /** Backlog 38: stores [order] (the own lists, top first) with the tabs; shown at once, rolled back when no relay took it. */
+    suspend fun reorder(order: List<ListAddress>): SaveResult
     suspend fun pin(address: ListAddress): SaveResult
     suspend fun unpin(address: ListAddress): SaveResult
     suspend fun move(address: ListAddress, delta: Int): SaveResult
@@ -59,14 +67,16 @@ interface FeedTabsRepository {
 /** The tabs event's content before encryption: `{"v":1,"tabs":[…]}`. */
 internal object TabsPayload {
     sealed interface Parsed {
-        data class Tabs(val tabs: List<String>) : Parsed
+        data class Tabs(val tabs: List<String>, val order: List<String> = emptyList()) : Parsed
         data object UnknownVersion : Parsed
         data object Invalid : Parsed
     }
 
-    fun encode(tabs: List<String>): String = buildJsonObject {
+    /** [order] is optional within version 1: a reader that does not know it keeps the tabs (backlog 38). */
+    fun encode(tabs: List<String>, order: List<String> = emptyList()): String = buildJsonObject {
         put("v", 1)
         put("tabs", JsonArray(tabs.map { JsonPrimitive(it) }))
+        if (order.isNotEmpty()) put("order", JsonArray(order.map { JsonPrimitive(it) }))
     }.toString()
 
     /** Version 1 with the first [MAX_TABS] valid, distinct addresses; anything else is not taken. */
@@ -79,10 +89,27 @@ internal object TabsPayload {
         val v = (o["v"] as? JsonPrimitive)?.intOrNull ?: return Parsed.Invalid
         if (v != 1) return Parsed.UnknownVersion
         val arr = o["tabs"] as? JsonArray ?: return Parsed.Invalid
-        return Parsed.Tabs(clean(arr.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }))
+        val order = (o["order"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }.orEmpty()
+        return Parsed.Tabs(clean(arr.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }), cleanOrder(order))
     }
 
     fun clean(tabs: List<String>): List<String> = tabs.filter { ListAddress.parse(it) != null }.distinct().take(MAX_TABS)
+
+    fun cleanOrder(order: List<String>): List<String> = order.filter { ListAddress.parse(it) != null }.distinct().take(MAX_ORDER)
+
+    /** At most this many own lists keep a place; more are shown as new ones (on top). */
+    const val MAX_ORDER = 500
+
+    /**
+     * Backlog 38: the tab order. Without an [order] the pin order; else the own pinned lists ([self]) as [order] has
+     * them (one missing from it first, in pin order), then the foreign ones in pin order.
+     */
+    fun arrange(tabs: List<String>, order: List<String>, self: String): List<String> {
+        if (order.isEmpty()) return tabs
+        val (own, foreign) = tabs.partition { ListAddress.parse(it)?.pubkey == self }
+        val index = order.withIndex().associate { (i, a) -> a to i }
+        return own.filter { it !in index } + own.filter { it in index }.sortedBy { index.getValue(it) } + foreign
+    }
 }
 
 class NostrFeedTabsRepository(
@@ -124,8 +151,15 @@ class NostrFeedTabsRepository(
         mutex.withLock { loadLocalLocked() }
         val scope = reconcileScope
         if (scope != null && reconcileStarted.compareAndSet(false, true)) pendingReconcile = scope.launch { gate.await(); quietly { reconcile() } }
-        emitAll(_tabs.filterNotNull().map { c -> c.tabs.mapNotNull(ListAddress::parse) }.distinctUntilChanged())
+        emitAll(_tabs.filterNotNull().map { c -> TabsPayload.arrange(c.tabs, c.order, signer.pubkey).mapNotNull(ListAddress::parse) }.distinctUntilChanged())
     }
+
+    override fun order(): Flow<List<ListAddress>> = flow {
+        mutex.withLock { loadLocalLocked() }
+        emitAll(_tabs.filterNotNull().map { c -> c.order.mapNotNull(ListAddress::parse) }.distinctUntilChanged())
+    }
+
+    override suspend fun reorder(order: List<ListAddress>): SaveResult = change { c -> c.tabs to TabsPayload.cleanOrder(order.map { it.toString() }) }
 
     private suspend fun loadLocalLocked(): CachedTabs {
         _tabs.value?.let { return it }
@@ -136,7 +170,7 @@ class NostrFeedTabsRepository(
         } catch (e: Exception) {
             null
         }
-        val tabs = local?.let { it.copy(tabs = TabsPayload.clean(it.tabs)) } ?: CachedTabs(emptyList(), 0)
+        val tabs = local?.let { it.copy(tabs = TabsPayload.clean(it.tabs), order = TabsPayload.cleanOrder(it.order)) } ?: CachedTabs(emptyList(), 0)
         _tabs.value = tabs
         return tabs
     }
@@ -166,7 +200,7 @@ class NostrFeedTabsRepository(
             is TabsPayload.Parsed.Tabs -> {
                 if (createdAt <= loadLocalLocked().createdAt) return
                 foreignFormat = false
-                val next = CachedTabs(p.tabs, createdAt)
+                val next = CachedTabs(p.tabs, createdAt, p.order)
                 _tabs.value = next
                 quietly { cache.save(signer.pubkey, next) }
             }
@@ -185,7 +219,7 @@ class NostrFeedTabsRepository(
         }
     }
 
-    override suspend fun pin(address: ListAddress): SaveResult = change { tabs ->
+    override suspend fun pin(address: ListAddress): SaveResult = changeTabs { tabs ->
         val key = address.toString()
         when {
             key in tabs -> tabs
@@ -194,15 +228,17 @@ class NostrFeedTabsRepository(
         }
     }
 
-    override suspend fun unpin(address: ListAddress): SaveResult = change { tabs -> tabs - address.toString() }
+    override suspend fun unpin(address: ListAddress): SaveResult = changeTabs { tabs -> tabs - address.toString() }
 
-    override suspend fun move(address: ListAddress, delta: Int): SaveResult = change { tabs ->
+    override suspend fun move(address: ListAddress, delta: Int): SaveResult = changeTabs { tabs ->
         val from = tabs.indexOf(address.toString())
         if (from < 0) tabs else tabs.toMutableList().apply { add((from + delta).coerceIn(0, tabs.lastIndex), removeAt(from)) }
     }
 
-    /** [f] gives the new tab list, null for a sixth pin. Shown at once; rolled back when no relay accepted it. */
-    private suspend fun change(f: (List<String>) -> List<String>?): SaveResult {
+    private suspend fun changeTabs(f: (List<String>) -> List<String>?): SaveResult = change { c -> f(c.tabs)?.let { it to c.order } }
+
+    /** [f] gives the new tabs and order, null for a sixth pin. Shown at once; rolled back when no relay accepted it. */
+    private suspend fun change(f: (CachedTabs) -> Pair<List<String>, List<String>>?): SaveResult {
         val pending = pendingReconcile
         // the change waits for the start reconcile; it must not wait for the feed's first page on top of it
         if (pending != null && !pending.isCompleted) gate.open("write")
@@ -210,20 +246,20 @@ class NostrFeedTabsRepository(
         return changeLocked(f)
     }
 
-    private suspend fun changeLocked(f: (List<String>) -> List<String>?): SaveResult = mutex.withLock {
+    private suspend fun changeLocked(f: (CachedTabs) -> Pair<List<String>, List<String>>?): SaveResult = mutex.withLock {
         readUnreadLocked()
         val before = loadLocalLocked()
-        val tabs = f(before.tabs) ?: return@withLock SaveResult.TooMany
-        if (tabs == before.tabs) return@withLock SaveResult.Ok
+        val (tabs, order) = f(before) ?: return@withLock SaveResult.TooMany
+        if (tabs == before.tabs && order == before.order) return@withLock SaveResult.Ok
         val ts = maxOf(now(), lastCreatedAt + 1, before.createdAt + 1)
-        val next = CachedTabs(tabs, ts)
+        val next = CachedTabs(tabs, ts, order)
         _tabs.value = next
         if (foreignFormat) {
             quietly { cache.save(signer.pubkey, next) }
             return@withLock SaveResult.Ok
         }
         val ok = try {
-            val content = privateTags.encryptText(TabsPayload.encode(tabs))
+            val content = privateTags.encryptText(TabsPayload.encode(tabs, order))
             val builder = EventBuilder(Kind(KIND.toUShort()), content)
                 .tags(listOf(Tag.parse(listOf("d", D_TAG))))
                 .customCreatedAt(Timestamp.fromSecs(ts.toULong()))

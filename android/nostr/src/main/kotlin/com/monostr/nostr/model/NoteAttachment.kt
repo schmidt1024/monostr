@@ -1,8 +1,10 @@
 package com.monostr.nostr.model
 
 /**
- * A picture uploaded for a note about to be published (spec 5.2): it becomes a URL at the end of
- * the text and a NIP-92 `imeta` tag, which is how [NoteMedia.parse] and other clients find it.
+ * A picture or video uploaded for a note about to be published (spec 5.2): it becomes a URL at the end of
+ * the text and a NIP-92 `imeta` tag, which is how [NoteMedia.parse] and other clients find it. A video
+ * names its poster picture ([image]) and its length ([durationSeconds]) there; the poster URL is never
+ * in the text (spec 2026-10-27 video §5).
  */
 data class NoteAttachment(
     val url: String,
@@ -12,6 +14,8 @@ data class NoteAttachment(
     val width: Int,
     val height: Int,
     val blurhash: String? = null,
+    val image: String? = null,
+    val durationSeconds: Double? = null,
 ) {
     companion object {
         /** [text] with the attachment URLs appended in order, each on its own line, after a blank line. */
@@ -36,6 +40,8 @@ data class NoteAttachment(
                     add("size ${a.size}")
                     add("dim ${a.width}x${a.height}")
                     a.blurhash?.let { add("blurhash $it") }
+                    a.image?.let { add("image $it") }
+                    a.durationSeconds?.let { add("duration ${java.math.BigDecimal.valueOf(it).stripTrailingZeros().toPlainString()}") }
                 }
             }
             return if (sensitive && attachments.isNotEmpty()) imeta + listOf(listOf("content-warning", "")) else imeta

@@ -124,4 +124,38 @@ class ProfileListsControllerTest {
         second.open(); runCurrent()
         assertEquals(listOf(theirs), second.state.value.lists)
     }
+
+    @Test
+    fun `the own lists show in the stored order and a move stores the full new order`() = runTest {
+        // backlog 38
+        val a = followSet("a", emptyList(), author = self); val b = followSet("b", emptyList(), author = self); val c3 = followSet("c", emptyList(), author = self)
+        val pins = FakeFeedTabs().apply { orderState.value = listOf(c3.address, a.address, b.address) }
+        val c = ProfileListsController(self, self, FakeLists(listOf(a, b, c3)), pins, eager())
+        c.open(); runCurrent()
+        assertEquals(listOf("c", "a", "b"), c.state.value.lists!!.map { it.address.d })
+        c.move(from = 2, to = 0); runCurrent()
+        assertEquals(listOf("reorder:b,c,a"), pins.calls)
+        assertEquals(listOf("b", "c", "a"), c.state.value.lists!!.map { it.address.d })
+    }
+
+    @Test
+    fun `a failed move says so and keeps the old order`() = runTest {
+        val a = followSet("a", emptyList(), author = self); val b = followSet("b", emptyList(), author = self)
+        val pins = FakeFeedTabs().apply { result = com.monostr.nostr.model.SaveResult.Failed }
+        val c = ProfileListsController(self, self, FakeLists(listOf(a, b)), pins, eager())
+        c.open(); runCurrent()
+        c.move(from = 1, to = 0); runCurrent()
+        assertEquals(listOf("a", "b"), c.state.value.lists!!.map { it.address.d })
+        assertTrue(c.state.value.message != null)
+    }
+
+    @Test
+    fun `another profile cannot be reordered`() = runTest {
+        val theirs = listOf(followSet("x", emptyList(), author = bob), followSet("y", emptyList(), author = bob))
+        val pins = FakeFeedTabs()
+        val c = ProfileListsController(bob, self, FakeLists().apply { byAuthor = mapOf(bob to theirs) }, pins, eager())
+        c.open(); runCurrent()
+        c.move(from = 1, to = 0); runCurrent()
+        assertTrue(pins.calls.none { it.startsWith("reorder") })
+    }
 }

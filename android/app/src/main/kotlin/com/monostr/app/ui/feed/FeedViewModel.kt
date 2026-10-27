@@ -1,5 +1,7 @@
 package com.monostr.app.ui.feed
 
+import com.monostr.app.ui.discover.DiscoverController
+import com.monostr.app.ui.discover.DiscoverVisibility
 import kotlinx.coroutines.delay
 import com.monostr.app.data.FeedSnapshot
 import kotlinx.coroutines.flow.first
@@ -641,6 +643,29 @@ class FeedViewModel @Inject constructor(session: NostrSession, private val facto
 
     fun dismissSupportHint() {
         viewModelScope.launch { runCatching { hints.setSupportHintDone(ready.pubkey) } }
+    }
+
+    /** Spec 2026-10-27 §4/§5: the curated lists above the home feed for accounts with a thin feed. */
+    val discover = DiscoverController(ready.discover, ready.follows, ready.profiles, ready.mute, ready.pubkey, viewModelScope, writeScope = ready.engine.backgroundScope)
+    val discoverShown: StateFlow<Boolean> = ready.discoverDecision.shown.map { it == true }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    init {
+        // decided once per session, after the feed's first page (spec perf2 A2); a contact list still unknown is asked
+        // again a few times (the feed's fetch may still run) before it counts as none (a brand-new account)
+        viewModelScope.launch {
+            ready.startupGate.await()
+            val followed = DiscoverVisibility.awaitFollowed { ready.follows.followed().first() }
+            hints.dismissed(ready.pubkey, DiscoverVisibility.HINT).collect { dismissed -> ready.discoverDecision.offer(DiscoverVisibility.decide(followed, dismissed)) }
+        }
+        viewModelScope.launch {
+            discoverShown.first { it }
+            discover.start()
+        }
+    }
+
+    fun dismissDiscover() {
+        ready.discoverDecision.dismiss()
+        viewModelScope.launch { runCatching { hints.dismiss(ready.pubkey, DiscoverVisibility.HINT) } }
     }
 
     private val amountsQuestion = AmountsQuestion(

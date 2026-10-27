@@ -1,5 +1,10 @@
 package com.monostr.app.ui.lists
 
+import com.monostr.nostr.repo.FollowRepository
+import com.monostr.nostr.repo.MuteRepository
+import com.monostr.app.ui.common.userMessage
+import kotlinx.coroutines.CancellationException
+import java.util.concurrent.atomic.AtomicBoolean
 import com.monostr.app.R
 import com.monostr.app.ui.common.Message
 import com.monostr.app.ui.common.attempt
@@ -38,7 +43,17 @@ data class ListUiState(
     /** The "Notes" tab: the same feed a pinned tab shows; rebuilt when the members change, null without members. */
     val feed: FeedController? = null,
     val message: Message? = null,
-)
+    /** Spec 2026-10-27 §5: someone else's list offers follow buttons (own lists keep their remove button). */
+    val canFollow: Boolean = false,
+    /** The user's follows, for the members' buttons. */
+    val followed: Set<String> = emptySet(),
+    /** The user and the muted accounts: no follow button, not part of «Follow all». */
+    val notFollowable: Set<String> = emptySet(),
+) {
+    /** Every member that can be followed is followed already. */
+    val allFollowed: Boolean
+        get() = set?.members?.filter { it !in notFollowable }?.let { it.isNotEmpty() && it.all { m -> m in followed } } ?: false
+}
 
 /** Spec 2026-10-18 §2.3: header, pin, "Notes" and "Members"; own lists can lose members here. */
 class ListController(
@@ -49,9 +64,13 @@ class ListController(
     private val profiles: ProfileRepository,
     private val scope: CoroutineScope,
     private val writeScope: CoroutineScope = scope,
+    private val follows: FollowRepository? = null,
+    private val mute: MuteRepository? = null,
     private val newFeed: (FeedSource.Authors, CoroutineScope) -> FeedController,
 ) {
-    private val _state = MutableStateFlow(ListUiState(isOwn = address.pubkey == self))
+    private val _state = MutableStateFlow(ListUiState(isOwn = address.pubkey == self, canFollow = follows != null && address.pubkey != self))
+    /** A «follow all» in flight: a second tap does nothing. */
+    private val followingAll = AtomicBoolean(false)
     val state: StateFlow<ListUiState> = _state.asStateFlow()
     private val pinActions = PinActions(pins, writeScope) { m -> _state.update { it.copy(message = m) } }
     private var feedScope: CoroutineScope? = null
@@ -64,6 +83,11 @@ class ListController(
             }
         }
         scope.launch { pins.tabs().collect { p -> _state.update { it.copy(pinned = address in p) } } }
+        if (_state.value.canFollow) {
+            scope.launch { follows!!.followed().collect { f -> _state.update { it.copy(followed = f ?: emptySet()) } } }
+            val muted = mute?.muted ?: kotlinx.coroutines.flow.MutableStateFlow(emptySet())
+            scope.launch { muted.collect { m -> _state.update { it.copy(notFollowable = m + self) } } }
+        }
         scope.launch { attempt { profiles.get(address.pubkey) }?.let { a -> _state.update { it.copy(author = a) } } }
         if (address.pubkey == self) {
             // the own lists are live: an edit or a removed member shows at once
@@ -133,6 +157,38 @@ class ListController(
     }
 
     fun clearMessage() = _state.update { it.copy(message = null) }
+
+    fun follow(pubkey: String) {
+        val repo = follows ?: return
+        writeScope.launch {
+            try {
+                repo.follow(pubkey)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(message = Message(e.userMessage())) }
+            }
+        }
+    }
+
+    /** Spec 2026-10-27 §5: every member not followed yet, not muted and not the user, in one contact list write. */
+    fun followAll() {
+        val repo = follows ?: return
+        val set = _state.value.set ?: return
+        if (!followingAll.compareAndSet(false, true)) return
+        val muted = mute?.muted?.value ?: emptySet()
+        writeScope.launch {
+            try {
+                repo.followAll(set.members.filter { it != self && it !in muted })
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(message = Message(e.userMessage())) }
+            } finally {
+                followingAll.set(false)
+            }
+        }
+    }
 
     fun close() = closeFeed()
 }

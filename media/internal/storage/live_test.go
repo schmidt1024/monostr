@@ -40,6 +40,19 @@ func TestAgainstARealBucket(t *testing.T) {
 		t.Fatalf("put: %v", err)
 	}
 	defer b.Delete(ctx, key)
+	// a video goes up as a stream
+	streamKey := key + "-stream"
+	if err := b.PutStream(ctx, streamKey, bytes.NewReader(data), int64(len(data)), "video/mp4"); err != nil {
+		t.Fatalf("put stream: %v", err)
+	}
+	defer b.Delete(ctx, streamKey)
+	if obj, err := b.Open(ctx, streamKey); err != nil {
+		t.Fatalf("open stream: %v", err)
+	} else if got, err := io.ReadAll(obj); err != nil || !bytes.Equal(got, data) {
+		t.Fatalf("read stream: %d bytes, %v", len(got), err)
+	} else {
+		obj.Close()
+	}
 
 	obj, err := b.Open(ctx, key)
 	if err != nil {

@@ -104,3 +104,30 @@ func (s *Store) Stats(dayStart int64) (Stats, error) {
 	}
 	return st, rows.Err()
 }
+
+// storageAlert is the alerts row of the operator's storage warning (spec 2026-10-27 video §6).
+const storageAlert = "storage"
+
+// StorageAlert reports the stored bytes and whether they are above threshold
+// with no warning sent since they last were below it. Being below clears the
+// mark, so the next crossing warns again.
+func (s *Store) StorageAlert(threshold int64) (due bool, total int64, err error) {
+	if err = s.db.QueryRow(`SELECT COALESCE(SUM(size), 0) FROM blobs`).Scan(&total); err != nil {
+		return false, 0, err
+	}
+	if total <= threshold {
+		_, err = s.db.Exec(`DELETE FROM alerts WHERE name = ?`, storageAlert)
+		return false, total, err
+	}
+	var n int
+	if err = s.db.QueryRow(`SELECT COUNT(*) FROM alerts WHERE name = ?`, storageAlert).Scan(&n); err != nil {
+		return false, total, err
+	}
+	return n == 0, total, nil
+}
+
+// MarkStorageAlerted records that the warning for this crossing went out.
+func (s *Store) MarkStorageAlerted(at int64) error {
+	_, err := s.db.Exec(`INSERT OR REPLACE INTO alerts(name, at) VALUES (?, ?)`, storageAlert, at)
+	return err
+}
