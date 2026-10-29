@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import com.monostr.nostr.model.AddressRef
 import rust.nostr.sdk.Event
 import rust.nostr.sdk.EventBuilder
 import rust.nostr.sdk.Filter
@@ -77,7 +78,7 @@ class BookmarksRepositoryTest {
         assertEquals(listOf(n3, n1, n2), repo.state.value.ids)
         val tags = latest(e).tags().toVec().map { it.asVec() }
         assertEquals(listOf(listOf("e", n2), listOf("t", "nostr")), tags)
-        assertEquals(listOf(listOf("a", "30023:abc:post"), listOf("e", n3), listOf("e", n1)), privateTags(e))
+        assertEquals(listOf(listOf("e", n3), listOf("a", "30023:abc:post"), listOf("e", n1)), privateTags(e))
 
         assertEquals(BookmarkOutcome.Ok, repo.toggle(n2))
         assertEquals(listOf(n3, n1), repo.state.value.ids)
@@ -86,6 +87,59 @@ class BookmarksRepositoryTest {
         assertEquals(BookmarkOutcome.Ok, repo.toggle(n3))
         assertEquals(listOf(n1), repo.state.value.ids)
         assertEquals(listOf(listOf("a", "30023:abc:post"), listOf("e", n1)), privateTags(e))
+    }
+
+    private val pk = "a".repeat(64)
+    private val coord = "30023:$pk:my-post"
+
+    @Test
+    fun `an article bookmark goes only into the encrypted part, e entries and foreign public tags stay`() = runTest {
+        val e = engine()
+        val existing = signer.nip44Encrypt(signer.pubkey, """[["e","$n1"],["x","keep"]]""")
+        e.save(EventBuilder(Kind(10003u), existing).tags(listOf(Tag.parse(listOf("e", n2)), Tag.parse(listOf("t", "nostr")))).customCreatedAt(Timestamp.fromSecs(1000u)).signWithKeys(keys))
+        val repo = NostrBookmarksRepository(e, signer, now = { 2000 }, send = okSend(e))
+        repo.ensureLoaded()
+
+        assertEquals(BookmarkOutcome.Ok, repo.toggleArticle(coord))
+        assertEquals(listOf(coord), repo.state.value.extraIds)
+        assertEquals(listOf(n1, n2), repo.state.value.ids)
+        assertEquals(listOf(listOf("e", n2), listOf("t", "nostr")), latest(e).tags().toVec().map { it.asVec() })
+        assertEquals(listOf(listOf("x", "keep"), listOf("a", coord), listOf("e", n1)), privateTags(e))
+
+        assertEquals(BookmarkOutcome.Ok, repo.toggleArticle(coord))
+        assertEquals(emptyList<String>(), repo.state.value.extraIds)
+        assertEquals(listOf(listOf("x", "keep"), listOf("e", n1)), privateTags(e))
+    }
+
+    @Test
+    fun `entries interleave articles with notes in list order, also an a entry another client added publicly`() = runTest {
+        val e = engine()
+        val other = "30023:$pk:public-one"
+        val existing = signer.nip44Encrypt(signer.pubkey, """[["e","$n1"],["a","$coord"],["a","not-a-coordinate"]]""")
+        e.save(EventBuilder(Kind(10003u), existing).tags(listOf(Tag.parse(listOf("a", other)))).customCreatedAt(Timestamp.fromSecs(1000u)).signWithKeys(keys))
+        val repo = NostrBookmarksRepository(e, signer, now = { 2000 }, send = okSend(e))
+        repo.ensureLoaded()
+        val entries = repo.localEntries()
+        assertEquals(listOf(n1, coord, other), entries.map { it.id })
+        assertNull(entries[0].article)
+        assertEquals(AddressRef(30023, pk, "my-post"), entries[1].article)
+        assertEquals(AddressRef(30023, pk, "public-one"), entries[2].article)
+
+        // removing the other client's public entry takes it out of the public tags
+        assertEquals(BookmarkOutcome.Ok, repo.toggleArticle(other))
+        assertEquals(emptyList<List<String>>(), latest(e).tags().toVec().map { it.asVec() })
+        assertEquals(listOf(coord, "not-a-coordinate"), repo.state.value.extraIds) // the malformed one is hidden, never rewritten
+    }
+
+    @Test
+    fun `entries with hints and markers written by another client survive a write verbatim`() = runTest {
+        val e = engine()
+        val existing = signer.nip44Encrypt(signer.pubkey, """[["a","$coord","wss://r"],["e","$n1","wss://r","root"]]""")
+        e.save(EventBuilder(Kind(10003u), existing).customCreatedAt(Timestamp.fromSecs(1000u)).signWithKeys(keys))
+        val repo = NostrBookmarksRepository(e, signer, now = { 2000 }, send = okSend(e))
+        repo.ensureLoaded()
+        assertEquals(BookmarkOutcome.Ok, repo.toggleArticle("30023:$pk:other"))
+        assertEquals(listOf(listOf("a", "30023:$pk:other"), listOf("a", coord, "wss://r"), listOf("e", n1, "wss://r", "root")), privateTags(e))
     }
 
     @Test
@@ -244,7 +298,12 @@ class BookmarksRepositoryTest {
         val repo = NostrBookmarksRepository(e, amber, now = { 2000 }, send = okSend(e))
         repo.ensureLoaded(interactive = false)
         assertEquals(0, amber.prompts)
-        assertEquals(BookmarksState(ids = listOf(n1), writable = true, loaded = true), repo.state.value)
+        val st = repo.state.value
+        assertEquals(listOf(n1), st.ids)
+        assertEquals(emptyList<String>(), st.extraIds)
+        assertEquals(listOf("e" to n1), st.ordered)
+        assertTrue(st.writable)
+        assertTrue(st.loaded)
     }
 
     @Test

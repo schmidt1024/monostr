@@ -27,6 +27,8 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withLink
 import com.monostr.app.R
+import com.monostr.nostr.model.AddressLinks
+import com.monostr.nostr.model.Article
 
 /**
  * Note body with tappable hashtags, `nostr:` mentions/notes and URLs (spec 3.3). URLs and hashtags
@@ -57,10 +59,12 @@ fun NoteText(
 ) {
     val spans = remember(content) { NoteLinks.annotate(content) }
     val uriHandler = LocalUriHandler.current
+    val openArticle = LocalOpenArticle.current
     val primary = MaterialTheme.colorScheme.primary
     val styles = TextLinkStyles(style = SpanStyle(color = primary, textDecoration = TextDecoration.Underline))
     val nameStyles = TextLinkStyles(style = SpanStyle(color = primary))
     val noteLabel = stringResource(R.string.note_ref_label)
+    val addressLabel = stringResource(R.string.address_ref_label)
     val text = buildAnnotatedString {
         for (s in spans) {
             when (s) {
@@ -68,6 +72,9 @@ fun NoteText(
                 is NoteSpan.Hashtag -> withLink(LinkAnnotation.Clickable("tag", styles) { onHashtag(s.tag) }) { append(s.text) }
                 is NoteSpan.Mention -> withLink(LinkAnnotation.Clickable("mention", nameStyles) { onOpenProfile(s.pubkey) }) { append(MentionNames.label(s.pubkey, names)) }
                 is NoteSpan.NoteRef -> withLink(LinkAnnotation.Clickable("note", nameStyles) { onOpenNote(s.noteId) }) { append(noteLabel) }
+                is NoteSpan.AddressRef -> withLink(LinkAnnotation.Clickable("address", nameStyles) {
+                    if (s.ref.kind == Article.KIND && openArticle != null) openArticle(s.ref, true) else runCatching { uriHandler.openUri(AddressLinks.web(s.ref)) }
+                }) { append(addressLabel) }
                 is NoteSpan.Url -> withLink(LinkAnnotation.Clickable("url", styles) { runCatching { uriHandler.openUri(s.url) } }) { append(s.text) }
             }
         }

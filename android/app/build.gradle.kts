@@ -92,6 +92,7 @@ dependencies {
     implementation(libs.coil.compose); implementation(libs.coil.network.okhttp)
     implementation(libs.kotlinx.coroutines.core); implementation(libs.kotlinx.serialization.json)
     implementation(libs.okhttp)
+    implementation(libs.commonmark); implementation(libs.commonmark.gfm.tables); implementation(libs.commonmark.gfm.strikethrough)
     implementation(libs.work.runtime); implementation(libs.core.ktx); implementation(libs.zxing.core); implementation(libs.core.splashscreen)
     implementation(libs.media3.exoplayer); implementation(libs.media3.ui)
     // spec 2026-10-27 video §4: a picked video is encoded on the device

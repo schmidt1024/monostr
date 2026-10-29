@@ -109,6 +109,8 @@ class NoteLink(val url: String, val preview: LinkPreview)
 @Composable
 fun rememberNoteLink(note: Note): NoteLink? {
     if (!LocalMediaSettings.current.linkPreviews) return null
+    // spec 8: never inside a screen opened from a direct message (the page's host is the sender's pick)
+    if (!com.monostr.app.ui.common.ForeignRule.linkPreview(com.monostr.app.ui.common.LocalAllowForeign.current)) return null
     val loader = LocalLinkPreviewLoader.current ?: return null
     val url = remember(note.id, note.displayContent) { LinkPreviewRules.firstPreviewUrl(note) } ?: return null
     var preview by remember(url) { mutableStateOf(loader.cached(note, url)) }

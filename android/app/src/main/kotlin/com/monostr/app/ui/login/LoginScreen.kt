@@ -19,6 +19,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.res.painterResource
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,6 +40,7 @@ import com.monostr.app.session.NostrSession
 import com.monostr.app.session.SessionState
 import com.monostr.app.ui.common.asString
 import com.monostr.nostr.LocalSigner
+import com.monostr.nostr.Nip49
 import com.monostr.nostr.nip55.AmberSigner
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -60,7 +62,7 @@ class LoginViewModel @Inject constructor(
         restoreMessage = (session.state.value as? SessionState.LoggedOut)?.message,
     )
 
-    fun loginWithSecret(input: String) = viewModelScope.launch { controller.loginWithSecret(input) }
+    fun loginWithSecret(input: String, password: String = "") = viewModelScope.launch { controller.loginWithSecret(input, password) }
     fun loginWithAmber() = viewModelScope.launch { controller.loginWithAmber() }
 }
 
@@ -68,6 +70,9 @@ class LoginViewModel @Inject constructor(
 fun LoginScreen(onCreate: () -> Unit = {}, vm: LoginViewModel = hiltViewModel()) {
     val state by vm.controller.state.collectAsStateWithLifecycle()
     var secret by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") } // plain remember: never saved state
+    val needsPassword = Nip49.isNcryptsec(secret)
+    LaunchedEffect(state.passwordError) { if (state.passwordError != null) password = "" }
     Column(Modifier.fillMaxSize().safeDrawingPadding().padding(24.dp), verticalArrangement = Arrangement.Center) {
         Image(
             painter = painterResource(R.drawable.ic_logo_mark),
@@ -104,8 +109,18 @@ fun LoginScreen(onCreate: () -> Unit = {}, vm: LoginViewModel = hiltViewModel())
             isError = state.error != null, supportingText = { state.error?.let { Text(it.asString()) } },
             modifier = Modifier.fillMaxWidth().testTag("login-secret"),
         )
+        if (needsPassword) {
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = password, onValueChange = { password = it }, singleLine = true,
+                label = { Text(stringResource(R.string.login_password_label)) }, visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
+                isError = state.passwordError != null, supportingText = { state.passwordError?.let { Text(it.asString()) } },
+                modifier = Modifier.fillMaxWidth().testTag("login-password"),
+            )
+        }
         Spacer(Modifier.height(8.dp))
-        OutlinedButton(onClick = { vm.loginWithSecret(secret) }, enabled = !state.busy && secret.isNotBlank(), modifier = Modifier.fillMaxWidth().testTag("login-secret-button")) { Text(stringResource(R.string.login_button)) }
+        OutlinedButton(onClick = { vm.loginWithSecret(secret, password) }, enabled = !state.busy && secret.isNotBlank() && (!needsPassword || password.isNotEmpty()), modifier = Modifier.fillMaxWidth().testTag("login-secret-button")) { Text(stringResource(R.string.login_button)) }
         Spacer(Modifier.height(16.dp))
         // spec 2026-10-17 §2: the way in for someone without a key
         TextButton(onClick = onCreate, enabled = !state.busy, modifier = Modifier.fillMaxWidth().testTag("login-create")) { Text(stringResource(R.string.login_create)) }

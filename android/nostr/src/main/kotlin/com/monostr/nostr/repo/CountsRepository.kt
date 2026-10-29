@@ -49,6 +49,11 @@ interface CountsRepository {
      * focused note, spec perf2 A6) skips the batch delay and runs beside a normal batch instead of behind it.
      */
     fun request(noteIds: Collection<String>, priority: Boolean = false)
+    /**
+     * An article (kind 30023): its counts land under [noteId] in [counts] but come from its [coordinate] (`#a`/`#A`),
+     * so every version and every client's reaction counts once.
+     */
+    fun requestArticle(noteId: String, coordinate: String, priority: Boolean = false)
     /** Optimistic change after an own like (kind 7) or repost (kind 6); the next request recounts. */
     fun bump(noteId: String, kind: Int, delta: Long)
 }
@@ -122,6 +127,14 @@ class NostrCountsRepository(
     private var watcher: Job? = null
     private var watchPollsLeft = 0
 
+    /** Note id -> coordinate for article ids: [countRound] counts those by coordinate. */
+    private val coordinates = ConcurrentHashMap<String, String>()
+
+    override fun requestArticle(noteId: String, coordinate: String, priority: Boolean) {
+        coordinates[noteId] = coordinate
+        request(listOf(noteId), priority)
+    }
+
     override fun request(noteIds: Collection<String>, priority: Boolean) = enqueue(noteIds, priority, onScreen = true)
 
     /** [onScreen]: a caller's request (the visible notes); the late-relay watch re-queues without changing them. */
@@ -147,7 +160,7 @@ class NostrCountsRepository(
             val c = m[noteId] ?: NoteCounts.EMPTY
             val bumped = when (kind) {
                 7 -> c.copy(likes = ((c.likes ?: 0) + delta).coerceAtLeast(0))
-                6 -> c.copy(reposts = ((c.reposts ?: 0) + delta).coerceAtLeast(0))
+                6, 16 -> c.copy(reposts = ((c.reposts ?: 0) + delta).coerceAtLeast(0))
                 1 -> c.copy(replies = ((c.replies ?: 0) + delta).coerceAtLeast(0))
                 else -> c
             }
@@ -220,7 +233,14 @@ class NostrCountsRepository(
             for (url in targets) for (id in ids) {
                 val eid = runCatching { EventId.parse(id) }.getOrNull() ?: continue
                 launch {
-                    val answers = KINDS.map { k -> async { countOrNull(url, Filter().kinds(k.map { Kind(it) }).event(eid), priority, round) } }.awaitAll()
+                    val coordinate = coordinates[id]
+                    val answers = (if (coordinate != null) articleFilters(coordinate) else noteFilters(eid)).map { fs ->
+                        async {
+                            // a kind slot may need several COUNTs (an article's replies); one missing answer misses the slot
+                            val parts = fs.map { f -> async { countOrNull(url, f, priority, round) } }.awaitAll()
+                            if (parts.any { it == null }) null else parts.sumOf { it!! }
+                        }
+                    }.awaitAll()
                     // a relay that missed one kind gives nothing for this note this round (no half-known counts)
                     if (answers.any { it == null }) { round.missed += id; return@launch }
                     merge(round, id, NoteCounts(answers[0], answers[1], answers[2]))
@@ -361,6 +381,16 @@ class NostrCountsRepository(
             null
         }
     }
+
+    private fun noteFilters(eid: EventId): List<List<Filter>> =
+        KINDS.map { k -> listOf(Filter().kinds(k.map { Kind(it) }).event(eid)) }
+
+    /** Likes kind 7 `#a`; reposts kinds 6 and 16 `#a`; replies kind 1111 `#A` plus kind 1 `#a`. */
+    private fun articleFilters(coordinate: String): List<List<Filter>> = listOf(
+        listOf(coordinateFilter(listOf(7), coordinate)),
+        listOf(coordinateFilter(listOf(6, 16), coordinate)),
+        listOf(coordinateFilter(listOf(Kinds.COMMENT), coordinate, "A"), coordinateFilter(listOf(1), coordinate)),
+    )
 
     private fun maxOf(a: Long?, b: Long?): Long? = when {
         a == null -> b

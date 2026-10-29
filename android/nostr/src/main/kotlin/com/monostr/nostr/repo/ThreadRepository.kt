@@ -73,7 +73,8 @@ class NostrThreadRepository(
 
     override fun observe(noteId: String): Flow<ThreadView> = channelFlow {
         val focused = loadNote(noteId) ?: return@channelFlow
-        val rootId = (focused.rootId ?: focused.id).lowercase()
+        // a comment directly under an article is the root of its own thread: its siblings tag the same article id
+        val rootId = (if (focused.articleParent != null) focused.id else (focused.rootId ?: focused.id)).lowercase()
         // spec perf2 decision 2: replies that tag only the focused note are found too
         val tagIds = listOf(rootId, focused.id).filter { HEX_ID.matches(it) }.distinct()
         val s = ThreadState(focused, rootId, tagIds)

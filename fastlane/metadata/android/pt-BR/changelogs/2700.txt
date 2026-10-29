@@ -1,0 +1,5 @@
+• Leia artigos (NIP-23) no app: imagem, título, texto formatado; abaixo, curtir, repostar, responder, salvar e dar gorjeta
+• Perfis ganham uma aba «Artigos»; as abas do perfil ficam em uma linha e rolam
+• Links para artigos, lives e outros eventos aparecem como cartões
+• Endereço Monero sem watcher (NIP-A3 payto): pronto em um minuto, outros pagam pela carteira deles
+• Faça backup da chave com senha (ncryptsec, NIP-49) e entre com ela

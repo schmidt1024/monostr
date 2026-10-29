@@ -1,0 +1,7 @@
+• 2 dakikaya kadar video paylaş; telefon küçültür, konum bilgisi olmadan
+• Keşfet: takip edilecek kişilerden seçilmiş listeler
+• Bağlantı kartları başlığı ve siteyi görselin üstünde gösterir; sondaki bağlantı metinden çıkar
+• Listelerini sürükleyerek sırala; sabitlenen sekmeler bu sırayı izler
+• Üç görsel üç kare olarak, beş ve üzeri "+N" ile
+• Fediverse yanıtları (NIP-22) konularda ve bildirimlerde görünür
+• Düzeltmeler: kendi yanıtın ve takip sayısı hemen görünür

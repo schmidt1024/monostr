@@ -1,6 +1,7 @@
 package com.monostr.app.ui.common
 
 import com.monostr.nostr.model.HashtagTags
+import com.monostr.nostr.model.NoteAddress
 import com.monostr.nostr.search.SearchQuery
 
 /** One run of note text: plain, or a link the UI renders in primary colour with underline (spec 3.3). */
@@ -10,6 +11,8 @@ sealed class NoteSpan {
     data class Hashtag(override val text: String, val tag: String) : NoteSpan()
     data class Mention(override val text: String, val pubkey: String) : NoteSpan()
     data class NoteRef(override val text: String, val noteId: String) : NoteSpan()
+    /** `nostr:naddr1…` (spec 2026-10-29 naddr): reads as «event» and opens the web link. */
+    data class AddressRef(override val text: String, val ref: com.monostr.nostr.model.AddressRef) : NoteSpan()
     data class Url(override val text: String, val url: String) : NoteSpan()
 }
 
@@ -18,7 +21,7 @@ object NoteLinks {
     // group 1: url, group 2: nostr link (scheme and prefix case-insensitive, bech32 may be all caps), group 3: hashtag (needs a letter somewhere)
     private val TOKEN = Regex(
         "(${HashtagTags.URL})" +
-            "|((?i:nostr:(?:npub1|nprofile1|note1|nevent1))[0-9a-zA-Z]+)" + // regex
+            "|((?i:nostr:(?:npub1|nprofile1|note1|nevent1|naddr1))[0-9a-zA-Z]+)" + // regex
             "|${HashtagTags.HASHTAG}", // the hashtags a published note tags (`t`) are exactly the ones shown as links
     )
 
@@ -55,6 +58,8 @@ object NoteLinks {
                     end = m.range.first + url.length
                     NoteSpan.Url(shownUrl(url), url)
                 }
+                m.groups[2] != null && m.value.startsWith("nostr:naddr1", ignoreCase = true) ->
+                    NoteAddress.decode(m.value)?.let { NoteSpan.AddressRef(m.value, it) }
                 m.groups[2] != null -> when (val q = SearchQuery.parse(m.value)) {
                     is SearchQuery.Profile -> NoteSpan.Mention(m.value, q.pubkey)
                     is SearchQuery.Thread -> NoteSpan.NoteRef(m.value, q.noteId)

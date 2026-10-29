@@ -601,4 +601,56 @@ class ConversationResolverTest {
             e.close()
         }
     }
+
+    private val articleRef = com.monostr.nostr.model.AddressRef(30023, a.publicKey().toHex(), "post")
+
+    private fun articleComment(keys: Keys, text: String, parent: Event? = null): Event {
+        val articleId = "d".repeat(64)
+        val root = listOf(listOf("A", articleRef.coordinate), listOf("E", articleId), listOf("K", "30023"), listOf("P", a.publicKey().toHex()))
+        val scope = if (parent == null) listOf(listOf("a", articleRef.coordinate), listOf("e", articleId), listOf("k", "30023"))
+        else listOf(listOf("e", parent.id().toHex()), listOf("k", "1111"))
+        return EventBuilder(Kind(1111u), text).tags((root + scope).map { Tag.parse(it) }).customCreatedAt(Timestamp.fromSecs((clock++).toULong())).signWithKeys(keys)
+    }
+
+    @Test
+    fun `a comment under an article has the article card above it, not an unavailable note`() = runTest {
+        SilentWsRelay(answerEose = true).use { relay ->
+            val e = engine(relay)
+            val c = articleComment(b, "first").also { e.save(it) }
+            val repo = NostrConversationRepository(e)
+            assertEquals(listOf<Slot>(Slot.Article(articleRef)), repo.ancestors(NoteMapper.note(c)!!))
+            assertTrue(relay.requests.isEmpty(), "the article id is not looked up as a note")
+            val walk = repo.localAncestors(NoteMapper.note(c)!!)
+            assertEquals(listOf<Slot>(Slot.Article(articleRef)), walk.ancestors)
+            e.close()
+        }
+    }
+
+    @Test
+    fun `a comment on a comment has the article first, then the parent comment`() = runTest {
+        SilentWsRelay(answerEose = true).use { relay ->
+            val e = engine(relay)
+            val c = articleComment(b, "first").also { e.save(it) }
+            val d = articleComment(a, "second", parent = c).also { e.save(it) }
+            val got = NostrConversationRepository(e).ancestors(NoteMapper.note(d)!!)
+            assertEquals(listOf("article", "first"), got.map { if (it is Slot.Article) "article" else (it as Slot.Shown).note.content })
+            e.close()
+        }
+    }
+
+    @Test
+    fun `feed chains of comments end at the article card, the article id is never asked for`() = runTest {
+        SilentWsRelay(answerEose = true).use { relay ->
+            val e = engine(relay)
+            val c = articleComment(b, "first").also { e.save(it) }
+            val d = articleComment(a, "second", parent = c).also { e.save(it) }
+            val top = NoteMapper.note(c)!!
+            val nested = NoteMapper.note(d)!!
+            val chains = NostrConversationRepository(e).chains(listOf(top, nested))
+            assertEquals(Chain(listOf(Slot.Article(articleRef)), cut = false), chains[top.id])
+            assertEquals(listOf("article", "first"), chains[nested.id]!!.ancestors.map { if (it is Slot.Article) "article" else (it as Slot.Shown).note.content })
+            assertTrue(relay.requests.isEmpty(), "the article id is not looked up as a note")
+            e.close()
+        }
+    }
 }

@@ -13,7 +13,9 @@ import com.monostr.app.ui.common.UiText
 import com.monostr.app.ui.common.uiText
 import com.monostr.app.ui.common.userMessage
 import com.monostr.monero.MoneroUri
+import com.monostr.nostr.PerfTrace
 import com.monostr.nostr.model.Note
+import com.monostr.nostr.repo.AuthorRelaysRepository
 import com.monostr.nostr.repo.TipsRepository
 import com.monostr.tips.PaymentInfo
 import com.monostr.tips.Watcher
@@ -22,6 +24,7 @@ import com.monostr.tips.TipType
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -34,6 +37,8 @@ sealed class TipPhase {
     data object Loading : TipPhase()
     /** Spec 5.5: the recipient has no valid payment info. */
     data object NoMonero : TipPhase()
+    /** The recipient has no payment info but a payto address: pay it by hand, nothing is published or tracked. [walletMissing] is null until the UI tried to open the wallet. */
+    data class PayTo(val address: String, val uri: String, val walletMissing: Boolean? = null) : TipPhase()
     data object Ready : TipPhase()
     data object Sending : TipPhase()
     /** The intent is published. [walletMissing] is null until the UI tried to open the wallet; [arrived] once the watcher's receipt settled the pending tip. */
@@ -74,6 +79,9 @@ class TipSheetController(
     private val settings: TipSettingsStore,
     private val pending: PendingTipStore,
     private val scope: CoroutineScope,
+    private val authorRelays: AuthorRelaysRepository,
+    /** The "connect the author's relays" setting: off, the recipient's own relays are never asked for its payto. */
+    private val authorRelaysEnabled: suspend () -> Boolean,
     /** The recipient names the watcher URL: a LAN or loopback one is never asked (debug builds allow it for local test watchers). */
     private val watcherAllowed: (String) -> Boolean = { BuildConfig.DEBUG || RelayHosts.isPublic(it) },
     private val now: () -> Long = { System.currentTimeMillis() / 1000 },
@@ -83,36 +91,82 @@ class TipSheetController(
     private var recipient: PaymentInfo.Enabled? = null
     /** Waits for the open sheet's pending tip to be settled; see [watchArrival]. */
     private var arrival: Job? = null
+    /** Loads the open sheet's payment info and payto; cancelled on dismiss and reopen, which releases the recipient's relays at once. */
+    private var loading: Job? = null
 
     fun open(note: Note) = open(TipTarget.Note(note))
 
     fun open(target: TipTarget) {
         arrival?.cancel()
+        loading?.cancel()
         recipient = null
         _state.value = TipSheetState(target = target)
-        scope.launch {
+        loading = scope.launch {
             val presets = settings.presets.first()
             val anonymous = settings.anonymous.first()
             val unit = settings.amountUnit.first()
             // the middle preset (0.001 XMR by default) is the sensible starting point, not the smallest
             _state.update { it.copy(presets = presets, selected = presets.getOrNull(presets.size / 2), anonymous = anonymous, unit = unit) }
-            val info = try {
-                // ask the relays first: a cached copy may still say "enabled" after the recipient disabled tips
-                withTimeoutOrNull(FRESH_INFO_TIMEOUT_MS) { tips.paymentInfo(target.recipient, maxAgeSeconds = 0) }
-                    ?: tips.cachedPaymentInfo(target.recipient) // relays too slow: the local copy, without asking them again
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                PaymentInfo.Disabled
+            // Amethyst/Ditto users keep their payto (kind 10133) on their own write relays only: asked alongside the payment info
+            val outbox = async { fetchOutboxPayto(target.recipient) }
+            try {
+                val info = try {
+                    var fresh: PaymentInfo? = null
+                    // one budget from opening for both: the outbox fetch is awaited only without a valid payment info
+                    withTimeoutOrNull(FRESH_INFO_TIMEOUT_MS) {
+                        // ask the relays first: a cached copy may still say "enabled" after the recipient disabled tips
+                        fresh = try {
+                            tips.paymentInfo(target.recipient, maxAgeSeconds = 0)
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            PaymentInfo.Disabled // the outbox payto may still answer
+                        }
+                        if (fresh !is PaymentInfo.Enabled) outbox.await()
+                    }
+                    fresh ?: tips.cachedPaymentInfo(target.recipient) // relays too slow: the local copy, without asking them again
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    PaymentInfo.Disabled
+                }
+                if (_state.value.target?.key != target.key) return@launch // dismissed or reopened meanwhile
+                recipient = info as? PaymentInfo.Enabled
+                val phase = if (recipient != null) TipPhase.Ready else {
+                    val payto = try {
+                        tips.cachedPayto(target.recipient)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        null
+                    }
+                    if (_state.value.target?.key != target.key) return@launch
+                    if (payto != null) TipPhase.PayTo(payto, "monero:$payto") else TipPhase.NoMonero
+                }
+                PerfTrace.mark("tip sheet phase ${phase::class.simpleName}")
+                _state.update { it.copy(phase = phase) }
+            } finally {
+                outbox.cancel()
             }
-            if (_state.value.target?.key != target.key) return@launch // dismissed or reopened meanwhile
-            recipient = info as? PaymentInfo.Enabled
-            _state.update { it.copy(phase = if (recipient == null) TipPhase.NoMonero else TipPhase.Ready) }
+        }
+    }
+
+    /** The recipient's kind 10133 from up to three of its write relays outside the user's list, into the database; never throws except on cancellation. */
+    private suspend fun fetchOutboxPayto(pubkey: String) {
+        try {
+            if (!authorRelaysEnabled()) return
+            val relays = authorRelays.writeRelays(pubkey)
+            if (relays.isNotEmpty()) tips.fetchPayto(pubkey, relays)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // no outbox payto: the user's own relays' answer stands
         }
     }
 
     fun dismiss() {
         arrival?.cancel()
+        loading?.cancel()
         recipient = null
         _state.value = TipSheetState()
     }
@@ -238,6 +292,12 @@ class TipSheetController(
     fun walletResult(opened: Boolean) {
         val pay = _state.value.phase as? TipPhase.Pay ?: return
         _state.update { it.copy(phase = pay.copy(walletMissing = !opened)) }
+    }
+
+    /** The UI reports whether a wallet app took the payto URI. */
+    fun payToWalletResult(opened: Boolean) {
+        val payTo = _state.value.phase as? TipPhase.PayTo ?: return
+        _state.update { it.copy(phase = payTo.copy(walletMissing = !opened)) }
     }
 
     companion object {

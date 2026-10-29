@@ -153,9 +153,11 @@
     <string name="profile_tab_posts">Publicações</string>
     <string name="profile_tab_replies">Respostas</string>
     <string name="profile_tab_reposts">Reposts</string>
+    <string name="profile_tab_articles">Artigos</string>
     <string name="profile_empty_posts">Ainda sem publicações</string>
     <string name="profile_empty_replies">Ainda sem respostas</string>
     <string name="profile_empty_reposts">Ainda sem reposts</string>
+    <string name="profile_empty_articles">Ainda não há artigos</string>
 
     <!-- compose -->
     <string name="compose_title_reply">Responder</string>
@@ -171,7 +173,10 @@
     <string name="login_no_signer">Nenhum assinador NIP-55 (por ex. Amber) instalado. Entre com uma chave:</string>
     <string name="login_secret_label">nsec ou hex</string>
     <string name="login_button">Entrar</string>
-    <string name="login_error_invalid_key">Não é uma chave nsec ou hex válida</string>
+    <string name="login_error_invalid_key">Não é uma chave nsec, ncryptsec ou hex válida</string>
+    <string name="login_password_label">Senha</string>
+    <string name="login_error_wrong_password">Senha incorreta</string>
+    <string name="login_error_too_strong">Este backup precisa de mais memória do que este telefone permite</string>
     <string name="login_error_rejected">Solicitação recusada no assinador</string>
     <string name="login_error_signer">O assinador informou um erro</string>
     <string name="login_error_failed">Falha ao entrar</string>
@@ -187,6 +192,10 @@
     <string name="tip_open_wallet_again">Abrir a carteira de novo</string>
     <string name="tip_sent">Carteira aberta. A gorjeta aguarda a confirmação do watcher.</string>
     <string name="tip_error_amount">Valor inválido (por ex. 0.005)</string>
+    <string name="tip_payto_title_plain">Enviar Monero</string>
+    <string name="tip_payto_note">Vai para o endereço, não para esta nota. Sem confirmação: o monostr não vê se você pagou.</string>
+    <string name="tip_payto_profile">Sem confirmação: o monostr não vê se você pagou.</string>
+    <string name="tip_payto_pay">Pagar com a carteira</string>
     <string name="tip_no_monero">O destinatário não configurou Monero</string>
     <string name="tip_notice_offline">Nenhum relay acessível, intent salvo localmente</string>
     <string name="tip_anonymous_switch">Gorjeta anônima</string>
@@ -220,6 +229,11 @@
     <string name="setup_path_existing_hint">Cole o endereço principal e a chave de visualização privada do Cake Wallet, Monerujo ou Feather.</string>
     <string name="setup_announced_warning">Esta conta já recebe gorjetas em %1$s…%2$s, configurada em outro dispositivo. Configurar aqui substitui esse endereço.</string>
     <string name="setup_announced_notice">As gorjetas já estão configuradas para esta conta (endereço %1$s…%2$s).</string>
+    <string name="setup_payto_replace">Substituir seu endereço Monero público %1$s…%2$s (também visível no Amethyst e no Ditto) pelo endereço de gorjetas?</string>
+    <string name="setup_payto_replace_yes">Substituir</string>
+    <string name="setup_payto_replace_keep">Manter</string>
+    <string name="setup_payto_failed">As gorjetas estão configuradas, mas não foi possível atualizar seu endereço público.</string>
+    <string name="setup_payto_retry">Tentar novamente</string>
     <string name="setup_keep_existing">Manter</string>
     <string name="setup_new_wallet">Criar uma nova carteira de gorjetas (recomendado)</string>
     <string name="setup_existing_wallet">Usar uma carteira existente</string>
@@ -250,10 +264,22 @@
     <string name="setup_err_watcher_network">O watcher informa uma rede desconhecida</string>
     <string name="setup_err_subaddress">Subendereços não são suportados. Use o endereço principal (começa com 4 ou 5).</string>
     <string name="setup_err_integrated">Endereços integrados não são suportados. Use o endereço principal.</string>
+    <string name="setup_err_address_integrated">Endereços integrados não são suportados. Use um endereço principal ou um subendereço (4… / 8…).</string>
     <string name="setup_err_address">Endereço inválido</string>
     <string name="setup_err_network">O endereço pertence a uma rede diferente da do watcher</string>
     <string name="setup_err_view_key_format">A chave de visualização deve ter 64 caracteres hex</string>
     <string name="setup_err_view_key_mismatch">A chave de visualização não corresponde ao endereço</string>
+    <string name="setup_address_title">Receber Monero</string>
+    <string name="setup_address_field">Endereço Monero (4… / 8…)</string>
+    <string name="setup_address_hint">Este endereço é público. O ideal é usar um subendereço só para o Nostr.</string>
+    <string name="setup_address_publish">Publicar</string>
+    <string name="setup_no_wallet_link">Ainda não tem uma carteira Monero? Crie uma aqui</string>
+    <string name="setup_address_done">Agora outras pessoas podem te enviar Monero, também pelo Amethyst e pelo Ditto.</string>
+    <string name="setup_upgrade_title">Upgrade: recibos</string>
+    <string name="setup_upgrade_text">Veja quem te deu gorjeta, com notificação.</string>
+    <string name="setup_upgrade_action">Configurar watcher</string>
+    <string name="setup_err_mainnet">Use um endereço da mainnet (começa com 4 ou 8).</string>
+    <string name="setup_err_relays_unknown">Relays inacessíveis, tente novamente.</string>
     <string name="setup_err_not_published">Nenhum relay acessível – informação de pagamento não publicada, tente novamente</string>
     <string name="setup_personal_err_input">Cole o nprofile (ou npub) do watcher.</string>
     <string name="setup_personal_err_relay">Informe um relay do watcher (wss://…).</string>
@@ -313,6 +339,11 @@
     <string name="note_via">via %1$s</string>
     <string name="settings_monero">Gorjetas em Monero</string>
     <string name="settings_monero_not_set_up">Não configurado. Não é necessário para enviar gorjetas.</string>
+    <string name="settings_monero_payto">Seu endereço Monero %1$s…%2$s</string>
+    <string name="settings_monero_payto_change">Alterar</string>
+    <string name="settings_monero_payto_remove">Remover</string>
+    <string name="settings_msg_payto_removed">Endereço removido</string>
+    <string name="settings_msg_disabled_payto_left">As gorjetas estão desativadas, mas não foi possível remover seu endereço público.</string>
     <string name="settings_monero_announced">As gorjetas chegam a %1$s…%2$s, configurada em outro dispositivo. Configurar aqui substitui esse endereço.</string>
     <string name="settings_monero_set_up">Configurar recebimento de gorjetas</string>
     <string name="settings_monero_address">As gorjetas chegam nesta carteira: %1$s…%2$s · %3$s</string>
@@ -460,6 +491,31 @@
     <string name="note_ref_label">nota</string>
     <string name="quote_missing">Nota não encontrada</string>
     <string name="mute_quote_placeholder">Nota de uma conta silenciada</string>
+    <string name="address_ref_label">evento</string>
+    <string name="address_type_article">Artigo</string>
+    <string name="address_type_live">Ao vivo</string>
+    <string name="address_type_listing">Anúncio</string>
+    <string name="address_type_list">Lista</string>
+    <string name="address_type_calendar">Evento de calendário</string>
+    <string name="address_type_event">Evento</string>
+    <string name="address_live">AO VIVO</string>
+    <string name="address_planned">Começa %1$s</string>
+    <string name="address_planned_unknown">Agendado</string>
+    <string name="address_ended">ENCERRADO</string>
+    <plurals name="address_watching">
+        <item quantity="one">%1$s assistindo</item>
+        <item quantity="other">%1$s assistindo</item>
+    </plurals>
+    <string name="address_missing">Evento não encontrado</string>
+    <string name="address_deleted">Evento excluído</string>
+    <string name="article_title">Artigo</string>
+    <plurals name="article_read_time">
+        <item quantity="one">%d min de leitura</item>
+        <item quantity="other">%d min de leitura</item>
+    </plurals>
+    <string name="article_missing">Artigo não encontrado</string>
+    <string name="article_deleted">Artigo excluído</string>
+    <string name="article_open_browser">Abrir no navegador</string>
     <string name="conversation_show_muted">Mostrar</string>
     <string name="action_quote">Citar</string>
     <string name="compose_quote_hint">Citação</string>
@@ -653,4 +709,15 @@
     <string name="upload_video_too_large">Este vídeo é demasiado grande. Experimenta um clip mais curto.</string>
     <string name="upload_video_rate">Limite diário de vídeos atingido, tenta amanhã</string>
     <string name="compose_video_tile">Vídeo</string>
+    <string name="backup_password_button">Backup com senha</string>
+    <string name="backup_password_title">Backup com senha</string>
+    <string name="backup_password_label">Senha</string>
+    <string name="backup_password_repeat">Repetir senha</string>
+    <string name="backup_password_too_short">Pelo menos 8 caracteres</string>
+    <string name="backup_password_mismatch">As senhas não coincidem</string>
+    <string name="backup_password_create">Criar</string>
+    <string name="backup_password_failed">Não foi possível criar o backup</string>
+    <string name="backup_password_note">Guarde a senha em separado. Sem ela, este backup é inútil. Amethyst e outras apps Nostr podem importá-lo.</string>
+    <string name="backup_copy">Copiar backup</string>
+    <string name="backup_copied">Backup copiado, a área de transferência será limpa em breve</string>
 </resources>

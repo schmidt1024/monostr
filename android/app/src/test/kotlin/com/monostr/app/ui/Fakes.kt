@@ -33,6 +33,8 @@ import com.monostr.nostr.model.SaveResult
 import com.monostr.nostr.repo.FeedTabsRepository
 import com.monostr.nostr.repo.ListsRepository
 import com.monostr.nostr.repo.AnonymousIntent
+import com.monostr.nostr.repo.OwnPayto
+import com.monostr.nostr.repo.PaytoWrite
 import com.monostr.nostr.repo.AuthorRelaysRepository
 import com.monostr.nostr.repo.FollowCounts
 import com.monostr.nostr.repo.FollowCountsRepository
@@ -174,6 +176,21 @@ class FakeFeed : FeedRepository {
         profileCalls += section to fetch
         return (byAuthor[author] ?: emptyList()).filter(section::keeps)
     }
+    /** What the database holds as visible articles per author (the relay fetch adds [fetchedArticles]). */
+    var storedArticles: Map<String, List<com.monostr.nostr.model.Article>> = emptyMap()
+    var fetchedArticles: Map<String, List<com.monostr.nostr.model.Article>> = emptyMap()
+    /** Order of article calls: "has", "probe", "list:<fetch>". */
+    val articleCalls = ArrayList<String>()
+    private val probed = HashMap<String, Boolean>()
+    override suspend fun hasArticles(author: String): Boolean { articleCalls += "has"; return storedArticles[author].orEmpty().isNotEmpty() }
+    override suspend fun probeArticles(author: String): Boolean {
+        articleCalls += "probe"
+        return probed.getOrPut(author) { fetchedArticles[author].orEmpty().isNotEmpty() }
+    }
+    override suspend fun profileArticles(author: String, fetch: Boolean): List<com.monostr.nostr.model.Article> {
+        articleCalls += "list:$fetch"
+        return (storedArticles[author].orEmpty() + if (fetch) fetchedArticles[author].orEmpty() else emptyList()).sortedByDescending { it.publishedAt }
+    }
     /** Authors of every refreshProfile call, in order. */
     val refreshProfileCalls = ArrayList<String>()
     /** When set, refreshProfile suspends here (the relays still answering). */
@@ -203,7 +220,9 @@ class FakeProfiles(known: Map<String, Profile> = emptyMap()) : ProfileRepository
     private val _updates = MutableSharedFlow<Map<String, Profile>>(extraBufferCapacity = 16)
     override val updates: SharedFlow<Map<String, Profile>> = _updates
     override fun observe(pubkey: String) = current.map { it[pubkey] ?: Profile.empty(pubkey) }
-    override suspend fun get(pubkey: String, maxAgeSeconds: Long): Profile = current.value[pubkey] ?: Profile.empty(pubkey)
+    /** When set, get suspends here (the header still loading). */
+    var getGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+    override suspend fun get(pubkey: String, maxAgeSeconds: Long): Profile { getGate?.await(); return current.value[pubkey] ?: Profile.empty(pubkey) }
     override suspend fun getAll(pubkeys: Collection<String>, maxAgeSeconds: Long): Map<String, Profile> {
         getAllCalls += pubkeys.toList()
         if (getAllDelayMs > 0) delay(getAllDelayMs)
@@ -279,7 +298,9 @@ class FakePublish(var relaysOk: Boolean = true, private val fail: Boolean = fals
     override suspend fun profile(json: String) = result(0).also { calls += "profile"; profileJson += json }
     override suspend fun react(note: Note, content: String) = result(7).also { calls += if (content == "+") "like:${note.id.take(4)}" else "react:${note.id.take(4)}:$content" }
     override suspend fun repost(note: Note) = result(6).also { calls += "repost:${note.id.take(4)}" }
-    override suspend fun withdraw(noteId: String, kind: Int) = result(5).also { calls += (if (kind == 7) "unlike:" else "unrepost:") + noteId.take(4) }
+    override suspend fun comment(text: String, article: Note, parent: Note?, attachments: List<NoteAttachment>, sensitive: Boolean) = result(1111).also { calls += "comment:${article.id.take(4)}:${parent?.id?.take(4) ?: "-"}:$text" }
+    val withdrawKinds = ArrayList<Int>()
+    override suspend fun withdraw(noteId: String, kind: Int) = result(5).also { withdrawKinds += kind; calls += (if (kind == 7) "unlike:" else "unrepost:") + noteId.take(4) }
     override suspend fun delete(note: Note) = result(5).also { calls += "delete:${note.id.take(4)}" }
     override suspend fun noteLink(note: Note) = "nostr:nevent1fake${note.id.take(8)}"
     /** When set, a resend throws. */
@@ -368,6 +389,39 @@ class FakeTips(
         statusRequests += watcherPubkey to relays
         statusGate?.await()
         return statuses[watcherPubkey]
+    }
+    /** Monero payto entries per pubkey, as [cachedPayto] reads them. */
+    var paytos: Map<String, String?> = emptyMap()
+    var own: OwnPayto = OwnPayto.Known(null)
+    /** Every address passed to [setOwnPayto]; a [PaytoWrite.Published] result also becomes [own]. */
+    val paytoWrites = ArrayList<String?>()
+    var paytoResult = PaytoWrite.Published
+    override suspend fun cachedPayto(pubkey: String): String? = paytos[pubkey] ?: outboxPaytos[pubkey]?.takeIf { pubkey in outboxFetched }
+    /** Payto entries only the recipient's own relays have: [cachedPayto] reads one once [fetchPayto] got that pubkey with non-empty relays. */
+    var outboxPaytos: Map<String, String> = emptyMap()
+    private val outboxFetched = HashSet<String>()
+    /** Every [fetchPayto] call as (pubkey, relays); [outboxGate], when set, holds each fetch until it completes; [outboxCancelled] counts the cancelled ones. */
+    val paytoFetches = ArrayList<Pair<String, List<String>>>()
+    var outboxGate: CompletableDeferred<Unit>? = null
+    var outboxCancelled = 0
+    override suspend fun fetchPayto(pubkey: String, relays: List<String>) {
+        paytoFetches += pubkey to relays
+        try {
+            outboxGate?.await()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            outboxCancelled++
+            throw e
+        }
+        if (relays.isNotEmpty()) outboxFetched += pubkey
+    }
+    /** Every [ownPayto] call; [ownGate], when set, holds the answer until it completes. */
+    var ownCalls = 0
+    var ownGate: CompletableDeferred<Unit>? = null
+    override suspend fun ownPayto(): OwnPayto { ownCalls++; ownGate?.await(); return own }
+    override suspend fun setOwnPayto(address: String?): PaytoWrite {
+        paytoWrites += address
+        if (paytoResult == PaytoWrite.Published) own = OwnPayto.Known(address)
+        return paytoResult
     }
     override suspend fun disablePaymentInfo(): PublishResult {
         disabledCalls++
@@ -657,6 +711,10 @@ class FakeAuthorRelays(private val lists: Map<String, List<String>> = emptyMap()
     /** What fetchNotes reports; the default is an id no screen shows, so every outbox tick counts as new. */
     var fetchedIds: Set<String> = setOf("f".repeat(64))
     override suspend fun fetchNotes(relays: List<String>, pubkey: String, limit: Int): Set<String> { fetched += relays to pubkey; return fetchedIds }
+    /** Article fetches from the author's relays (relays, limit); [onArticles] runs inside (a test stores the fetched articles there). */
+    val articleFetches = ArrayList<Pair<List<String>, Int>>()
+    var onArticles: () -> Boolean = { false }
+    override suspend fun fetchArticles(relays: List<String>, pubkey: String, limit: Int): Boolean { articleFetches += relays to limit; return onArticles() }
 }
 
 class FakeCounts : CountsRepository {
@@ -669,6 +727,8 @@ class FakeCounts : CountsRepository {
     override fun request(noteIds: Collection<String>, priority: Boolean) {
         if (priority) priorityRequested += noteIds.toList() else requested += noteIds.toList()
     }
+    val articlesRequested = ArrayList<Pair<String, String>>()
+    override fun requestArticle(noteId: String, coordinate: String, priority: Boolean) { articlesRequested += noteId to coordinate }
     override fun bump(noteId: String, kind: Int, delta: Long) { bumps += Triple(noteId, kind, delta) }
     fun set(id: String, c: NoteCounts) { _counts.update { it + (id to c) } }
 }
@@ -692,6 +752,15 @@ class FakeBookmarks(initial: List<String> = emptyList(), var outcome: BookmarkOu
         _state.update { s -> s.copy(ids = if (noteId in s.ids) s.ids - noteId else listOf(noteId) + s.ids) }
         gate?.await()
         if (outcome != BookmarkOutcome.Ok) _state.update { it.copy(ids = before) }
+        return outcome
+    }
+    val toggledArticles = ArrayList<String>()
+    override suspend fun toggleArticle(coordinate: String): BookmarkOutcome {
+        toggledArticles += coordinate
+        if (outcome != BookmarkOutcome.NotLoaded) _state.update { it.copy(loaded = true) }
+        val before = _state.value
+        _state.update { s -> s.copy(extraIds = if (coordinate in s.extraIds) s.extraIds - coordinate else listOf(coordinate) + s.extraIds) }
+        if (outcome != BookmarkOutcome.Ok) _state.value = before
         return outcome
     }
     /** What the database holds (localEntries); null = the same as [notes]. */

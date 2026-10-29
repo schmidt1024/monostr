@@ -39,11 +39,24 @@ class BookmarkActions(
         return note.copy(bookmarked = note.target.id in s.ids, bookmarkEnabled = s.writable || !s.loaded)
     }
 
+    /** [note] (an article's) flagged by its coordinate: bookmarked when the list holds it, enabled while the list may be written. */
+    fun articleFlags(note: NoteUi, coordinate: String): NoteUi {
+        val s = bookmarks.state.value
+        return note.copy(bookmarked = coordinate in s.extraIds, bookmarkEnabled = s.writable || !s.loaded)
+    }
+
+    /** Toggles the article [coordinate] (privately); messages as [toggle]. */
+    fun toggleArticle(coordinate: String, onResult: (UiText?) -> Unit) = run({ bookmarks.toggleArticle(coordinate) }, onResult)
+
     /** Toggles [target]; success and a user's own rejection are silent, everything else gets a message. */
     fun toggle(target: Note, onResult: (UiText?) -> Unit) {
+        run({ bookmarks.toggle(target.id) }, onResult)
+    }
+
+    private fun run(write: suspend () -> BookmarkOutcome, onResult: (UiText?) -> Unit) {
         (background ?: scope).launch {
             val message = try {
-                when (bookmarks.toggle(target.id)) {
+                when (write()) {
                     BookmarkOutcome.Ok, BookmarkOutcome.Rejected -> null
                     BookmarkOutcome.PublishFailed, BookmarkOutcome.NotLoaded -> uiText(R.string.bookmark_failed)
                     BookmarkOutcome.Unsupported -> uiText(R.string.bookmark_nip44_unsupported)

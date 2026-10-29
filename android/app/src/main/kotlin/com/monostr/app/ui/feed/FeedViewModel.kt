@@ -115,6 +115,8 @@ data class FeedUiState(
     val pending: Set<String> = emptySet(),
     /** Ancestors only a mute hides: shown as "Note from a muted account", one tap shows the note there. */
     val mutedAncestors: Map<String, NoteUi> = emptyMap(),
+    /** Spec 2026-10-29 article reader (final review M11): chain slots that are the article a comment sits under, by coordinate; shown as its card. */
+    val articles: Map<String, com.monostr.nostr.model.AddressRef> = emptyMap(),
     /** Like X's "new posts": live notes above the newest shown, held back while the user reads; [FeedController.showNew] or a refresh shows them. */
     val newAbove: List<NoteUi> = emptyList(),
     val loading: Boolean = true,
@@ -369,7 +371,7 @@ class FeedController(
     /** Spec 2026-10-16 §2.2 Timeouts, §6: a refresh tries the chains again that had unavailable notes (muted ones are loaded, so they stay). */
     private fun retryUnavailable() {
         val s = _state.value
-        val open = s.notes.filter { n -> s.chains[n.note.id]?.ancestors?.any { it !in allAncestors } == true }
+        val open = s.notes.filter { n -> s.chains[n.note.id]?.ancestors?.any { it !in allAncestors && it !in s.articles } == true }
         // entries a job is still resolving are walked again when it ends (a retry must not get lost in the stage-3 window)
         retryAgain += open.map { it.note.id }.filter { it in resolving }
         resolveChains(open)
@@ -432,6 +434,7 @@ class FeedController(
                 ancestors = visibleAncestors(),
                 mutedAncestors = mutedAncestors(),
                 pending = if (resolved.isEmpty() && pendings.isEmpty()) s.pending else s.pending - resolved + pendings.map { it.id },
+                articles = s.articles + found.values.flatMap { c -> c.ancestors.filterIsInstance<Slot.Article>() }.associate { it.id to it.ref },
             )
         }
         trackShown()

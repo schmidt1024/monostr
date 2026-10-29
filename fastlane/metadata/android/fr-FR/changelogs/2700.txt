@@ -1,0 +1,5 @@
+• Lisez les articles (NIP-23) dans l'app : image, titre, texte mis en forme ; dessous, aimer, republier, répondre, enregistrer et pourboire
+• Les profils ont un onglet « Articles » ; les onglets restent sur une ligne et défilent
+• Les liens vers articles, directs et autres événements apparaissent en cartes
+• Adresse Monero sans watcher (NIP-A3 payto) : prête en une minute
+• Sauvegardez votre clé avec un mot de passe (ncryptsec, NIP-49) et connectez-vous avec

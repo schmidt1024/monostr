@@ -6,6 +6,7 @@ import com.monostr.nostr.PublishResult
 import com.monostr.nostr.RefreshGate
 import com.monostr.nostr.Signer
 import com.monostr.nostr.StartupGate
+import com.monostr.nostr.model.AddressRef
 import com.monostr.nostr.model.Note
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
@@ -22,8 +23,11 @@ import java.time.Duration
 /** Bookmarked note ids (private + public), whether the list may be written, whether load ran. */
 typealias BookmarksState = ListState
 
-/** One bookmark; [note] is null when the note is not available locally or from the relays. */
-data class BookmarkEntry(val id: String, val note: Note?)
+/**
+ * One bookmark; [note] is null when the note is not available locally or from the relays. An address entry (`a` tag, e.g. an
+ * article) has [article] set, [id] is its coordinate and [note] stays null: the screen's card loads the event itself.
+ */
+data class BookmarkEntry(val id: String, val note: Note?, val article: AddressRef? = null)
 
 /**
  * The bookmarks' name for [ListOutcome], one case each. Not a typealias: Kotlin does not resolve
@@ -63,6 +67,11 @@ interface BookmarksRepository {
      * published) and applies the change on top of a newer list another device wrote meanwhile.
      */
     suspend fun toggle(noteId: String): BookmarkOutcome
+    /**
+     * Same for an article (`30023:<pubkey>:<d>`): monostr's own additions go into the encrypted part as `["a", coordinate]`,
+     * never public; an `a` entry another client added (public or private) counts as bookmarked and is removed from where it is.
+     */
+    suspend fun toggleArticle(coordinate: String): BookmarkOutcome
     /** [entries] from the database only (spec perf 3.8): the stored notes at once, the others as placeholders. */
     suspend fun localEntries(): List<BookmarkEntry>
     /** Notes for [BookmarksState.ids] in list order; missing ones fetched in chunks of 50 side by side, an id no relay had is not asked again for 10 minutes. */
@@ -85,7 +94,7 @@ class NostrBookmarksRepository(
     private val entriesTimeout: Duration = Duration.ofSeconds(8),
     gate: StartupGate = StartupGate.OPEN,
 ) : BookmarksRepository {
-    private val list = NostrPrivateList(engine, signer, kind = 10003, tag = "e", now, send, fetchTimeout, refreshTimeout, watch, gate = gate)
+    private val list = NostrPrivateList(engine, signer, kind = 10003, tag = "e", now, send, fetchTimeout, refreshTimeout, watch, gate = gate, extraTag = "a")
     /** Runs (and joins) the relay lookups on the engine's scope so a left screen does not cancel them (spec 3.1); freshness is [missedAt], not the gate. */
     private val lookups = RefreshGate<String>(engine.backgroundScope, 0, now)
     private val clock = now
@@ -97,6 +106,8 @@ class NostrBookmarksRepository(
 
     override suspend fun toggle(noteId: String): BookmarkOutcome = list.toggle(noteId).toBookmarkOutcome()
 
+    override suspend fun toggleArticle(coordinate: String): BookmarkOutcome = list.toggle(coordinate, entryTag = "a").toBookmarkOutcome()
+
     /** A kind 10003 of ours from a relay; see [NostrPrivateList.onListEvent]. */
     internal suspend fun onListEvent(event: Event) = list.onListEvent(event)
 
@@ -105,16 +116,17 @@ class NostrBookmarksRepository(
         missedAt.clear()
     }
 
-    override suspend fun localEntries(): List<BookmarkEntry> = resolve(list.state.value.ids, fetch = false)
+    override suspend fun localEntries(): List<BookmarkEntry> = resolve(list.state.value.ordered, fetch = false)
 
-    override suspend fun entries(): List<BookmarkEntry> = resolve(list.state.value.ids, fetch = true)
+    override suspend fun entries(): List<BookmarkEntry> = resolve(list.state.value.ordered, fetch = true)
 
     /**
      * The notes of [ids] from the database; with [fetch] the missing ones are asked of the relays in chunks of
      * [CHUNK] side by side (spec perf 3.8: one after another, 8 s each, before), except ids no relay had less than
      * [missRetrySeconds] ago. A lookup while no relay is connected is not remembered.
      */
-    private suspend fun resolve(ids: List<String>, fetch: Boolean): List<BookmarkEntry> {
+    private suspend fun resolve(ordered: List<Pair<String, String>>, fetch: Boolean): List<BookmarkEntry> {
+        val ids = ordered.filter { it.first == "e" }.map { it.second }
         val parsed = ids.mapNotNull { id -> runCatching { EventId.parse(id) }.getOrNull()?.let { id.lowercase() to it } }.distinctBy { it.first }
         val found = HashMap<String, Event>() // keyed by lowercase hex id
         suspend fun read(chunk: List<Pair<String, EventId>>) =
@@ -144,10 +156,23 @@ class NostrBookmarksRepository(
             }
         }
         val notes = NoteLoader.notes(engine, ids.mapNotNull { found[it.lowercase()] }).associateBy { it.id.lowercase() }
-        return ids.map { BookmarkEntry(it, notes[it.lowercase()]) }
+        // addresses keep their place in the list; one that is not a valid coordinate is dropped
+        return ordered.mapNotNull { (t, v) ->
+            if (t == "e") BookmarkEntry(v, notes[v.lowercase()]) else addressOf(v)?.let { BookmarkEntry(v, null, it) }
+        }
     }
 
     companion object {
+        private val PUBKEY = Regex("[0-9a-f]{64}") // regex
+
+        /** The address a bookmarked `a` coordinate (`kind:pubkey:d`, the identifier may hold colons) points at; null for anything else. */
+        internal fun addressOf(coordinate: String): AddressRef? {
+            val parts = coordinate.split(':', limit = 3)
+            if (parts.size != 3 || !PUBKEY.matches(parts[1])) return null
+            val kind = parts[0].toIntOrNull()?.takeIf { it in 30000..39999 } ?: return null
+            return AddressRef(kind, parts[1], parts[2])
+        }
+
         /** Relays cap filter ids (same limit as the tipper intents). */
         const val CHUNK = 50
     }

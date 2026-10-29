@@ -105,6 +105,9 @@ class CreateAccountController(
     /** The nsec for the copy button; never logged. */
     fun copyText(): String = key.nsec
 
+    /** The hex secret for the password backup dialog (spec 2026-10-29 ncryptsec); never logged. */
+    fun secretHex(): String = key.secretHex
+
     suspend fun finish() {
         val s = _state.value
         if (s.busy || s.step != CreateStep.Follow) return

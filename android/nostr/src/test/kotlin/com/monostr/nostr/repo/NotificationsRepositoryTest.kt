@@ -241,7 +241,7 @@ class NotificationsRepositoryTest {
             val e = connectedEngine(dir, relay)
             val repo = NostrNotificationsRepository(e, NostrTipsRepository(e) { 1000 }) { 1000 }
             repo.refresh(since = null, limit = 100)
-            assertTrue(relay.requests.any { "\"kinds\":[${com.monostr.tips.Kinds.PAYMENT_INFO}]" in it && me.publicKey().toHex() in it }, "no payment info request: ${relay.requests}")
+            assertTrue(relay.requests.any { "\"kinds\":[${com.monostr.tips.Kinds.PAYMENT_INFO}" in it && me.publicKey().toHex() in it }, "no payment info request: ${relay.requests}")
             e.close()
         }
     }

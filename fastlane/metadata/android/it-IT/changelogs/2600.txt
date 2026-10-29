@@ -1,0 +1,7 @@
+• Pubblica video fino a 2 minuti; il telefono li riduce, senza dati di posizione
+• Scopri: liste curate di persone da seguire
+• Le schede dei link mostrano titolo e sito sull’immagine; un link in fondo esce dal testo
+• Ordina le tue liste trascinandole; le schede fissate seguono l’ordine
+• Tre immagini come tre quadrati, da cinque con «+N»
+• Le risposte dal Fediverso (NIP-22) compaiono nei thread e nelle notifiche
+• Correzioni: la tua risposta e i seguiti appaiono subito

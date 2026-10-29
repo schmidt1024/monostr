@@ -10,6 +10,7 @@ import com.monostr.nostr.RustConvert
 import com.monostr.nostr.StartupGate
 import com.monostr.tips.Kinds
 import com.monostr.tips.PaymentInfo
+import com.monostr.tips.Payto
 import com.monostr.tips.Watcher
 import com.monostr.tips.WatcherStatus
 import com.monostr.tips.PreparedTip
@@ -43,6 +44,17 @@ data class Tipper(val receipt: TipReceipt, val comment: String)
 /** A tip intent signed with a one-time key: the publish outcome and the signed event (JSON) for a later resend. */
 data class AnonymousIntent(val result: PublishResult, val eventJson: String)
 
+/** The user's own Monero payto entry (kind 10133, NIP-A3) as the relays know it. */
+sealed class OwnPayto {
+    /** [address]: the Monero entry, or null when the event has none or a completed fetch proved there is no event. */
+    data class Known(val address: String?) : OwnPayto()
+    /** No local event and the relays did not answer completely: writing now could replace an event we never saw. */
+    data object Unknown : OwnPayto()
+}
+
+/** Outcome of [TipsRepository.setOwnPayto]. */
+enum class PaytoWrite { Published, NotPublished, Unknown }
+
 interface TipsRepository {
     /** The recipient's payment info (kind 10037): local first, relays when missing or older than [maxAgeSeconds]. Malformed ⇒ Disabled. */
     suspend fun paymentInfo(pubkey: String, maxAgeSeconds: Long = 3600): PaymentInfo
@@ -55,6 +67,18 @@ interface TipsRepository {
     suspend fun publishPaymentInfo(address: Address, watcher: Watcher, amountsHidden: Boolean): PublishResult
     /** Spec 0.4 §2.2: only [relays], the newest valid status by [watcherPubkey]; null when none or unreachable. */
     suspend fun watcherStatus(watcherPubkey: String, relays: List<String>): WatcherStatus?
+    /** The Monero payto entry of [pubkey] from the local kind 10133 only; [paymentInfo] fetches that event alongside. */
+    suspend fun cachedPayto(pubkey: String): String?
+    /** Pulls the kind 10133 of [pubkey] from [relays] (its own write relays) into the database; never throws except on cancellation. */
+    suspend fun fetchPayto(pubkey: String, relays: List<String>)
+    /** The own Monero payto entry after one relay fetch of the own kind 10133. */
+    suspend fun ownPayto(): OwnPayto
+    /**
+     * Sets (or with null removes) the Monero entry of the own kind 10133, keeping every other tag as it is.
+     * Reads like [ownPayto] first: [PaytoWrite.Unknown] and nothing sent when that is unknown; nothing sent and
+     * [PaytoWrite.Published] when the entry already is [address]. [address] is expected trimmed.
+     */
+    suspend fun setOwnPayto(address: String?): PaytoWrite
     /** Publishes an address-less payment info: "no Monero" (spec 6.5). */
     suspend fun disablePaymentInfo(): PublishResult
     /** Signs, stores and publishes a tip intent to the user's relays and to [watcherRelays] (spec 3.2). */
@@ -112,6 +136,12 @@ class NostrTipsRepository(
 
     private fun infoFilter(pubkey: String) = Filter().kind(Kind(Kinds.PAYMENT_INFO.toUShort())).author(PublicKey.parse(pubkey)).limit(1u)
 
+    /** The relay fetch of [paymentInfo]: kind 10037 and the payto kind 10133 in one filter (both replaceable: one each, no limit). */
+    private fun infoFetchFilter(pubkey: String) =
+        Filter().kinds(listOf(Kind(Kinds.PAYMENT_INFO.toUShort()), Kind(Kinds.PAYTO.toUShort()))).author(PublicKey.parse(pubkey))
+
+    private fun paytoFilter(pubkey: String) = Filter().kind(Kind(Kinds.PAYTO.toUShort())).author(PublicKey.parse(pubkey)).limit(1u)
+
     private fun receiptFilter(noteIds: Collection<String>) =
         Filter().kind(Kind(Kinds.TIP_RECEIPT.toUShort())).events(noteIds.take(MAX_NOTES).map { EventId.parse(it) })
 
@@ -121,7 +151,7 @@ class NostrTipsRepository(
         val last = infoRefresh.fetchedAt(pubkey)
         // a missing info is cached like a present one: no relay round trip per call for users without Monero
         if (last != null && last + maxAgeSeconds >= now()) return parsePaymentInfo(stored)
-        val fetch: suspend () -> Unit = { quietly { engine.fetch(filter, fetchTimeout) } }
+        val fetch: suspend () -> Unit = { quietly { engine.fetch(infoFetchFilter(pubkey), fetchTimeout) } }
         // spec perf 3.4: a stored info answers at once and is refreshed behind it; only a forced read (maxAge 0) or a missing info waits
         if (stored != null && maxAgeSeconds > 0) {
             infoRefresh.launch(pubkey, force = true, block = fetch)
@@ -132,6 +162,57 @@ class NostrTipsRepository(
     }
 
     override suspend fun cachedPaymentInfo(pubkey: String): PaymentInfo = parsePaymentInfo(engine.query(infoFilter(pubkey)).firstOrNull())
+
+    override suspend fun cachedPayto(pubkey: String): String? =
+        engine.query(paytoFilter(pubkey)).firstOrNull()?.let { Payto.moneroAddress(tipsTags(it)) }
+
+    override suspend fun fetchPayto(pubkey: String, relays: List<String>) {
+        if (relays.isEmpty()) return
+        quietly {
+            // held, not attached by fetchFrom: relays the engine already knows stay, the ones attached here go again;
+            // NonCancellable: a cancellation landing on the attach's own return would lose `held` and leak the relays
+            val held = withContext(NonCancellable) { engine.attachTemporary(relays) }
+            try {
+                engine.fetchFrom(relays, paytoFilter(pubkey), fetchTimeout, attach = false)
+            } finally {
+                engine.detachTemporary(held)
+            }
+        }
+    }
+
+    /** The own kind 10133 after one relay fetch: [event] the newest stored one, [state] what it says. */
+    private class OwnPaytoRead(val event: Event?, val state: OwnPayto)
+
+    private suspend fun readOwnPayto(): OwnPaytoRead {
+        val self = requireNotNull(engine.pubkey) { "payto needs a logged-in user" }
+        val filter = paytoFilter(self)
+        val fetch = engine.fetchOwn(filter, fetchTimeout)
+        // the database keeps the newest version, whether it was stored before or just fetched
+        val event = engine.query(filter).firstOrNull()
+        val state = when {
+            event != null -> OwnPayto.Known(Payto.moneroAddress(tipsTags(event)))
+            fetch.completed -> OwnPayto.Known(null)
+            else -> OwnPayto.Unknown
+        }
+        return OwnPaytoRead(event, state)
+    }
+
+    override suspend fun ownPayto(): OwnPayto = readOwnPayto().state
+
+    override suspend fun setOwnPayto(address: String?): PaytoWrite {
+        val read = readOwnPayto()
+        val state = read.state as? OwnPayto.Known ?: return PaytoWrite.Unknown
+        if (state.address == address) return PaytoWrite.Published
+        val base = read.event
+        val tags = if (base == null) emptyList() else tipsTags(base)
+        // replaceable: the new event must be strictly newer than the one it replaces
+        val createdAt = maxOf(now(), (base?.createdAt()?.asSecs()?.toLong() ?: 0L) + 1)
+        val result = engine.signAndPublish(RustConvert.toBuilder(Payto.build(Payto.withMonero(tags, address), createdAt)))
+        return if (result.sentToAny) PaytoWrite.Published else PaytoWrite.NotPublished
+    }
+
+    /** The tags of [event], read on the FFI dispatcher (rust-nostr call). */
+    private suspend fun tipsTags(event: Event): List<List<String>> = withContext(engine.ffiDispatcher) { RustConvert.toTips(event).tags }
 
     /** [event] as payment info; missing or malformed ⇒ Disabled. `toTips` is a rust-nostr call: on the FFI dispatcher. */
     private suspend fun parsePaymentInfo(event: Event?): PaymentInfo =
@@ -147,7 +228,8 @@ class NostrTipsRepository(
         if (relays.isEmpty()) return null
         return try {
             val filter = Filter().kind(Kind(Kinds.WATCHER_STATUS.toUShort())).author(PublicKey.parse(watcherPubkey)).limit(5u)
-            val held = engine.attachTemporary(relays)
+            // NonCancellable: a cancellation landing on the attach's own return would lose `held` and leak the relays
+            val held = withContext(NonCancellable) { engine.attachTemporary(relays) }
             try {
                 val events = engine.fetchFrom(relays, filter, attach = false)
                 withContext(engine.ffiDispatcher) {

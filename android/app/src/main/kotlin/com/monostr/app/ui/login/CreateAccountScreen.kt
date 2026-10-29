@@ -50,6 +50,7 @@ import com.monostr.app.session.NewKey
 import com.monostr.app.session.NostrSession
 import com.monostr.app.session.PendingSetup
 import com.monostr.app.session.SessionState
+import com.monostr.app.ui.common.PasswordBackupDialog
 import com.monostr.app.ui.common.SecureWindow
 import com.monostr.app.ui.common.asString
 import com.monostr.app.ui.common.copySecret
@@ -171,6 +172,7 @@ private fun Backup(state: CreateAccountState, controller: CreateAccountControlle
     SecureWindow()
     val context = LocalContext.current
     var copiedAt by remember { mutableStateOf<Long?>(null) }
+    var passwordDialog by remember { mutableStateOf(false) }
     Title(R.string.create_backup_title)
     Text(state.nsec, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("create-nsec"))
     OutlinedButton(
@@ -184,6 +186,10 @@ private fun Backup(state: CreateAccountState, controller: CreateAccountControlle
         Text(stringResource(R.string.create_copied), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         LaunchedEffect(at) { delay(SeedClipboardClear.CLEAR_AFTER_MS); copiedAt = null } // only hides the hint
     }
+    TextButton(onClick = { passwordDialog = true }, modifier = Modifier.fillMaxWidth().testTag("create-backup-password")) {
+        Text(stringResource(R.string.backup_password_button))
+    }
+    if (passwordDialog) PasswordBackupDialog(controller.secretHex(), onDismiss = { passwordDialog = false })
     Text(stringResource(R.string.create_backup_warning), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
     Column {
         Text(stringResource(R.string.create_npub_label), style = MaterialTheme.typography.labelLarge)

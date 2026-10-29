@@ -18,7 +18,8 @@ object NoteMapper {
     internal fun note(event: JsonEvent, withQuote: Boolean = true, resolveRepost: (String) -> Event? = { null }): Note? {
         val tags = event.tags
         return when (event.kind) {
-            // a NIP-22 comment reads like a note: its lowercase `e` is the parent (an article comment has none)
+            // a NIP-22 comment reads like a note: its lowercase `e` is the parent; directly under an article that `e` (when there is one)
+            // names the article's version, so [articleParent] marks the comment and the walks stop there instead of loading it
             1, Kinds.COMMENT -> {
                 val refs = Nip10.parse(tags)
                 val parsed = NoteMedia.parse(event.content, tags, withQuote)
@@ -36,6 +37,8 @@ object NoteMapper {
                     client = client(tags),
                     rootHint = refs.rootHint, replyHint = refs.replyHint,
                     quoteAuthor = parsed.quote?.author,
+                    addressRef = parsed.address,
+                    articleParent = if (event.kind == Kinds.COMMENT) articleParent(tags) else null,
                 )
             }
             6 -> {
@@ -52,6 +55,19 @@ object NoteMapper {
             }
             else -> null
         }
+    }
+
+    /**
+     * The article a kind 1111 sits directly under: its root `A` tag is a `30023:<pubkey>:<d>` coordinate and the parent is that
+     * same coordinate (lowercase `a`) or, from clients that only name the shown version, the parent kind `k` is 30023.
+     * A comment below another comment names the article only as root, so it has none.
+     */
+    internal fun articleParent(tags: List<List<String>>): AddressRef? {
+        val root = tags.firstOrNull { it.size >= 2 && it[0] == "A" }?.get(1) ?: return null
+        val ref = Article.refOfCoordinate(root) ?: return null
+        val parentCoordinate = tags.firstOrNull { it.size >= 2 && it[0] == "a" }?.get(1)
+        val parentKind = tags.firstOrNull { it.size >= 2 && it[0] == "k" }?.get(1)
+        return ref.takeIf { parentCoordinate == root || (parentCoordinate == null && parentKind == Article.KIND.toString()) }
     }
 
     /** The first `client` tag's name, trimmed and cut to [Note.CLIENT_MAX]; null for no tag, a bare tag or a blank name. */

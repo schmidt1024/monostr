@@ -117,6 +117,43 @@ func TestInfo(t *testing.T) {
 	}
 }
 
+func TestHomePage(t *testing.T) {
+	e := newEnv(t)
+	resp, err := http.Get(e.srv.URL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	page := string(raw)
+	if resp.StatusCode != 200 || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/html") {
+		t.Fatalf("%d %q", resp.StatusCode, resp.Header.Get("Content-Type"))
+	}
+	for _, want := range []string{"monostr watcher", "stagenet", "42", "wss://r.example", "npub1", "open to everyone", "github.com/schmidt1024/monostr"} {
+		if !strings.Contains(page, want) {
+			t.Fatalf("page lacks %q", want)
+		}
+	}
+	// anything else under / stays a 404
+	resp, _ = e.do(t, "GET", "/nope", nil, false, nil)
+	if resp.StatusCode != 404 {
+		t.Fatalf("/nope: %d", resp.StatusCode)
+	}
+}
+
+func TestHomePageRestricted(t *testing.T) {
+	e := newEnvAllowing(t, func(pk string) []string { return []string{pk} })
+	resp, err := http.Get(e.srv.URL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if !strings.Contains(string(raw), "restricted to listed accounts") {
+		t.Fatal("restricted watcher shows open registration")
+	}
+}
+
 func TestRegisterRequiresValidNip98(t *testing.T) {
 	e := newEnv(t)
 	body := []byte(`{"address":"4A","view_key":"` + strings.Repeat("c", 64) + `"}`)

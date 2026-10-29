@@ -27,6 +27,8 @@ interface AuthorRelaysRepository {
     suspend fun detach(relays: List<String>)
     /** Pulls the author's kind 1/6 from [relays] into the database (spec 5.2); never throws except on cancellation. */
     suspend fun fetchNotes(relays: List<String>, pubkey: String, limit: Int = 50): Set<String>
+    /** Pulls the author's articles (kind 30023) from [relays] into the database (article reader, final review M2); true when any came. Never throws except on cancellation. */
+    suspend fun fetchArticles(relays: List<String>, pubkey: String, limit: Int): Boolean = false
 }
 
 class NostrAuthorRelaysRepository(
@@ -152,6 +154,20 @@ class NostrAuthorRelaysRepository(
             engine.detachTemporary(relays)
         }
         return ids
+    }
+
+    override suspend fun fetchArticles(relays: List<String>, pubkey: String, limit: Int): Boolean {
+        if (relays.isEmpty()) return false
+        var any = false
+        try {
+            quietly {
+                val filter = Filter().kind(Kind(30023u)).author(PublicKey.parse(pubkey)).limit(limit.toULong())
+                any = engine.fetchFrom(relays, filter, notesFetchTimeout).isNotEmpty()
+            }
+        } finally {
+            engine.detachTemporary(relays)
+        }
+        return any
     }
 
     companion object {

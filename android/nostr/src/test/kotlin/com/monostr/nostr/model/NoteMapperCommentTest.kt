@@ -30,4 +30,34 @@ class NoteMapperCommentTest {
         val n = NoteMapper.note(comment(listOf(listOf("A", "30023:${"c".repeat(64)}:x"), listOf("K", "30023"), listOf("a", "30023:${"c".repeat(64)}:x"))))!!
         assertNull(n.replyToId)
     }
+
+    private val coordinate = "30023:${"c".repeat(64)}:my post"
+    private val articleId = "d".repeat(64)
+
+    @Test
+    fun `a top level article comment has the article as its parent`() {
+        val n = NoteMapper.note(comment(listOf(
+            listOf("A", coordinate), listOf("E", articleId), listOf("K", "30023"), listOf("P", "c".repeat(64)),
+            listOf("a", coordinate), listOf("e", articleId), listOf("k", "30023"), listOf("p", "c".repeat(64)),
+        )))!!
+        assertEquals(AddressRef(30023, "c".repeat(64), "my post"), n.articleParent)
+        assertEquals(articleId, n.replyToId)
+    }
+
+    @Test
+    fun `a comment below a comment has no article parent`() {
+        val n = NoteMapper.note(comment(listOf(
+            listOf("A", coordinate), listOf("E", articleId), listOf("K", "30023"), listOf("P", "c".repeat(64)),
+            listOf("e", parent), listOf("k", "1111"), listOf("p", "e".repeat(64)),
+        )))!!
+        assertNull(n.articleParent)
+        assertEquals(parent, n.replyToId)
+    }
+
+    @Test
+    fun `a comment under another kind of address has no article parent`() {
+        val live = "30311:${"c".repeat(64)}:x"
+        val n = NoteMapper.note(comment(listOf(listOf("A", live), listOf("K", "30311"), listOf("a", live), listOf("k", "30311"))))!!
+        assertNull(n.articleParent)
+    }
 }

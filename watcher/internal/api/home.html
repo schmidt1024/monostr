@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>monostr watcher</title>
+<link rel="icon" href="https://monostr.com/monostr-icon.png">
+<style>
+:root { --bg: #fff; --fg: #1a1a1a; --muted: #666; --line: #e3e3e3; --accent: #f26822; }
+@media (prefers-color-scheme: dark) { :root { --bg: #121212; --fg: #ececec; --muted: #9a9a9a; --line: #2c2c2c; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 40rem; margin: 0 auto; padding: 3rem 1.25rem; }
+h1 { font-size: 1.6rem; margin: 0 0 .25rem; }
+h2 { font-size: 1rem; margin: 2rem 0 .5rem; }
+p { margin: .5rem 0; }
+.lead { color: var(--muted); margin-bottom: 1.5rem; }
+.dot { display: inline-block; width: .6rem; height: .6rem; border-radius: 50%; background: #2e9d4f; margin-right: .4rem; }
+dl { display: grid; grid-template-columns: max-content 1fr; gap: .35rem 1rem; margin: 0; padding: 1rem; border: 1px solid var(--line); border-radius: .5rem; }
+dt { color: var(--muted); }
+dd { margin: 0; overflow-wrap: anywhere; }
+code { font: .9em ui-monospace, SFMono-Regular, Menlo, monospace; }
+a { color: var(--accent); }
+footer { margin-top: 2.5rem; color: var(--muted); font-size: .9rem; }
+</style>
+</head>
+<body>
+<main>
+<h1>monostr watcher</h1>
+<p class="lead">Monero tips for Nostr, made visible.</p>
+
+<p>This server is a watcher for the <a href="https://monostr.com">monostr</a> app. It has no website to browse: the app talks to it over a small HTTP API.</p>
+
+<h2>What it does</h2>
+<p>To receive tips, you register your Monero address and your private view key here. The watcher sees your incoming payments and publishes signed tip receipts on Nostr, so everyone sees the tip under the note.</p>
+<p>A view key can only see incoming payments. It cannot spend anything. You can unregister at any time, and you can run your own watcher instead.</p>
+
+<h2>Status</h2>
+<dl>
+<dt>State</dt><dd><span class="dot"></span>online</dd>
+<dt>Network</dt><dd>{{.Network}}</dd>
+<dt>Block height</dt><dd>{{.Height}}</dd>
+<dt>Registration</dt><dd>{{if .Open}}open to everyone{{else}}restricted to listed accounts{{end}}</dd>
+<dt>Watcher key</dt><dd><code>{{.Npub}}</code></dd>
+<dt>Relays</dt><dd>{{range $i, $r := .Relays}}{{if $i}}<br>{{end}}<code>{{$r}}</code>{{end}}</dd>
+<dt>Version</dt><dd>{{.Version}}, tip protocol {{.Protocol}}</dd>
+</dl>
+<p>Machine-readable: <a href="/v1/info"><code>/v1/info</code></a></p>
+
+<h2>Run your own</h2>
+<p>The watcher is open source: <a href="https://github.com/schmidt1024/monostr/tree/main/watcher">source code</a> and <a href="https://github.com/schmidt1024/monostr/blob/main/watcher/SELFHOST.md">self-hosting guide</a> on GitHub.</p>
+
+<footer><a href="https://monostr.com">monostr.com</a></footer>
+</main>
+</body>
+</html>

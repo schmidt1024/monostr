@@ -1,0 +1,5 @@
+• Leggi gli articoli (NIP-23) nell'app: immagine, titolo, testo formattato; sotto, mi piace, ripubblica, rispondi, salva e mancia
+• I profili hanno una scheda «Articoli»; le schede del profilo restano su una riga e scorrono
+• I link ad articoli, dirette e altri eventi appaiono come schede
+• Indirizzo Monero senza watcher (NIP-A3 payto): pronto in un minuto, gli altri pagano dal loro wallet
+• Salva la chiave con una password (ncryptsec, NIP-49) e accedi con essa

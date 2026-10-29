@@ -1,0 +1,5 @@
+• Artikel (NIP-23) in der App lesen: Bild, Titel, formatierter Text; darunter liken, reposten, antworten, merken und tippen
+• Profile bekommen einen Tab «Artikel»; Profil-Tabs bleiben einzeilig und scrollen
+• Links auf Artikel, Livestreams und andere Events erscheinen als Karten
+• Monero-Adresse ohne Watcher (NIP-A3 payto): in einer Minute eingerichtet, andere zahlen aus ihrem Wallet
+• Schlüssel mit Passwort sichern (ncryptsec, NIP-49) und damit anmelden

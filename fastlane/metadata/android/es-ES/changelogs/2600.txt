@@ -1,0 +1,7 @@
+• Publica vídeos de hasta 2 minutos; el móvil los reduce, sin datos de ubicación
+• Descubrir: listas seleccionadas de gente a la que seguir
+• Las tarjetas de enlace muestran título y sitio sobre la imagen; un enlace al final sale del texto
+• Ordena tus listas arrastrando; las pestañas fijadas siguen el orden
+• Tres imágenes como tres cuadrados, desde cinco con «+N»
+• Las respuestas del Fediverso (NIP-22) aparecen en hilos y notificaciones
+• Correcciones: tu respuesta y los seguidos, al instante

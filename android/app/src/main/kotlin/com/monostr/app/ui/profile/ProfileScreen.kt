@@ -4,6 +4,7 @@ import com.monostr.app.ui.lists.DragHandle
 import com.monostr.app.ui.lists.rememberListReorderState
 import com.monostr.app.ui.lists.reorderable
 import androidx.compose.foundation.lazy.itemsIndexed
+import com.monostr.nostr.model.Article
 import com.monostr.nostr.model.FollowSet
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.ui.platform.LocalContext
@@ -21,7 +22,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.runtime.saveable.rememberSaveable
 import com.monostr.app.ui.lists.AddToListController
@@ -100,6 +101,7 @@ import com.monostr.app.ui.common.Avatar
 import com.monostr.app.ui.common.BookmarkActions
 import com.monostr.app.ui.common.DeletionMessages
 import com.monostr.app.ui.common.MessageSnackbar
+import com.monostr.app.ui.common.AddressCard
 import com.monostr.app.ui.common.NoteActions
 import com.monostr.app.ui.common.NoteDeletions
 import com.monostr.app.ui.common.Message
@@ -125,6 +127,7 @@ import com.monostr.app.ui.tips.TipSheetFactory
 import com.monostr.app.ui.tips.TipSheetHost
 import com.monostr.app.ui.tips.TippersDialog
 import com.monostr.nostr.model.Note
+import kotlinx.coroutines.CompletableDeferred
 import com.monostr.nostr.model.Profile
 import com.monostr.nostr.repo.AuthorRelaysRepository
 import com.monostr.nostr.repo.CountsRepository
@@ -139,6 +142,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -189,6 +194,10 @@ data class ProfileUiState(
     val ended: Set<ProfileSection> = emptySet(),
     /** The relays are asked for this profile's notes (spec perf 3.5); the stored ones show meanwhile. */
     val refreshing: Boolean = false,
+    /** Whether the "Articles" tab shows: a stored article by this person, or the one relay probe found one. Never for zero articles. */
+    val hasArticles: Boolean = false,
+    /** The "Articles" tab's articles, newest first; null until the tab was opened once. */
+    val articles: List<Article>? = null,
 ) {
     /** The open tab's notes. */
     val shown: List<NoteUi> get() = list(tab).orEmpty()
@@ -203,13 +212,18 @@ data class ProfileUiState(
         ProfileSection.POSTS -> notes
         ProfileSection.REPLIES -> replies
         ProfileSection.REPOSTS -> reposts
+        ProfileSection.ARTICLES -> null
     }
 
     fun withList(section: ProfileSection, list: List<NoteUi>): ProfileUiState = when (section) {
         ProfileSection.POSTS -> copy(notes = list, loading = false)
         ProfileSection.REPLIES -> copy(replies = list)
         ProfileSection.REPOSTS -> copy(reposts = list)
+        ProfileSection.ARTICLES -> this
     }
+
+    /** The tabs the row shows, in order. */
+    val tabs: List<ProfileSection> get() = ProfileSection.entries.filter { it != ProfileSection.ARTICLES || hasArticles }
 
     /** The notes of every tab loaded so far. */
     val allNotes: List<NoteUi> get() = notes + replies.orEmpty() + reposts.orEmpty()
@@ -280,6 +294,7 @@ class ProfileController(
             }
             markOnce("profile header")
             markOnce("profile first notes")
+            headerLoaded.complete(Unit)
         }
         // first, so nothing is missed: a profile the background lookup finds lands on the notes (spec perf 3.2)
         scope.launch { profiles.updates.collect { byKey -> _state.update { s -> s.mapNotes { l -> l.map { it.withProfiles(byKey) } } } } }
@@ -300,10 +315,16 @@ class ProfileController(
                     s.copy(profile = p).mapNotes { l -> l.map { n -> if (n.note.author == pubkey) n.copy(author = p, repostedAuthor = if (n.note.isRepost) n.repostedAuthor else p) else n } }
                 }
                 markOnce("profile header")
+                headerLoaded.complete(Unit)
             }
         }
         // the header from the database at once; a missing or stale one is looked up behind it and arrives above (spec perf 3.2)
-        scope.launch { attempt { profiles.get(pubkey) } }
+        scope.launch {
+            attempt { profiles.get(pubkey) }
+            // a person without a kind 0 has no header to wait for
+            headerLoaded.complete(Unit)
+        }
+        scope.launch { articleTab() }
         // the numbers come in as the relays answer (following at once, followers growing): apart from the notes, a failure costs only the line
         followCounts?.let { repo ->
             scope.launch {
@@ -340,6 +361,65 @@ class ProfileController(
                 // the author's relays are an extra: the notes from the user's own relays stay
             }
         }
+    }
+
+    private val headerLoaded = CompletableDeferred<Unit>()
+
+    /**
+     * Spec article reader 6: the tab shows at once for a stored article; otherwise one `limit:1` probe, only after the header
+     * has loaded (never before, never in the way of the header or the posts), cached per person by the repository.
+     */
+    private suspend fun articleTab() {
+        try {
+            if (feed.hasArticles(pubkey)) {
+                _state.update { it.copy(hasArticles = true) }
+                return
+            }
+            headerLoaded.await()
+            // the own relays first, then once the author's write relays (final review M2)
+            if (feed.probeArticles(pubkey) || (articlesFromAuthor(1) && feed.hasArticles(pubkey))) _state.update { it.copy(hasArticles = true) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // the tab is an extra: it stays hidden
+        }
+    }
+
+    private var articlesStarted = false
+    private var articlesMarked = false
+
+    /**
+     * The author's write relays asked once for [limit] articles (when the setting allows them; a profile is never a DM
+     * context): true when any came. A failure is no article.
+     */
+    private suspend fun articlesFromAuthor(limit: Int): Boolean = try {
+        val relays = if (authorRelaysEnabled()) authorRelays.writeRelays(pubkey) else emptyList()
+        relays.isNotEmpty() && authorRelays.fetchArticles(relays, pubkey, limit)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        false
+    }
+
+    /** The database first, then one relay refresh (articles and deletion requests) beside one ask of the author's relays, then the database again. */
+    private suspend fun loadArticles() {
+        try {
+            showArticles(feed.profileArticles(pubkey, fetch = false))
+            coroutineScope {
+                val outbox = async { articlesFromAuthor(ARTICLES_FROM_AUTHOR) }
+                showArticles(feed.profileArticles(pubkey, fetch = true))
+                if (outbox.await()) showArticles(feed.profileArticles(pubkey, fetch = false))
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            _state.update { it.copy(articles = it.articles ?: emptyList(), message = uiText(R.string.profile_error_load).asMessage()) }
+        }
+    }
+
+    private fun showArticles(list: List<Article>) {
+        _state.update { it.copy(articles = list, hasArticles = it.hasArticles || list.isNotEmpty()) }
+        if (!articlesMarked) { articlesMarked = true; PerfTrace.mark("profile articles shown ${list.size}") }
     }
 
     /** Spec perf 3.5: the stored "Posts" first, then one relay refresh for every tab, then the database again. */
@@ -428,9 +508,11 @@ class ProfileController(
     /** [reload] of every tab opened so far; one tab's failure must not stop the others or replace a loaded profile with an error. */
     private suspend fun reloadLoaded() {
         for (section in ProfileSection.entries) {
+            if (section == ProfileSection.ARTICLES) continue
             if (section != ProfileSection.POSTS && _state.value.list(section) == null) continue
             runCatching { reload(section) }.onFailure { if (it is CancellationException) throw it }
         }
+        if (_state.value.articles != null) runCatching { showArticles(feed.profileArticles(pubkey, fetch = false)) }.onFailure { if (it is CancellationException) throw it }
     }
 
     /** [notes] with their authors' profiles (one read; landed ones come through [ProfileRepository.updates]); the flags follow in [flagged]. */
@@ -451,6 +533,10 @@ class ProfileController(
     fun selectTab(section: ProfileSection) {
         val before = _state.value
         _state.update { it.copy(tab = section) }
+        if (section == ProfileSection.ARTICLES) {
+            if (!articlesStarted) { articlesStarted = true; scope.launch { loadArticles() } }
+            return
+        }
         if (section == ProfileSection.POSTS || before.list(section) != null || !tabsLoading.add(section)) return
         scope.launch {
             try {
@@ -471,6 +557,7 @@ class ProfileController(
     fun loadMore() {
         val s = _state.value
         val section = s.tab
+        if (section == ProfileSection.ARTICLES) return
         val list = s.list(section)
         if (s.loadingMore || list.isNullOrEmpty() || section in s.ended) return
         val oldest = list.last().note.createdAt
@@ -772,14 +859,15 @@ fun ProfileScreen(
                 }
             }
             stickyHeader(key = "profile-tabs") {
-                PrimaryTabRow(selectedTabIndex = if (listsTab) ProfileSection.entries.size else state.tab.ordinal, modifier = Modifier.testTag("profile-tabs")) {
+                // single-line labels, scrolls when they do not fit, always left-aligned (like X); the selected tab scrolls into view
+                PrimaryScrollableTabRow(selectedTabIndex = if (listsTab) state.tabs.size else state.tabs.indexOf(state.tab).coerceAtLeast(0), edgePadding = 16.dp, modifier = Modifier.testTag("profile-tabs")) {
                     // X: tabs stuck at the top stay there and the new tab starts right below them;
                     // otherwise the swap of the list's items would send the list back to the profile's top
                     fun keepTabsAtTop() {
                         val tabs = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == "profile-tabs" }
                         if (tabs != null && tabs.offset <= 0) scope.launch { listState.scrollToItem(tabs.index) }
                     }
-                    ProfileSection.entries.forEach { section ->
+                    state.tabs.forEach { section ->
                         Tab(
                             selected = !listsTab && state.tab == section,
                             onClick = {
@@ -789,7 +877,7 @@ fun ProfileScreen(
                             },
                             // M3 colours an unselected tab like the selected one unless told otherwise; X greys it
                             unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            text = { Text(stringResource(section.label)) },
+                            text = { Text(stringResource(section.label), maxLines = 1, softWrap = false) },
                             modifier = Modifier.testTag("profile-tab-${section.name.lowercase()}"),
                         )
                     }
@@ -801,12 +889,31 @@ fun ProfileScreen(
                             keepTabsAtTop()
                         },
                         unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        text = { Text(stringResource(R.string.profile_tab_lists)) },
+                        text = { Text(stringResource(R.string.profile_tab_lists), maxLines = 1, softWrap = false) },
                         modifier = Modifier.testTag("profile-tab-lists"),
                     )
                 }
             }
-            if (!listsTab) {
+            if (!listsTab && state.tab == ProfileSection.ARTICLES) {
+                val articles = state.articles
+                if (articles == null) item(key = "profile-loading") { ListSpinner() }
+                else {
+                    items(articles, key = { "article-" + it.coordinate }) { a ->
+                        AddressCard(
+                            a.ref, names, onOpenProfile = onOpenProfile, sensitive = a.contentWarning != null,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        )
+                    }
+                    if (articles.isEmpty()) item(key = "profile-empty") {
+                        Text(
+                            stringResource(state.tab.empty),
+                            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.fillMaxWidth().padding(24.dp).testTag("profile-empty"),
+                        )
+                    }
+                }
+                if ((articles?.size ?: 0) < SHORT_TAB) item(key = "profile-tab-room") { Spacer(Modifier.fillParentMaxHeight()) }
+            } else if (!listsTab) {
                 items(state.shown, key = { it.note.id }) { n ->
                     NoteCard(
                         note = n,
@@ -971,13 +1078,18 @@ private val ProfileSection.label: Int get() = when (this) {
     ProfileSection.POSTS -> R.string.profile_tab_posts
     ProfileSection.REPLIES -> R.string.profile_tab_replies
     ProfileSection.REPOSTS -> R.string.profile_tab_reposts
+    ProfileSection.ARTICLES -> R.string.profile_tab_articles
 }
 
 private val ProfileSection.empty: Int get() = when (this) {
     ProfileSection.POSTS -> R.string.profile_empty_posts
     ProfileSection.REPLIES -> R.string.profile_empty_replies
     ProfileSection.REPOSTS -> R.string.profile_empty_reposts
+    ProfileSection.ARTICLES -> R.string.profile_empty_articles
 }
+
+/** Articles asked from the author's write relays when the tab opens (the repository's own read is 100). */
+private const val ARTICLES_FROM_AUTHOR = 100
 
 /** Below this many notes a tab may be shorter than the screen and gets room below (see the tab row). */
 private const val SHORT_TAB = 10

@@ -1,6 +1,7 @@
 package com.monostr.app
 
 import android.view.WindowManager
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -108,5 +109,19 @@ class ShowKeyTest {
         rule.waitForIdle()
         assertTrue(nodes("show-key-nsec").isEmpty())
         assertFalse(secure())
+    }
+
+    /** Spec 2026-10-29 ncryptsec: the password dialog turns the key into an ncryptsec1 string. */
+    @Test
+    fun passwordBackupShowsAnNcryptsec() {
+        loginFresh()
+        openShowKey()
+        rule.onNodeWithTag("show-key-password").performScrollTo().performClick()
+        rule.waitUntil(5_000) { nodes("backup-password").isNotEmpty() }
+        rule.onNodeWithTag("backup-password").performTextInput("password1")
+        rule.onNodeWithTag("backup-password-repeat").performTextInput("password1")
+        rule.onNodeWithTag("backup-password-create").performClick()
+        rule.waitUntil(30_000) { nodes("backup-ncryptsec").isNotEmpty() }
+        assertTrue(rule.onNodeWithTag("backup-ncryptsec").fetchSemanticsNode().config[SemanticsProperties.Text].first().text.startsWith("ncryptsec1"))
     }
 }

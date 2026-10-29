@@ -92,7 +92,7 @@ class NostrOwnReactions(
     private val checked: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
     private val pubkey = requireNotNull(engine.pubkey) { "own reactions need a logged-in user" }
 
-    private fun ownFilter() = Filter().kinds(listOf(Kind(7u), Kind(6u))).author(PublicKey.parse(pubkey))
+    private fun ownFilter() = Filter().kinds(listOf(Kind(7u), Kind(6u), Kind(16u))).author(PublicKey.parse(pubkey))
 
     /**
      * The newest [limit] own reactions come with [load]; a note on screen whose reaction is older is looked up
@@ -148,7 +148,7 @@ class NostrOwnReactions(
             when (ev.kind) {
                 // oldest first, so the newest reaction to a note wins; an empty content counts as a like (NIP-25)
                 7 -> ev.content.trim().let { c -> if (c != "-") reactions[target] = c.ifEmpty { LIKE } }
-                6 -> reposted += target
+                6, 16 -> reposted += target
             }
         }
         Found(reactions, reposted, raw.size)

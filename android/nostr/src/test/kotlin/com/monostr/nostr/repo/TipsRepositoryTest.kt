@@ -11,6 +11,7 @@ import com.monostr.nostr.awaitTrue
 import com.monostr.nostr.connectedEngine
 import com.monostr.nostr.RustConvert
 import com.monostr.tips.Kinds
+import com.monostr.tips.Payto
 import com.monostr.tips.PaymentId
 import com.monostr.tips.PaymentInfo
 import com.monostr.tips.Watcher
@@ -443,6 +444,148 @@ class TipsRepositoryTest {
                 gate.open("test")
                 assertTrue(awaitTrue { relay.requests.size >= 2 }, "fetch and live subscription: ${relay.requests}")
                 job.cancel()
+            } finally {
+                e.close()
+            }
+        }
+    }
+
+    private val sub = "84DbuRJ1PQ4LHj5awNDtBXFDJczqxhujvgpMxmF9uxGNKjChpAUd2YobG8zibKqSyDUUxnavkHLew9YscmTLGYGgJSVxDjL"
+    private val lightning = listOf("payto", "lightning", "me@getalby.com")
+
+    private fun payto(keys: Keys, tags: List<List<String>>, at: Long = clock): Event = signed(keys, Payto.build(tags, at))
+
+    private suspend fun ownPaytos(e: NostrEngine): List<Event> = e.query(Filter().kind(Kind(Kinds.PAYTO.toUShort())).author(me.publicKey()))
+    private fun Event.tagList() = tags().toVec().map { it.asVec() }
+
+    @Test
+    fun `paymentInfoFetchAlsoStoresPayto`() = runTest {
+        val aliceHex = alice.publicKey().toHex()
+        val tags = listOf(listOf("payto", "monero", aliceAddress.encode()))
+        SilentWsRelay(serve = listOf(alicePaymentInfo().asJson(), payto(alice, tags).asJson())).use { relay ->
+            val e = connectedEngine(dir, relay)
+            try {
+                val repo = NostrTipsRepository(e) { clock }
+                assertNull(repo.cachedPayto(aliceHex))
+                assertTrue(repo.paymentInfo(aliceHex, 0) is PaymentInfo.Enabled)
+                assertEquals(aliceAddress.encode(), repo.cachedPayto(aliceHex))
+                assertEquals(1, relay.requests.size, "one filter for both kinds: ${relay.requests}")
+                assertTrue("10133" in relay.requests.single() && "10037" in relay.requests.single(), "requests: ${relay.requests}")
+            } finally {
+                e.close()
+            }
+        }
+    }
+
+    @Test
+    fun `fetchPaytoFromAuthorRelaysStoresIt`() = runTest {
+        val aliceHex = alice.publicKey().toHex()
+        val tags = listOf(listOf("payto", "monero", aliceAddress.encode()))
+        SilentWsRelay(serve = listOf(payto(alice, tags).asJson())).use { authorRelay ->
+            SilentWsRelay().use { ownRelay ->
+                val e = connectedEngine(dir, ownRelay)
+                try {
+                    val repo = NostrTipsRepository(e) { clock }
+                    assertNull(repo.cachedPayto(aliceHex))
+                    repo.fetchPayto(aliceHex, emptyList()) // no relays: nothing to ask
+                    assertNull(repo.cachedPayto(aliceHex))
+                    repo.fetchPayto(aliceHex, listOf(authorRelay.url))
+                    assertEquals(aliceAddress.encode(), repo.cachedPayto(aliceHex))
+                    assertTrue(ownRelay.requests.none { "10133" in it }, "the own relays are not asked: ${ownRelay.requests}")
+                    assertTrue(e.temporaryRelayUrls().isEmpty(), "the author relay is detached again: ${e.temporaryRelayUrls()}")
+                } finally {
+                    e.close()
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `setOwnPaytoKeepsForeignTags`() = runTest {
+        val old = payto(me, listOf(lightning), at = clock + 50) // newer than the clock: the write must still be newer
+        SilentWsRelay(serve = listOf(old.asJson()), acceptEvents = true).use { relay ->
+            val e = connectedEngine(dir, relay)
+            try {
+                val repo = NostrTipsRepository(e, fetchTimeout = Duration.ofSeconds(3)) { clock }
+                assertEquals(PaytoWrite.Published, repo.setOwnPayto(sub))
+                val mine = ownPaytos(e).single()
+                assertEquals(listOf(lightning, listOf("payto", "monero", sub)), mine.tagList())
+                assertTrue(mine.createdAt().asSecs().toLong() > clock + 50)
+                assertEquals(1, relay.events.size)
+                assertEquals(OwnPayto.Known(sub), repo.ownPayto())
+            } finally {
+                e.close()
+            }
+        }
+    }
+
+    @Test
+    fun `setOwnPaytoCreatesWhenRelaysSayNone`() = runTest {
+        SilentWsRelay(answerEose = true, acceptEvents = true).use { relay ->
+            val e = connectedEngine(dir, relay)
+            try {
+                val repo = NostrTipsRepository(e, fetchTimeout = Duration.ofSeconds(3)) { clock }
+                assertEquals(OwnPayto.Known(null), repo.ownPayto())
+                // null where there is none: nothing goes out
+                assertEquals(PaytoWrite.Published, repo.setOwnPayto(null))
+                assertTrue(ownPaytos(e).isEmpty())
+                assertTrue(relay.events.isEmpty(), "sent: ${relay.events}")
+                assertEquals(PaytoWrite.Published, repo.setOwnPayto(sub))
+                assertEquals(listOf(listOf("payto", "monero", sub)), ownPaytos(e).single().tagList())
+                assertEquals(1, relay.events.size)
+                // the same address again: nothing goes out
+                assertEquals(PaytoWrite.Published, repo.setOwnPayto(sub))
+                assertEquals(1, relay.events.size)
+            } finally {
+                e.close()
+            }
+        }
+    }
+
+    @Test
+    fun `setOwnPaytoRefusesWhenRelayUnreachable`() = runTest {
+        SilentWsRelay(recordRequests = true).use { relay -> // connected, never answers
+            val e = connectedEngine(dir, relay)
+            try {
+                val repo = NostrTipsRepository(e, fetchTimeout = Duration.ofMillis(500)) { clock }
+                assertEquals(OwnPayto.Unknown, repo.ownPayto())
+                assertEquals(PaytoWrite.Unknown, repo.setOwnPayto(sub))
+                assertTrue(ownPaytos(e).isEmpty())
+                assertTrue(relay.events.isEmpty(), "sent: ${relay.events}")
+            } finally {
+                e.close()
+            }
+        }
+    }
+
+    @Test
+    fun `setOwnPaytoNullRemovesMoneroOnly`() = runTest {
+        val old = payto(me, listOf(listOf("payto", "xmr", aliceAddress.encode()), lightning, listOf("payto", "MONERO", sub)))
+        SilentWsRelay(serve = listOf(old.asJson()), acceptEvents = true).use { relay ->
+            val e = connectedEngine(dir, relay)
+            try {
+                clock += 10
+                val repo = NostrTipsRepository(e, fetchTimeout = Duration.ofSeconds(3)) { clock }
+                assertEquals(OwnPayto.Known(aliceAddress.encode()), repo.ownPayto())
+                assertEquals(PaytoWrite.Published, repo.setOwnPayto(null))
+                assertEquals(listOf(lightning), ownPaytos(e).single().tagList())
+                assertEquals(1, relay.events.size)
+            } finally {
+                e.close()
+            }
+        }
+    }
+
+    @Test
+    fun `setOwnPayto without a relay OK is NotPublished and keeps the old event`() = runTest {
+        val old = payto(me, listOf(lightning))
+        SilentWsRelay(serve = listOf(old.asJson()), rejectEvents = true).use { relay ->
+            val e = connectedEngine(dir, relay)
+            try {
+                clock += 10
+                val repo = NostrTipsRepository(e, fetchTimeout = Duration.ofSeconds(3)) { clock }
+                assertEquals(PaytoWrite.NotPublished, repo.setOwnPayto(sub))
+                assertEquals(listOf(lightning), ownPaytos(e).single().tagList())
             } finally {
                 e.close()
             }

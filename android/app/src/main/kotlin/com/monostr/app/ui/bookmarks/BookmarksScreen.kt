@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -43,6 +44,7 @@ import androidx.lifecycle.viewModelScope
 import com.monostr.app.R
 import com.monostr.app.data.dm.unreadTotalExcept
 import com.monostr.app.session.NostrSession
+import com.monostr.app.ui.common.AddressCard
 import com.monostr.app.ui.common.BookmarkActions
 import com.monostr.app.ui.common.DeletionMessages
 import com.monostr.app.ui.common.LoadingScreen
@@ -73,6 +75,7 @@ import com.monostr.app.ui.tips.TipDecorations
 import com.monostr.app.ui.tips.TipSheetFactory
 import com.monostr.app.ui.tips.TipSheetHost
 import com.monostr.app.ui.tips.TippersDialog
+import com.monostr.nostr.model.AddressRef
 import com.monostr.nostr.model.Note
 import com.monostr.nostr.model.Profile
 import com.monostr.nostr.repo.BookmarkEntry
@@ -96,8 +99,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-data class BookmarkUi(val id: String, val note: NoteUi?)
-data class BookmarksUiState(val entries: List<BookmarkUi> = emptyList(), val loading: Boolean = true, val message: Message? = null,
+/** [article]: an address entry (coordinate in [id]); the card loads the event itself. */
+data class BookmarkUi(val id: String, val note: NoteUi?, val article: AddressRef? = null)
+data class BookmarksUiState(val entries: List<BookmarkUi> = emptyList(), val loading: Boolean = true, val message: Message? = null, val pending: Set<String> = emptySet(),
 )
 
 /**
@@ -151,11 +155,14 @@ class BookmarksController(
         scope.launch { counts.counts.collect { _state.update { s -> s.copy(entries = s.entries.map { e -> e.copy(note = e.note?.let(::withCounts)) }) } } }
         // Rows are rebuilt only when the id list changes (a new list replaces a relay lookup still running for the old one); a pending
         // removal just re-applies the kept rows, re-flagged so the icon shows the pending state.
-        scope.launch { bookmarks.state.map { it.ids }.distinctUntilChanged().collectLatest { ids -> rebuild(ids) } }
+        scope.launch { bookmarks.state.map { s -> s.ordered.map { it.second } }.distinctUntilChanged().collectLatest { ids -> rebuild(ids) } }
         scope.launch {
-            pendingRemoval.collect { pending -> _state.update { it.copy(entries = keepPending(it.entries, fresh.map(::current), pending, bookmarks.state.value.ids)) } }
+            pendingRemoval.collect { pending -> _state.update { it.copy(pending = pending, entries = keepPending(it.entries, fresh.map(::current), pending, listed())) } }
         }
     }
+
+    /** Every listed id and coordinate, in list order. */
+    private fun listed(): List<String> = bookmarks.state.value.ordered.map { it.second }
 
     /** The rows for the repository's current id list, as last resolved, with profiles only: [current] adds flags, tips, counts and visibility when they are written. */
     private var fresh: List<BookmarkUi> = emptyList()
@@ -180,7 +187,7 @@ class BookmarksController(
     private suspend fun show(ids: List<String>, entries: List<BookmarkEntry>) {
         val byKey = profiles.getAll(entries.flatMap { e -> listOfNotNull(e.note?.author, e.note?.repostOf?.author) })
         fresh = entries.map { e ->
-            BookmarkUi(e.id, e.note?.let { n -> NoteUi(n, byKey.getValue(n.author), n.repostOf?.let { byKey.getValue(it.author) } ?: byKey.getValue(n.author)) })
+            if (e.article != null) BookmarkUi(e.id, null, e.article) else BookmarkUi(e.id, e.note?.let { n -> NoteUi(n, byKey.getValue(n.author), n.repostOf?.let { byKey.getValue(it.author) } ?: byKey.getValue(n.author)) })
         }
         _state.update { it.copy(entries = keepPending(it.entries, fresh.map(::current), pendingRemoval.value, ids), loading = false) }
         decorations.track(entries.mapNotNull { it.note })
@@ -193,6 +200,15 @@ class BookmarksController(
             // Success or not, the list now follows the repository again: the id is gone after a
             // successful publish and back (reverted) after a failed one.
             pendingRemoval.update { it - note.id }
+        }
+    }
+
+    /** Takes the article (or other address) [coordinate] out of the list; the row stays until the outcome, like a note's. */
+    fun removeArticle(coordinate: String) {
+        pendingRemoval.update { it + coordinate }
+        actions.toggleArticle(coordinate) { m ->
+            if (m != null) _state.update { it.copy(message = m.asMessage()) }
+            pendingRemoval.update { it - coordinate }
         }
     }
     fun like(note: Note) = noteActions.like(note, ::onActionResult)
@@ -208,13 +224,13 @@ class BookmarksController(
     fun mute(note: Note) {
         muteActions?.mute(note.author) { m, ok ->
             _state.update { it.copy(message = Message(m, undoMute = note.author.takeIf { ok })) }
-            if (!ok) scope.launch { rebuild(bookmarks.state.value.ids) }
+            if (!ok) scope.launch { rebuild(listed()) }
         }
     }
 
     /** The snackbar's "Undo" (spec 9.4): the rows are resolved again, so the account's notes come back. */
     fun unmute(pubkey: String) {
-        muteActions?.unmute(pubkey) { m -> if (m == null) scope.launch { rebuild(bookmarks.state.value.ids) } else _state.update { it.copy(message = m.asMessage()) } }
+        muteActions?.unmute(pubkey) { m -> if (m == null) scope.launch { rebuild(listed()) } else _state.update { it.copy(message = m.asMessage()) } }
     }
 
     /** [row] without its note when [visibility] hides that note; the bookmark itself stays. */
@@ -299,7 +315,14 @@ fun BookmarksScreen(
                 LazyColumn(state = listState, modifier = Modifier.padding(padding).fillMaxSize().testTag("bookmarks-list")) {
                     items(state.entries, key = { it.id }) { e ->
                         val n = e.note
-                        if (n == null) {
+                        if (e.article != null) {
+                            Row(Modifier.fillMaxWidth().padding(start = 16.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.Top) {
+                                AddressCard(ref = e.article, names = names, onOpenProfile = onOpenProfile, modifier = Modifier.weight(1f))
+                                // the row stays until the outcome; its icon shows "not bookmarked" while the removal is in flight
+                                val pending = e.id in state.pending
+                                IconButton(onClick = { vm.controller.removeArticle(e.id) }, enabled = !pending, modifier = Modifier.testTag("bookmark-remove-${e.id.take(8)}")) { Icon(if (pending) Icons.Outlined.BookmarkBorder else Icons.Filled.Bookmark, contentDescription = stringResource(R.string.note_bookmark)) }
+                            }
+                        } else if (n == null) {
                             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Text(stringResource(R.string.bookmarks_missing, Profile.shortPubkey(e.id)), style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
                                 IconButton(onClick = { vm.controller.remove(Note(e.id, "", "", 0, 1, null, null, null, emptyList())) }, modifier = Modifier.testTag("bookmark-remove-${e.id.take(8)}")) { Icon(Icons.Filled.Bookmark, contentDescription = stringResource(R.string.note_bookmark)) }

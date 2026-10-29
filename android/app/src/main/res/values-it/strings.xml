@@ -153,9 +153,11 @@
     <string name="profile_tab_posts">Post</string>
     <string name="profile_tab_replies">Risposte</string>
     <string name="profile_tab_reposts">Ripubblicati</string>
+    <string name="profile_tab_articles">Articoli</string>
     <string name="profile_empty_posts">Ancora nessun post</string>
     <string name="profile_empty_replies">Ancora nessuna risposta</string>
     <string name="profile_empty_reposts">Ancora nessuna ripubblicazione</string>
+    <string name="profile_empty_articles">Ancora nessun articolo</string>
 
     <!-- compose -->
     <string name="compose_title_reply">Rispondi</string>
@@ -171,7 +173,10 @@
     <string name="login_no_signer">Nessun firmatario NIP-55 (ad es. Amber) installato. Accedi con una chiave:</string>
     <string name="login_secret_label">nsec o hex</string>
     <string name="login_button">Accedi</string>
-    <string name="login_error_invalid_key">Chiave nsec o hex non valida</string>
+    <string name="login_error_invalid_key">Chiave nsec, ncryptsec o hex non valida</string>
+    <string name="login_password_label">Password</string>
+    <string name="login_error_wrong_password">Password errata</string>
+    <string name="login_error_too_strong">Questo backup richiede più memoria di quella che questo telefono consente</string>
     <string name="login_error_rejected">Richiesta rifiutata dal firmatario</string>
     <string name="login_error_signer">Il firmatario ha segnalato un errore</string>
     <string name="login_error_failed">Accesso non riuscito</string>
@@ -187,6 +192,10 @@
     <string name="tip_open_wallet_again">Riapri il portafoglio</string>
     <string name="tip_sent">Portafoglio aperto. La mancia attende la conferma del watcher.</string>
     <string name="tip_error_amount">Importo non valido (ad es. 0.005)</string>
+    <string name="tip_payto_title_plain">Invia Monero</string>
+    <string name="tip_payto_note">Va al suo indirizzo, non a questa nota. Senza conferma: monostr non vede se hai pagato.</string>
+    <string name="tip_payto_profile">Senza conferma: monostr non vede se hai pagato.</string>
+    <string name="tip_payto_pay">Paga con il portafoglio</string>
     <string name="tip_no_monero">Il destinatario non ha configurato Monero</string>
     <string name="tip_notice_offline">Nessun relay raggiungibile, intent salvato in locale</string>
     <string name="tip_anonymous_switch">Mancia anonima</string>
@@ -220,6 +229,11 @@
     <string name="setup_path_existing_hint">Incolla l\'indirizzo principale e la chiave di visualizzazione privata da Cake Wallet, Monerujo o Feather.</string>
     <string name="setup_announced_warning">Questo account riceve già mance su %1$s…%2$s, configurato su un altro dispositivo. Configurare qui sostituisce quell\'indirizzo.</string>
     <string name="setup_announced_notice">Le mance sono già configurate per questo account (indirizzo %1$s…%2$s).</string>
+    <string name="setup_payto_replace">Sostituire il tuo indirizzo Monero pubblico %1$s…%2$s (visibile anche in Amethyst e Ditto) con l’indirizzo per le mance?</string>
+    <string name="setup_payto_replace_yes">Sostituisci</string>
+    <string name="setup_payto_replace_keep">Mantieni</string>
+    <string name="setup_payto_failed">Le mance sono configurate, ma non è stato possibile aggiornare il tuo indirizzo pubblico.</string>
+    <string name="setup_payto_retry">Riprova</string>
     <string name="setup_keep_existing">Mantienilo</string>
     <string name="setup_new_wallet">Crea un nuovo portafoglio per mance (consigliato)</string>
     <string name="setup_existing_wallet">Usa un portafoglio esistente</string>
@@ -250,10 +264,22 @@
     <string name="setup_err_watcher_network">Il watcher segnala una rete sconosciuta</string>
     <string name="setup_err_subaddress">I sottoindirizzi non sono supportati. Usa l\'indirizzo principale (inizia con 4 o 5).</string>
     <string name="setup_err_integrated">Gli indirizzi integrati non sono supportati. Usa l\'indirizzo principale.</string>
+    <string name="setup_err_address_integrated">Gli indirizzi integrati non sono supportati. Usa un indirizzo principale o un sottoindirizzo (4… / 8…).</string>
     <string name="setup_err_address">Indirizzo non valido</string>
     <string name="setup_err_network">L\'indirizzo appartiene a una rete diversa da quella del watcher</string>
     <string name="setup_err_view_key_format">La chiave di visualizzazione deve avere 64 caratteri hex</string>
     <string name="setup_err_view_key_mismatch">La chiave di visualizzazione non corrisponde all\'indirizzo</string>
+    <string name="setup_address_title">Ricevi Monero</string>
+    <string name="setup_address_field">Indirizzo Monero (4… / 8…)</string>
+    <string name="setup_address_hint">Questo indirizzo è pubblico. Meglio usare un sottoindirizzo solo per Nostr.</string>
+    <string name="setup_address_publish">Pubblica</string>
+    <string name="setup_no_wallet_link">Non hai ancora un portafoglio Monero? Creane uno qui</string>
+    <string name="setup_address_done">Ora gli altri possono inviarti Monero, anche da Amethyst e Ditto.</string>
+    <string name="setup_upgrade_title">Upgrade: ricevute</string>
+    <string name="setup_upgrade_text">Scopri chi ti ha mandato una mancia, con notifica.</string>
+    <string name="setup_upgrade_action">Configura il watcher</string>
+    <string name="setup_err_mainnet">Usa un indirizzo mainnet (inizia con 4 o 8).</string>
+    <string name="setup_err_relays_unknown">Relay non raggiungibili, riprova.</string>
     <string name="setup_err_not_published">Nessun relay raggiungibile – informazioni di pagamento non pubblicate, riprova</string>
     <string name="setup_personal_err_input">Incolla il nprofile (o npub) del watcher.</string>
     <string name="setup_personal_err_relay">Indica un relay del watcher (wss://…).</string>
@@ -313,6 +339,11 @@
     <string name="note_via">via %1$s</string>
     <string name="settings_monero">Mance in Monero</string>
     <string name="settings_monero_not_set_up">Non configurato. Non serve per inviare mance.</string>
+    <string name="settings_monero_payto">Il tuo indirizzo Monero %1$s…%2$s</string>
+    <string name="settings_monero_payto_change">Cambia</string>
+    <string name="settings_monero_payto_remove">Rimuovi</string>
+    <string name="settings_msg_payto_removed">Indirizzo rimosso</string>
+    <string name="settings_msg_disabled_payto_left">Le mance sono disattivate, ma non è stato possibile rimuovere il tuo indirizzo pubblico.</string>
     <string name="settings_monero_announced">Le mance arrivano a %1$s…%2$s, configurato su un altro dispositivo. Configurare qui sostituisce quell\'indirizzo.</string>
     <string name="settings_monero_set_up">Configura la ricezione di mance</string>
     <string name="settings_monero_address">Le mance arrivano in questo wallet: %1$s…%2$s · %3$s</string>
@@ -460,6 +491,31 @@
     <string name="note_ref_label">nota</string>
     <string name="quote_missing">Nota non trovata</string>
     <string name="mute_quote_placeholder">Nota di un account silenziato</string>
+    <string name="address_ref_label">evento</string>
+    <string name="address_type_article">Articolo</string>
+    <string name="address_type_live">Live</string>
+    <string name="address_type_listing">Annuncio</string>
+    <string name="address_type_list">Lista</string>
+    <string name="address_type_calendar">Evento di calendario</string>
+    <string name="address_type_event">Evento</string>
+    <string name="address_live">LIVE</string>
+    <string name="address_planned">Inizia %1$s</string>
+    <string name="address_planned_unknown">Programmato</string>
+    <string name="address_ended">CONCLUSO</string>
+    <plurals name="address_watching">
+        <item quantity="one">%1$s spettatore</item>
+        <item quantity="other">%1$s spettatori</item>
+    </plurals>
+    <string name="address_missing">Evento non trovato</string>
+    <string name="address_deleted">Evento eliminato</string>
+    <string name="article_title">Articolo</string>
+    <plurals name="article_read_time">
+        <item quantity="one">%d min di lettura</item>
+        <item quantity="other">%d min di lettura</item>
+    </plurals>
+    <string name="article_missing">Articolo non trovato</string>
+    <string name="article_deleted">Articolo eliminato</string>
+    <string name="article_open_browser">Apri nel browser</string>
     <string name="conversation_show_muted">Mostra</string>
     <string name="action_quote">Cita</string>
     <string name="compose_quote_hint">Citazione</string>
@@ -653,4 +709,15 @@
     <string name="upload_video_too_large">Questo video è troppo grande. Prova una clip più corta.</string>
     <string name="upload_video_rate">Limite giornaliero di video raggiunto, riprova domani</string>
     <string name="compose_video_tile">Video</string>
+    <string name="backup_password_button">Backup con password</string>
+    <string name="backup_password_title">Backup con password</string>
+    <string name="backup_password_label">Password</string>
+    <string name="backup_password_repeat">Ripeti la password</string>
+    <string name="backup_password_too_short">Almeno 8 caratteri</string>
+    <string name="backup_password_mismatch">Le password non coincidono</string>
+    <string name="backup_password_create">Crea</string>
+    <string name="backup_password_failed">Impossibile creare il backup</string>
+    <string name="backup_password_note">Conserva la password separatamente. Senza di essa questo backup è inutile. Amethyst e altre app Nostr possono importarlo.</string>
+    <string name="backup_copy">Copia il backup</string>
+    <string name="backup_copied">Backup copiato, gli appunti verranno svuotati a breve</string>
 </resources>

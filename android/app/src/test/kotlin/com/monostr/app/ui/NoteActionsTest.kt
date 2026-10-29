@@ -43,6 +43,21 @@ class NoteActionsTest {
     }
 
     @Test
+    fun `an article repost is kind 16 and its undo withdraws kind 16`() = runTest {
+        val publish = FakePublish()
+        val counts = FakeCounts()
+        val article = n.copy(kind = 30023)
+        val actions = NoteActions(publish, eager(), counts)
+        actions.repost(article) {}
+        advanceUntilIdle()
+        actions.repost(article) {}
+        advanceUntilIdle()
+        assertEquals(listOf(16), publish.withdrawKinds)
+        assertEquals(listOf(Triple(article.id, 16, 1L), Triple(article.id, 16, -1L)), counts.bumps)
+        assertFalse(actions.flags(ui).reposted)
+    }
+
+    @Test
     fun `a second tap takes the like or repost back with a deletion request, a third sends it again`() = runTest {
         val publish = FakePublish()
         val counts = FakeCounts()

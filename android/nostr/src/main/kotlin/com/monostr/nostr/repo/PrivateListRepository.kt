@@ -24,7 +24,18 @@ import rust.nostr.sdk.Timestamp
 import java.time.Duration
 
 /** Ids of a private NIP-51 list (private + public entries of its tag), whether it may be written, whether load ran. */
-data class ListState(val ids: List<String> = emptyList(), val writable: Boolean = false, val loaded: Boolean = false)
+data class ListState(
+    val ids: List<String> = emptyList(),
+    val writable: Boolean = false,
+    val loaded: Boolean = false,
+    /** Values of the list's second tag (bookmarks: `a` coordinates), private + public; empty for lists without one. */
+    val extraIds: List<String> = emptyList(),
+    /** Set by the list itself; null (hand-built states) = [ids] then [extraIds]. */
+    private val order: List<Pair<String, String>>? = null,
+) {
+    /** Both tags' entries (tag to value) in list order: private ones newest first, then public ones. */
+    val ordered: List<Pair<String, String>> get() = order ?: (ids.map { "e" to it } + extraIds.map { "a" to it })
+}
 
 sealed class ListOutcome {
     data object Ok : ListOutcome()
@@ -60,17 +71,22 @@ class NostrPrivateList(
     private val onState: (ListState) -> Unit = {},
     /** Spec perf2 A3: the background refresh of a stored list waits until the home feed's first page is in; the inline fetch without a local copy does not. */
     private val gate: StartupGate = StartupGate.OPEN,
+    /** A second tag whose entries are edited too, inside the encrypted part only when added by this app (bookmarks: `a` for articles). */
+    private val extraTag: String? = null,
 ) {
     private val _state = MutableStateFlow(ListState())
     val state: StateFlow<ListState> = _state.asStateFlow()
     private val mutex = Mutex()
     private val privateTags = PrivateTags(signer)
 
-    /** The parts of the list we preserve verbatim; only privateIds is ours to edit. */
+    /** The parts of the list we preserve verbatim; only privateEntries is ours to edit. */
     private var publicTags: List<List<String>> = emptyList()
     private var privateOther: List<List<String>> = emptyList()
-    private var privateIds: List<String> = emptyList()
-    private val publicIds: List<String> get() = publicTags.filter { it.size >= 2 && it[0] == tag }.map { it[1] }
+    /** Our tags' private entries as written (hints, markers and all); only [0] and [1] are used to identify one. */
+    private var privateEntries: List<List<String>> = emptyList()
+    private val publicEntries: List<List<String>> get() = publicTags.filter { it.size >= 2 && isMine(it[0]) }
+    private fun holds(t: String, id: String) = (privateEntries + publicEntries).any { it[0] == t && it[1] == id }
+    private fun isMine(t: String) = t == tag || (extraTag != null && t == extraTag)
 
     /**
      * `created_at` of the last known list (loaded or published). The list's kind is replaceable
@@ -204,7 +220,7 @@ class NostrPrivateList(
         if (event.createdAt().asSecs().toLong() <= snapshotCreatedAt) return@withLock
         val prevPublicTags = publicTags
         val prevPrivateOther = privateOther
-        val prevPrivateIds = privateIds
+        val prevPrivateEntries = privateEntries
         val prevSnapshotCreatedAt = snapshotCreatedAt
         val prevLastCreatedAt = lastCreatedAt
         when (adopt(event, interactive = false)) {
@@ -212,7 +228,7 @@ class NostrPrivateList(
             Decrypt.UNREADABLE -> publish(writable = false, loaded = true)
             else -> {
                 // silent decrypt impossible: keep the current list, the next interactive load picks it up
-                publicTags = prevPublicTags; privateOther = prevPrivateOther; privateIds = prevPrivateIds
+                publicTags = prevPublicTags; privateOther = prevPrivateOther; privateEntries = prevPrivateEntries
                 snapshotCreatedAt = prevSnapshotCreatedAt; lastCreatedAt = prevLastCreatedAt
             }
         }
@@ -228,7 +244,7 @@ class NostrPrivateList(
         snapshotCreatedAt = createdAt
         lastCreatedAt = maxOf(lastCreatedAt, createdAt)
         publicTags = event.tags().toVec().map { it.asVec() }
-        privateIds = emptyList(); privateOther = emptyList()
+        privateEntries = emptyList(); privateOther = emptyList()
         val content = event.content()
         if (content.isBlank()) return Decrypt.OK
         val tags = when (val r = privateTags.decrypt(content, interactive)) {
@@ -237,8 +253,8 @@ class NostrPrivateList(
             Decrypted.Rejected -> return Decrypt.REJECTED
             Decrypted.Unreadable -> return Decrypt.UNREADABLE
         }
-        privateIds = tags.filter { it.size >= 2 && it[0] == tag }.map { it[1] }
-        privateOther = tags.filter { it.size < 2 || it[0] != tag }
+        privateEntries = tags.filter { it.size >= 2 && isMine(it[0]) }
+        privateOther = tags.filter { it.size < 2 || !isMine(it[0]) }
         return Decrypt.OK
     }
 
@@ -265,12 +281,12 @@ class NostrPrivateList(
     }
 
     /** Applies the direction the user chose; idempotent, so it can be re-applied after a refresh. */
-    private fun applyToggle(id: String, remove: Boolean) {
+    private fun applyToggle(t: String, id: String, remove: Boolean) {
         if (remove) {
-            privateIds = privateIds.filterNot { it == id }
-            publicTags = publicTags.filterNot { it.size >= 2 && it[0] == tag && it[1] == id }
-        } else if (id !in privateIds && id !in publicIds) {
-            privateIds = listOf(id) + privateIds
+            privateEntries = privateEntries.filterNot { it[0] == t && it[1] == id }
+            publicTags = publicTags.filterNot { it.size >= 2 && it[0] == t && it[1] == id }
+        } else if (!holds(t, id)) {
+            privateEntries = listOf(listOf(t, id)) + privateEntries
         }
     }
 
@@ -278,53 +294,53 @@ class NostrPrivateList(
      * Flips [id]: takes it out of both parts when the list the user saw holds it, else adds it
      * privately. Semantics as documented on [BookmarksRepository.toggle].
      */
-    suspend fun toggle(id: String): ListOutcome = mutex.withLock {
+    suspend fun toggle(id: String, entryTag: String = tag): ListOutcome = mutex.withLock {
         val load = loadLocked(interactive = true)
         if (load == Load.REJECTED) return@withLock ListOutcome.Rejected
         if (!_state.value.loaded) return@withLock ListOutcome.NotLoaded
         if (!_state.value.writable) return@withLock ListOutcome.Unsupported
         // The direction comes from the list the user saw (read after the load, inside the lock).
-        setLocked(id, present = id !in privateIds && id !in publicIds, load)
+        setLocked(entryTag, id, present = !holds(entryTag, id), load)
     }
 
     /** Puts [id] into the list ([present]) or takes it out of both parts; idempotent. Semantics as documented on [BookmarksRepository.toggle]. */
-    suspend fun set(id: String, present: Boolean): ListOutcome = mutex.withLock {
+    suspend fun set(id: String, present: Boolean, entryTag: String = tag): ListOutcome = mutex.withLock {
         val load = loadLocked(interactive = true)
         if (load == Load.REJECTED) return@withLock ListOutcome.Rejected
         if (!_state.value.loaded) return@withLock ListOutcome.NotLoaded
         if (!_state.value.writable) return@withLock ListOutcome.Unsupported
-        setLocked(id, present, load)
+        setLocked(entryTag, id, present, load)
     }
 
     /** The write behind [toggle] and [set]; the caller holds [mutex] and has loaded a writable list. */
-    private suspend fun setLocked(id: String, present: Boolean, load: Load): ListOutcome {
+    private suspend fun setLocked(t: String, id: String, present: Boolean, load: Load): ListOutcome {
         // The UI flips at once, the relays are reconciled afterwards (a refresh may bring a newer
         // list, the same direction is re-applied).
         val remove = !present
-        var revertPublic = publicTags; var revertPrivate = privateIds
-        applyToggle(id, remove)
+        var revertPublic = publicTags; var revertPrivate = privateEntries
+        applyToggle(t, id, remove)
         // Nothing changed (muting a muted account, unmuting one that is not): no signature, no publish.
-        if (publicTags == revertPublic && privateIds == revertPrivate) return ListOutcome.Ok
+        if (publicTags == revertPublic && privateEntries == revertPrivate) return ListOutcome.Ok
         publish(writable = true, loaded = true)
         try {
             // A load that just fetched has the relays' copy already; a local-only load or an older snapshot needs the refresh.
             if (load == Load.ALREADY || load == Load.LOCAL) {
                 val refresh = refreshLocked()
                 if (refresh.outcome != null) {
-                    publicTags = revertPublic; privateIds = revertPrivate
+                    publicTags = revertPublic; privateEntries = revertPrivate
                     publish(writable = refresh.outcome != ListOutcome.Unsupported, loaded = refresh.outcome != ListOutcome.Rejected)
                     return refresh.outcome
                 }
                 if (refresh.adopted) {
-                    revertPublic = publicTags; revertPrivate = privateIds
-                    applyToggle(id, remove)
+                    revertPublic = publicTags; revertPrivate = privateEntries
+                    applyToggle(t, id, remove)
                     publish(writable = true, loaded = true)
                 }
             }
             val ts = maxOf(now(), lastCreatedAt + 1)
             lastCreatedAt = ts
             val outcome = try {
-                val content = privateTags.encrypt(privateOther + privateIds.map { listOf(tag, it) })
+                val content = privateTags.encrypt(privateOther + privateEntries)
                 val builder = EventBuilder(Kind(kind.toUShort()), content).tags(publicTags.map { Tag.parse(it) }).customCreatedAt(Timestamp.fromSecs(ts.toULong()))
                 if (send(builder).sentToAny) ListOutcome.Ok else ListOutcome.PublishFailed
             } catch (e: CancellationException) {
@@ -338,26 +354,32 @@ class NostrPrivateList(
             }
             if (outcome == ListOutcome.Ok) snapshotCreatedAt = ts
             if (outcome != ListOutcome.Ok) {
-                publicTags = revertPublic; privateIds = revertPrivate
+                publicTags = revertPublic; privateEntries = revertPrivate
                 publish(writable = outcome != ListOutcome.Unsupported, loaded = true)
             }
             return outcome
         } catch (e: CancellationException) {
             // the caller left (e.g. back from a thread during the refresh or before the relay OK): a change
             // that reached no relay must not stay in memory
-            publicTags = revertPublic; privateIds = revertPrivate
+            publicTags = revertPublic; privateEntries = revertPrivate
             publish(writable = true, loaded = true)
             throw e
         }
     }
 
     fun clear() {
-        publicTags = emptyList(); privateOther = emptyList(); privateIds = emptyList(); lastCreatedAt = 0; snapshotCreatedAt = 0
+        publicTags = emptyList(); privateOther = emptyList(); privateEntries = emptyList(); lastCreatedAt = 0; snapshotCreatedAt = 0
         emit(ListState())
     }
 
     private fun publish(writable: Boolean, loaded: Boolean) {
-        emit(ListState(ids = (privateIds + publicIds).distinct(), writable = writable, loaded = loaded))
+        val all = (privateEntries + publicEntries).map { it[0] to it[1] }.distinct()
+        emit(ListState(
+            ids = all.filter { it.first == tag }.map { it.second },
+            writable = writable, loaded = loaded,
+            extraIds = all.filter { it.first != tag }.map { it.second },
+            order = all,
+        ))
     }
 
     private fun emit(state: ListState) {

@@ -1,0 +1,7 @@
+• Publique vídeos de até 2 minutos; o celular os reduz, sem dados de localização
+• Descobrir: listas selecionadas de pessoas para seguir
+• Os cartões de link mostram título e site sobre a imagem; um link no fim sai do texto
+• Ordene suas listas arrastando; as abas fixadas seguem a ordem
+• Três imagens como três quadrados, a partir de cinco com "+N"
+• Respostas do Fediverso (NIP-22) aparecem nas conversas e notificações
+• Correções: sua resposta e os seguidos aparecem na hora

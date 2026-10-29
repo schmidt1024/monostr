@@ -2,6 +2,7 @@ package com.monostr.nostr.repo
 
 import com.monostr.nostr.Exit
 import com.monostr.nostr.NostrEngine
+import com.monostr.nostr.model.AddressRef
 import com.monostr.nostr.model.Note
 import com.monostr.nostr.model.NoteMapper
 import com.monostr.nostr.model.parentCandidates
@@ -18,6 +19,8 @@ sealed interface Slot {
     val id: String
     data class Shown(val note: Note) : Slot { override val id: String get() = note.id }
     data class Unavailable(override val id: String) : Slot
+    /** Spec 2026-10-29 article reader: the long-form article a comment sits under, shown as a card; [id] is its coordinate. */
+    data class Article(val ref: AddressRef) : Slot { override val id: String get() = ref.coordinate }
     /** Spec 2026-10-23 §4.2: missing after the database and the own relays, but the [EventLocator] may still find it at [wanted]. */
     data class Pending(override val id: String, val wanted: Wanted) : Slot
 }
@@ -83,7 +86,7 @@ class NostrConversationRepository(
 
     private suspend fun walkChains(notes: List<Note>, asked: MutableSet<String>?): Map<String, Chain> {
         // the entry id → the reply whose chain it shows (a repost shows the reposted note's chain)
-        val replies = notes.mapNotNull { n -> (n.repostOf ?: n).takeIf { it.isReply }?.let { n.id to it } }
+        val replies = notes.mapNotNull { n -> (n.repostOf ?: n).takeIf { it.isReply || it.articleParent != null }?.let { n.id to it } }
         if (replies.isEmpty()) return emptyMap()
         val known = HashMap<String, Note?>()
         // only with a locator: the ids the database holds (a withdrawn note is held, so never pending)
@@ -91,7 +94,11 @@ class NostrConversationRepository(
         // per entry: the ids walked, direct parent first, upwards
         val paths = replies.associate { (key, _) -> key to ArrayList<String>() }
         val reply = replies.toMap()
-        var frontier: Map<String, String> = replies.associate { (key, r) -> key to r.replyToId!! }
+        // spec 2026-10-29 article reader (final review M11): like [walk], a comment under an article has the article above it,
+        // shown as a card; its id (the article's event) is never looked up as a note
+        val articles = HashMap<String, AddressRef>()
+        for ((key, r) in replies) r.articleParent?.let { articles[key] = it }
+        var frontier: Map<String, String> = replies.filter { (key, _) -> key !in articles }.associate { (key, r) -> key to r.replyToId!! }
         repeat(FEED_ROUNDS) {
             if (frontier.isEmpty()) return@repeat
             load(frontier.values.toSet(), known, stored = stored, asked = asked) // one batch for the whole page per round
@@ -100,13 +107,19 @@ class NostrConversationRepository(
                     val path = paths.getValue(key)
                     if (id in path || id == reply.getValue(key).id) continue // cycle: stop
                     path += id
-                    known[id]?.replyToId?.let { put(key, it) } // go on above a found reply
+                    val found = known[id] ?: continue
+                    val article = found.articleParent
+                    if (article != null) articles[key] = article else found.replyToId?.let { put(key, it) } // go on above a found reply
                 }
             }
         }
-        load(replies.mapNotNull { (key, r) -> r.rootId?.takeIf { needsRoot(paths.getValue(key), it, known) } }.toSet(), known, stored = stored, asked = asked)
-        val pending = if (locator == null) emptyMap() else pending(locator, replies, paths, known, stored!!)
-        return replies.associate { (key, r) -> key to assemble(paths.getValue(key), r.rootId, known, pending) }
+        val walks = replies.filter { (key, _) -> key !in articles }
+        load(walks.mapNotNull { (key, r) -> r.rootId?.takeIf { needsRoot(paths.getValue(key), it, known) } }.toSet(), known, stored = stored, asked = asked)
+        val pending = if (locator == null) emptyMap() else pending(locator, replies, paths, known, stored!!, articles.keys)
+        return replies.associate { (key, r) ->
+            val article = articles[key]
+            key to if (article != null) shape(listOf<Slot>(Slot.Article(article)) + paths.getValue(key).asReversed().map { slot(it, known, pending) }) else assemble(paths.getValue(key), r.rootId, known, pending)
+        }
     }
 
     /**
@@ -120,11 +133,14 @@ class NostrConversationRepository(
         paths: Map<String, List<String>>,
         known: Map<String, Note?>,
         stored: Set<String>,
+        /** Entries whose walk ended at an article: no root is wanted for them. */
+        underArticle: Set<String> = emptySet(),
     ): Map<String, Wanted> {
         val wants = Wants(known, stored)
         for ((key, r) in replies) {
             val path = paths.getValue(key)
             wants.path(r, path)
+            if (key in underArticle) continue
             val rootId = r.rootId ?: continue
             if (needsRoot(path, rootId, known)) wants.root(rootId, r)
         }
@@ -226,13 +242,17 @@ class NostrConversationRepository(
     ): List<Slot> {
         val held = stored ?: if (network && locator != null) HashSet() else null
         val path = ArrayList<String>()
-        var id = note.replyToId
+        // spec 2026-10-29 article reader: a comment directly under an article has the article above it, not a note to load
+        var article: AddressRef? = note.articleParent
+        var id = if (article != null) null else note.replyToId
         while (id != null && id !in path && path.size < MAX_HOPS) {
             load(setOf(id), known, network, held, asked)
             path += id
-            id = known[id]?.replyToId
+            val next = known[id]
+            article = next?.articleParent
+            id = if (article != null) null else next?.replyToId
         }
-        val rootId = note.rootId?.takeIf { path.isNotEmpty() && it != note.id && !reachedRoot(path, known) && it !in path }
+        val rootId = note.rootId?.takeIf { article == null && path.isNotEmpty() && it != note.id && !reachedRoot(path, known) && it !in path }
         if (rootId != null) load(setOf(rootId), known, network, held, asked)
         val pending = if (!network || locator == null || held == null) emptyMap() else Wants(known, held).run {
             path(note, path)
@@ -240,7 +260,8 @@ class NostrConversationRepository(
             searchable(locator)
         }
         val up = path.asReversed().map { slot(it, known, pending) }
-        return if (rootId == null) up else listOf(slot(rootId, known, pending)) + up
+        val tail = if (rootId == null) up else listOf(slot(rootId, known, pending)) + up
+        return article?.let { listOf<Slot>(Slot.Article(it)) + tail } ?: tail
     }
 
     private fun slot(id: String, known: Map<String, Note?>, pending: Map<String, Wanted> = emptyMap()): Slot =

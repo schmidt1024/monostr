@@ -37,6 +37,10 @@ data class Note(
     val replyHint: RefHint? = null,
     /** Author pubkey of the quoted note from the `q` tag or `nevent`, null if unknown. */
     val quoteAuthor: String? = null,
+    /** Spec 2026-10-29 naddr: the addressable event (kind 30000-39999) this note points at, shown as a card; null when it quotes a note or sits in a quote card. */
+    val addressRef: AddressRef? = null,
+    /** Spec 2026-10-29 article reader: a NIP-22 comment (kind 1111) written directly under a long-form article (root `A` tag `30023:…`, parent `a` the same); null for any other note. */
+    val articleParent: AddressRef? = null,
 ) {
     val isReply: Boolean get() = replyToId != null
     val isRepost: Boolean get() = kind == 6

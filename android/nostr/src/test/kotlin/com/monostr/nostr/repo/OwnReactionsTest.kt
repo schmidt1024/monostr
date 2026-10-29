@@ -53,6 +53,21 @@ class OwnReactionsTest {
     }
 
     @Test
+    fun `an article repost (kind 16) counts as reposted, a withdrawn one does not`() = runTest {
+        val e = engine()
+        val kept = EventBuilder.textNote("article stand-in 1").signWithKeys(alice).also { e.save(it) }
+        val gone = EventBuilder.textNote("article stand-in 2").signWithKeys(alice).also { e.save(it) }
+        fun generic(target: rust.nostr.sdk.Event) = EventBuilder(Kind(16u), "").tags(listOf(Tag.parse(listOf("e", target.id().toHex())), Tag.parse(listOf("k", "30023")))).signWithKeys(me)
+        e.save(generic(kept))
+        val withdrawn = generic(gone).also { e.save(it) }
+        e.save(EventBuilder(Kind(5u), "").tags(listOf(Tag.parse(listOf("e", withdrawn.id().toHex())))).signWithKeys(me))
+        val own = NostrOwnReactions(e)
+        own.load(fetch = false)
+        assertEquals(setOf(kept.id().toHex()), own.reposted.value)
+        e.close()
+    }
+
+    @Test
     fun `an emoji reaction is kept with its content, the newest one wins`() = runTest {
         val e = engine()
         val note = EventBuilder.textNote("note").signWithKeys(alice).also { e.save(it) }

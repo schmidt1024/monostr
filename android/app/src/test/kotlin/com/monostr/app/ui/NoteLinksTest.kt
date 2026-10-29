@@ -4,11 +4,39 @@ import com.monostr.app.ui.common.NoteLinks
 import com.monostr.app.ui.common.NoteSpan
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
+import rust.nostr.sdk.Coordinate
 import rust.nostr.sdk.Keys
+import rust.nostr.sdk.Kind
+import rust.nostr.sdk.Nip19Coordinate
 
 class NoteLinksTest {
     private val keys = Keys.parse("0000000000000000000000000000000000000000000000000000000000000001")
     private val npub = keys.publicKey().toBech32()
+    private fun naddr(kind: Int, d: String) = Nip19Coordinate(Coordinate(Kind(kind.toUShort()), keys.publicKey(), d), emptyList()).toBech32()
+
+    @Test
+    fun `an naddr mid text becomes an address link, a non addressable kind stays plain`() {
+        val link = "nostr:" + naddr(30311, "live")
+        val spans = NoteLinks.annotate("watch $link now")
+        assertEquals(3, spans.size)
+        assertEquals(NoteSpan.Plain("watch "), spans[0])
+        val ref = (spans[1] as NoteSpan.AddressRef).ref
+        assertEquals(30311, ref.kind)
+        assertEquals("live", ref.identifier)
+        assertEquals(link, spans[1].text)
+        assertEquals(NoteSpan.Plain(" now"), spans[2])
+        // spec 2026-10-29 naddr: only kinds 30000-39999 are cards, anything else stays raw text
+        val plain = "see nostr:" + naddr(1, "x")
+        assertEquals(listOf(NoteSpan.Plain(plain)), NoteLinks.annotate(plain))
+    }
+
+    @Test
+    fun `an all caps naddr link is matched`() {
+        val link = ("nostr:" + naddr(30023, "post")).uppercase()
+        val spans = NoteLinks.annotate(link)
+        assertEquals(1, spans.size)
+        assertEquals("post", (spans[0] as NoteSpan.AddressRef).ref.identifier)
+    }
 
     @Test
     fun `a long link is shown shortened and still opens in full`() {

@@ -3,10 +3,7 @@ package com.monostr.nostr.repo
 import com.monostr.nostr.NostrEngine
 import com.monostr.nostr.PublishResult
 import com.monostr.nostr.model.NoteMapper
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.BufferOverflow
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,7 +15,6 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
 import rust.nostr.sdk.Event
 import rust.nostr.sdk.EventBuilder
 import rust.nostr.sdk.Filter
@@ -137,38 +133,9 @@ class NostrFollowRepository(
         _changes.tryEmit(Unit)
     }
 
-    private class Fetch(val found: Boolean, val completed: Boolean)
-
-    /**
-     * One relay fetch of the own kind 3 (stored by the engine). Completed, i.e. an empty result means
-     * "no list anywhere": the fetch returned before its timeout without an error, EVERY configured
-     * normal relay was connected before and after it (rust-nostr ends the fetch on the EOSE of the
-     * relays it reached, so one connected relay proves nothing about the others), and none of them
-     * sent a CLOSED meanwhile (a refusal is no answer).
-     */
-    private suspend fun fetchList(): Fetch {
-        val configured = engine.relayUrls().toSet()
-        val connectedBefore = engine.connectedNormalRelayUrls()
-        val mark = engine.closedMark()
-        val started = System.nanoTime()
-        val events = try {
-            engine.fetch(filter(), fetchTimeout)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            return Fetch(found = false, completed = false)
-        }
-        val inTime = System.nanoTime() - started < fetchTimeout.toNanos()
-        if (events.isNotEmpty()) feed.markContactsFetched(now())
-        val everyRelay = configured.isNotEmpty() && connectedBefore.containsAll(configured)
-        // The notification loop that records CLOSED runs apart from the fetch: give a frame that came
-        // in just before the fetch returned the moment to land (only where it decides anything).
-        if (events.isEmpty() && inTime && everyRelay && !engine.closedSince(mark, configured)) {
-            withContext(Dispatchers.Default) { delay(CLOSED_SETTLE_MS) }
-        }
-        val completed = inTime && everyRelay && engine.connectedNormalRelayUrls().containsAll(configured) && !engine.closedSince(mark, configured)
-        return Fetch(events.isNotEmpty(), completed)
-    }
+    /** One relay fetch of the own kind 3 (stored by the engine), see [fetchOwn]; a found list marks the contacts fetched. */
+    private suspend fun fetchList(): OwnFetch =
+        engine.fetchOwn(filter(), fetchTimeout).also { if (it.found) feed.markContactsFetched(now()) }
 
     private suspend fun load(): Snapshot {
         var list = engine.query(filter()).firstOrNull()
@@ -220,9 +187,5 @@ class NostrFollowRepository(
         }
         if (changed > 0) _changes.tryEmit(Unit)
         return changed
-    }
-
-    private companion object {
-        const val CLOSED_SETTLE_MS = 100L
     }
 }

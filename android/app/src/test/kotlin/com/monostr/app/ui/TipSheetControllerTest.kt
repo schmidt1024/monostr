@@ -7,6 +7,7 @@ import com.monostr.app.R
 import com.monostr.app.data.PendingTip
 import com.monostr.app.data.PendingTipStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import com.monostr.app.ui.tips.TipPhase
@@ -24,7 +25,10 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -50,16 +54,18 @@ class TipSheetControllerTest {
         val gateway: FakeWatcherGateway = FakeWatcherGateway(),
         val pending: FakePendingTips = FakePendingTips(),
         val settings: FakeTipSettings = FakeTipSettings().apply { anonymousState.value = false },
+        val authorRelays: FakeAuthorRelays = FakeAuthorRelays(),
+        var authorRelaysOn: Boolean = true,
     )
 
     private fun TestScope.controller(rig: Rig) =
-        TipSheetController(rig.tips, rig.gateway, rig.settings, rig.pending, eager()) { 5_000 }
+        TipSheetController(rig.tips, rig.gateway, rig.settings, rig.pending, eager(), rig.authorRelays, { rig.authorRelaysOn }) { 5_000 }
 
     @Test
     fun `a watcher on a lan address is never asked and its relays are not used`() = runTest {
         val lan = PaymentInfo.Enabled(aliceAddress, Watcher.Http("https://192.168.1.10:8080", watcherPk))
         val rig = Rig(FakeTips(infos = mapOf(alice to lan)))
-        val c = TipSheetController(rig.tips, rig.gateway, rig.settings, rig.pending, eager(), now = { 5_000 }, watcherAllowed = RelayHosts::isPublic)
+        val c = TipSheetController(rig.tips, rig.gateway, rig.settings, rig.pending, eager(), rig.authorRelays, { true }, now = { 5_000 }, watcherAllowed = RelayHosts::isPublic)
         c.open(n)
         c.setCustom("0,005")
         c.send()
@@ -390,7 +396,7 @@ class TipSheetControllerTest {
             override val pending: Flow<List<PendingTip>> = flow { emit(emptyList()); emitAll(inner.state) }
         }
         val tips = FakeTips(infos = mapOf(alice to enabled))
-        val c = TipSheetController(tips, FakeWatcherGateway(), FakeTipSettings().apply { anonymousState.value = false }, flaky, eager()) { 5_000 }
+        val c = TipSheetController(tips, FakeWatcherGateway(), FakeTipSettings().apply { anonymousState.value = false }, flaky, eager(), FakeAuthorRelays(), { true }) { 5_000 }
         c.open(n)
         advanceUntilIdle()
         c.send()
@@ -452,5 +458,128 @@ class TipSheetControllerTest {
         advanceUntilIdle()
         assertEquals(listOf("wss://w.example"), rig.tips.anonymousRelays.last())
         assertEquals(0, rig.gateway.infoCalls)
+    }
+
+    private val sub = "8" + "A".repeat(94)
+
+    @Test
+    fun `payto only recipient gets payto`() = runTest {
+        val rig = Rig(FakeTips().apply { paytos = mapOf(alice to sub) })
+        val c = controller(rig)
+        c.open(n)
+        advanceUntilIdle()
+        assertEquals(TipPhase.PayTo(sub, "monero:$sub"), c.state.value.phase)
+    }
+
+    private val dittoRelays = listOf("wss://relay.ditto.example", "wss://nostr.mom.example")
+
+    @Test
+    fun `paytoOnlyOnAuthorRelaysGetsPayTo`() = runTest {
+        // an Amethyst/Ditto user keeps the kind 10133 on its own write relays only
+        val rig = Rig(FakeTips().apply { outboxPaytos = mapOf(alice to sub) }, authorRelays = FakeAuthorRelays(mapOf(alice to dittoRelays)))
+        val c = controller(rig)
+        c.open(n)
+        advanceUntilIdle()
+        assertEquals(TipPhase.PayTo(sub, "monero:$sub"), c.state.value.phase)
+        assertEquals(listOf(alice to dittoRelays), rig.tips.paytoFetches)
+    }
+
+    @Test
+    fun `authorRelaysOffAsksNoForeignRelay`() = runTest {
+        val rig = Rig(FakeTips().apply { outboxPaytos = mapOf(alice to sub) }, authorRelays = FakeAuthorRelays(mapOf(alice to dittoRelays)), authorRelaysOn = false)
+        val c = controller(rig)
+        c.open(n)
+        advanceUntilIdle()
+        assertEquals(TipPhase.NoMonero, c.state.value.phase)
+        assertTrue(rig.tips.paytoFetches.isEmpty())
+    }
+
+    @Test
+    fun `readyDoesNotWaitForOutboxFetch`() = runTest {
+        // the forced read is held until the outbox fetch is under way, then answers with a valid info
+        val live = CompletableDeferred<Unit>()
+        val tips = FakeTips().apply { liveInfos = mapOf(alice to enabled); liveGate = live; outboxGate = CompletableDeferred() }
+        val rig = Rig(tips, authorRelays = FakeAuthorRelays(mapOf(alice to dittoRelays)))
+        val c = controller(rig)
+        c.open(n)
+        runCurrent()
+        assertEquals(TipPhase.Loading, c.state.value.phase)
+        live.complete(Unit)
+        runCurrent()
+        assertEquals(TipPhase.Ready, c.state.value.phase)
+        assertEquals(0L, currentTime, "no virtual time spent on the outbox fetch")
+        assertEquals(listOf(alice to dittoRelays), rig.tips.paytoFetches, "the outbox fetch started")
+        assertEquals(1, rig.tips.outboxCancelled, "and was cancelled once the info was valid")
+    }
+
+    @Test
+    fun `dismissCancelsOutboxFetchAtOnce`() = runTest {
+        val tips = FakeTips().apply { liveInfos = emptyMap(); outboxGate = CompletableDeferred() }
+        val c = controller(Rig(tips, authorRelays = FakeAuthorRelays(mapOf(alice to dittoRelays))))
+        c.open(n)
+        runCurrent()
+        assertEquals(TipPhase.Loading, c.state.value.phase, "waiting for the outbox fetch")
+        c.dismiss()
+        runCurrent()
+        assertEquals(1, tips.outboxCancelled, "the recipient's relays are released without waiting for the budget")
+        assertEquals(0L, currentTime)
+        c.open(n)
+        runCurrent()
+        c.open(n) // a reopen cancels the previous load too
+        runCurrent()
+        assertEquals(2, tips.outboxCancelled)
+    }
+
+    @Test
+    fun `outboxFetchRespectsSharedBudget`() = runTest {
+        // the forced read answers "no info" after 2 s; the outbox fetch never ends: one 3 s budget from opening, not 2 + 3
+        val tips = FakeTips().apply { liveInfos = emptyMap(); liveDelayMs = 2_000; outboxGate = CompletableDeferred() }
+        val c = controller(Rig(tips, authorRelays = FakeAuthorRelays(mapOf(alice to dittoRelays))))
+        c.open(n)
+        advanceTimeBy(2_999)
+        runCurrent()
+        assertEquals(TipPhase.Loading, c.state.value.phase)
+        advanceTimeBy(2)
+        runCurrent()
+        assertEquals(TipPhase.NoMonero, c.state.value.phase)
+    }
+
+    @Test
+    fun `payment info wins over payto`() = runTest {
+        val rig = Rig(FakeTips(infos = mapOf(alice to enabled)).apply { paytos = mapOf(alice to sub) })
+        val c = controller(rig)
+        c.open(n)
+        advanceUntilIdle()
+        assertEquals(TipPhase.Ready, c.state.value.phase)
+    }
+
+    @Test
+    fun `no payto stays no monero`() = runTest {
+        val c = controller(Rig(FakeTips().apply { paytos = mapOf(bob to sub) }))
+        c.open(n)
+        advanceUntilIdle()
+        assertEquals(TipPhase.NoMonero, c.state.value.phase)
+    }
+
+    @Test
+    fun `payto wallet missing shows the fallback`() = runTest {
+        val c = controller(Rig(FakeTips().apply { paytos = mapOf(alice to sub) }))
+        c.open(n)
+        advanceUntilIdle()
+        c.payToWalletResult(false)
+        assertEquals(true, (c.state.value.phase as TipPhase.PayTo).walletMissing)
+        c.payToWalletResult(true)
+        assertEquals(false, (c.state.value.phase as TipPhase.PayTo).walletMissing)
+    }
+
+    @Test
+    fun `payto sends no intent and records nothing`() = runTest {
+        val rig = Rig(FakeTips().apply { paytos = mapOf(alice to sub) })
+        val c = controller(rig)
+        c.open(n)
+        advanceUntilIdle()
+        c.payToWalletResult(true)
+        assertTrue(rig.tips.sentIntents.isEmpty())
+        assertTrue(rig.pending.pending.first().isEmpty())
     }
 }

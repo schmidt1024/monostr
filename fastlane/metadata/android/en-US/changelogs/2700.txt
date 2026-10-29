@@ -1,0 +1,5 @@
+• Read articles (NIP-23) in the app: picture, title, formatted text; like, repost, reply, bookmark and tip under them
+• Profiles get an "Articles" tab; profile tabs stay on one line and scroll
+• Links to articles, live streams and other events show as cards
+• Monero address without a watcher (NIP-A3 payto): set it up in a minute, others pay from their wallet
+• Back up your key with a password (ncryptsec, NIP-49) and sign in with it

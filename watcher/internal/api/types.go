@@ -1,4 +1,4 @@
-// Package api is the watcher's HTTP surface: /v1/info, /v1/accounts and the
+// Package api is the watcher's HTTP surface: a status page at /, /v1/info, /v1/accounts and the
 // internal monero-lws hook target.
 package api
 

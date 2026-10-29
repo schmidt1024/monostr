@@ -15,8 +15,8 @@ data class NoteMedia(
 ) {
     enum class Kind { IMAGE, VIDEO }
 
-    /** Media in display order, the note text with those URLs (and a freestanding quote link) removed, and the quote. */
-    data class Parsed(val media: List<NoteMedia>, val displayContent: String, val quote: QuoteRef? = null)
+    /** Media in display order, the note text with those URLs (and a freestanding quote link) removed, and the quote or, without one, the addressable event it points at. */
+    data class Parsed(val media: List<NoteMedia>, val displayContent: String, val quote: QuoteRef? = null, val address: AddressRef? = null)
 
     companion object {
         /** Backlog 39: five and more show as 2 x 2 with «+N»; the viewer holds them all. */
@@ -33,8 +33,14 @@ data class NoteMedia(
         /** [withQuote] false: no quote detection (inside a quote card, spec 3: depth 1). */
         fun parse(content: String, tags: List<List<String>>, withQuote: Boolean = true): Parsed {
             val quote = if (withQuote) NoteQuote.find(content, tags) else null
-            val text = if (quote != null) NoteQuote.strip(content, quote.id) else content
-            return parseMedia(text, tags).copy(quote = quote)
+            // a quote wins over an naddr: one card per note (spec 2026-10-29 naddr)
+            val address = if (withQuote && quote == null) NoteAddress.find(content) else null
+            val text = when {
+                quote != null -> NoteQuote.strip(content, quote.id)
+                address != null -> NoteAddress.strip(content, address)
+                else -> content
+            }
+            return parseMedia(text, tags).copy(quote = quote, address = address)
         }
 
         private fun parseMedia(content: String, tags: List<List<String>>): Parsed {

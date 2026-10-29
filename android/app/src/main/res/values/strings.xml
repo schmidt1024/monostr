@@ -155,9 +155,11 @@
     <string name="profile_tab_posts">Posts</string>
     <string name="profile_tab_replies">Replies</string>
     <string name="profile_tab_reposts">Reposts</string>
+    <string name="profile_tab_articles">Articles</string>
     <string name="profile_empty_posts">No posts yet</string>
     <string name="profile_empty_replies">No replies yet</string>
     <string name="profile_empty_reposts">No reposts yet</string>
+    <string name="profile_empty_articles">No articles yet</string>
 
     <!-- compose -->
     <string name="compose_title_reply">Reply</string>
@@ -173,7 +175,10 @@
     <string name="login_no_signer">No NIP-55 signer (e.g. Amber) installed. Sign in with a key:</string>
     <string name="login_secret_label">nsec or hex</string>
     <string name="login_button">Sign in</string>
-    <string name="login_error_invalid_key">Not a valid nsec or hex key</string>
+    <string name="login_error_invalid_key">Not a valid nsec, ncryptsec or hex key</string>
+    <string name="login_password_label">Password</string>
+    <string name="login_error_wrong_password">Wrong password</string>
+    <string name="login_error_too_strong">This backup needs more memory than this phone allows</string>
     <string name="login_error_rejected">Request rejected in the signer</string>
     <string name="login_error_signer">The signer reported an error</string>
     <string name="login_error_failed">Sign-in failed</string>
@@ -189,6 +194,10 @@
     <string name="tip_open_wallet_again">Open wallet again</string>
     <string name="tip_sent">Wallet opened. The tip is waiting for the watcher\'s confirmation.</string>
     <string name="tip_error_amount">Invalid amount (e.g. 0.005)</string>
+    <string name="tip_payto_title_plain">Send Monero</string>
+    <string name="tip_payto_note">Goes to their address, not to this note. No confirmation: monostr can\'t see whether you paid.</string>
+    <string name="tip_payto_profile">No confirmation: monostr can\'t see whether you paid.</string>
+    <string name="tip_payto_pay">Pay with wallet</string>
     <string name="tip_no_monero">Recipient has not set up Monero</string>
     <string name="tip_notice_offline">No relay reachable, intent saved locally</string>
     <string name="tip_anonymous_switch">Tip anonymously</string>
@@ -222,6 +231,11 @@
     <string name="setup_path_existing_hint">Paste the primary address and the private view key from Cake Wallet, Monerujo or Feather.</string>
     <string name="setup_announced_warning">This account already receives tips at %1$s…%2$s, set up on another device. Setting up here replaces that address.</string>
     <string name="setup_announced_notice">Tips are already set up for this account (address %1$s…%2$s).</string>
+    <string name="setup_payto_replace">Replace your public Monero address %1$s…%2$s (also visible in Amethyst and Ditto) with the tip address?</string>
+    <string name="setup_payto_replace_yes">Replace</string>
+    <string name="setup_payto_replace_keep">Keep</string>
+    <string name="setup_payto_failed">Tips are set up, but your public address could not be updated.</string>
+    <string name="setup_payto_retry">Try again</string>
     <string name="setup_keep_existing">Keep it</string>
     <string name="setup_new_wallet">Create a new tip wallet (recommended)</string>
     <string name="setup_existing_wallet">Use an existing wallet</string>
@@ -252,10 +266,22 @@
     <string name="setup_err_watcher_network">Watcher reports an unknown network</string>
     <string name="setup_err_subaddress">Subaddresses are not supported. Please use the primary address (starts with 4 or 5).</string>
     <string name="setup_err_integrated">Integrated addresses are not supported. Please use the primary address.</string>
+    <string name="setup_err_address_integrated">Integrated addresses are not supported. Please use a primary address or subaddress (4… / 8…).</string>
     <string name="setup_err_address">Invalid address</string>
     <string name="setup_err_network">Address belongs to a different network than the watcher</string>
     <string name="setup_err_view_key_format">View key must be 64 hex characters</string>
     <string name="setup_err_view_key_mismatch">View key does not match the address</string>
+    <string name="setup_address_title">Receive Monero</string>
+    <string name="setup_address_field">Monero address (4… / 8…)</string>
+    <string name="setup_address_hint">This address is public. Best use a subaddress only for Nostr.</string>
+    <string name="setup_address_publish">Publish</string>
+    <string name="setup_no_wallet_link">No Monero wallet yet? Create one here</string>
+    <string name="setup_address_done">Others can now send you Monero, also from Amethyst and Ditto.</string>
+    <string name="setup_upgrade_title">Upgrade: receipts</string>
+    <string name="setup_upgrade_text">See who tipped you, with a notification.</string>
+    <string name="setup_upgrade_action">Set up watcher</string>
+    <string name="setup_err_mainnet">Please use a mainnet address (starts with 4 or 8).</string>
+    <string name="setup_err_relays_unknown">Relays not reachable, try again.</string>
     <string name="setup_err_not_published">No relay reachable – payment info not published, please try again</string>
     <string name="setup_personal_err_input">Paste the watcher\'s nprofile (or npub).</string>
     <string name="setup_personal_err_relay">Add a relay of the watcher (wss://…).</string>
@@ -316,6 +342,11 @@
     <string name="note_via">via %1$s</string>
     <string name="settings_monero">Monero tips</string>
     <string name="settings_monero_not_set_up">Not set up. Not needed for sending tips.</string>
+    <string name="settings_monero_payto">Your Monero address %1$s…%2$s</string>
+    <string name="settings_monero_payto_change">Change</string>
+    <string name="settings_monero_payto_remove">Remove</string>
+    <string name="settings_msg_payto_removed">Address removed</string>
+    <string name="settings_msg_disabled_payto_left">Tips are off, but your public address could not be removed.</string>
     <string name="settings_monero_announced">Tips arrive at %1$s…%2$s, set up on another device. Setting up here replaces that address.</string>
     <string name="settings_monero_set_up">Set up receiving Monero tips</string>
     <string name="settings_monero_address">Tips arrive in this wallet: %1$s…%2$s · %3$s</string>
@@ -460,6 +491,31 @@
     <string name="note_ref_label">note</string>
     <string name="quote_missing">Note not found</string>
     <string name="mute_quote_placeholder">Note from a muted account</string>
+    <string name="address_ref_label">event</string>
+    <string name="address_type_article">Article</string>
+    <string name="address_type_live">Live</string>
+    <string name="address_type_listing">Listing</string>
+    <string name="address_type_list">List</string>
+    <string name="address_type_calendar">Calendar event</string>
+    <string name="address_type_event">Event</string>
+    <string name="address_live">LIVE</string>
+    <string name="address_planned">Starts %1$s</string>
+    <string name="address_planned_unknown">Planned</string>
+    <string name="address_ended">ENDED</string>
+    <plurals name="address_watching">
+        <item quantity="one">%1$s watching</item>
+        <item quantity="other">%1$s watching</item>
+    </plurals>
+    <string name="address_missing">Event not found</string>
+    <string name="address_deleted">Event deleted</string>
+    <string name="article_title">Article</string>
+    <plurals name="article_read_time">
+        <item quantity="one">%d min read</item>
+        <item quantity="other">%d min read</item>
+    </plurals>
+    <string name="article_missing">Article not found</string>
+    <string name="article_deleted">Article deleted</string>
+    <string name="article_open_browser">Open in browser</string>
     <string name="conversation_show_muted">Show</string>
     <string name="action_quote">Quote</string>
     <string name="compose_quote_hint">Quote</string>
@@ -652,4 +708,15 @@
     <string name="upload_video_too_large">This video is too large. Try a shorter clip.</string>
     <string name="upload_video_rate">Daily video limit reached, try again tomorrow</string>
     <string name="compose_video_tile">Video</string>
+    <string name="backup_password_button">Back up with a password</string>
+    <string name="backup_password_title">Back up with a password</string>
+    <string name="backup_password_label">Password</string>
+    <string name="backup_password_repeat">Repeat password</string>
+    <string name="backup_password_too_short">At least 8 characters</string>
+    <string name="backup_password_mismatch">Passwords do not match</string>
+    <string name="backup_password_create">Create</string>
+    <string name="backup_password_failed">Could not create the backup</string>
+    <string name="backup_password_note">Keep the password separately. Without it this backup is useless. Amethyst and other Nostr apps can import it.</string>
+    <string name="backup_copy">Copy backup</string>
+    <string name="backup_copied">Backup copied. The clipboard clears itself shortly.</string>
 </resources>

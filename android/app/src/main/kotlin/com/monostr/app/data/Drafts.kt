@@ -31,9 +31,13 @@ data class Draft(
 object DraftTargets {
     const val NOTE = "note"
 
-    fun of(replyTo: String?, quote: String?): String = when {
+    /** A compose that starts from a given text (quoting an article) has its own slot: it never reads or overwrites the new-note draft. */
+    fun of(replyTo: String?, quote: String?, prefill: String? = null, article: String? = null, commentParent: String? = null): String = when {
+        // a comment under an article (spec 2026-10-29): per coordinate, and per parent comment when it answers one
+        article != null -> "comment:$article" + (commentParent?.let { ":$it" } ?: "")
         replyTo != null -> "reply:$replyTo"
         quote != null -> "quote:$quote"
+        !prefill.isNullOrEmpty() -> "prefill:" + Integer.toHexString(prefill.hashCode())
         else -> NOTE
     }
 }

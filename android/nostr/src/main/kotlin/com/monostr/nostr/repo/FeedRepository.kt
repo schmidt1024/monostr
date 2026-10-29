@@ -2,11 +2,14 @@ package com.monostr.nostr.repo
 
 import com.monostr.nostr.NostrEngine
 import com.monostr.nostr.RefreshGate
+import com.monostr.nostr.model.AddressableEvent
+import com.monostr.nostr.model.Article
 import com.monostr.nostr.model.Nip10
 import com.monostr.nostr.model.Note
 import com.monostr.nostr.model.NoteMapper
 import com.monostr.tips.event.Event as JsonEvent
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
@@ -55,18 +58,30 @@ interface FeedRepository {
     suspend fun refreshProfile(author: String, limit: Int = 50) {}
     /** The [section]'s notes before [before], fetched from relays first; paging works like [loadMore]. */
     suspend fun moreProfileNotes(author: String, section: ProfileSection, before: Long, limit: Int = 50): List<Note>
+    /**
+     * The author's articles (kind 30023 only, never drafts), newest by `published_at` else created_at, the newest version per
+     * `d`, deleted ones left out; the database, after one relay fetch of articles and deletion requests when [fetch] is set.
+     */
+    suspend fun profileArticles(author: String, fetch: Boolean = true): List<Article> = emptyList()
+    /** Whether the database holds a visible article among [author]'s newest few; no relay is asked. */
+    suspend fun hasArticles(author: String): Boolean = false
+    /** One `limit:1` kind 30023 relay probe, then [hasArticles]; a found article answers from memory for the process, none is probed again next time. */
+    suspend fun probeArticles(author: String): Boolean = false
 }
 
 /** The tabs of a profile, like X: "Posts" the author's own root notes, "Replies" their replies, "Reposts" what they reposted. */
 enum class ProfileSection(internal val kinds: List<Int>) {
     POSTS(listOf(1)),
     REPLIES(listOf(1)),
-    REPOSTS(listOf(6));
+    REPOSTS(listOf(6)),
+    /** Long-form articles; read through [FeedRepository.profileArticles], not as notes. */
+    ARTICLES(listOf(30023));
 
     fun keeps(note: Note): Boolean = when (this) {
         POSTS -> note.repostOf == null && isRoot(note)
         REPLIES -> note.isReply
         REPOSTS -> note.repostOf != null
+        ARTICLES -> false
     }
 }
 
@@ -404,6 +419,88 @@ class NostrFeedRepository(
 
     override suspend fun moreProfileNotes(author: String, section: ProfileSection, before: Long, limit: Int): List<Note> =
         relayPage(listOf(author), section::keeps, before, limit, section.kinds)
+
+    private val articleProbes = java.util.concurrent.ConcurrentHashMap<String, CompletableDeferred<Boolean>>()
+
+    /**
+     * Final review I4: on the profile's hot path, so only the author's newest [HAS_ARTICLES_LIMIT] articles are read and checked
+     * against the deletion requests naming them; an author whose newest few are all deleted shows no tab until the list is read.
+     */
+    override suspend fun hasArticles(author: String): Boolean = withContext(Dispatchers.IO) { storedArticles(author, hasArticlesFilter(author)).isNotEmpty() }
+
+    /** The database read of [hasArticles]: the author's newest [HAS_ARTICLES_LIMIT] kind 30023. */
+    internal fun hasArticlesFilter(author: String): Filter = articlesFilter(author, HAS_ARTICLES_LIMIT)
+
+    private fun articlesFilter(author: String, limit: Int): Filter = authorsFilter(listOf(author), listOf(Article.KIND)).limit(limit.toULong())
+
+    override suspend fun probeArticles(author: String): Boolean {
+        val mine = CompletableDeferred<Boolean>()
+        val running = articleProbes.putIfAbsent(author, mine)
+        if (running != null) return running.await()
+        try {
+            quietly { engine.fetchSettled(authorsFilter(listOf(author), listOf(Article.KIND)).limit(1uL)) }
+            val found = hasArticles(author)
+            // a found article is kept for the process; none is asked again at the next profile open (final review M2)
+            if (!found) articleProbes.remove(author, mine)
+            mine.complete(found)
+        } catch (e: Throwable) {
+            articleProbes.remove(author, mine)
+            mine.cancel()
+            throw e
+        }
+        return mine.await()
+    }
+
+    override suspend fun profileArticles(author: String, fetch: Boolean): List<Article> {
+        if (fetch) {
+            coroutineScope {
+                listOf(
+                    async { quietly { engine.fetchSettled(authorsFilter(listOf(author), listOf(Article.KIND)).limit(ARTICLES_LIMIT.toULong())) } },
+                    async { fetchDeletions(listOf(author), null) },
+                ).awaitAll()
+            }
+        }
+        return storedArticles(author)
+    }
+
+    /**
+     * The author's stored articles read with [filter] (the newest 100 by default), the newest version per `d`, without the deleted ones: a request by the
+     * author naming the coordinate in `a` or the version's id in `e`, not older than the version (the card's rule).
+     */
+    private suspend fun storedArticles(author: String, filter: Filter = articlesFilter(author, ARTICLES_LIMIT)): List<Article> = withContext(Dispatchers.IO) {
+        val events = engine.query(filter).filter { it.author().toHex() == author }
+        if (events.isEmpty()) return@withContext emptyList()
+        val newest = events.map { e ->
+            val tags = e.tags().toVec().map { it.asVec() }
+            AddressableEvent(e.id().toHex(), Article.KIND, author, tags.firstOrNull { it.size >= 2 && it[0] == "d" }?.get(1) ?: "", e.createdAt().asSecs().toLong(), tags, e.content())
+        }.groupBy { it.identifier }.values.map { versions -> versions.maxBy { it.createdAt } }
+        val coordinates = newest.map { "${Article.KIND}:$author:${it.identifier}" }
+        val deletedAt = HashMap<String, Long>()
+        val requests = engine.query(articleDeletions(author, "#a", coordinates)) + engine.query(articleDeletions(author, "#e", newest.map { it.id }))
+        for (r in requests) {
+            if (r.author().toHex() != author) continue
+            val at = r.createdAt().asSecs().toLong()
+            for (tag in r.tags().toVec().map { it.asVec() }) {
+                if (tag.size >= 2 && (tag[0] == "a" || tag[0] == "e")) deletedAt.merge(tag[1], at, ::maxOf)
+            }
+        }
+        newest
+            .filter { ev ->
+                val at = maxOf(deletedAt["${Article.KIND}:$author:${ev.identifier}"] ?: Long.MIN_VALUE, deletedAt[ev.id] ?: Long.MIN_VALUE)
+                at < ev.createdAt
+            }
+            .mapNotNull(Article::parse)
+            .sortedByDescending { it.publishedAt }
+    }
+
+    /** Kind 5 by [author] naming one of [values] in [tag] (`#a` coordinates, `#e` ids). */
+    private fun articleDeletions(author: String, tag: String, values: List<String>): Filter = Filter.fromJson(
+        buildJsonObject {
+            put("kinds", JsonArray(listOf(JsonPrimitive(5))))
+            put("authors", JsonArray(listOf(JsonPrimitive(author))))
+            put(tag, JsonArray(values.map { JsonPrimitive(it) }))
+        }.toString(),
+    )
 }
 
 /**
@@ -446,6 +543,12 @@ private const val DELETION_LIMIT = 200uL
 
 /** Margin for [NostrFeedRepository]'s incremental deletion fetch: a request signed by a clock a bit behind still comes. */
 private const val DELETION_SKEW = 600L
+
+/** Articles per profile read (a person's long-form list is short). */
+private const val ARTICLES_LIMIT = 100
+
+/** Articles [NostrFeedRepository.hasArticles] reads: enough for the tab, cheap on the profile's hot path (final review I4). */
+internal const val HAS_ARTICLES_LIMIT = 5
 
 /** Events per database read of the "Posts" tab; replies in between are dropped in Kotlin before any further work. */
 private const val POSTS_SCAN = 200

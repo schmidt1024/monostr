@@ -49,8 +49,11 @@ class NoteActions(
 
     /** Repost, or undo the user's repost of the note. */
     fun repost(target: Note, onResult: (UiText) -> Unit) =
-        if (target.id in own.reposted.value) withdraw(target, 6, uiText(R.string.action_unrepost_sent), onResult)
-        else act(target, 6, uiText(R.string.action_repost_sent), onResult) { publish.repost(target) }
+        if (target.id in own.reposted.value) withdraw(target, repostKind(target), uiText(R.string.action_unrepost_sent), onResult)
+        else act(target, repostKind(target), uiText(R.string.action_repost_sent), onResult) { publish.repost(target) }
+
+    /** A repost of an article is a generic repost (kind 16, NIP-18); of anything else kind 6. */
+    private fun repostKind(target: Note) = if (target.kind == 30023) 16 else 6
 
     /**
      * NIP-09 for the user's own reaction ([kind] 7) or repost (6) of [target]: unmarked at once, a request names

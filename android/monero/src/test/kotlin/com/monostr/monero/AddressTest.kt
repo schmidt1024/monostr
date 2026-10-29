@@ -101,4 +101,38 @@ class AddressTest {
             Address(Network.MAINNET, spendPub, viewPub).integrated(ByteArray(7))
         }
     }
+
+    private val subaddress =
+        "84DbuRJ1PQ4LHj5awNDtBXFDJczqxhujvgpMxmF9uxGNKjChpAUd2YobG8zibKqSyDUUxnavkHLew9YscmTLGYGgJSVxDjL"
+
+    @Test
+    fun `checkReceiving accepts primary`() {
+        assertEquals(Network.MAINNET, Address.checkReceiving(mainnet))
+    }
+
+    @Test
+    fun `checkReceiving accepts subaddress`() {
+        assertEquals(Network.MAINNET, Address.checkReceiving(subaddress))
+    }
+
+    @Test
+    fun `checkReceiving trims`() {
+        assertEquals(Network.MAINNET, Address.checkReceiving("  $mainnet\n"))
+    }
+
+    @Test
+    fun `checkReceiving rejects integrated`() {
+        assertThrows(AddressException.IntegratedNotAllowed::class.java) { Address.checkReceiving(integratedMainnet) }
+    }
+
+    @Test
+    fun `checkReceiving rejects bad checksum`() {
+        val bad = mainnet.dropLast(1) + (if (mainnet.last() == '3') '4' else '3')
+        assertThrows(AddressException.BadChecksum::class.java) { Address.checkReceiving(bad) }
+    }
+
+    @Test
+    fun `parse still rejects subaddress`() {
+        assertThrows(AddressException.SubaddressNotAllowed::class.java) { Address.parse(subaddress) }
+    }
 }

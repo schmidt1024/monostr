@@ -36,6 +36,7 @@ func New(svc Service, publicURL string, registerLimit *ratelimit.Window, allowed
 		s.allowed[pk] = true
 	}
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /{$}", s.home)
 	mux.HandleFunc("GET /v1/info", s.info)
 	mux.HandleFunc("POST /v1/accounts", s.register)
 	mux.HandleFunc("DELETE /v1/accounts", s.unregister)

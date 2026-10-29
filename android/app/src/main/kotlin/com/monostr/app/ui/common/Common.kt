@@ -267,6 +267,7 @@ private fun ListNoteCard(
             Column(Modifier.weight(1f)) {
                 NoteHeaderLine(note, onOpen = onOpen, onOpenProfile = onOpenProfile, menu = menu.takeIf { showActions })
                 if (replyContext) ReplyContextLine(shown, names, onOpenProfile)
+                val foreign = LocalAllowForeign.current
                 val link = rememberNoteLink(shown)
                 val text = link?.let { LinkPreviewRules.textWithCard(shown.displayContent, it.url) } ?: shown.displayContent
                 if (text.isNotBlank()) {
@@ -274,8 +275,9 @@ private fun ListNoteCard(
                     NoteText(text, onOpen = onOpen, onHashtag = onHashtag, onOpenProfile = onOpenProfile, onOpenNote = onOpenNote, names = names, collapsible = collapsed, stateKey = shown.id, modifier = Modifier.fillMaxWidth().testTag("note-text-$id8"))
                 }
                 shown.quotedId?.let { qid ->
-                    QuoteCard(qid, shown.quoteRelays, names, onOpenNote = onOpenNote, onOpenProfile = onOpenProfile, onHashtag = onHashtag, modifier = Modifier.padding(top = 8.dp), author = shown.quoteAuthor)
+                    QuoteCard(qid, ForeignRule.quoteHints(shown.quoteRelays, foreign), names, onOpenNote = onOpenNote, onOpenProfile = onOpenProfile, onHashtag = onHashtag, modifier = Modifier.padding(top = 8.dp), author = ForeignRule.quoteAuthor(shown.quoteAuthor, foreign))
                 }
+                shown.addressRef?.let { val (ref, f) = ForeignRule.address(it, foreign); AddressCard(ref, names, onOpenProfile = onOpenProfile, modifier = Modifier.padding(top = 8.dp), sensitive = shown.isSensitive, allowForeign = f) }
                 NoteMediaRow(shown, onOpenMedia = { i -> onOpenMedia(shown.id, i) }, onOpenVideo = onOpenVideo)
                 NoteLinkPreview(shown, link)
                 if (showActions) {
@@ -341,6 +343,7 @@ private fun DetailNoteCard(
     ) {
         NoteDetailHeader(note, onOpenProfile = onOpenProfile, menu = menu.takeIf { showActions }, avatarModifier = if (lineAbove) Modifier.onPlaced { placed.avatar = it } else Modifier)
         Spacer(Modifier.height(12.dp))
+        val foreign = LocalAllowForeign.current
         val link = rememberNoteLink(shown)
         val text = link?.let { LinkPreviewRules.textWithCard(shown.displayContent, it.url) } ?: shown.displayContent
         if (text.isNotBlank()) {
@@ -348,8 +351,9 @@ private fun DetailNoteCard(
             NoteText(text, onOpen = onOpen, onHashtag = onHashtag, onOpenProfile = onOpenProfile, onOpenNote = onOpenNote, names = names, style = MaterialTheme.typography.bodyLarge, selectable = true, modifier = Modifier.fillMaxWidth().testTag("note-text-$id8"))
         }
         shown.quotedId?.let { qid ->
-            QuoteCard(qid, shown.quoteRelays, names, onOpenNote = onOpenNote, onOpenProfile = onOpenProfile, onHashtag = onHashtag, modifier = Modifier.padding(top = 8.dp), author = shown.quoteAuthor)
+            QuoteCard(qid, ForeignRule.quoteHints(shown.quoteRelays, foreign), names, onOpenNote = onOpenNote, onOpenProfile = onOpenProfile, onHashtag = onHashtag, modifier = Modifier.padding(top = 8.dp), author = ForeignRule.quoteAuthor(shown.quoteAuthor, foreign))
         }
+        shown.addressRef?.let { val (ref, f) = ForeignRule.address(it, foreign); AddressCard(ref, names, onOpenProfile = onOpenProfile, modifier = Modifier.padding(top = 8.dp), sensitive = shown.isSensitive, allowForeign = f) }
         NoteMediaRow(shown, onOpenMedia = { i -> onOpenMedia(shown.id, i) }, onOpenVideo = onOpenVideo)
         NoteLinkPreview(shown, link)
         Spacer(Modifier.height(12.dp))

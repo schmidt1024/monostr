@@ -16,6 +16,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -38,6 +39,7 @@ import androidx.lifecycle.viewModelScope
 import com.monostr.app.R
 import com.monostr.app.session.NewKey
 import com.monostr.app.session.NostrSession
+import com.monostr.app.ui.common.PasswordBackupDialog
 import com.monostr.app.ui.common.SecureWindow
 import com.monostr.app.ui.common.copySecret
 import com.monostr.app.ui.monero.NSEC_CLIP_LABEL
@@ -93,6 +95,7 @@ fun ShowKeyScreen(onBack: () -> Unit, vm: ShowKeyViewModel = hiltViewModel()) {
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { onBack() }
     val context = LocalContext.current
     var copiedAt by remember { mutableStateOf<Long?>(null) }
+    var passwordDialog by remember { mutableStateOf(false) }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -118,6 +121,10 @@ fun ShowKeyScreen(onBack: () -> Unit, vm: ShowKeyViewModel = hiltViewModel()) {
                 Text(stringResource(R.string.create_copied), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 LaunchedEffect(at) { delay(SeedClipboardClear.CLEAR_AFTER_MS); copiedAt = null } // only hides the hint
             }
+            TextButton(onClick = { passwordDialog = true }, modifier = Modifier.fillMaxWidth().testTag("show-key-password")) {
+                Text(stringResource(R.string.backup_password_button))
+            }
+            if (passwordDialog) PasswordBackupDialog(key.secretHex, onDismiss = { passwordDialog = false })
             Text(stringResource(R.string.create_backup_warning), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
             Column {
                 Text(stringResource(R.string.create_npub_label), style = MaterialTheme.typography.labelLarge)

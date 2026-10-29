@@ -39,6 +39,21 @@ class Address(val network: Network, val spendPublic: ByteArray, val viewPublic: 
 
         /** Parses a primary address. Rejects subaddresses and integrated addresses. */
         fun parse(s: String): Address {
+            val d = decode(s)
+            if (d.kind == AddressKind.SUBADDRESS) throw AddressException.SubaddressNotAllowed()
+            return Address(d.network, d.body.copyOfRange(1, 33), d.body.copyOfRange(33, 65))
+        }
+
+        /**
+         * Validates an address that only receives funds: primary or subaddress, any network.
+         * Rejects integrated addresses. Returns the address's network.
+         */
+        fun checkReceiving(s: String): Network = decode(s).network
+
+        private class Decoded(val network: Network, val kind: AddressKind, val body: ByteArray)
+
+        /** Decodes and checksum-verifies [s]; throws for integrated addresses and bad length. */
+        private fun decode(s: String): Decoded {
             val trimmed = s.trim()
             val bytes = try {
                 MoneroBase58.decode(trimmed)
@@ -56,11 +71,11 @@ class Address(val network: Network, val spendPublic: ByteArray, val viewPublic: 
             val prefix = body[0].toInt() and 0xff
             val (network, kind) = Network.fromPrefix(prefix) ?: throw AddressException.UnknownPrefix(prefix)
             when (kind) {
-                AddressKind.SUBADDRESS -> throw AddressException.SubaddressNotAllowed()
                 AddressKind.INTEGRATED -> throw AddressException.IntegratedNotAllowed()
-                AddressKind.STANDARD -> if (bytes.size != STANDARD_LENGTH) throw AddressException.BadLength()
+                AddressKind.STANDARD, AddressKind.SUBADDRESS ->
+                    if (bytes.size != STANDARD_LENGTH) throw AddressException.BadLength()
             }
-            return Address(network, body.copyOfRange(1, 33), body.copyOfRange(33, 65))
+            return Decoded(network, kind, body)
         }
     }
 }

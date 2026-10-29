@@ -63,6 +63,19 @@ fun PendingRow(lineAbove: Boolean, lineBelow: Boolean, modifier: Modifier = Modi
 fun MutedRow(lineAbove: Boolean, lineBelow: Boolean, onShow: () -> Unit, modifier: Modifier = Modifier) =
     PlaceholderRow(stringResource(R.string.mute_quote_placeholder), "note-muted", lineAbove, lineBelow, modifier, action = stringResource(R.string.conversation_show_muted) to onShow)
 
+/** Spec 2026-10-29 article reader: the article a comment sits under, as a card at the top of a chain; the thread line runs on below it. */
+@Composable
+fun ChainCardRow(lineBelow: Boolean, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    val lineColor = MaterialTheme.colorScheme.outlineVariant
+    Box(
+        modifier.fillMaxWidth()
+            .drawBehind {
+                if (lineBelow) drawLine(lineColor, Offset(LINE_X.toPx(), size.height - 10.dp.toPx()), Offset(LINE_X.toPx(), size.height), LINE_WIDTH.toPx())
+            }
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+    ) { content() }
+}
+
 /** The row of a chain note that is not shown: [text] in a muted card, the thread line running through; [action] adds a tappable label on the right. */
 @Composable
 private fun PlaceholderRow(text: String, tag: String, lineAbove: Boolean, lineBelow: Boolean, modifier: Modifier, action: Pair<String, () -> Unit>? = null) {

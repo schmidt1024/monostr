@@ -30,6 +30,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -51,6 +52,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -80,6 +83,7 @@ class MoneroSetupViewModel @Inject constructor(session: NostrSession, settings: 
         val ready = session.requireReady()
         controller = MoneroSetupController(
             intro = handle.get<Boolean>("intro") ?: false,
+            upgrade = handle.get<Boolean>("upgrade") ?: false,
             gateway = ready.watchers, tips = ready.tips, settings = settings, secrets = secrets,
             relays = { session.ensureRelays(it) }, scope = viewModelScope, selfPubkey = ready.pubkey,
             // spec §12: where the wait of the first /v1/info after login comes from
@@ -109,6 +113,8 @@ fun MoneroSetupScreen(onDone: () -> Unit, vm: MoneroSetupViewModel = hiltViewMod
             val announced = state.announced
             if (announced != null && (state.step is SetupStep.Watcher || state.step is SetupStep.Personal)) AnnouncedNotice(announced, c::skip)
             when (val step = state.step) {
+                is SetupStep.Address -> AddressStep(step, state.intro, state.error?.asString(), c::setAddress, c::publishAddress, c::createWallet, c::skip)
+                is SetupStep.AddressDone -> AddressDoneStep(step, c::upgrade, c::finish)
                 is SetupStep.Watcher -> WatcherStep(step, state.intro, state.error?.asString(), c::setWatcherUrl, c::loadWatcher, c::cancelCheck, c::startPersonal, c::skip)
                 is SetupStep.Choose -> ChooseStep(step, state.announced, c)
                 is SetupStep.Seed -> SeedStep(step, c)
@@ -118,7 +124,7 @@ fun MoneroSetupScreen(onDone: () -> Unit, vm: MoneroSetupViewModel = hiltViewMod
                 SetupStep.Registering -> Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) { CircularProgressIndicator(); Text(stringResource(R.string.setup_registering)) }
                 is SetupStep.Done -> DoneStep(step, c)
                 is SetupStep.Personal -> PersonalStep(step, state.error?.asString(), c::setPersonalInput, c::setPersonalRelay, c::loadPersonal, c::backToWatcher, c::cancelCheck)
-                is SetupStep.PersonalConfirm -> PersonalConfirmStep(step, state.error?.asString(), c::confirmPersonal, c::backToWatcher)
+                is SetupStep.PersonalConfirm -> PersonalConfirmStep(step, state.error?.asString(), c::confirmPersonal, c::backToWatcher, c::setReplacePayto)
             }
         }
     }
@@ -157,6 +163,50 @@ internal fun AnnouncedNotice(address: String, onKeep: () -> Unit) {
         }
     }
     Spacer(Modifier.height(16.dp))
+}
+
+/** Spec payto §4: one address, published as payto; "No wallet yet?" leads to the watcher path. */
+@Composable
+internal fun ColumnScope.AddressStep(
+    step: SetupStep.Address, intro: Boolean, error: String?,
+    onInput: (String) -> Unit, onPublish: () -> Unit, onCreateWallet: () -> Unit, onSkip: () -> Unit,
+) {
+    if (intro) {
+        Text(stringResource(R.string.setup_intro_text), style = MaterialTheme.typography.bodyMedium)
+        Spacer(Modifier.height(16.dp))
+    }
+    Text(stringResource(R.string.setup_address_title), style = MaterialTheme.typography.titleMedium)
+    OutlinedTextField(
+        value = step.input, onValueChange = onInput, label = { Text(stringResource(R.string.setup_address_field)) },
+        isError = error != null, supportingText = { Text(error ?: stringResource(R.string.setup_address_hint)) }, enabled = !step.loading,
+        modifier = Modifier.fillMaxWidth().testTag("setup-payto-address"),
+    )
+    Spacer(Modifier.height(8.dp))
+    Button(onClick = onPublish, enabled = !step.loading && step.input.isNotBlank(), modifier = Modifier.fillMaxWidth().testTag("setup-payto-publish")) {
+        if (step.loading) BusyLabel(stringResource(R.string.setup_address_publish)) else Text(stringResource(R.string.setup_address_publish))
+    }
+    TextButton(onClick = onCreateWallet, enabled = !step.loading, modifier = Modifier.testTag("setup-create-wallet")) { Text(stringResource(R.string.setup_no_wallet_link)) }
+    if (intro) TextButton(onClick = onSkip, modifier = Modifier.align(Alignment.End).testTag("setup-skip")) { Text(stringResource(R.string.setup_skip)) }
+}
+
+/** Spec payto §4 step 3–4: the address is out; receipts via a watcher are the upgrade. */
+@Composable
+internal fun AddressDoneStep(step: SetupStep.AddressDone, onUpgrade: () -> Unit, onDone: () -> Unit) {
+    Text(stringResource(R.string.setup_done_title), style = MaterialTheme.typography.titleMedium)
+    Text(stringResource(R.string.setup_address_done), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("setup-address-done"))
+    Spacer(Modifier.height(8.dp))
+    Text(step.address, fontFamily = MonostrFonts.mono, style = MaterialTheme.typography.bodySmall)
+    Spacer(Modifier.height(16.dp))
+    Card(Modifier.fillMaxWidth().testTag("setup-upgrade")) {
+        Column(Modifier.padding(16.dp)) {
+            Text(stringResource(R.string.setup_upgrade_title), style = MaterialTheme.typography.titleSmall)
+            Text(stringResource(R.string.setup_upgrade_text), style = MaterialTheme.typography.bodySmall)
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(onClick = onUpgrade, modifier = Modifier.fillMaxWidth().testTag("setup-upgrade-action")) { Text(stringResource(R.string.setup_upgrade_action)) }
+        }
+    }
+    Spacer(Modifier.height(16.dp))
+    Button(onClick = onDone, modifier = Modifier.fillMaxWidth().testTag("setup-done")) { Text(stringResource(R.string.action_done)) }
 }
 
 @Composable
@@ -216,7 +266,7 @@ internal fun PersonalStep(step: SetupStep.Personal, error: String?, onInput: (St
 }
 
 @Composable
-internal fun PersonalConfirmStep(step: SetupStep.PersonalConfirm, error: String?, onConfirm: () -> Unit, onBack: () -> Unit) {
+internal fun PersonalConfirmStep(step: SetupStep.PersonalConfirm, error: String?, onConfirm: () -> Unit, onBack: () -> Unit, onReplacePayto: (Boolean) -> Unit = {}) {
     val status = step.status
     val address = status.address.encode()
     val height = if (status.height > 0) status.height.toString() else stringResource(R.string.setup_personal_height_unknown)
@@ -227,9 +277,10 @@ internal fun PersonalConfirmStep(step: SetupStep.PersonalConfirm, error: String?
     Spacer(Modifier.height(16.dp))
     Text(stringResource(R.string.setup_personal_privacy), style = MaterialTheme.typography.bodyMedium)
     if (ProtocolVersion.supportsHiddenAmounts(status.protocol)) AmountsPrivateText()
+    PaytoQuestion(step.paytoConflict, step.paytoPending, step.replacePayto, onReplacePayto)
     error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
     Spacer(Modifier.height(12.dp))
-    Button(onClick = onConfirm, modifier = Modifier.fillMaxWidth().testTag("setup-personal-confirm")) { Text(stringResource(R.string.setup_personal_confirm)) }
+    Button(onClick = onConfirm, enabled = !step.paytoPending, modifier = Modifier.fillMaxWidth().testTag("setup-personal-confirm")) { Text(stringResource(R.string.setup_personal_confirm)) }
     TextButton(onClick = onBack, modifier = Modifier.testTag("setup-personal-back")) { Text(stringResource(R.string.action_back)) }
 }
 
@@ -317,9 +368,34 @@ private fun ConfirmStep(step: SetupStep.Confirm, error: String?, c: MoneroSetupC
         Checkbox(checked = understood, onCheckedChange = { understood = it }, modifier = Modifier.testTag("setup-understood"))
         Text(stringResource(R.string.setup_understood))
     }
+    PaytoQuestion(step.paytoConflict, step.paytoPending, step.replacePayto, c::setReplacePayto)
     error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
     Spacer(Modifier.height(12.dp))
-    Button(onClick = c::confirm, enabled = understood, modifier = Modifier.fillMaxWidth().testTag("setup-confirm")) { Text(stringResource(R.string.setup_register)) }
+    Button(onClick = c::confirm, enabled = understood && !step.paytoPending, modifier = Modifier.fillMaxWidth().testTag("setup-confirm")) { Text(stringResource(R.string.setup_register)) }
+}
+
+/** Spec payto §4: asked once before publishing when the own payto differs from the tip address; «Replace» is preselected. */
+@Composable
+private fun PaytoQuestion(current: String?, pending: Boolean, replace: Boolean, onReplace: (Boolean) -> Unit) {
+    if (pending) {
+        // the own payto is still being read: the question may follow, confirming waits
+        Spacer(Modifier.height(8.dp))
+        LinearProgressIndicator(Modifier.fillMaxWidth().testTag("setup-payto-pending"))
+        return
+    }
+    if (current == null) return
+    Spacer(Modifier.height(8.dp))
+    Text(stringResource(R.string.setup_payto_replace, current.take(8), current.takeLast(6)), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("setup-payto-question"))
+    listOf(true to R.string.setup_payto_replace_yes, false to R.string.setup_payto_replace_keep).forEach { (value, label) ->
+        Row(
+            Modifier.fillMaxWidth().selectable(selected = replace == value, role = Role.RadioButton) { onReplace(value) }
+                .testTag(if (value) "setup-payto-replace" else "setup-payto-keep"),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            RadioButton(selected = replace == value, onClick = null)
+            Text(stringResource(label), modifier = Modifier.padding(start = 8.dp))
+        }
+    }
 }
 
 /** Protocol 0.5: the new payment info hides tip amounts. */
@@ -343,6 +419,11 @@ private fun ColumnScope.DoneStep(step: SetupStep.Done, c: MoneroSetupController)
     Text(stringResource(R.string.setup_done_title), style = MaterialTheme.typography.titleMedium)
     Text(stringResource(R.string.setup_done_text), style = MaterialTheme.typography.bodyMedium)
     if (step.amountsHidden) AmountsPrivateText()
+    if (step.paytoFailed) {
+        Spacer(Modifier.height(8.dp))
+        Text(stringResource(R.string.setup_payto_failed), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("setup-payto-failed"))
+        OutlinedButton(onClick = c::retryPayto, modifier = Modifier.testTag("setup-payto-retry")) { Text(stringResource(R.string.setup_payto_retry)) }
+    }
     Spacer(Modifier.height(12.dp))
     QrCode(step.address, Modifier.size(220.dp).align(Alignment.CenterHorizontally))
     Spacer(Modifier.height(8.dp))

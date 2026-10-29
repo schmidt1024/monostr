@@ -5,9 +5,12 @@ import com.monostr.app.R
 import com.monostr.app.data.KeystoreSecretStore
 import com.monostr.app.data.MoneroSetup
 import com.monostr.app.ui.settings.MoneroSettingsController
+import com.monostr.app.ui.settings.MoneroSettingsState
 import com.monostr.app.ui.settings.PersonalWatcherLine
 import com.monostr.monero.MoneroKeys
 import com.monostr.monero.Network
+import com.monostr.nostr.repo.OwnPayto
+import com.monostr.nostr.repo.PaytoWrite
 import com.monostr.tips.PaymentInfo
 import com.monostr.tips.Watcher
 import com.monostr.tips.WatcherStatus
@@ -435,5 +438,178 @@ class MoneroSettingsControllerTest {
         unreachable.start()
         advanceUntilIdle()
         assertNull(unreachable.state.value.amountsSupported)
+    }
+
+    private val addr = "4" + "A".repeat(94)
+
+    private fun TestScope.paytoController(tips: FakeTips, setup: MoneroSetup? = null, settings: FakeTipSettings = FakeTipSettings(setup = setup)) =
+        MoneroSettingsController(settings, FakeSecrets(), tips, FakeWatcherGateway(), { true }, eager())
+
+    @Test
+    fun `showsPaytoWithoutSetup`() = runTest {
+        val tips = FakeTips().apply { own = OwnPayto.Known(addr) }
+        val c = paytoController(tips)
+        c.start()
+        advanceUntilIdle()
+        assertEquals(addr, c.state.value.payto)
+    }
+
+    @Test
+    fun `removePaytoClears`() = runTest {
+        val tips = FakeTips().apply { own = OwnPayto.Known(addr) }
+        val c = paytoController(tips)
+        c.start()
+        advanceUntilIdle()
+        c.removePayto()
+        advanceUntilIdle()
+        assertEquals(listOf<String?>(null), tips.paytoWrites)
+        assertNull(c.state.value.payto)
+        assertEquals(uiText(R.string.settings_msg_payto_removed), c.state.value.message)
+    }
+
+    @Test
+    fun `removePaytoUnknownKeepsAndErrors`() = runTest {
+        val tips = FakeTips().apply { own = OwnPayto.Known(addr); paytoResult = PaytoWrite.Unknown }
+        val c = paytoController(tips)
+        c.start()
+        advanceUntilIdle()
+        c.removePayto()
+        advanceUntilIdle()
+        assertEquals(addr, c.state.value.payto)
+        assertEquals(uiText(R.string.setup_err_relays_unknown), c.state.value.error)
+        tips.paytoResult = PaytoWrite.NotPublished
+        c.removePayto()
+        advanceUntilIdle()
+        assertEquals(addr, c.state.value.payto)
+        assertEquals(MoneroSettingsController.ERR_NOT_PUBLISHED, c.state.value.error)
+    }
+
+    @Test
+    fun `disableAlsoRemovesPayto`() = runTest {
+        val setup = MoneroSetup("4addr", "https://w.example", "c".repeat(64), "mainnet", 1)
+        val tips = FakeTips().apply { own = OwnPayto.Known(addr) }
+        val c = paytoController(tips, setup)
+        c.start()
+        advanceUntilIdle()
+        c.disable()
+        advanceUntilIdle()
+        assertEquals(listOf<String?>(null), tips.paytoWrites)
+        assertNull(c.state.value.setup)
+        assertNull(c.state.value.payto)
+        assertEquals(uiText(R.string.settings_msg_disabled), c.state.value.message)
+    }
+
+    @Test
+    fun `removalDuringReadIsNotUndone`() = runTest {
+        val tips = FakeTips().apply { own = OwnPayto.Known(addr); ownGate = kotlinx.coroutines.CompletableDeferred() }
+        val c = paytoController(tips)
+        c.start()
+        advanceUntilIdle()
+        c.removePayto()
+        advanceUntilIdle()
+        tips.ownGate!!.complete(Unit)
+        advanceUntilIdle()
+        assertNull(c.state.value.payto)
+    }
+
+    @Test
+    fun `disablePaytoFailureStillDisables`() = runTest {
+        val setup = MoneroSetup("4addr", "https://w.example", "c".repeat(64), "mainnet", 1)
+        val settings = FakeTipSettings(setup = setup)
+        val tips = FakeTips().apply { own = OwnPayto.Known(addr); paytoResult = PaytoWrite.Unknown }
+        val c = paytoController(tips, settings = settings)
+        c.start()
+        advanceUntilIdle()
+        c.disable()
+        advanceUntilIdle()
+        assertNull(settings.setupState.value)
+        assertEquals(addr, c.state.value.payto)
+        assertEquals(uiText(R.string.settings_msg_disabled_payto_left), c.state.value.message)
+    }
+
+    private val addr2 = "8" + "B".repeat(94)
+
+    @Test
+    fun `resumeReadsPaytoChangedInSetupScreen`() = runTest {
+        val tips = FakeTips()
+        val c = paytoController(tips)
+        c.start()
+        c.resumed() // the opening: start already reads
+        advanceUntilIdle()
+        assertEquals(1, tips.ownCalls)
+        assertNull(c.state.value.payto)
+        // address-only setup in the setup screen: the stored setup does not change
+        tips.own = OwnPayto.Known(addr)
+        c.resumed()
+        advanceUntilIdle()
+        assertEquals(addr, c.state.value.payto)
+        // «Change» there
+        tips.own = OwnPayto.Known(addr2)
+        c.resumed()
+        advanceUntilIdle()
+        assertEquals(addr2, c.state.value.payto)
+        // removed there
+        tips.own = OwnPayto.Known(null)
+        c.resumed()
+        advanceUntilIdle()
+        assertNull(c.state.value.payto)
+    }
+
+    @Test
+    fun `resumeWithUnknownPaytoKeepsAddress`() = runTest {
+        val tips = FakeTips().apply { own = OwnPayto.Known(addr) }
+        val c = paytoController(tips)
+        c.start(); c.resumed()
+        advanceUntilIdle()
+        tips.own = OwnPayto.Unknown
+        c.resumed()
+        advanceUntilIdle()
+        assertEquals(addr, c.state.value.payto)
+    }
+
+    @Test
+    fun `resumeWithSetupDoesNotReadPayto`() = runTest {
+        val setup = MoneroSetup("4addr", "https://w.example", "c".repeat(64), "mainnet", 1)
+        val tips = FakeTips().apply { own = OwnPayto.Known(addr) }
+        val c = paytoController(tips, setup)
+        c.start(); c.resumed(); c.resumed()
+        advanceUntilIdle()
+        assertEquals(0, tips.ownCalls)
+        assertNull(c.state.value.payto)
+    }
+
+    @Test
+    fun `removalDuringResumeReadIsNotUndone`() = runTest {
+        val tips = FakeTips().apply { own = OwnPayto.Known(addr) }
+        val c = paytoController(tips)
+        c.start(); c.resumed()
+        advanceUntilIdle()
+        tips.ownGate = kotlinx.coroutines.CompletableDeferred()
+        c.resumed()
+        advanceUntilIdle()
+        c.removePayto()
+        advanceUntilIdle()
+        tips.own = OwnPayto.Known(addr) // a stale relay answer
+        tips.ownGate!!.complete(Unit)
+        advanceUntilIdle()
+        assertNull(c.state.value.payto)
+    }
+
+    @Test
+    fun `paytoOnlyHidesBehindAnnouncedWatcher`() = runTest {
+        val self = "5".repeat(64)
+        val address = MoneroKeys.generate().address(Network.MAINNET)
+        val announced = address.encode()
+        val tips = FakeTips(infos = mapOf(self to PaymentInfo.Enabled(address, Watcher.Http("https://w.example", "c".repeat(64)))))
+            .apply { own = OwnPayto.Known(announced) }
+        val c = MoneroSettingsController(FakeTipSettings(), FakeSecrets(), tips, FakeWatcherGateway(), { true }, eager(), selfPubkey = self)
+        c.start()
+        advanceUntilIdle()
+        assertEquals(announced, c.state.value.announced)
+        assertEquals(announced, c.state.value.payto)
+        // a watcher set up on another device keeps its notice: no «Remove» that would only strip the payto
+        assertNull(c.state.value.paytoOnly)
+        assertEquals(addr, MoneroSettingsState(payto = addr).paytoOnly)
+        assertNull(MoneroSettingsState(payto = addr, setup = MoneroSetup("4addr", "https://w.example", "c".repeat(64), "mainnet", 1)).paytoOnly)
     }
 }

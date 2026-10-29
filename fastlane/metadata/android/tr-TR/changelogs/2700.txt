@@ -1,0 +1,5 @@
+• Makaleleri (NIP-23) uygulamada oku: görsel, başlık, biçimli metin; altında beğen, yeniden paylaş, yanıtla, kaydet ve bahşiş ver
+• Profillerde «Makaleler» sekmesi var; profil sekmeleri tek satırda kalır ve kayar
+• Makale, canlı yayın ve diğer etkinlik bağlantıları kart olarak görünür
+• Watcher olmadan Monero adresi (NIP-A3 payto): bir dakikada hazır, başkaları cüzdanından öder
+• Anahtarını parolayla yedekle (ncryptsec, NIP-49) ve onunla giriş yap

@@ -456,3 +456,30 @@ class CountsRepositoryTest {
         assertEquals(3, bTargets.count { it == other })
     }
 }
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class CountsArticleTest {
+    @TempDir lateinit var dir: Path
+    private val id = "a".repeat(64)
+    private val coord = "30023:${"b".repeat(64)}:post"
+
+    @Test
+    fun `an article is counted by its coordinate and lands under the note id`() = runTest {
+        val e = NostrEngine.create(dir.resolve("lmdb").toString(), null, emptyList())
+        val seen = java.util.Collections.synchronizedList(ArrayList<String>())
+        val repo = NostrCountsRepository(
+            e, this, relays = { listOf("wss://a") },
+            counter = { _, f ->
+                val r = f.asRecord()
+                val kinds = r.kinds!!.map { it.asU16().toInt() }
+                val tag = r.genericTags.first()
+                seen += "$kinds ${if (tag.key.isUppercase()) "A" else "a"} ${tag.value.first()}"
+                when (kinds) { listOf(7) -> 4L; listOf(6, 16) -> 2L; listOf(1111) -> 5L; else -> 1L }
+            },
+            now = { 1000 }, batchDelayMs = 0,
+        )
+        repo.requestArticle(id, coord); advanceUntilIdle()
+        assertEquals(com.monostr.nostr.model.NoteCounts(4, 2, 6), repo.counts.value.getValue(id))
+        assertEquals(setOf("[7] a $coord", "[6, 16] a $coord", "[1111] A $coord", "[1] a $coord"), seen.toSet())
+    }
+}

@@ -30,7 +30,12 @@ import com.monostr.app.data.UiSettingsStore
 import com.monostr.app.session.NostrSession
 import com.monostr.app.session.Ready
 import com.monostr.app.session.SessionState
+import com.monostr.app.ui.article.ArticleScreen
 import com.monostr.app.ui.bookmarks.BookmarksScreen
+import com.monostr.app.ui.common.LocalOpenArticle
+import com.monostr.nostr.model.AddressRef
+import com.monostr.app.ui.common.AddressLoader
+import com.monostr.app.ui.common.LocalAddressLoader
 import com.monostr.app.ui.common.LocalQuoteLoader
 import com.monostr.app.ui.common.QuoteLoader
 import com.monostr.app.ui.common.StartScreen
@@ -88,14 +93,19 @@ object Routes {
         return if (params.isEmpty()) "list-edit" else "list-edit?" + params.joinToString("&")
     }
     fun thread(id: String) = "thread/$id"
+    /** Spec 2026-10-29 article reader: [naddr] is the bech32 `naddr1…` (letters and digits only, so no encoding). */
+    fun article(naddr: String, foreign: Boolean = true) = "article/$naddr?foreign=$foreign"
     fun profile(pubkey: String) = "profile/$pubkey"
     fun dm(pubkey: String) = "dm/$pubkey"
-    fun compose(replyTo: String? = null, quote: String? = null) = when {
+    /** Spec 2026-10-29 article reader: [article] is the bech32 `naddr1…` of the article commented on, [parent] the comment answered. */
+    fun commentOn(article: String, parent: String? = null) = "compose?article=$article" + (parent?.let { "&parent=$it" } ?: "")
+    fun compose(replyTo: String? = null, quote: String? = null, text: String? = null) = when {
         replyTo != null -> "compose?replyTo=$replyTo"
         quote != null -> "compose?quote=$quote"
+        text != null -> "compose?text=" + android.net.Uri.encode(text)
         else -> "compose"
     }
-    fun moneroSetup(intro: Boolean) = "monero-setup?intro=$intro"
+    fun moneroSetup(intro: Boolean, upgrade: Boolean = false) = "monero-setup?intro=$intro&upgrade=$upgrade"
     fun search(q: String? = null) = if (q == null) "search" else "search?q=" + android.net.Uri.encode(q)
     fun media(noteId: String, index: Int) = "media/$noteId/$index"
     fun video(url: String) = "video?url=" + android.net.Uri.encode(url)
@@ -149,6 +159,7 @@ private fun LoggedInNavHost(ready: Ready, gate: OnboardingGateViewModel = hiltVi
     val mediaSettings by media.settings.collectAsState()
     // one loader per logged-in account; a new login gets a new Ready and so a new loader
     val quoteLoader = remember(ready) { QuoteLoader(ready.quotes, ready.profiles, ready.muted) }
+    val addressLoader = remember(ready) { AddressLoader(ready.addresses, ready.profiles, ready.muted) }
     val linkPreviewLoader = remember(ready) { LinkPreviewLoader(media.linkPreviews, ready.muted, ready.mute.state) }
     var introShown by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(showIntro) {
@@ -174,11 +185,12 @@ private fun LoggedInNavHost(ready: Ready, gate: OnboardingGateViewModel = hiltVi
         }
     }
     val onOpenMedia: (String, Int) -> Unit = { id, i -> nav.navigate(Routes.media(id, i)) }
+    val openArticle: (AddressRef, Boolean) -> Unit = { ref, foreign -> nav.navigate(Routes.article(ref.toBech32(), foreign)) }
     val onOpenVideo: (String) -> Unit = { nav.navigate(Routes.video(it)) }
     val onMessages: () -> Unit = { nav.navigate(Routes.MESSAGES) { popUpTo(Routes.FEED); launchSingleTop = true } }
     // spec 11.1: bookmarks are a tab, so they navigate like the other tabs
     val onBookmarks: () -> Unit = { nav.navigate(Routes.BOOKMARKS) { popUpTo(Routes.FEED); launchSingleTop = true } }
-    CompositionLocalProvider(LocalMediaSettings provides mediaSettings, LocalQuoteLoader provides quoteLoader, LocalLinkPreviewLoader provides linkPreviewLoader, LocalPreviewImageLoader provides media.previewImages.loader) {
+    CompositionLocalProvider(LocalMediaSettings provides mediaSettings, LocalQuoteLoader provides quoteLoader, LocalAddressLoader provides addressLoader, LocalOpenArticle provides openArticle, LocalLinkPreviewLoader provides linkPreviewLoader, LocalPreviewImageLoader provides media.previewImages.loader) {
         NavHost(navController = nav, startDestination = Routes.FEED) {
             composable(Routes.FEED) {
                 FeedScreen(
@@ -271,6 +283,24 @@ private fun LoggedInNavHost(ready: Ready, gate: OnboardingGateViewModel = hiltVi
                     onOpenVideo = onOpenVideo,
                 )
             }
+            composable(
+                "article/{naddr}?foreign={foreign}",
+                arguments = listOf(navArgument("naddr") { type = NavType.StringType }, navArgument("foreign") { type = NavType.BoolType; defaultValue = true }),
+            ) {
+                ArticleScreen(
+                    onBack = { nav.popBackStack() },
+                    onOpenProfile = { nav.navigate(Routes.profile(it)) },
+                    onOpenThread = { nav.navigate(Routes.thread(it)) },
+                    onOpenArticle = openArticle,
+                    onQuote = { nav.navigate(Routes.compose(text = "\n\nnostr:" + it.toBech32())) },
+                    onReply = { ref, parent -> nav.navigate(Routes.commentOn(ref.toBech32(), parent)) },
+                    onQuoteNote = { nav.navigate(Routes.compose(quote = it)) },
+                    onOpenNoteMedia = onOpenMedia,
+                    onOpenVideo = onOpenVideo,
+                    onHashtag = { nav.navigate(Routes.search("#$it")) },
+                    onOpenMedia = { urls, i -> nav.navigate(Routes.mediaUrls(urls, i)) },
+                )
+            }
             composable("profile/{pubkey}", arguments = listOf(navArgument("pubkey") { type = NavType.StringType })) {
                 ProfileScreen(
                     onBack = { nav.popBackStack() },
@@ -313,10 +343,13 @@ private fun LoggedInNavHost(ready: Ready, gate: OnboardingGateViewModel = hiltVi
                 ListEditScreen(onDone = { deleted -> if (deleted) nav.popBackStack(Routes.LIST, inclusive = true) else nav.popBackStack() })
             }
             composable(
-                "compose?replyTo={replyTo}&quote={quote}",
+                "compose?replyTo={replyTo}&quote={quote}&text={text}&article={article}&parent={parent}",
                 arguments = listOf(
                     navArgument("replyTo") { type = NavType.StringType; nullable = true; defaultValue = null },
                     navArgument("quote") { type = NavType.StringType; nullable = true; defaultValue = null },
+                    navArgument("text") { type = NavType.StringType; nullable = true; defaultValue = null },
+                    navArgument("article") { type = NavType.StringType; nullable = true; defaultValue = null },
+                    navArgument("parent") { type = NavType.StringType; nullable = true; defaultValue = null },
                 ),
             ) {
                 ComposeScreen(onDone = { nav.popBackStack() })
@@ -344,6 +377,7 @@ private fun LoggedInNavHost(ready: Ready, gate: OnboardingGateViewModel = hiltVi
                 SettingsScreen(
                     onBack = { nav.popBackStack() },
                     onMoneroSetup = { nav.navigate(Routes.moneroSetup(intro = false)) },
+                    onMoneroUpgrade = { nav.navigate(Routes.moneroSetup(intro = false, upgrade = true)) },
                     onSupport = { nav.navigate(Routes.SUPPORT) },
                     onAbout = { nav.navigate(Routes.ABOUT) },
                     onMuted = { nav.navigate(Routes.MUTED) },
@@ -356,8 +390,11 @@ private fun LoggedInNavHost(ready: Ready, gate: OnboardingGateViewModel = hiltVi
             composable(Routes.MUTED) { MutedScreen(onBack = { nav.popBackStack() }, onOpenProfile = { nav.navigate(Routes.profile(it)) }) }
             composable(Routes.ABOUT) { AboutScreen(onBack = { nav.popBackStack() }, onOpenProfile = { nav.navigate(Routes.profile(it)) }) }
             composable(
-                "monero-setup?intro={intro}",
-                arguments = listOf(navArgument("intro") { type = NavType.BoolType; defaultValue = false }),
+                "monero-setup?intro={intro}&upgrade={upgrade}",
+                arguments = listOf(
+                    navArgument("intro") { type = NavType.BoolType; defaultValue = false },
+                    navArgument("upgrade") { type = NavType.BoolType; defaultValue = false },
+                ),
             ) {
                 MoneroSetupScreen(onDone = { nav.popBackStack() })
             }

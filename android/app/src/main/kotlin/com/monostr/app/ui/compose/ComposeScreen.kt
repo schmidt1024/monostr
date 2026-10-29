@@ -80,7 +80,12 @@ import com.monostr.app.ui.common.uiText
 import com.monostr.app.ui.common.uploadMessage
 import com.monostr.app.ui.common.userMessage
 import com.monostr.nostr.Npub
+import com.monostr.nostr.model.AddressRef
+import com.monostr.nostr.model.Article
 import com.monostr.nostr.model.Note
+import com.monostr.nostr.model.NoteAddress
+import com.monostr.nostr.repo.AddressResult
+import com.monostr.nostr.repo.AddressableRepository
 import com.monostr.nostr.model.NoteMedia
 import com.monostr.nostr.model.MentionTags
 import com.monostr.nostr.model.Profile
@@ -135,6 +140,10 @@ data class ComposeUiState(
     val sensitive: Boolean = false,
     /** Spec 2026-10-16 §8.2: the restored draft's text, once, for the field to take; cleared by [ComposeController.restoreApplied]. */
     val restoredText: String? = null,
+    /** Spec 2026-10-29 article reader: the article being commented on, once loaded, with its title for the header. */
+    val article: Note? = null,
+    val articleTitle: String? = null,
+    val articleUnresolved: Boolean = false,
 ) {
     /** Every picture is on the server: nothing uploading, nothing failed. */
     val attachmentsReady: Boolean get() = attachments.all { it.uploaded != null }
@@ -167,6 +176,13 @@ class ComposeController(
     private val now: () -> Long = { System.currentTimeMillis() / 1000 },
     /** pubkey → shown name from the local database only (no network); restored drafts show their mentions with it. */
     private val localNames: suspend (List<String>) -> Map<String, String> = { emptyMap() },
+    /** A text the new note starts with (a quote of an article: «\n\nnostr:naddr1…»); it wins over a stored draft's text. */
+    val prefill: String? = null,
+    /** Spec 2026-10-29 article reader: a comment under this article (kind 1111), optionally answering the comment [commentParentId]. */
+    private val articleRef: AddressRef? = null,
+    private val commentParentId: String? = null,
+    /** Loads the article for [articleRef]; only the user's own relays and the database are asked (the reader just showed it). */
+    private val addresses: AddressableRepository? = null,
 ) {
     private val _state = MutableStateFlow(ComposeUiState())
     val state: StateFlow<ComposeUiState> = _state.asStateFlow()
@@ -181,7 +197,7 @@ class ComposeController(
      * it produced an event (sent, or stored for a resend), the pictures may be named by that event and must stay.
      */
     private var consumed = false
-    private val target = DraftTargets.of(replyToId, quoteId)
+    private val target = DraftTargets.of(replyToId, quoteId, prefill, articleRef?.coordinate, commentParentId)
     /** The field's text as last reported by [onTextChange] (or restored). */
     private var text = ""
     /** False until the stored draft was read: before that nothing is written, so an early close cannot wipe it. */
@@ -191,6 +207,10 @@ class ComposeController(
     @Volatile private var stored: Set<String> = emptySet()
 
     fun start() {
+        prefill?.takeIf { it.isNotEmpty() }?.let { p ->
+            text = p
+            _state.update { it.copy(restoredText = p) }
+        }
         drafts?.let { store -> scope.launch { restoreDraft(store) } }
         suggester?.let { s ->
             scope.launch {
@@ -203,6 +223,7 @@ class ComposeController(
                 }
             }
         }
+        if (articleRef != null) scope.launch { loadArticleTarget(articleRef) }
         if (replyToId != null) scope.launch {
             try {
                 // spec perf2 C6: the reply target is one note; the thread's root, walk and replies are not needed for it
@@ -226,6 +247,24 @@ class ComposeController(
             }
             // a send tapped while the quote was loading left quote_missing behind; the loaded quote clears it
             _state.update { if (quoted != null) it.copy(quoted = quoted, error = null) else it.copy(quoteUnresolved = true, error = uiText(R.string.quote_missing)) }
+        }
+    }
+
+    /** The article and, when answering a comment, that comment; a target that does not load blocks the send with the reply-target error. */
+    private suspend fun loadArticleTarget(ref: AddressRef) {
+        try {
+            val found = addresses?.let { (it.cached(ref, false) as? AddressResult.Found) ?: it.get(ref, false) } as? AddressResult.Found
+            val article = found?.let { Article.parse(it.event) }
+            val parent = commentParentId?.let { threads.note(it) }
+            if (article == null || (commentParentId != null && parent == null)) {
+                _state.update { it.copy(articleUnresolved = true, error = uiText(R.string.compose_error_reply_target)) }
+                return
+            }
+            _state.update { it.copy(article = article.asNote(), articleTitle = article.title, replyTo = parent) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            _state.update { it.copy(articleUnresolved = true, error = uiText(R.string.compose_error_reply_target)) }
         }
     }
 
@@ -519,6 +558,10 @@ class ComposeController(
             _state.update { it.copy(error = uiText(R.string.quote_missing)) }
             return
         }
+        if (articleRef != null && _state.value.article == null) {
+            _state.update { it.copy(error = uiText(R.string.compose_error_reply_target)) }
+            return
+        }
         // synchronously, before the launch: the pictures are frozen and protected from this tap on
         val firstSend = pendingEventId == null
         consumed = true
@@ -533,6 +576,7 @@ class ComposeController(
                 val sensitive = _state.value.sensitive
                 val result = when {
                     pending != null -> publish.resend(pending)
+                    articleRef != null -> publish.comment(text, checkNotNull(_state.value.article), parent, media, sensitive)
                     parent != null -> publish.reply(text, parent, media, sensitive)
                     quoted != null -> publish.quote(text, quoted, media, sensitive)
                     else -> publish.post(text, media, sensitive)
@@ -574,7 +618,12 @@ class ComposeViewModel @Inject constructor(
         release = { ReceivedImages.release(it, received) },
         drafts = drafts, account = ready.pubkey, background = ready.engine.backgroundScope,
         localNames = { keys -> ready.profiles.local(keys).associate { it.pubkey to it.shownName } },
+        prefill = handle["text"],
+        articleRef = handle.get<String>("article")?.let { NoteAddress.decode("nostr:$it") },
+        commentParentId = handle["parent"],
+        addresses = ready.addresses,
     )
+    val prefill: String? = handle["text"]
     init {
         ReceivedImages.sweep(received, System.currentTimeMillis())
         controller.start()
@@ -627,7 +676,10 @@ fun ComposeScreen(onDone: () -> Unit, vm: ComposeViewModel = hiltViewModel()) {
     // spec 2026-10-16 §8.2: the draft's text with the cursor at the end; a text the field already has (rotation, process death) wins
     LaunchedEffect(state.restoredText) {
         val restored = state.restoredText ?: return@LaunchedEffect
-        if (field.text.isEmpty()) field.setTextAndPlaceCursorAtEnd(restored)
+        // a prefill (the quoted article's link) leaves the cursor in front, where the user's own words go
+        if (field.text.isEmpty()) {
+            if (restored == vm.prefill) field.edit { replace(0, length, restored); selection = TextRange(0) } else field.setTextAndPlaceCursorAtEnd(restored)
+        }
         vm.controller.restoreApplied()
     }
     // leaving the app with the composer open saves at once, not a second later
@@ -647,13 +699,14 @@ fun ComposeScreen(onDone: () -> Unit, vm: ComposeViewModel = hiltViewModel()) {
     val videoOnly = remember { PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly) }
     Scaffold(topBar = {
         TopAppBar(
-            title = { Text(stringResource(if (state.replyTo != null) R.string.compose_title_reply else R.string.compose_title_new)) },
+            title = { Text(stringResource(if (state.replyTo != null || state.article != null) R.string.compose_title_reply else R.string.compose_title_new)) },
             navigationIcon = { IconButton(onClick = onDone) { Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.action_close)) } },
         )
     }) { padding ->
         Column(Modifier.padding(padding).imePadding().padding(16.dp).fillMaxSize().verticalScroll(rememberScrollState())) {
-            state.replyTo?.let {
-                Text(it.displayContent, style = MaterialTheme.typography.bodySmall, maxLines = 3)
+            // the comment answered, else the article commented on
+            (state.replyTo?.displayContent ?: state.articleTitle)?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 3, modifier = Modifier.testTag("compose-article-target"))
                 Spacer(Modifier.height(12.dp))
             }
             // after an offline send the stored event is re-sent as is, so the text is frozen
@@ -738,7 +791,7 @@ fun ComposeScreen(onDone: () -> Unit, vm: ComposeViewModel = hiltViewModel()) {
             Button(
                 onClick = { vm.controller.send(field.text.toString()) },
                 enabled = !state.sending && (field.text.isNotBlank() || vm.quoteId != null || state.attachments.isNotEmpty()) &&
-                    state.attachmentsReady && !state.replyUnresolved && !state.quoteUnresolved,
+                    state.attachmentsReady && !state.replyUnresolved && !state.quoteUnresolved && !state.articleUnresolved,
                 modifier = Modifier.fillMaxWidth().testTag("compose-send"),
             ) {
                 Text(stringResource(when {

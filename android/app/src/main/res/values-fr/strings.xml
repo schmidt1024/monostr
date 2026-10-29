@@ -153,9 +153,11 @@
     <string name="profile_tab_posts">Publications</string>
     <string name="profile_tab_replies">Réponses</string>
     <string name="profile_tab_reposts">Reposts</string>
+    <string name="profile_tab_articles">Articles</string>
     <string name="profile_empty_posts">Pas encore de publications</string>
     <string name="profile_empty_replies">Pas encore de réponses</string>
     <string name="profile_empty_reposts">Pas encore de reposts</string>
+    <string name="profile_empty_articles">Pas encore d\'articles</string>
 
     <!-- compose -->
     <string name="compose_title_reply">Répondre</string>
@@ -171,7 +173,10 @@
     <string name="login_no_signer">Aucun signataire NIP-55 (p. ex. Amber) installé. Connectez-vous avec une clé :</string>
     <string name="login_secret_label">nsec ou hex</string>
     <string name="login_button">Se connecter</string>
-    <string name="login_error_invalid_key">Clé nsec ou hex invalide</string>
+    <string name="login_error_invalid_key">Clé nsec, ncryptsec ou hex invalide</string>
+    <string name="login_password_label">Mot de passe</string>
+    <string name="login_error_wrong_password">Mot de passe incorrect</string>
+    <string name="login_error_too_strong">Cette sauvegarde nécessite plus de mémoire que ce téléphone n’en permet</string>
     <string name="login_error_rejected">Requête refusée par le signataire</string>
     <string name="login_error_signer">Le signataire a signalé une erreur</string>
     <string name="login_error_failed">Échec de la connexion</string>
@@ -187,6 +192,10 @@
     <string name="tip_open_wallet_again">Rouvrir le portefeuille</string>
     <string name="tip_sent">Portefeuille ouvert. Le pourboire attend la confirmation du watcher.</string>
     <string name="tip_error_amount">Montant invalide (p. ex. 0.005)</string>
+    <string name="tip_payto_title_plain">Envoyer des Monero</string>
+    <string name="tip_payto_note">Va à son adresse, pas à cette note. Sans confirmation : monostr ne voit pas si vous avez payé.</string>
+    <string name="tip_payto_profile">Sans confirmation : monostr ne voit pas si vous avez payé.</string>
+    <string name="tip_payto_pay">Payer avec le portefeuille</string>
     <string name="tip_no_monero">Le destinataire n\'a pas configuré Monero</string>
     <string name="tip_notice_offline">Aucun relais joignable, intent enregistré localement</string>
     <string name="tip_anonymous_switch">Pourboire anonyme</string>
@@ -220,6 +229,11 @@
     <string name="setup_path_existing_hint">Collez l\'adresse principale et la clé de visualisation privée depuis Cake Wallet, Monerujo ou Feather.</string>
     <string name="setup_announced_warning">Ce compte reçoit déjà des pourboires à %1$s…%2$s, configuré sur un autre appareil. Une configuration ici remplace cette adresse.</string>
     <string name="setup_announced_notice">Les pourboires sont déjà configurés pour ce compte (adresse %1$s…%2$s).</string>
+    <string name="setup_payto_replace">Remplacer votre adresse Monero publique %1$s…%2$s (visible aussi dans Amethyst et Ditto) par l’adresse des pourboires ?</string>
+    <string name="setup_payto_replace_yes">Remplacer</string>
+    <string name="setup_payto_replace_keep">Garder</string>
+    <string name="setup_payto_failed">Les pourboires sont configurés, mais votre adresse publique n’a pas pu être mise à jour.</string>
+    <string name="setup_payto_retry">Réessayer</string>
     <string name="setup_keep_existing">La garder</string>
     <string name="setup_new_wallet">Créer un portefeuille de pourboires (recommandé)</string>
     <string name="setup_existing_wallet">Utiliser un portefeuille existant</string>
@@ -250,10 +264,22 @@
     <string name="setup_err_watcher_network">Le watcher signale un réseau inconnu</string>
     <string name="setup_err_subaddress">Les sous-adresses ne sont pas prises en charge. Utilisez l\'adresse principale (commence par 4 ou 5).</string>
     <string name="setup_err_integrated">Les adresses intégrées ne sont pas prises en charge. Utilisez l\'adresse principale.</string>
+    <string name="setup_err_address_integrated">Les adresses intégrées ne sont pas prises en charge. Utilisez une adresse principale ou une sous-adresse (4… / 8…).</string>
     <string name="setup_err_address">Adresse invalide</string>
     <string name="setup_err_network">L\'adresse appartient à un autre réseau que le watcher</string>
     <string name="setup_err_view_key_format">La clé de visualisation doit comporter 64 caractères hex</string>
     <string name="setup_err_view_key_mismatch">La clé de visualisation ne correspond pas à l\'adresse</string>
+    <string name="setup_address_title">Recevoir des Monero</string>
+    <string name="setup_address_field">Adresse Monero (4… / 8…)</string>
+    <string name="setup_address_hint">Cette adresse est publique. Utilisez de préférence une sous-adresse réservée à Nostr.</string>
+    <string name="setup_address_publish">Publier</string>
+    <string name="setup_no_wallet_link">Pas encore de portefeuille Monero ? En créer un ici</string>
+    <string name="setup_address_done">D\'autres peuvent maintenant vous envoyer des Monero, aussi depuis Amethyst et Ditto.</string>
+    <string name="setup_upgrade_title">Amélioration : reçus</string>
+    <string name="setup_upgrade_text">Voyez qui vous a envoyé un pourboire, avec une notification.</string>
+    <string name="setup_upgrade_action">Configurer le watcher</string>
+    <string name="setup_err_mainnet">Utilisez une adresse mainnet (commence par 4 ou 8).</string>
+    <string name="setup_err_relays_unknown">Relais injoignables, réessayez.</string>
     <string name="setup_err_not_published">Aucun relais joignable – informations de paiement non publiées, veuillez réessayer</string>
     <string name="setup_personal_err_input">Collez le nprofile (ou npub) du watcher.</string>
     <string name="setup_personal_err_relay">Indiquez un relais du watcher (wss://…).</string>
@@ -313,6 +339,11 @@
     <string name="note_via">via %1$s</string>
     <string name="settings_monero">Pourboires Monero</string>
     <string name="settings_monero_not_set_up">Non configuré. Pas nécessaire pour envoyer des pourboires.</string>
+    <string name="settings_monero_payto">Votre adresse Monero %1$s…%2$s</string>
+    <string name="settings_monero_payto_change">Modifier</string>
+    <string name="settings_monero_payto_remove">Supprimer</string>
+    <string name="settings_msg_payto_removed">Adresse supprimée</string>
+    <string name="settings_msg_disabled_payto_left">Les pourboires sont désactivés, mais votre adresse publique n\'a pas pu être supprimée.</string>
     <string name="settings_monero_announced">Les pourboires arrivent à %1$s…%2$s, configurée sur un autre appareil. Une configuration ici remplace cette adresse.</string>
     <string name="settings_monero_set_up">Configurer la réception de pourboires</string>
     <string name="settings_monero_address">Les pourboires arrivent dans ce portefeuille : %1$s…%2$s · %3$s</string>
@@ -460,6 +491,31 @@
     <string name="note_ref_label">note</string>
     <string name="quote_missing">Note introuvable</string>
     <string name="mute_quote_placeholder">Note d’un compte masqué</string>
+    <string name="address_ref_label">événement</string>
+    <string name="address_type_article">Article</string>
+    <string name="address_type_live">En direct</string>
+    <string name="address_type_listing">Annonce</string>
+    <string name="address_type_list">Liste</string>
+    <string name="address_type_calendar">Événement de calendrier</string>
+    <string name="address_type_event">Événement</string>
+    <string name="address_live">EN DIRECT</string>
+    <string name="address_planned">Début %1$s</string>
+    <string name="address_planned_unknown">Planifié</string>
+    <string name="address_ended">TERMINÉ</string>
+    <plurals name="address_watching">
+        <item quantity="one">%1$s spectateur</item>
+        <item quantity="other">%1$s spectateurs</item>
+    </plurals>
+    <string name="address_missing">Événement introuvable</string>
+    <string name="address_deleted">Événement supprimé</string>
+    <string name="article_title">Article</string>
+    <plurals name="article_read_time">
+        <item quantity="one">%d min de lecture</item>
+        <item quantity="other">%d min de lecture</item>
+    </plurals>
+    <string name="article_missing">Article introuvable</string>
+    <string name="article_deleted">Article supprimé</string>
+    <string name="article_open_browser">Ouvrir dans le navigateur</string>
     <string name="conversation_show_muted">Afficher</string>
     <string name="action_quote">Citer</string>
     <string name="compose_quote_hint">Citation</string>
@@ -653,4 +709,15 @@
     <string name="upload_video_too_large">Cette vidéo est trop lourde. Essaie un clip plus court.</string>
     <string name="upload_video_rate">Limite quotidienne de vidéos atteinte, réessaie demain</string>
     <string name="compose_video_tile">Vidéo</string>
+    <string name="backup_password_button">Sauvegarder avec un mot de passe</string>
+    <string name="backup_password_title">Sauvegarder avec un mot de passe</string>
+    <string name="backup_password_label">Mot de passe</string>
+    <string name="backup_password_repeat">Répétez le mot de passe</string>
+    <string name="backup_password_too_short">Au moins 8 caractères</string>
+    <string name="backup_password_mismatch">Les mots de passe ne correspondent pas</string>
+    <string name="backup_password_create">Créer</string>
+    <string name="backup_password_failed">Impossible de créer la sauvegarde</string>
+    <string name="backup_password_note">Conservez le mot de passe séparément. Sans lui, cette sauvegarde est inutilisable. Amethyst et d’autres applications Nostr peuvent l’importer.</string>
+    <string name="backup_copy">Copier la sauvegarde</string>
+    <string name="backup_copied">Sauvegarde copiée, le presse-papiers sera vidé sous peu</string>
 </resources>

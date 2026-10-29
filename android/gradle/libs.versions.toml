@@ -43,6 +43,9 @@ hilt-compiler = { module = "com.google.dagger:hilt-android-compiler", version.re
 hilt-navigation-compose = { module = "androidx.hilt:hilt-navigation-compose", version = "1.3.0" }
 rustnostr-android = { module = "org.rust-nostr:nostr-sdk", version.ref = "rustnostr" }
 rustnostr-jvm = { module = "org.rust-nostr:nostr-sdk-jvm", version.ref = "rustnostr" }
+commonmark = { module = "org.commonmark:commonmark", version = "0.31.0" }
+commonmark-gfm-tables = { module = "org.commonmark:commonmark-ext-gfm-tables", version = "0.31.0" }
+commonmark-gfm-strikethrough = { module = "org.commonmark:commonmark-ext-gfm-strikethrough", version = "0.31.0" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit5" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }

@@ -63,6 +63,12 @@ import com.monostr.app.data.dm.DmStatus
 import com.monostr.app.session.NostrSession
 import com.monostr.app.ui.common.Avatar
 import com.monostr.app.ui.common.NoteText
+import com.monostr.app.ui.common.AddressCard
+import com.monostr.app.ui.common.LocalOpenArticle
+import com.monostr.app.ui.common.LocalAllowForeign
+import androidx.compose.runtime.CompositionLocalProvider
+import com.monostr.nostr.model.AddressRef
+import com.monostr.app.ui.common.dmAddressRef
 import com.monostr.app.ui.common.QuoteCard
 import com.monostr.app.ui.common.asString
 import com.monostr.app.ui.common.relativeTime
@@ -90,7 +96,10 @@ class ChatViewModel @Inject constructor(session: NostrSession, handle: SavedStat
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Spec 8: a DM sender must not pick relays the app contacts. Every article link in a bubble (a card, or the inline «event»
+ * link) opens the reader without the naddr's hints and with `foreign = false`: only the user's own relays are asked.
+ */
 @Composable
 fun ChatScreen(
     onBack: () -> Unit,
@@ -100,6 +109,24 @@ fun ChatScreen(
     onOpenMedia: (urls: List<String>, index: Int) -> Unit,
     onOpenVideo: (String) -> Unit,
     vm: ChatViewModel = hiltViewModel(),
+) {
+    val parent = LocalOpenArticle.current
+    val open = remember(parent) { parent?.let { p -> { ref: AddressRef, _: Boolean -> p(dmAddressRef(ref), false) } } }
+    CompositionLocalProvider(LocalOpenArticle provides open, LocalAllowForeign provides false) {
+        ChatScreenContent(onBack, onOpenProfile, onOpenThread, onHashtag, onOpenMedia, onOpenVideo, vm)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ChatScreenContent(
+    onBack: () -> Unit,
+    onOpenProfile: (String) -> Unit,
+    onOpenThread: (String) -> Unit,
+    onHashtag: (String) -> Unit,
+    onOpenMedia: (urls: List<String>, index: Int) -> Unit,
+    onOpenVideo: (String) -> Unit,
+    vm: ChatViewModel,
 ) {
     val state by vm.controller.state.collectAsStateWithLifecycle()
     val names by vm.controller.names.collectAsStateWithLifecycle()
@@ -208,6 +235,8 @@ private fun Bubble(
                     // spec 8: no hint relays from a DM (they would connect to relays the sender chose); DB and own relays only
                     QuoteCard(qid, emptyList(), names, onOpenNote = onOpenThread, onOpenProfile = onOpenProfile, onHashtag = onHashtag, modifier = Modifier.padding(top = 6.dp))
                 }
+                // spec 8: no hint relays from a DM, as for the quote above
+                note.addressRef?.let { AddressCard(dmAddressRef(it), names, onOpenProfile = onOpenProfile, modifier = Modifier.padding(top = 6.dp), sensitive = note.isSensitive, allowForeign = false) }
                 NoteMediaRow(note, onOpenMedia = { i -> openPictures(note.media, i, onOpenMedia) }, onOpenVideo = onOpenVideo)
                 Row(Modifier.align(Alignment.End).testTag("chat-status-${m.rumorId.take(8)}"), verticalAlignment = Alignment.CenterVertically) {
                     Text(relativeTime(m.createdAt).asString(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

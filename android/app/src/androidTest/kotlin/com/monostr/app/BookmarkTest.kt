@@ -96,7 +96,13 @@ class BookmarkTest {
         val id8 = note.id().toHex().take(8)
         rule.onNodeWithTag("note-bookmark-$id8").performClick()
         // the icon flips at once (optimistic); a failed publish would flip it back and show the snackbar
-        rule.waitUntil(30_000) { rule.onAllNodes(hasTestTag("note-bookmark-$id8") and hasStateDescription(str(R.string.note_bookmarked))).fetchSemanticsNodes().isNotEmpty() }
+        try {
+            rule.waitUntil(30_000) { rule.onAllNodes(hasTestTag("note-bookmark-$id8") and hasStateDescription(str(R.string.note_bookmarked))).fetchSemanticsNodes().isNotEmpty() }
+        } catch (e: androidx.compose.ui.test.ComposeTimeoutException) {
+            // say why: a list that never loaded (no relay answered) shows the failure snackbar, a read-only list disables the icon
+            val failed = rule.onAllNodesWithText(str(R.string.bookmark_failed)).fetchSemanticsNodes().isNotEmpty()
+            throw AssertionError("bookmark icon did not flip; list state=${ready.bookmarks.state.value}, failure snackbar=$failed", e)
+        }
         rule.waitUntil(30_000) { runBlocking { ready.bookmarks.state.value.ids.contains(note.id().toHex()) } && rule.onAllNodesWithText(str(R.string.bookmark_failed)).fetchSemanticsNodes().isEmpty() }
         // the icon flips before the relays answer; the list is stored locally only once a relay accepted it
         val listFilter = Filter().kind(Kind(10003u)).author(me.publicKey()).limit(1u)

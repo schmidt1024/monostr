@@ -160,9 +160,11 @@
     <string name="profile_tab_posts">Посты</string>
     <string name="profile_tab_replies">Ответы</string>
     <string name="profile_tab_reposts">Репосты</string>
+    <string name="profile_tab_articles">Статьи</string>
     <string name="profile_empty_posts">Постов пока нет</string>
     <string name="profile_empty_replies">Ответов пока нет</string>
     <string name="profile_empty_reposts">Репостов пока нет</string>
+    <string name="profile_empty_articles">Статей пока нет</string>
 
     <!-- compose -->
     <string name="compose_title_reply">Ответ</string>
@@ -178,7 +180,10 @@
     <string name="login_no_signer">Подписант NIP-55 (например, Amber) не установлен. Войдите с ключом:</string>
     <string name="login_secret_label">nsec или hex</string>
     <string name="login_button">Войти</string>
-    <string name="login_error_invalid_key">Недействительный ключ nsec или hex</string>
+    <string name="login_error_invalid_key">Недействительный ключ nsec, ncryptsec или hex</string>
+    <string name="login_password_label">Пароль</string>
+    <string name="login_error_wrong_password">Неверный пароль</string>
+    <string name="login_error_too_strong">Этой копии нужно больше памяти, чем позволяет этот телефон</string>
     <string name="login_error_rejected">Запрос отклонён подписантом</string>
     <string name="login_error_signer">Подписант сообщил об ошибке</string>
     <string name="login_error_failed">Не удалось войти</string>
@@ -194,6 +199,10 @@
     <string name="tip_open_wallet_again">Открыть кошелёк снова</string>
     <string name="tip_sent">Кошелёк открыт. Чаевые ожидают подтверждения от watcher.</string>
     <string name="tip_error_amount">Неверная сумма (например, 0.005)</string>
+    <string name="tip_payto_title_plain">Отправить Monero</string>
+    <string name="tip_payto_note">Уходит на адрес, а не на эту заметку. Без подтверждения: monostr не видит, оплатили ли вы.</string>
+    <string name="tip_payto_profile">Без подтверждения: monostr не видит, оплатили ли вы.</string>
+    <string name="tip_payto_pay">Оплатить кошельком</string>
     <string name="tip_no_monero">Получатель не настроил Monero</string>
     <string name="tip_notice_offline">Нет доступных релеев, интент сохранён локально</string>
     <string name="tip_anonymous_switch">Анонимные чаевые</string>
@@ -227,6 +236,11 @@
     <string name="setup_path_existing_hint">Вставьте основной адрес и приватный ключ просмотра из Cake Wallet, Monerujo или Feather.</string>
     <string name="setup_announced_warning">Этот аккаунт уже получает чаевые на адрес %1$s…%2$s, настроенный на другом устройстве. Настройка здесь заменит этот адрес.</string>
     <string name="setup_announced_notice">Чаевые для этого аккаунта уже настроены (адрес %1$s…%2$s).</string>
+    <string name="setup_payto_replace">Заменить ваш публичный адрес Monero %1$s…%2$s (виден и в Amethyst и Ditto) адресом для чаевых?</string>
+    <string name="setup_payto_replace_yes">Заменить</string>
+    <string name="setup_payto_replace_keep">Оставить</string>
+    <string name="setup_payto_failed">Чаевые настроены, но ваш публичный адрес обновить не удалось.</string>
+    <string name="setup_payto_retry">Повторить</string>
     <string name="setup_keep_existing">Оставить</string>
     <string name="setup_new_wallet">Создать новый кошелёк для чаевых (рекомендуется)</string>
     <string name="setup_existing_wallet">Использовать существующий кошелёк</string>
@@ -257,10 +271,22 @@
     <string name="setup_err_watcher_network">Watcher сообщает о неизвестной сети</string>
     <string name="setup_err_subaddress">Субадреса не поддерживаются. Используйте основной адрес (начинается с 4 или 5).</string>
     <string name="setup_err_integrated">Интегрированные адреса не поддерживаются. Используйте основной адрес.</string>
+    <string name="setup_err_address_integrated">Интегрированные адреса не поддерживаются. Используйте основной адрес или субадрес (4… / 8…).</string>
     <string name="setup_err_address">Неверный адрес</string>
     <string name="setup_err_network">Сеть адреса не совпадает с сетью watcher</string>
     <string name="setup_err_view_key_format">Ключ просмотра должен содержать 64 hex-символа</string>
     <string name="setup_err_view_key_mismatch">Ключ просмотра не соответствует адресу</string>
+    <string name="setup_address_title">Получать Monero</string>
+    <string name="setup_address_field">Адрес Monero (4… / 8…)</string>
+    <string name="setup_address_hint">Этот адрес публичный. Лучше использовать субадрес только для Nostr.</string>
+    <string name="setup_address_publish">Опубликовать</string>
+    <string name="setup_no_wallet_link">Ещё нет кошелька Monero? Создайте его здесь</string>
+    <string name="setup_address_done">Теперь вам могут отправлять Monero, в том числе из Amethyst и Ditto.</string>
+    <string name="setup_upgrade_title">Улучшение: квитанции</string>
+    <string name="setup_upgrade_text">Смотрите, кто прислал вам чаевые, с уведомлением.</string>
+    <string name="setup_upgrade_action">Настроить watcher</string>
+    <string name="setup_err_mainnet">Используйте адрес mainnet (начинается с 4 или 8).</string>
+    <string name="setup_err_relays_unknown">Релеи недоступны, попробуйте ещё раз.</string>
     <string name="setup_err_not_published">Нет доступных релеев – платёжная информация не опубликована, попробуйте снова</string>
     <string name="setup_personal_err_input">Вставьте nprofile (или npub) watcher.</string>
     <string name="setup_personal_err_relay">Укажите релей watcher (wss://…).</string>
@@ -320,6 +346,11 @@
     <string name="note_via">через %1$s</string>
     <string name="settings_monero">Чаевые в Monero</string>
     <string name="settings_monero_not_set_up">Не настроено. Для отправки чаевых не требуется.</string>
+    <string name="settings_monero_payto">Ваш адрес Monero %1$s…%2$s</string>
+    <string name="settings_monero_payto_change">Изменить</string>
+    <string name="settings_monero_payto_remove">Удалить</string>
+    <string name="settings_msg_payto_removed">Адрес удалён</string>
+    <string name="settings_msg_disabled_payto_left">Чаевые отключены, но ваш публичный адрес удалить не удалось.</string>
     <string name="settings_monero_announced">Чаевые приходят на адрес %1$s…%2$s, настроенный на другом устройстве. Настройка здесь заменит этот адрес.</string>
     <string name="settings_monero_set_up">Настроить приём чаевых</string>
     <string name="settings_monero_address">Чаевые приходят в этот кошелёк: %1$s…%2$s · %3$s</string>
@@ -475,6 +506,35 @@
     <string name="note_ref_label">заметка</string>
     <string name="quote_missing">Заметка не найдена</string>
     <string name="mute_quote_placeholder">Заметка заглушённого аккаунта</string>
+    <string name="address_ref_label">событие</string>
+    <string name="address_type_article">Статья</string>
+    <string name="address_type_live">Эфир</string>
+    <string name="address_type_listing">Объявление</string>
+    <string name="address_type_list">Список</string>
+    <string name="address_type_calendar">Событие календаря</string>
+    <string name="address_type_event">Событие</string>
+    <string name="address_live">В ЭФИРЕ</string>
+    <string name="address_planned">Начало: %1$s</string>
+    <string name="address_planned_unknown">Запланировано</string>
+    <string name="address_ended">ЗАВЕРШЕНО</string>
+    <plurals name="address_watching">
+        <item quantity="one">Смотрит: %1$s</item>
+        <item quantity="few">Смотрят: %1$s</item>
+        <item quantity="many">Смотрят: %1$s</item>
+        <item quantity="other">Смотрят: %1$s</item>
+    </plurals>
+    <string name="address_missing">Событие не найдено</string>
+    <string name="address_deleted">Событие удалено</string>
+    <string name="article_title">Статья</string>
+    <plurals name="article_read_time">
+        <item quantity="one">%d мин чтения</item>
+        <item quantity="few">%d мин чтения</item>
+        <item quantity="many">%d мин чтения</item>
+        <item quantity="other">%d мин чтения</item>
+    </plurals>
+    <string name="article_missing">Статья не найдена</string>
+    <string name="article_deleted">Статья удалена</string>
+    <string name="article_open_browser">Открыть в браузере</string>
     <string name="conversation_show_muted">Показать</string>
     <string name="action_quote">Цитировать</string>
     <string name="compose_quote_hint">Цитата</string>
@@ -670,4 +730,15 @@
     <string name="upload_video_too_large">Видео слишком большое. Попробуйте клип покороче.</string>
     <string name="upload_video_rate">Дневной лимит видео исчерпан, попробуйте завтра</string>
     <string name="compose_video_tile">Видео</string>
+    <string name="backup_password_button">Резервная копия с паролем</string>
+    <string name="backup_password_title">Резервная копия с паролем</string>
+    <string name="backup_password_label">Пароль</string>
+    <string name="backup_password_repeat">Повторите пароль</string>
+    <string name="backup_password_too_short">Не менее 8 символов</string>
+    <string name="backup_password_mismatch">Пароли не совпадают</string>
+    <string name="backup_password_create">Создать</string>
+    <string name="backup_password_failed">Не удалось создать копию</string>
+    <string name="backup_password_note">Храните пароль отдельно. Без него эта копия бесполезна. Amethyst и другие приложения Nostr могут её импортировать.</string>
+    <string name="backup_copy">Скопировать копию</string>
+    <string name="backup_copied">Копия скопирована, буфер обмена скоро очистится</string>
 </resources>

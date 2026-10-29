@@ -41,6 +41,8 @@ import androidx.lifecycle.viewModelScope
 import com.monostr.app.R
 import com.monostr.app.session.NostrSession
 import com.monostr.app.ui.common.BookmarkActions
+import com.monostr.app.ui.common.AddressCard
+import com.monostr.app.ui.common.ChainCardRow
 import com.monostr.app.ui.common.DeletionMessages
 import com.monostr.app.ui.common.LoadingScreen
 import com.monostr.app.ui.common.MessageSnackbar
@@ -68,6 +70,7 @@ import com.monostr.app.ui.tips.TipSheetFactory
 import com.monostr.app.ui.tips.TipSheetHost
 import com.monostr.app.ui.tips.TippersDialog
 import com.monostr.nostr.PerfTrace
+import com.monostr.nostr.model.AddressRef
 import com.monostr.nostr.model.Note
 import com.monostr.nostr.model.Strands
 import com.monostr.nostr.repo.Slot
@@ -94,6 +97,8 @@ data class ThreadUiState(val items: List<NoteUi> = emptyList(), val focusedId: S
     val rows: List<ThreadRow> = emptyList(),
     /** Notes of [rows] only a mute hides: an ancestor or a kept strand head shows as "Note from a muted account", one tap shows it. */
     val muted: Map<String, NoteUi> = emptyMap(),
+    /** Spec 2026-10-29 article reader: ancestor rows (by row id) that are the article a comment sits under; they show as a card. */
+    val articles: Map<String, AddressRef> = emptyMap(),
 )
 
 /** One row of the thread page (spec 2026-10-16 §4.2), top to bottom. [id] keys the LazyColumn. */
@@ -239,7 +244,8 @@ class ThreadController(
                     all = withFocused.map { n -> NoteUi(n, byKey.getValue(n.author), byKey.getValue(n.author)) }
                     val items = visibility.visible(all.map(::fresh), keep = view.focused.id)
                     val muted = visibility.mutedOnly(all.map(::fresh), keep = view.focused.id).associateBy { it.note.id }
-                    _state.update { it.copy(items = items, rows = rows, focusedId = view.focused.id, loading = false, muted = muted) }
+                    val articles = ancestors.filterIsInstance<Slot.Article>().associate { it.id to it.ref }
+                    _state.update { it.copy(items = items, rows = rows, focusedId = view.focused.id, loading = false, muted = muted, articles = articles) }
                     if (!contentMarked && items.isNotEmpty()) { contentMarked = true; PerfTrace.mark("thread first content") }
                     if (view.ancestors.isNotEmpty()) markOnce("thread ancestors shown")
                     if (view.repliesFetched) markOnce("thread relay replies shown")
@@ -375,7 +381,9 @@ fun ThreadScreen(
                                 val lineBelow = row is ThreadRow.Ancestor || (row is ThreadRow.Reply && row.lineBelow && next is ThreadRow.Child)
                                 val n = byId[row.id]
                                 if (n == null) {
-                                    if (row is ThreadRow.Ancestor && row.pending) PendingRow(lineAbove, lineBelow)
+                                    val article = state.articles[row.id]
+                                    if (article != null) ChainCardRow(lineBelow) { AddressCard(article, names, onOpenProfile = onOpenProfile, modifier = Modifier.testTag("thread-article-root")) }
+                                    else if (row is ThreadRow.Ancestor && row.pending) PendingRow(lineAbove, lineBelow)
                                     else if (row.id in state.muted) MutedRow(lineAbove, lineBelow, onShow = { shownMuted = shownMuted + row.id })
                                     else UnavailableRow(lineAbove, lineBelow)
                                 } else NoteCard(

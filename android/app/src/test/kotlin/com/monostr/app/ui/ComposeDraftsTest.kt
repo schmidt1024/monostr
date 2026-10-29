@@ -54,6 +54,19 @@ class ComposeDraftsTest {
     }
 
     @Test
+    fun `a prefilled compose never touches the new-note draft`() = runTest {
+        val drafts = FakeDraftStore().apply { put(me, DraftTargets.NOTE, Draft("my own draft", sensitive = false, attachments = emptyList(), updatedAt = 4_000)) }
+        val c = ComposeController(null, FakeThreads(emptyMap()), FakePublish(), eager(), drafts = drafts, account = me, background = eager(), now = { 5_000L }, prefill = "\n\nnostr:naddr1x")
+        c.start()
+        advanceUntilIdle()
+        assertEquals("\n\nnostr:naddr1x", c.state.value.restoredText)
+        c.onTextChange("my words\n\nnostr:naddr1x", 8)
+        c.saveDraftNow()
+        advanceUntilIdle()
+        assertEquals("my own draft", drafts.stored(me, DraftTargets.NOTE)!!.text)
+    }
+
+    @Test
     fun `typing saves once, a second after the last change`() = runTest {
         val drafts = FakeDraftStore()
         val c = controller(drafts)

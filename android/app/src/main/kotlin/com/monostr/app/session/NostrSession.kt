@@ -90,6 +90,7 @@ import com.monostr.nostr.repo.NostrFeedRepository
 import com.monostr.nostr.repo.NostrFollowRepository
 import com.monostr.nostr.repo.NostrNotificationsRepository
 import com.monostr.nostr.repo.NostrProfileRepository
+import com.monostr.nostr.repo.NostrAddressableRepository
 import com.monostr.nostr.repo.NostrQuoteRepository
 import com.monostr.nostr.repo.EventLocator
 import com.monostr.nostr.repo.ForeignRelays
@@ -110,6 +111,7 @@ import com.monostr.nostr.repo.NotificationsRepository
 import com.monostr.app.ui.notifications.NotificationsStore
 import com.monostr.nostr.repo.ProfileRepository
 import com.monostr.nostr.repo.PublishRepository
+import com.monostr.nostr.repo.AddressableRepository
 import com.monostr.nostr.repo.QuoteRepository
 import com.monostr.nostr.repo.SearchRepository
 import com.monostr.nostr.repo.ThreadRepository
@@ -168,6 +170,10 @@ class Ready(
     val dmStore: DmStore,
     val dmRelays: DmRelaysRepository,
     val quotes: QuoteRepository,
+    /** Spec 2026-10-29 naddr: the event behind a `nostr:naddr1…` card. */
+    val addresses: AddressableRepository,
+    /** Spec 2026-10-29 article reader: the replies under an article. */
+    val articleReplies: com.monostr.nostr.repo.ArticleRepliesRepository,
     val follows: FollowRepository,
     /** Follower and following numbers for the profile header. */
     val followCounts: FollowCountsRepository,
@@ -687,6 +693,8 @@ class NostrSession @Inject constructor(
                 authorRelays = authorRelays,
                 dms = dms, dmStore = dmStore, dmRelays = dmRelays,
                 quotes = NostrQuoteRepository(engine, locator = locator, foreign = foreign),
+                addresses = NostrAddressableRepository(engine, foreign = foreign, locator = locator),
+                articleReplies = com.monostr.nostr.repo.NostrArticleRepliesRepository(engine, foreign = foreign),
                 follows = follows,
                 followCounts = followCounts,
                 deletions = NoteDeletions(engine.backgroundScope),

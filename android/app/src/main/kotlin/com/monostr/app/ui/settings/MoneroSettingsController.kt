@@ -17,6 +17,8 @@ import com.monostr.app.ui.common.uiText
 import com.monostr.app.ui.common.userMessage
 import com.monostr.app.ui.tips.AmountsPrompt
 import com.monostr.app.ui.tips.AmountsVisibility
+import com.monostr.nostr.repo.OwnPayto
+import com.monostr.nostr.repo.PaytoWrite
 import com.monostr.nostr.repo.TipsRepository
 import kotlinx.coroutines.CancellationException
 import com.monostr.tips.PaymentInfo
@@ -51,6 +53,8 @@ data class MoneroSettingsState(
     val busy: Boolean = false,
     /** Without a setup on this device: the tip address the account announces (kind 10037), set up elsewhere. */
     val announced: String? = null,
+    /** Without a setup on this device: the public Monero address (NIP-A3 payto), possibly published by another client. */
+    val payto: String? = null,
     val error: UiText? = null,
     val message: UiText? = null,
     /** Personal watcher only: its newest kind 10038, null when none was found (see [statusChecked]). */
@@ -63,6 +67,13 @@ data class MoneroSettingsState(
     val amountsSupported: Boolean? = null,
 ) {
     val canAddPreset: Boolean get() = presets.size < Presets.MAX
+
+    /**
+     * The address to show with «Change» / «Remove» / the receipts upgrade: only for an account with just a payto.
+     * An announced watcher setup from another device keeps its own notice, or «Remove» would only strip the payto
+     * while tips keep arriving at the announced address.
+     */
+    val paytoOnly: String? get() = payto.takeIf { setup == null && announced == null }
 }
 
 /** Settings → Monero (spec 6.4–6.6) and the NIP-65 relay adoption. */
@@ -81,6 +92,9 @@ class MoneroSettingsController(
 ) {
     private var statusJob: Job? = null
     private var supportJob: Job? = null
+    private var paytoJob: Job? = null
+    /** Counts published removals: a read that started before one must not bring the address back. */
+    private var paytoRemovals = 0
     private val visibility = AmountsVisibility(tips, gateway, settings)
     private var followed = false
 
@@ -94,6 +108,8 @@ class MoneroSettingsController(
                 // after a reinstall or on a second device "not set up" would be wrong: tips still arrive at the announced address
                 val announced = if (s == null && selfPubkey != null) announcedAddress(selfPubkey) else null
                 _state.update { it.copy(announced = announced.takeIf { _ -> it.setup == null }) }
+                // read in the background: relays may be slow and must not hold back the rest of the state
+                if (s == null) readPayto() else { paytoJob?.cancel(); _state.update { it.copy(payto = null) } }
                 statusJob?.cancel()
                 _state.update { it.copy(watcherStatus = null, statusChecked = false, personalLine = PersonalWatcherLine.Unknown) }
                 supportJob?.cancel()
@@ -123,6 +139,35 @@ class MoneroSettingsController(
                 _state.update { it.copy(presets = p.map { v -> Presets.format(v, u) }, unit = u) }
             }
         }
+    }
+
+    /** Reads the own payto in the background; a removal published meanwhile wins over what the read found. */
+    private fun readPayto() {
+        paytoJob?.cancel()
+        paytoJob = scope.launch {
+            val removals = paytoRemovals
+            val known = try {
+                tips.ownPayto() as? OwnPayto.Known
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null
+            }
+            // unknown (relays silent, nothing stored): keep what is shown rather than call it "not set up"
+            if (known != null && removals == paytoRemovals) _state.update { it.copy(payto = known.address.takeIf { _ -> it.setup == null }) }
+        }
+    }
+
+    private var resumedOnce = false
+
+    /**
+     * The Settings screen is back in front: the setup screen may have published, changed or removed the address
+     * without touching the stored setup, so the own payto is read again. The first resume is the opening, which
+     * [start] already reads for.
+     */
+    fun resumed() {
+        if (!resumedOnce) { resumedOnce = true; return }
+        if (_state.value.setup == null) readPayto()
     }
 
     /** The status must name this account and the stored address, or the watcher watches something else (a null [selfPubkey] skips the account check). */
@@ -205,11 +250,34 @@ class MoneroSettingsController(
                     return@launch
                 }
                 settings.setSetup(null)
-                _state.update { it.copy(busy = false, message = uiText(R.string.settings_msg_disabled)) }
+                // the public address would keep receiving tips; failing to remove it must not undo the switch-off
+                val left = removeOwnPayto() != PaytoWrite.Published
+                _state.update { it.copy(busy = false, payto = if (left) it.payto else null, message = uiText(if (left) R.string.settings_msg_disabled_payto_left else R.string.settings_msg_disabled)) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 _state.update { it.copy(busy = false, error = e.userMessage()) }
+            }
+        }
+    }
+
+    private suspend fun removeOwnPayto(): PaytoWrite = try {
+        tips.setOwnPayto(null).also { if (it == PaytoWrite.Published) { paytoRemovals++; paytoJob?.cancel() } }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        PaytoWrite.Unknown
+    }
+
+    /** Takes the public Monero address off the account (no setup on this device); nothing changes unless it was published. */
+    fun removePayto() {
+        if (_state.value.busy) return
+        scope.launch {
+            _state.update { it.copy(busy = true, error = null) }
+            when (removeOwnPayto()) {
+                PaytoWrite.Published -> _state.update { it.copy(busy = false, payto = null, message = uiText(R.string.settings_msg_payto_removed)) }
+                PaytoWrite.NotPublished -> _state.update { it.copy(busy = false, error = ERR_NOT_PUBLISHED) }
+                PaytoWrite.Unknown -> _state.update { it.copy(busy = false, error = uiText(R.string.setup_err_relays_unknown)) }
             }
         }
     }

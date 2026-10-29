@@ -56,6 +56,8 @@ import com.monostr.app.ui.common.PendingRow
 import com.monostr.app.ui.common.ShowBarsWhenStuck
 import com.monostr.app.ui.common.ShowRepliesRow
 import com.monostr.app.ui.common.UnavailableRow
+import com.monostr.app.ui.common.ChainCardRow
+import com.monostr.app.ui.common.AddressCard
 import com.monostr.app.ui.common.VisibleNotes
 import com.monostr.nostr.model.Note
 import kotlinx.coroutines.launch
@@ -121,7 +123,9 @@ internal fun FeedList(
                         chain?.ancestors?.forEachIndexed { i, id ->
                             val above = i > 0
                             val a = state.ancestors[id] ?: state.mutedAncestors[id]?.takeIf { id in shownMuted }
-                            if (a == null && id in state.pending) PendingRow(lineAbove = above, lineBelow = true)
+                            val article = state.articles[id]
+                            if (article != null) ChainCardRow(lineBelow = true) { AddressCard(article, names, onOpenProfile = nav.onOpenProfile, modifier = Modifier.testTag("feed-article-root")) }
+                            else if (a == null && id in state.pending) PendingRow(lineAbove = above, lineBelow = true)
                             else if (a == null && id in state.mutedAncestors) MutedRow(lineAbove = above, lineBelow = true, onShow = { shownMuted = shownMuted + id })
                             else if (a == null) UnavailableRow(lineAbove = above, lineBelow = true)
                             else NoteCard(

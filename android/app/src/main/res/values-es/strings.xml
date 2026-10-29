@@ -153,9 +153,11 @@
     <string name="profile_tab_posts">Publicaciones</string>
     <string name="profile_tab_replies">Respuestas</string>
     <string name="profile_tab_reposts">Reposts</string>
+    <string name="profile_tab_articles">Artículos</string>
     <string name="profile_empty_posts">Aún no hay publicaciones</string>
     <string name="profile_empty_replies">Aún no hay respuestas</string>
     <string name="profile_empty_reposts">Aún no hay reposts</string>
+    <string name="profile_empty_articles">Aún no hay artículos</string>
 
     <!-- compose -->
     <string name="compose_title_reply">Responder</string>
@@ -171,7 +173,10 @@
     <string name="login_no_signer">No hay ningún firmante NIP-55 (p. ej. Amber) instalado. Inicia sesión con una clave:</string>
     <string name="login_secret_label">nsec o hex</string>
     <string name="login_button">Iniciar sesión</string>
-    <string name="login_error_invalid_key">No es una clave nsec o hex válida</string>
+    <string name="login_error_invalid_key">No es una clave nsec, ncryptsec o hex válida</string>
+    <string name="login_password_label">Contraseña</string>
+    <string name="login_error_wrong_password">Contraseña incorrecta</string>
+    <string name="login_error_too_strong">Esta copia necesita más memoria de la que permite este teléfono</string>
     <string name="login_error_rejected">Solicitud rechazada en el firmante</string>
     <string name="login_error_signer">El firmante informó de un error</string>
     <string name="login_error_failed">Error al iniciar sesión</string>
@@ -187,6 +192,10 @@
     <string name="tip_open_wallet_again">Abrir la wallet de nuevo</string>
     <string name="tip_sent">Wallet abierta. La propina espera la confirmación del watcher.</string>
     <string name="tip_error_amount">Importe no válido (p. ej. 0.005)</string>
+    <string name="tip_payto_title_plain">Enviar Monero</string>
+    <string name="tip_payto_note">Va a su dirección, no a esta nota. Sin confirmación: monostr no puede ver si pagaste.</string>
+    <string name="tip_payto_profile">Sin confirmación: monostr no puede ver si pagaste.</string>
+    <string name="tip_payto_pay">Pagar con wallet</string>
     <string name="tip_no_monero">El destinatario no ha configurado Monero</string>
     <string name="tip_notice_offline">Ningún relay accesible, intent guardado localmente</string>
     <string name="tip_anonymous_switch">Propina anónima</string>
@@ -220,6 +229,11 @@
     <string name="setup_path_existing_hint">Pega la dirección principal y la clave de visualización privada de Cake Wallet, Monerujo o Feather.</string>
     <string name="setup_announced_warning">Esta cuenta ya recibe propinas en %1$s…%2$s, configurada en otro dispositivo. Configurar aquí reemplaza esa dirección.</string>
     <string name="setup_announced_notice">Las propinas ya están configuradas para esta cuenta (dirección %1$s…%2$s).</string>
+    <string name="setup_payto_replace">¿Reemplazar tu dirección pública de Monero %1$s…%2$s (también visible en Amethyst y Ditto) por la dirección de propinas?</string>
+    <string name="setup_payto_replace_yes">Reemplazar</string>
+    <string name="setup_payto_replace_keep">Mantener</string>
+    <string name="setup_payto_failed">Las propinas están configuradas, pero no se pudo actualizar tu dirección pública.</string>
+    <string name="setup_payto_retry">Reintentar</string>
     <string name="setup_keep_existing">Mantenerla</string>
     <string name="setup_new_wallet">Crear una wallet nueva para propinas (recomendado)</string>
     <string name="setup_existing_wallet">Usar una wallet existente</string>
@@ -250,10 +264,22 @@
     <string name="setup_err_watcher_network">El watcher indica una red desconocida</string>
     <string name="setup_err_subaddress">Las subdirecciones no son compatibles. Usa la dirección principal (empieza por 4 o 5).</string>
     <string name="setup_err_integrated">Las direcciones integradas no son compatibles. Usa la dirección principal.</string>
+    <string name="setup_err_address_integrated">Las direcciones integradas no son compatibles. Usa una dirección principal o una subdirección (4… / 8…).</string>
     <string name="setup_err_address">Dirección no válida</string>
     <string name="setup_err_network">La dirección pertenece a una red distinta de la del watcher</string>
     <string name="setup_err_view_key_format">La clave de visualización debe tener 64 caracteres hex</string>
     <string name="setup_err_view_key_mismatch">La clave de visualización no corresponde a la dirección</string>
+    <string name="setup_address_title">Recibir Monero</string>
+    <string name="setup_address_field">Dirección de Monero (4… / 8…)</string>
+    <string name="setup_address_hint">Esta dirección es pública. Lo mejor es usar una subdirección solo para Nostr.</string>
+    <string name="setup_address_publish">Publicar</string>
+    <string name="setup_no_wallet_link">¿Aún no tienes una wallet de Monero? Crea una aquí</string>
+    <string name="setup_address_done">Ahora otros pueden enviarte Monero, también desde Amethyst y Ditto.</string>
+    <string name="setup_upgrade_title">Mejora: recibos</string>
+    <string name="setup_upgrade_text">Mira quién te dio propina, con notificación.</string>
+    <string name="setup_upgrade_action">Configurar watcher</string>
+    <string name="setup_err_mainnet">Usa una dirección de mainnet (empieza por 4 u 8).</string>
+    <string name="setup_err_relays_unknown">Relays no disponibles, inténtalo de nuevo.</string>
     <string name="setup_err_not_published">Ningún relay accesible – información de pago no publicada, inténtalo de nuevo</string>
     <string name="setup_personal_err_input">Pega el nprofile (o npub) del watcher.</string>
     <string name="setup_personal_err_relay">Indica un relay del watcher (wss://…).</string>
@@ -313,6 +339,11 @@
     <string name="note_via">vía %1$s</string>
     <string name="settings_monero">Propinas en Monero</string>
     <string name="settings_monero_not_set_up">No configurado. No hace falta para enviar propinas.</string>
+    <string name="settings_monero_payto">Tu dirección de Monero %1$s…%2$s</string>
+    <string name="settings_monero_payto_change">Cambiar</string>
+    <string name="settings_monero_payto_remove">Quitar</string>
+    <string name="settings_msg_payto_removed">Dirección quitada</string>
+    <string name="settings_msg_disabled_payto_left">Las propinas están desactivadas, pero no se pudo quitar tu dirección pública.</string>
     <string name="settings_monero_announced">Las propinas llegan a %1$s…%2$s, configurada en otro dispositivo. Configurar aquí reemplaza esa dirección.</string>
     <string name="settings_monero_set_up">Configurar recepción de propinas</string>
     <string name="settings_monero_address">Las propinas llegan a esta cartera: %1$s…%2$s · %3$s</string>
@@ -460,6 +491,31 @@
     <string name="note_ref_label">nota</string>
     <string name="quote_missing">Nota no encontrada</string>
     <string name="mute_quote_placeholder">Nota de una cuenta silenciada</string>
+    <string name="address_ref_label">evento</string>
+    <string name="address_type_article">Artículo</string>
+    <string name="address_type_live">En vivo</string>
+    <string name="address_type_listing">Anuncio</string>
+    <string name="address_type_list">Lista</string>
+    <string name="address_type_calendar">Evento de calendario</string>
+    <string name="address_type_event">Evento</string>
+    <string name="address_live">EN VIVO</string>
+    <string name="address_planned">Empieza %1$s</string>
+    <string name="address_planned_unknown">Programado</string>
+    <string name="address_ended">FINALIZADO</string>
+    <plurals name="address_watching">
+        <item quantity="one">%1$s viendo</item>
+        <item quantity="other">%1$s viendo</item>
+    </plurals>
+    <string name="address_missing">Evento no encontrado</string>
+    <string name="address_deleted">Evento eliminado</string>
+    <string name="article_title">Artículo</string>
+    <plurals name="article_read_time">
+        <item quantity="one">%d min de lectura</item>
+        <item quantity="other">%d min de lectura</item>
+    </plurals>
+    <string name="article_missing">Artículo no encontrado</string>
+    <string name="article_deleted">Artículo eliminado</string>
+    <string name="article_open_browser">Abrir en el navegador</string>
     <string name="conversation_show_muted">Mostrar</string>
     <string name="action_quote">Citar</string>
     <string name="compose_quote_hint">Cita</string>
@@ -653,4 +709,15 @@
     <string name="upload_video_too_large">Este vídeo es demasiado grande. Prueba con un clip más corto.</string>
     <string name="upload_video_rate">Límite diario de vídeos alcanzado, inténtalo mañana</string>
     <string name="compose_video_tile">Vídeo</string>
+    <string name="backup_password_button">Copia con contraseña</string>
+    <string name="backup_password_title">Copia con contraseña</string>
+    <string name="backup_password_label">Contraseña</string>
+    <string name="backup_password_repeat">Repite la contraseña</string>
+    <string name="backup_password_too_short">Al menos 8 caracteres</string>
+    <string name="backup_password_mismatch">Las contraseñas no coinciden</string>
+    <string name="backup_password_create">Crear</string>
+    <string name="backup_password_failed">No se pudo crear la copia</string>
+    <string name="backup_password_note">Guarda la contraseña por separado. Sin ella, esta copia no sirve de nada. Amethyst y otras apps de Nostr pueden importarla.</string>
+    <string name="backup_copy">Copiar copia</string>
+    <string name="backup_copied">Copia copiada, el portapapeles se vaciará en breve</string>
 </resources>

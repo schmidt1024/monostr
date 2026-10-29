@@ -54,3 +54,12 @@ internal fun taggedFilter(kinds: List<Int>, ids: Collection<String>, since: Long
         if (since != null) put("since", JsonPrimitive(since.coerceAtLeast(0)))
     }.toString(),
 )
+
+/** [kinds] whose [tag] (`a` or `A`) names [coordinate]; an article's counts use the coordinate only. */
+internal fun coordinateFilter(kinds: List<Int>, coordinate: String, tag: String = "a", since: Long? = null): Filter = Filter.fromJson(
+    buildJsonObject {
+        put("kinds", JsonArray(kinds.map { JsonPrimitive(it) }))
+        put("#$tag", JsonArray(listOf(JsonPrimitive(coordinate))))
+        if (since != null) put("since", JsonPrimitive(since.coerceAtLeast(0)))
+    }.toString(),
+)

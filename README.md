@@ -15,7 +15,7 @@ Also on [Zapstore](https://zapstore.dev/apps/com.monostr.app) and as APK in the 
 - Feed, threads, profiles with Posts and Replies tabs; like, repost, quote, reply
 - Pictures in notes and own uploads (Blossom), sensitive content blurred
 - Private messages (NIP-17), private bookmarks and mutes (NIP-51), search (NIP-50), notifications
-- Sign in with Amber (NIP-55) or a key; light and dark theme; English, German, Spanish, French, Italian, Portuguese, Russian, Turkish
+- Sign in with Amber (NIP-55) or a key (nsec, or a password-protected ncryptsec, NIP-49; the key can be backed up as an ncryptsec too); light and dark theme; English, German, Spanish, French, Italian, Portuguese, Russian, Turkish
 
 ## How the Monero tips work
 
@@ -60,6 +60,8 @@ Release APKs are signed with this certificate (SHA-256):
 - DM notifications hide the sender name by default; Settings can show it.
 - Pictures load only on tap by default; Settings can load them automatically.
 - Notes, likes and reposts carry a NIP-89 `client` tag ("via monostr") only if you switch it on in Settings; off by default.
+- Long-form articles (NIP-23) open in an in-app reader with likes, reposts, replies, bookmarks and Monero tips; profiles show an Articles tab.
+- A Monero address can be published without a watcher (NIP-A3 payto); tips to people who only have a payto address open your wallet without a confirmation in monostr.
 - Follower numbers are the largest count the relays report (NIP-45); no proprietary index is asked (since 0.22.4).
 
 ## License

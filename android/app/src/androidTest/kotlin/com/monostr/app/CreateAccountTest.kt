@@ -139,6 +139,22 @@ class CreateAccountTest {
         assertNull(runBlocking { entry.pendingSetup().load(pk) })
     }
 
+    /** Spec 2026-10-29 ncryptsec: the Backup step offers the password backup. */
+    @Test
+    fun passwordBackupShowsAnNcryptsec() {
+        rule.onNodeWithTag("login-create").performClick()
+        rule.waitUntil(5_000) { nodes("create-welcome").isNotEmpty() }
+        rule.onNodeWithTag("create-next").performClick()
+        rule.waitUntil(5_000) { nodes("create-nsec").isNotEmpty() }
+        rule.onNodeWithTag("create-backup-password").performScrollTo().performClick()
+        rule.waitUntil(5_000) { nodes("backup-password").isNotEmpty() }
+        rule.onNodeWithTag("backup-password").performTextInput("password1")
+        rule.onNodeWithTag("backup-password-repeat").performTextInput("password1")
+        rule.onNodeWithTag("backup-password-create").performClick()
+        rule.waitUntil(30_000) { nodes("backup-ncryptsec").isNotEmpty() }
+        assertTrue(rule.onNodeWithTag("backup-ncryptsec").fetchSemanticsNode().config[SemanticsProperties.Text].first().text.startsWith("ncryptsec1"))
+    }
+
     @Test
     fun backOnWelcomeAsksAndReturnsToLogin() {
         rule.onNodeWithTag("login-create").performClick()

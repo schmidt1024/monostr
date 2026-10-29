@@ -6,6 +6,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -37,9 +38,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ClipboardManager
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -48,6 +51,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.monostr.app.R
+import com.monostr.app.data.AmountUnit
 import com.monostr.app.data.Presets
 import com.monostr.app.ui.common.QrCode
 import com.monostr.app.ui.common.asString
@@ -71,6 +75,7 @@ fun TipSheetHost(controller: TipSheetController) {
     if (!state.visible) return
     val context = LocalContext.current
     val pay = state.phase as? TipPhase.Pay
+    val payTo = state.phase as? TipPhase.PayTo
     LaunchedEffect(pay?.uri) {
         if (pay != null && pay.walletMissing == null) controller.walletResult(WalletOpener.open(context, pay.uri))
     }
@@ -83,6 +88,7 @@ fun TipSheetHost(controller: TipSheetController) {
             onSend = controller::send,
             onRetryWallet = { pay?.let { controller.walletResult(WalletOpener.open(context, it.uri)) } },
             onDone = controller::dismiss,
+            onPayTo = { payTo?.let { controller.payToWalletResult(WalletOpener.open(context, it.uri)) } },
         )
     }
 }
@@ -98,6 +104,7 @@ fun TipSheetContent(
     onSend: () -> Unit,
     onRetryWallet: () -> Unit,
     onDone: () -> Unit,
+    onPayTo: () -> Unit = {},
 ) {
     val clipboard = LocalClipboardManager.current
     val uriHandler = LocalUriHandler.current
@@ -109,6 +116,21 @@ fun TipSheetContent(
             TipPhase.NoMonero -> {
                 Text(TipSheetController.NO_MONERO.asString(), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("tip-no-monero"))
                 Spacer(Modifier.height(16.dp))
+                TextButton(onClick = onDone, modifier = Modifier.align(Alignment.End).testTag("tip-done")) { Text(stringResource(R.string.action_close)) }
+            }
+            is TipPhase.PayTo -> {
+                Text(stringResource(R.string.tip_payto_title_plain), style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("tip-payto"))
+                Text(
+                    stringResource(if (state.target is TipTarget.Note) R.string.tip_payto_note else R.string.tip_payto_profile),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(12.dp))
+                if (phase.walletMissing == true) {
+                    WalletFallback(phase.uri, phase.address, null, state.unit, uriHandler, clipboard)
+                    Spacer(Modifier.height(8.dp))
+                }
+                Button(onClick = onPayTo, modifier = Modifier.fillMaxWidth().testTag("tip-payto-pay")) { Text(stringResource(R.string.tip_payto_pay)) }
+                Spacer(Modifier.height(8.dp))
                 TextButton(onClick = onDone, modifier = Modifier.align(Alignment.End).testTag("tip-done")) { Text(stringResource(R.string.action_close)) }
             }
             TipPhase.Ready, TipPhase.Sending -> {
@@ -173,22 +195,7 @@ fun TipSheetContent(
                 } else {
                     state.notice?.let { Text(it.asString(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error); Spacer(Modifier.height(8.dp)) }
                     if (phase.walletMissing == true) {
-                        Text(stringResource(R.string.tip_no_wallet_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("tip-fallback"))
-                        Text(stringResource(R.string.tip_no_wallet_text), style = MaterialTheme.typography.bodySmall)
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            TextButton(onClick = { uriHandler.openUri("https://f-droid.org/packages/io.horizontalsystems.bankwallet/") }) { Text("Unstoppable") }
-                            TextButton(onClick = { uriHandler.openUri("https://cakewallet.com") }) { Text("Cake Wallet") }
-                        }
-                        QrCode(phase.uri, Modifier.size(200.dp).align(Alignment.CenterHorizontally))
-                        Spacer(Modifier.height(8.dp))
-                        Text(stringResource(R.string.tip_xmr_amount, Presets.format(phase.amount, state.unit), state.unit.label), style = MaterialTheme.typography.titleMedium, fontFamily = MonostrFonts.mono, modifier = Modifier.testTag("tip-fallback-amount"))
-                        Text(phase.address, style = MaterialTheme.typography.bodySmall, fontFamily = MonostrFonts.mono, modifier = Modifier.testTag("tip-fallback-address"))
-                        Spacer(Modifier.height(8.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(onClick = { clipboard.setText(AnnotatedString(phase.address)) }, modifier = Modifier.testTag("tip-copy-address")) { Text(stringResource(R.string.action_copy_address)) }
-                            OutlinedButton(onClick = { clipboard.setText(AnnotatedString(phase.uri)) }, modifier = Modifier.testTag("tip-copy-uri")) { Text(stringResource(R.string.action_copy_uri)) }
-                        }
-                        Spacer(Modifier.height(8.dp))
+                        WalletFallback(phase.uri, phase.address, phase.amount, state.unit, uriHandler, clipboard)
                         Button(onClick = onRetryWallet, modifier = Modifier.fillMaxWidth().testTag("tip-open-wallet")) { Text(stringResource(R.string.tip_open_wallet_again)) }
                     } else {
                         Text(stringResource(R.string.tip_sent), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("tip-sent"))
@@ -199,4 +206,25 @@ fun TipSheetContent(
             }
         }
     }
+}
+
+/** Pay-by-hand block when no wallet app took the `monero:` URI: wallet links, QR, address, copy buttons. No amount line when [amount] is null (payto). */
+@Composable
+private fun ColumnScope.WalletFallback(uri: String, address: String, amount: Long?, unit: AmountUnit, uriHandler: UriHandler, clipboard: ClipboardManager) {
+                        Text(stringResource(R.string.tip_no_wallet_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("tip-fallback"))
+                        Text(stringResource(R.string.tip_no_wallet_text), style = MaterialTheme.typography.bodySmall)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = { uriHandler.openUri("https://f-droid.org/packages/io.horizontalsystems.bankwallet/") }) { Text("Unstoppable") }
+                            TextButton(onClick = { uriHandler.openUri("https://cakewallet.com") }) { Text("Cake Wallet") }
+                        }
+                        QrCode(uri, Modifier.size(200.dp).align(Alignment.CenterHorizontally))
+                        Spacer(Modifier.height(8.dp))
+                        if (amount != null) Text(stringResource(R.string.tip_xmr_amount, Presets.format(amount, unit), unit.label), style = MaterialTheme.typography.titleMedium, fontFamily = MonostrFonts.mono, modifier = Modifier.testTag("tip-fallback-amount"))
+                        Text(address, style = MaterialTheme.typography.bodySmall, fontFamily = MonostrFonts.mono, modifier = Modifier.testTag("tip-fallback-address"))
+                        Spacer(Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(onClick = { clipboard.setText(AnnotatedString(address)) }, modifier = Modifier.testTag("tip-copy-address")) { Text(stringResource(R.string.action_copy_address)) }
+                            OutlinedButton(onClick = { clipboard.setText(AnnotatedString(uri)) }, modifier = Modifier.testTag("tip-copy-uri")) { Text(stringResource(R.string.action_copy_uri)) }
+                        }
+                        Spacer(Modifier.height(8.dp))
 }

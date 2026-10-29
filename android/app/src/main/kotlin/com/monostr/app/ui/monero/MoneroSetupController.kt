@@ -18,6 +18,8 @@ import com.monostr.monero.Network
 import com.monostr.monero.hexToBytes
 import com.monostr.monero.toHex
 import com.monostr.nostr.WatcherProfile
+import com.monostr.nostr.repo.OwnPayto
+import com.monostr.nostr.repo.PaytoWrite
 import com.monostr.nostr.repo.TipsRepository
 import com.monostr.tips.NetworkTag
 import com.monostr.tips.PaymentInfo
@@ -28,6 +30,7 @@ import com.monostr.tips.event.isHex64
 import com.monostr.tips.watcher.WatcherException
 import com.monostr.tips.watcher.WatcherInfo
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
@@ -55,6 +58,13 @@ import java.util.Random
 
 sealed class SetupStep {
     /**
+     * Spec payto §4: the first step, one receiving address (primary or subaddress) published as payto.
+     * [loading]: the publish runs. [known]: the field holds the account's own payto entry.
+     */
+    data class Address(val input: String, val loading: Boolean = false, val known: Boolean = false) : SetupStep()
+    /** The address is published; the watcher (receipts) is offered as an upgrade. */
+    data class AddressDone(val address: String) : SetupStep()
+    /**
      * [loading]: inputs are locked, at first while the stored settings are read, then while a check runs.
      * [checking]: the user started a check (spec §12: progress, "Checking watcher…").
      * [slow]: that check runs for 3 s already (hint + Cancel). [retry]: the last check timed out or hit a network error.
@@ -69,17 +79,30 @@ sealed class SetupStep {
         /** The raw key never appears in logs or a state dump (spec: view key never in toString()). */
         override fun toString() = "Existing(address=$address, viewKey=<redacted ${viewKey.length} chars>)"
     }
-    /** Spec 6.3 step 4: the privacy warning before anything leaves the device. */
-    /** [amountsHidden]: the watcher speaks protocol 0.5, so the payment info will hide tip amounts. */
-    data class Confirm(val address: String, val restoreHeight: Long?, val amountsHidden: Boolean = false) : SetupStep()
+    /**
+     * Spec 6.3 step 4: the privacy warning before anything leaves the device.
+     * [amountsHidden]: the watcher speaks protocol 0.5, so the payment info will hide tip amounts.
+     * [paytoConflict]: the own payto address when it differs from [address] (spec payto §4); [replacePayto] is the answer.
+     * [paytoPending]: the own payto is still being read; confirming waits for it.
+     */
+    data class Confirm(
+        val address: String, val restoreHeight: Long?, val amountsHidden: Boolean = false,
+        val paytoConflict: String? = null, val replacePayto: Boolean = true, val paytoPending: Boolean = false,
+    ) : SetupStep()
     /** Spec 0.4 §4.3: the watcher's nprofile (or npub/hex plus [relay]). */
     /** [slow] and [retry] as in [Watcher] (spec §12). */
     data class Personal(val input: String, val relay: String, val loading: Boolean = false, val slow: Boolean = false, val retry: Boolean = false) : SetupStep()
-    /** A fresh status of a personal watcher for this account; confirming announces it in pubkey form. */
-    data class PersonalConfirm(val status: WatcherStatus, val relays: List<String>) : SetupStep()
+    /** A fresh status of a personal watcher for this account; confirming announces it in pubkey form. The payto fields as in [Confirm]. */
+    data class PersonalConfirm(
+        val status: WatcherStatus, val relays: List<String>,
+        val paytoConflict: String? = null, val replacePayto: Boolean = true, val paytoPending: Boolean = false,
+    ) : SetupStep()
     data object Registering : SetupStep()
-    /** [amountsHidden]: the published payment info hides tip amounts (protocol 0.5). */
-    data class Done(val address: String, val restoreHeight: Long?, val amountsHidden: Boolean = false) : SetupStep()
+    /**
+     * [amountsHidden]: the published payment info hides tip amounts (protocol 0.5).
+     * [paytoFailed]: the setup is complete, but the own payto entry could not be set to [address] (spec payto §4).
+     */
+    data class Done(val address: String, val restoreHeight: Long?, val amountsHidden: Boolean = false, val paytoFailed: Boolean = false) : SetupStep()
 }
 
 data class SetupState(
@@ -96,12 +119,16 @@ data class SetupState(
 )
 
 /**
+ * Spec payto §4: without a setup on this device the setup starts with one address ([SetupStep.Address]);
+ * the watcher is the upgrade ([upgrade] starts there).
  * Spec 6: watcher selection, path A (new tip wallet: keys → 25 words → verify three → register)
  * and path B (existing wallet: address + view key checked locally → warning → register).
  * The spend key never leaves this class and is wiped once the registration finished or failed.
  */
 class MoneroSetupController(
     intro: Boolean,
+    /** Opens the watcher step directly (the receipts upgrade), even without a setup on this device. */
+    upgrade: Boolean = false,
     private val gateway: WatcherGateway,
     private val tips: TipsRepository,
     private val settings: TipSettingsStore,
@@ -119,7 +146,10 @@ class MoneroSetupController(
     /** Debug-only timing of the `/v1/info` calls (spec §12); the ViewModel passes a logcat writer in debug builds. */
     private val log: (String) -> Unit = {},
 ) {
-    private val _state = MutableStateFlow(SetupState(intro = intro))
+    private val startsAtWatcher = upgrade
+    private val _state = MutableStateFlow(
+        SetupState(step = if (upgrade) SetupStep.Watcher(Presets.DEFAULT_WATCHER, loading = true) else SetupStep.Address("", loading = true), intro = intro),
+    )
     val state: StateFlow<SetupState> = _state.asStateFlow()
 
     private var existing: MoneroSetup? = null
@@ -141,22 +171,127 @@ class MoneroSetupController(
     /** The start phase with the announced lookup; "Later" and "Keep it" stop it. */
     private var starting: Job? = null
     private var infoLogged = false
+    /** The watcher step was opened by the announced lookup, not by the user. */
+    private var watcherForAnnounced = false
+    /** The own payto address the field was prefilled with; that input still counts as untouched. */
+    private var prefilled: String? = null
+    /** Spec payto §4: the own payto as last read or written; an unknown or failed read is not kept and asked again. */
+    private var knownPayto: OwnPayto.Known? = null
+    /** The one running read of the own payto; prefill, prefetch and the conflict check share it. */
+    private var paytoRead: Deferred<OwnPayto?>? = null
+    /**
+     * Whether the shown payto question rests on a known own payto. When not (relays incomplete), the write
+     * re-reads first and never replaces a differing address nobody was asked about.
+     */
+    private var paytoAsked = false
+    /** [paytoAsked] of the setup that ended in [SetupStep.Done], for [retryPayto]. */
+    private var retryAsked = false
+    private var paytoRetry: Job? = null
 
     fun start() {
         starting = scope.launch {
             existing = settings.setup.first()
             // a personal setup has no URL: switching to HTTP starts at the default watcher
             url = existing?.watcherUrl?.takeIf { it.isNotEmpty() } ?: Presets.DEFAULT_WATCHER
-            // the step is usable at once; the announced lookup below runs behind it
-            _state.update { it.copy(step = SetupStep.Watcher(url)) }
-            prefetch()
+            // the step is usable at once; the lookups below run behind it
+            if (existing != null || startsAtWatcher) {
+                _state.update { it.copy(step = SetupStep.Watcher(url)) }
+                prefetch()
+                // ready before the confirm step asks whether the tip address replaces it
+                paytoLookup()
+            } else {
+                _state.update { it.copy(step = SetupStep.Address("")) }
+                launch { prefillOwnPayto() }
+            }
             if (existing != null) return@launch
             // set up on another device or before a reinstall: the watcher step offers to keep that tip address
             val asked = System.nanoTime()
             val announced = announcedAddress()
             log("announced tip address (relays): ${(System.nanoTime() - asked) / 1_000_000} ms")
-            if (announced != null) _state.update { it.copy(announced = announced) }
+            if (announced == null) return@launch
+            var switched = false
+            _state.update { s ->
+                val step = s.step
+                // only an untouched field: typed or pasted input and a shown error stay
+                switched = step is SetupStep.Address && !step.loading && s.error == null && (step.input.isEmpty() || step.input == prefilled)
+                if (switched) s.copy(step = SetupStep.Watcher(url), announced = announced, error = null) else s.copy(announced = announced)
+            }
+            if (switched) {
+                watcherForAnnounced = true
+                prefetch()
+            }
         }
+    }
+
+    /**
+     * Spec payto §4: the own payto entry fills the address field; in the intro it counts as set up and closes it
+     * (also over a watcher step the announced lookup opened). A failed or unknown read leaves the field empty.
+     */
+    private suspend fun prefillOwnPayto() {
+        val address = ownPaytoAddress() ?: return
+        val s = _state.value
+        val step = s.step
+        val untouched = (step is SetupStep.Address && !step.loading) || (step is SetupStep.Watcher && watcherForAnnounced && !step.loading)
+        if (s.intro && untouched) {
+            runCatching { settings.setOnboardingSeen() }
+            _state.update { it.copy(finished = true) }
+            return
+        }
+        _state.update { cur ->
+            val st = cur.step as? SetupStep.Address
+            if (st != null && !st.loading && st.input.isEmpty()) {
+                prefilled = address
+                cur.copy(step = st.copy(input = address, known = true))
+            } else cur
+        }
+    }
+
+    /**
+     * Spec payto §4: checks the address locally (mainnet primary or subaddress), then writes it as the own payto.
+     * Only a published entry finishes the step.
+     */
+    fun publishAddress() {
+        val step = _state.value.step as? SetupStep.Address ?: return
+        if (step.loading) return
+        val trimmed = step.input.trim()
+        val net = try {
+            Address.checkReceiving(trimmed)
+        } catch (e: AddressException.IntegratedNotAllowed) {
+            return fail(ERR_ADDRESS_INTEGRATED)
+        } catch (e: AddressException) {
+            return fail(ERR_ADDRESS)
+        }
+        if (net != Network.MAINNET) return fail(ERR_MAINNET)
+        _state.update { it.copy(step = step.copy(loading = true), error = null) }
+        scope.launch {
+            try {
+                when (tips.setOwnPayto(trimmed)) {
+                    PaytoWrite.Published -> {
+                        knownPayto = OwnPayto.Known(trimmed)
+                        settings.setOnboardingSeen()
+                        _state.update { it.copy(step = SetupStep.AddressDone(trimmed), error = null) }
+                    }
+                    PaytoWrite.NotPublished -> _state.update { it.copy(step = step, error = ERR_NOT_PUBLISHED) }
+                    PaytoWrite.Unknown -> _state.update { it.copy(step = step, error = ERR_RELAYS_UNKNOWN) }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(step = step, error = e.userMessage()) }
+            }
+        }
+    }
+
+    /** "No Monero wallet yet?": today's watcher path with a new tip wallet. */
+    fun createWallet() = openWatcher()
+
+    /** From [SetupStep.AddressDone]: the receipts upgrade, the watcher setup. */
+    fun upgrade() = openWatcher()
+
+    private fun openWatcher() {
+        watcherForAnnounced = false
+        _state.update { it.copy(step = SetupStep.Watcher(url), error = null) }
+        prefetch()
     }
 
     /** Spec §12: a valid https (or loopback http) URL, normalized as the check uses it; null otherwise. */
@@ -213,6 +348,7 @@ class MoneroSetupController(
     }
 
     fun setWatcherUrl(input: String) {
+        watcherForAnnounced = false
         url = input.trim()
         // spec §12: an edited URL invalidates the prefetched result
         if (prefetchUrl != null && checkedUrl(url) != prefetchUrl) dropPrefetch()
@@ -249,6 +385,7 @@ class MoneroSetupController(
             return
         }
         if ((_state.value.step as? SetupStep.Watcher)?.checking == true) return
+        watcherForAnnounced = false
         url = target
         // a prefetch is used once: a later check asks the watcher again
         val prefetched = prefetch?.takeIf { prefetchUrl == target }
@@ -317,17 +454,42 @@ class MoneroSetupController(
             _state.update { it.copy(step = SetupStep.Verify(positions, wrong = true)) }
             return
         }
-        pendingAddress = k.address(network)
+        val address = k.address(network)
+        pendingAddress = address
         pendingViewKey = k.viewSecret.copyOf()
-        register(restoreHeight = loaded.height)
+        // spec payto §4: a different own payto is asked about before anything is published; the spinner shows meanwhile
+        _state.update { it.copy(step = SetupStep.Registering, error = null) }
+        scope.launch {
+            val conflict = paytoConflict(address.encode())
+            if (_state.value.step != SetupStep.Registering) return@launch
+            if (conflict == null) register(restoreHeight = loaded.height)
+            else _state.update { it.copy(step = SetupStep.Confirm(address.encode(), loaded.height, hidesAmounts(), conflict), error = null) }
+        }
     }
 
+    /** Spec payto §4: an own payto primary address (one the watcher can watch) fills the address field. */
     fun startExisting() {
         keys = null
         _state.update { it.copy(step = SetupStep.Existing("", ""), error = null) }
+        scope.launch {
+            val own = ownPaytoAddress() ?: return@launch
+            if (runCatching { Address.parse(own) }.getOrNull()?.network != network) return@launch
+            _state.update { s ->
+                val st = s.step as? SetupStep.Existing
+                if (st != null && st.address.isEmpty()) s.copy(step = st.copy(address = own)) else s
+            }
+        }
     }
 
-    fun setAddress(input: String) = _state.update { s -> s.copy(step = (s.step as? SetupStep.Existing)?.copy(address = input) ?: s.step, error = null) }
+    /** The address field of [SetupStep.Address] (locked while publishing) or [SetupStep.Existing]. */
+    fun setAddress(input: String) = _state.update { s ->
+        val step = when (val st = s.step) {
+            is SetupStep.Existing -> st.copy(address = input)
+            is SetupStep.Address -> if (st.loading) st else st.copy(input = input)
+            else -> st
+        }
+        s.copy(step = step, error = null)
+    }
 
     fun setViewKey(input: String) = _state.update { s -> s.copy(step = (s.step as? SetupStep.Existing)?.copy(viewKey = input) ?: s.step, error = null) }
 
@@ -350,7 +512,7 @@ class MoneroSetupController(
         if (!MoneroKeys.viewKeyMatches(address, viewKey)) return fail(ERR_VIEW_KEY_MISMATCH)
         pendingAddress = address
         pendingViewKey = viewKey
-        _state.update { it.copy(step = SetupStep.Confirm(address.encode(), null, hidesAmounts()), error = null) }
+        toConfirm(address.encode())
     }
 
     /** Spec 6.5: move the stored wallet to the newly chosen watcher. */
@@ -363,10 +525,33 @@ class MoneroSetupController(
         if (address.network != network) return fail(ERR_NETWORK)
         pendingAddress = address
         pendingViewKey = hex.hexToBytes()
-        _state.update { it.copy(step = SetupStep.Confirm(address.encode(), null, hidesAmounts()), error = null) }
+        toConfirm(address.encode())
+    }
+
+    /**
+     * Path B and the reuse: the confirm step at once. The payto question (spec payto §4) follows when the own
+     * payto is read; until then confirming waits.
+     */
+    private fun toConfirm(address: String) {
+        val known = knownPayto
+        if (known != null) {
+            paytoAsked = true
+            _state.update { it.copy(step = SetupStep.Confirm(address, null, hidesAmounts(), known.address?.takeIf { a -> a != address }), error = null) }
+            return
+        }
+        val pending = SetupStep.Confirm(address, null, hidesAmounts(), paytoPending = true)
+        _state.update { it.copy(step = pending, error = null) }
+        scope.launch {
+            val conflict = paytoConflict(address)
+            _state.update { s ->
+                val st = s.step as? SetupStep.Confirm
+                if (st != null && st.paytoPending && st.address == address) s.copy(step = st.copy(paytoConflict = conflict, paytoPending = false)) else s
+            }
+        }
     }
 
     fun startPersonal() {
+        watcherForAnnounced = false
         _state.update { it.copy(step = SetupStep.Personal("", ""), error = null) }
     }
 
@@ -413,7 +598,18 @@ class MoneroSetupController(
                 personalProfile = profile
                 personalStatus = status
                 network = net
-                _state.update { it.copy(step = SetupStep.PersonalConfirm(status, profile.relays), error = null) }
+                val tip = status.address.encode()
+                val known = knownPayto
+                paytoAsked = known != null
+                _state.update { it.copy(step = SetupStep.PersonalConfirm(status, profile.relays, known?.address?.takeIf { a -> a != tip }, paytoPending = known == null), error = null) }
+                // outside the check: cancelling or leaving the check must not leave the question pending
+                if (known == null) scope.launch {
+                    val conflict = paytoConflict(tip)
+                    _state.update { s ->
+                        val st = s.step as? SetupStep.PersonalConfirm
+                        if (st != null && st.paytoPending && st.status == status) s.copy(step = st.copy(paytoConflict = conflict, paytoPending = false)) else s
+                    }
+                }
             } catch (e: TimeoutCancellationException) {
                 _state.update { if (current(it)) it.copy(step = back.copy(retry = true), error = ERR_TIMEOUT) else it }
             } catch (e: CancellationException) {
@@ -434,6 +630,8 @@ class MoneroSetupController(
      */
     fun confirmPersonal() {
         val step = _state.value.step as? SetupStep.PersonalConfirm ?: return
+        if (step.paytoPending) return
+        val asked = paytoAsked
         val profile = personalProfile ?: return
         val status = personalStatus ?: return
         _state.update { it.copy(step = SetupStep.Registering, error = null) }
@@ -462,7 +660,10 @@ class MoneroSetupController(
                     // receipts may arrive later via the watcher's relays; the setup itself is complete
                 }
                 existing = settings.setup.first()
-                _state.update { it.copy(step = SetupStep.Done(status.address.encode(), null, hidden), error = null) }
+                val address = status.address.encode()
+                retryAsked = asked
+                val paytoFailed = (step.paytoConflict == null || step.replacePayto) && !publishPayto(address, asked)
+                _state.update { it.copy(step = SetupStep.Done(address, null, hidden, paytoFailed), error = null) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: SetupFailure) {
@@ -474,7 +675,11 @@ class MoneroSetupController(
     }
 
     /** Path B, or a retry after a failed registration: a path-A retry keeps the restore height. */
-    fun confirm() = register(restoreHeight = (_state.value.step as? SetupStep.Confirm)?.restoreHeight)
+    fun confirm() {
+        val step = _state.value.step as? SetupStep.Confirm ?: return
+        if (step.paytoPending) return
+        register(restoreHeight = step.restoreHeight)
+    }
 
     fun skip() {
         starting?.cancel()
@@ -490,6 +695,83 @@ class MoneroSetupController(
 
     fun finish() = _state.update { it.copy(finished = true) }
 
+    /** Spec payto §4: the answer to "replace your public Monero address?" on the confirm steps. */
+    fun setReplacePayto(value: Boolean) = _state.update { s ->
+        val step = when (val st = s.step) {
+            is SetupStep.Confirm -> st.copy(replacePayto = value)
+            is SetupStep.PersonalConfirm -> st.copy(replacePayto = value)
+            else -> st
+        }
+        s.copy(step = step)
+    }
+
+    /** Spec payto §4: after a payto write failed on [SetupStep.Done], tries only that write again. */
+    fun retryPayto() {
+        val step = _state.value.step as? SetupStep.Done ?: return
+        if (!step.paytoFailed || paytoRetry?.isActive == true) return
+        paytoRetry = scope.launch {
+            val failed = !publishPayto(step.address, retryAsked)
+            _state.update { s -> (s.step as? SetupStep.Done)?.let { s.copy(step = it.copy(paytoFailed = failed)) } ?: s }
+        }
+    }
+
+    /**
+     * The own payto: the known answer, else the running read, else a new one. A known answer is kept for this
+     * setup; an unknown or failed read (null) is not, the next caller reads again.
+     */
+    private fun paytoLookup(): Deferred<OwnPayto?> {
+        knownPayto?.let { return CompletableDeferred(it) }
+        paytoRead?.takeIf { it.isActive }?.let { return it }
+        return scope.async { readOwnPayto() }.also { paytoRead = it }
+    }
+
+    private suspend fun readOwnPayto(): OwnPayto? {
+        val own = try {
+            tips.ownPayto()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return null
+        }
+        if (own is OwnPayto.Known) knownPayto = own
+        return own
+    }
+
+    /** The own payto address (null: none, or not known). */
+    private suspend fun ownPaytoAddress(): String? = (paytoLookup().await() as? OwnPayto.Known)?.address
+
+    /**
+     * The own payto address when it differs from the tip address [address]: then the user is asked once.
+     * Records in [paytoAsked] whether that answer rests on a known own payto.
+     */
+    private suspend fun paytoConflict(address: String): String? {
+        val own = paytoLookup().await() as? OwnPayto.Known
+        paytoAsked = own != null
+        return own?.address?.takeIf { it != address }
+    }
+
+    /**
+     * Spec payto §4: the tip address becomes the own payto too. False when that failed; the setup itself stands.
+     * Without a known own payto at the question ([asked] false), a fresh read comes first: a differing address
+     * nobody was asked about is never replaced.
+     */
+    private suspend fun publishPayto(address: String, asked: Boolean): Boolean {
+        val written = try {
+            if (!asked) {
+                val now = tips.ownPayto() as? OwnPayto.Known ?: return false
+                knownPayto = now
+                if (now.address != null && now.address != address) return false
+            }
+            tips.setOwnPayto(address) == PaytoWrite.Published
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            false
+        }
+        if (written) knownPayto = OwnPayto.Known(address)
+        return written
+    }
+
     /** Wipes key material of an abandoned setup (the screen's ViewModel is cleared). */
     fun clear() = wipe()
 
@@ -499,6 +781,10 @@ class MoneroSetupController(
         val viewKey = pendingViewKey ?: return
         val loaded = info ?: return
         val hidden = hidesAmounts(loaded.protocol)
+        // the answer to the payto question survives a failed attempt
+        val shown = _state.value.step as? SetupStep.Confirm
+        val back = SetupStep.Confirm(address.encode(), restoreHeight, hidden, shown?.paytoConflict, shown?.replacePayto ?: true)
+        val asked = paytoAsked
         _state.update { it.copy(step = SetupStep.Registering, error = null) }
         scope.launch {
             try {
@@ -535,13 +821,16 @@ class MoneroSetupController(
                 }
                 existing = settings.setup.first()
                 wipe()
-                _state.update { it.copy(step = SetupStep.Done(address.encode(), restoreHeight, hidden), error = null) }
+                // spec payto §4: after the payment info is out; a failure here is a warning, never a rollback
+                retryAsked = asked
+                val paytoFailed = (back.paytoConflict == null || back.replacePayto) && !publishPayto(back.address, asked)
+                _state.update { it.copy(step = SetupStep.Done(back.address, restoreHeight, hidden, paytoFailed), error = null) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: SetupFailure) {
-                _state.update { it.copy(step = SetupStep.Confirm(address.encode(), restoreHeight, hidden), error = e.text) }
+                _state.update { it.copy(step = back, error = e.text) }
             } catch (e: Exception) {
-                _state.update { it.copy(step = SetupStep.Confirm(address.encode(), restoreHeight, hidden), error = e.userMessage()) }
+                _state.update { it.copy(step = back, error = e.userMessage()) }
             }
         }
     }
@@ -610,11 +899,15 @@ class MoneroSetupController(
         val ERR_WATCHER_NETWORK = uiText(R.string.setup_err_watcher_network)
         val ERR_SUBADDRESS = uiText(R.string.setup_err_subaddress)
         val ERR_INTEGRATED = uiText(R.string.setup_err_integrated)
+        /** The Address step takes subaddresses too, so its message must not ask for the primary address. */
+        val ERR_ADDRESS_INTEGRATED = uiText(R.string.setup_err_address_integrated)
         val ERR_ADDRESS = uiText(R.string.setup_err_address)
         val ERR_NETWORK = uiText(R.string.setup_err_network)
         val ERR_VIEW_KEY_FORMAT = uiText(R.string.setup_err_view_key_format)
         val ERR_VIEW_KEY_MISMATCH = uiText(R.string.setup_err_view_key_mismatch)
         val ERR_NOT_PUBLISHED = uiText(R.string.setup_err_not_published)
+        val ERR_MAINNET = uiText(R.string.setup_err_mainnet)
+        val ERR_RELAYS_UNKNOWN = uiText(R.string.setup_err_relays_unknown)
         val ERR_PERSONAL_INPUT = uiText(R.string.setup_personal_err_input)
         val ERR_PERSONAL_RELAY = uiText(R.string.setup_personal_err_relay)
         val ERR_PERSONAL_NOT_FOUND = uiText(R.string.setup_personal_err_not_found)

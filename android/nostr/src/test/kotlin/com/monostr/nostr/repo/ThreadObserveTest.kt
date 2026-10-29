@@ -426,4 +426,30 @@ class ThreadObserveTest {
             }
         }
     }
+
+    @Test
+    fun `a comment under an article opens with the article slot, and its siblings are no replies`() = runTest {
+        val articleId = "d".repeat(64)
+        val coordinate = "30023:${alice.publicKey().toHex()}:post"
+        fun top(text: String, keys: Keys) = EventBuilder(Kind(1111u), text).tags(
+            listOf(
+                listOf("A", coordinate), listOf("E", articleId), listOf("K", "30023"), listOf("P", alice.publicKey().toHex()),
+                listOf("a", coordinate), listOf("e", articleId), listOf("k", "30023"), listOf("p", alice.publicKey().toHex()),
+            ).map { Tag.parse(it) },
+        ).customCreatedAt(Timestamp.fromSecs((clock++).toULong())).signWithKeys(keys)
+        val mine = top("mine", bob)
+        val sibling = top("sibling", alice)
+        SilentWsRelay(answerEose = true).use { relay ->
+            val e = connectedEngine(dir, relay)
+            try {
+                e.save(mine); e.save(sibling)
+                val views = NostrThreadRepository(e).observe(mine.hex()).untilFirst { it.repliesFetched }
+                val first = views.first()
+                assertEquals(listOf<Slot>(Slot.Article(com.monostr.nostr.model.AddressRef(30023, alice.publicKey().toHex(), "post"))), first.ancestors)
+                assertTrue(views.last().replies.isEmpty(), "replies: ${views.last().replies.map { it.content }}")
+            } finally {
+                e.close()
+            }
+        }
+    }
 }

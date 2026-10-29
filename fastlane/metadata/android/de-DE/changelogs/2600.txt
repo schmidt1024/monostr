@@ -1,0 +1,7 @@
+• Videos bis 2 Minuten posten; das Handy verkleinert sie, ohne Standortdaten
+• Entdecken: kuratierte Listen mit Leuten zum Folgen
+• Link-Karten zeigen Titel und Seite auf dem Bild; ein Link am Ende verschwindet aus dem Text
+• Listen per Ziehen sortieren; angeheftete Tabs folgen
+• Drei Bilder als drei Quadrate, ab fünf mit «+N»
+• Antworten aus dem Fediverse (NIP-22) erscheinen in Threads und Mitteilungen
+• Fixes: eigene Antwort sofort sichtbar, Following-Zahl sofort

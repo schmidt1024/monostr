@@ -63,7 +63,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.monostr.app.R
@@ -346,13 +348,15 @@ class SettingsViewModel @Inject constructor(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(onBack: () -> Unit, onMoneroSetup: () -> Unit, onSupport: () -> Unit = {}, onAbout: () -> Unit = {}, onMuted: () -> Unit = {}, onShowKey: () -> Unit = {}, vm: SettingsViewModel = hiltViewModel()) {
+fun SettingsScreen(onBack: () -> Unit, onMoneroSetup: () -> Unit, onMoneroUpgrade: () -> Unit = {}, onSupport: () -> Unit = {}, onAbout: () -> Unit = {}, onMuted: () -> Unit = {}, onShowKey: () -> Unit = {}, vm: SettingsViewModel = hiltViewModel()) {
     val state by vm.controller.state.collectAsStateWithLifecycle()
     val monero by vm.monero.state.collectAsStateWithLifecycle()
     val live by vm.relayStates.collectAsStateWithLifecycle(initialValue = emptyList<RelayInfo>())
     val snackbar = remember { SnackbarHostState() }
     val moneroMessage = monero.message?.asString()
     LaunchedEffect(moneroMessage) { moneroMessage?.let { snackbar.showSnackbar(it); vm.monero.clearMessage() } }
+    // back from the setup screen: an address-only setup, a change or a removal there leaves the stored setup alone
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.monero.resumed() }
     val notice by vm.notice.collectAsStateWithLifecycle()
     val noticeText = notice?.asString()
     LaunchedEffect(noticeText) { noticeText?.let { snackbar.showSnackbar(it); vm.clearNotice() } }
@@ -444,7 +448,26 @@ fun SettingsScreen(onBack: () -> Unit, onMoneroSetup: () -> Unit, onSupport: () 
             Spacer(Modifier.height(24.dp))
             Text(stringResource(R.string.settings_monero), style = MaterialTheme.typography.titleMedium)
             val setup = monero.setup
-            if (setup == null) {
+            val payto = monero.paytoOnly
+            if (setup == null && payto != null) {
+                val copied = stringResource(R.string.note_copied)
+                val context = LocalContext.current
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.settings_monero_payto, payto.take(8), payto.takeLast(6)), style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f, fill = false).testTag("settings-monero-payto"))
+                    TextButton(onClick = { copyToClipboard(context, payto, copied) }, modifier = Modifier.testTag("settings-monero-copy-payto")) { Text(stringResource(R.string.action_copy_address)) }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = onMoneroSetup, modifier = Modifier.testTag("settings-monero-payto-change")) { Text(stringResource(R.string.settings_monero_payto_change)) }
+                    OutlinedButton(onClick = vm.monero::removePayto, enabled = !monero.busy, modifier = Modifier.testTag("settings-monero-payto-remove")) { Text(stringResource(R.string.settings_monero_payto_remove)) }
+                }
+                Card(Modifier.fillMaxWidth().testTag("settings-monero-upgrade")) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(stringResource(R.string.setup_upgrade_title), style = MaterialTheme.typography.titleSmall)
+                        Text(stringResource(R.string.setup_upgrade_text), style = MaterialTheme.typography.bodySmall)
+                        OutlinedButton(onClick = onMoneroUpgrade, modifier = Modifier.fillMaxWidth().testTag("settings-monero-upgrade-action")) { Text(stringResource(R.string.setup_upgrade_action)) }
+                    }
+                }
+            } else if (setup == null) {
                 val announced = monero.announced
                 if (announced != null) Text(stringResource(R.string.settings_monero_announced, announced.take(8), announced.takeLast(6)), style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("settings-monero-announced"))
                 else Text(stringResource(R.string.settings_monero_not_set_up), style = MaterialTheme.typography.bodySmall)

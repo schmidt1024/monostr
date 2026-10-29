@@ -29,6 +29,11 @@ interface PublishRepository {
     suspend fun react(note: Note, content: String): PublishResult
     suspend fun repost(note: Note): PublishResult
     /**
+     * NIP-22 comment (kind 1111) on the article [article] (a kind 30023 note): top level, or a reply to the comment
+     * [parent]. Tags and attachments as in [reply].
+     */
+    suspend fun comment(text: String, article: Note, parent: Note? = null, attachments: List<NoteAttachment> = emptyList(), sensitive: Boolean = false): PublishResult
+    /**
      * Unlike (kind 7) or undo repost (kind 6): a NIP-09 request naming every own event of [kind] that targets
      * [noteId]. Stored locally only once a relay accepted it, like [delete]. Null when the database holds none.
      */
@@ -114,13 +119,33 @@ class NostrPublishRepository(
 
     override suspend fun react(note: Note, content: String): PublishResult {
         val target = requireNotNull(engine.eventById(note.id)) { NOTE_NOT_IN_DATABASE }
+        articleTags(note)?.let { return engine.signAndSend(EventBuilder(Kind(7u), content).tags(it.map { t -> Tag.parse(t) } + viaTag())) }
         return engine.signAndSend(EventBuilder.reaction(target, content).tags(viaTag()))
     }
 
     override suspend fun repost(note: Note): PublishResult {
         val target = requireNotNull(engine.eventById(note.id)) { NOTE_NOT_IN_DATABASE }
+        // NIP-18: a repost of anything but kind 1 is kind 16. An article can be far larger than a relay takes in one event
+        // (relay.monostr.com: 64 KiB), so the content stays empty and the e and a tags carry a relay hint instead (final review I2)
+        articleTags(note, relayHint())?.let { return engine.signAndSend(EventBuilder(Kind(16u), "").tags(it.map { t -> Tag.parse(t) } + viaTag())) }
         return engine.signAndSend(EventBuilder.repost(target, null).tags(viaTag()))
     }
+
+    override suspend fun comment(text: String, article: Note, parent: Note?, attachments: List<NoteAttachment>, sensitive: Boolean): PublishResult {
+        val ref = requireNotNull(article.addressRef?.takeIf { article.kind == ARTICLE_KIND }) { "comment needs an article" }
+        val root = listOf(listOf("A", ref.coordinate), listOf("E", article.id), listOf("K", ARTICLE_KIND.toString()), listOf("P", article.author))
+        val scope = if (parent == null) {
+            root + listOf(listOf("a", ref.coordinate), listOf("e", article.id), listOf("k", ARTICLE_KIND.toString()), listOf("p", article.author))
+        } else {
+            // the parent's own kind: a comment (1111) or an old-style kind 1 reply under the article (final review I6)
+            root + listOf(listOf("e", parent.id), listOf("k", parent.kind.toString()), listOf("p", parent.author))
+        }
+        val mentions = MentionTags.pubkeys(text).map { listOf("p", it) }
+        return engine.signAndSend(
+            withPow(EventBuilder(Kind(COMMENT_KIND.toUShort()), NoteAttachment.content(text, attachments)).tags((scope + mentions).distinct().map { Tag.parse(it) } + HashtagTags.from(text) + attachmentTags(attachments, sensitive) + viaTag())),
+        )
+    }
+
 
     override suspend fun withdraw(noteId: String, kind: Int): PublishResult? {
         val tags = withdrawTags(noteId, kind) ?: return null
@@ -168,6 +193,18 @@ class NostrPublishRepository(
     // signAndPublish: stored only after a relay OK, so a refused list never gets adopted by DmSync (spec 11)
     override suspend fun dmRelayList(relays: List<String>): PublishResult =
         engine.signAndPublish(EventBuilder(Kind(10050u), "").tags(relays.map { Tag.parse(listOf("relay", it.trim().trimEnd('/'))) }))
+}
+
+private const val ARTICLE_KIND = 30023
+private const val COMMENT_KIND = 1111
+
+/**
+ * Reaction and repost tags for an article (kind 30023): shown event, coordinate, author, kind; null for any other note.
+ * [hint]: a relay that has the article, on the `e` and `a` tags (NIP-18 for a repost without content).
+ */
+internal fun articleTags(note: Note, hint: String? = null): List<List<String>>? {
+    val ref = note.addressRef?.takeIf { note.kind == ARTICLE_KIND } ?: return null
+    return listOf(listOfNotNull("e", note.id, hint), listOfNotNull("a", ref.coordinate, hint), listOf("p", note.author), listOf("k", ARTICLE_KIND.toString()))
 }
 
 /** The content of a plain like (NIP-25). */

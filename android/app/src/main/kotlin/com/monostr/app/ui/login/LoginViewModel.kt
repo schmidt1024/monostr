@@ -6,6 +6,7 @@ import com.monostr.app.R
 import com.monostr.app.ui.common.UiText
 import com.monostr.app.ui.common.uiText
 import com.monostr.nostr.LocalSigner
+import com.monostr.nostr.Nip49
 import com.monostr.nostr.nip55.Nip55
 import com.monostr.nostr.nip55.SignerBridge
 import kotlinx.coroutines.CancellationException
@@ -15,7 +16,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-data class LoginUiState(val amberAvailable: Boolean = false, val busy: Boolean = false, val error: UiText? = null, val notice: UiText? = null)
+data class LoginUiState(val amberAvailable: Boolean = false, val busy: Boolean = false, val error: UiText? = null, val passwordError: UiText? = null, val notice: UiText? = null)
 
 /** What the ViewModel needs from the session; kept small so tests can fake it. */
 interface LoginActions {
@@ -33,7 +34,20 @@ class LoginController(
     private val _state = MutableStateFlow(LoginUiState(amberAvailable = amberAvailable, notice = restoreMessage))
     val state: StateFlow<LoginUiState> = _state.asStateFlow()
 
-    suspend fun loginWithSecret(input: String) {
+    /** [password] only matters for an ncryptsec (NIP-49, spec 2026-10-29 ncryptsec); it is passed on unchanged. */
+    suspend fun loginWithSecret(input: String, password: String = "") {
+        if (Nip49.isNcryptsec(input)) {
+            // decrypt inside the busy state so a second tap cannot start a second scrypt run
+            run(_state) {
+                when (val d = Nip49.decrypt(input, password)) {
+                    is Nip49.Decrypted.Key -> actions.loginLocal(LocalSigner(d.secretHex))
+                    Nip49.Decrypted.WrongPassword -> throw LoginFailure(null, uiText(R.string.login_error_wrong_password))
+                    Nip49.Decrypted.Invalid -> throw LoginFailure(uiText(R.string.login_error_invalid_key))
+                    Nip49.Decrypted.TooStrong -> throw LoginFailure(uiText(R.string.login_error_too_strong))
+                }
+            }
+            return
+        }
         val signer = LocalSigner.parseOrNull(input)
         if (signer == null) {
             _state.update { it.copy(error = uiText(R.string.login_error_invalid_key)) }
@@ -54,7 +68,7 @@ class LoginController(
     }
 
     private suspend fun run(state: MutableStateFlow<LoginUiState>, block: suspend () -> Unit) {
-        state.update { it.copy(busy = true, error = null, notice = null) }
+        state.update { it.copy(busy = true, error = null, passwordError = null, notice = null) }
         try {
             block()
             state.update { it.copy(busy = false) }
@@ -62,7 +76,7 @@ class LoginController(
             state.update { it.copy(busy = false) }
             throw e
         } catch (e: LoginFailure) {
-            state.update { it.copy(busy = false, error = e.userText) }
+            state.update { it.copy(busy = false, error = e.userText, passwordError = e.passwordText) }
         } catch (e: Exception) {
             // engine or Keystore failure: never show the exception text
             state.update { it.copy(busy = false, error = uiText(R.string.login_error_failed)) }
@@ -70,5 +84,5 @@ class LoginController(
     }
 
     /** A login failure with a fixed text for the UI. */
-    private class LoginFailure(val userText: UiText) : Exception()
+    private class LoginFailure(val userText: UiText?, val passwordText: UiText? = null) : Exception()
 }

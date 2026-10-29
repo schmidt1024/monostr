@@ -17,6 +17,8 @@ import com.monostr.tips.watcher.WatcherInfo
 import com.monostr.tips.WatcherStatus
 import com.monostr.app.data.Presets
 import com.monostr.app.ui.common.UiText
+import com.monostr.nostr.repo.OwnPayto
+import com.monostr.nostr.repo.PaytoWrite
 import rust.nostr.sdk.Keys
 import rust.nostr.sdk.Nip19Profile
 import rust.nostr.sdk.PublicKey
@@ -55,8 +57,8 @@ class MoneroSetupControllerTest {
         val relays: MutableList<List<String>> = ArrayList(),
     )
 
-    private fun TestScope.controller(rig: Rig, intro: Boolean = false) = MoneroSetupController(
-        intro = intro, gateway = rig.gateway, tips = rig.tips, settings = rig.settings, secrets = rig.secrets,
+    private fun TestScope.controller(rig: Rig, intro: Boolean = false, upgrade: Boolean = false) = MoneroSetupController(
+        intro = intro, upgrade = upgrade, gateway = rig.gateway, tips = rig.tips, settings = rig.settings, secrets = rig.secrets,
         relays = { rig.relays += it }, scope = eager(), selfPubkey = self, keyGen = { rig.keys }, random = Random(7), now = { NOW },
         formatTime = { "t$it" },
     ).also { it.start(); advanceUntilIdle() }
@@ -84,6 +86,9 @@ class MoneroSetupControllerTest {
         val expectedViewKey = rig.keys.viewSecret.toHex()
         val c = controller(rig, intro = true)
         assertTrue(c.state.value.intro)
+        assertEquals(SetupStep.Address(""), c.state.value.step)
+        // "No Monero wallet yet?" leads into the watcher path
+        c.createWallet()
         assertEquals(SetupStep.Watcher("https://watcher.monostr.com"), c.state.value.step)
         c.loadDefaultWatcher()
         advanceUntilIdle()
@@ -383,7 +388,7 @@ class MoneroSetupControllerTest {
     fun `personal watcher from nprofile is announced in pubkey form`() = runTest {
         val rig = Rig()
         rig.tips.statuses[watcherHex] = status()
-        val c = controller(rig)
+        val c = controller(rig, upgrade = true)
         val input = nprofile("wss://w.example")
         loadPersonal(c, input)
         assertNull(c.state.value.error)
@@ -728,7 +733,7 @@ class MoneroSetupControllerTest {
     @Test
     fun `a finished prefetch is reused and the next step appears at once`() = runTest {
         val rig = Rig()
-        val c = controller(rig)
+        val c = controller(rig, upgrade = true)
         assertEquals(listOf(Presets.DEFAULT_WATCHER), rig.gateway.infoUrls, "the prefilled watcher is prefetched")
         c.loadWatcher()
         assertTrue(c.state.value.step is SetupStep.Choose, "step ${c.state.value.step}")
@@ -752,7 +757,7 @@ class MoneroSetupControllerTest {
     @Test
     fun `editing the url cancels the prefetch`() = runTest {
         val rig = Rig(FakeWatcherGateway().apply { infoGate = kotlinx.coroutines.CompletableDeferred() })
-        val c = controller(rig)
+        val c = controller(rig, upgrade = true)
         c.setWatcherUrl(" ${Presets.DEFAULT_WATCHER} ")
         assertEquals(0, rig.gateway.infoCancelled, "the same url keeps its prefetch")
         c.setWatcherUrl(url)
@@ -767,7 +772,7 @@ class MoneroSetupControllerTest {
     @Test
     fun `a failed prefetch stays silent until the user checks`() = runTest {
         val rig = Rig(FakeWatcherGateway(infoError = WatcherException.Network(IOException("down"))))
-        val c = controller(rig)
+        val c = controller(rig, upgrade = true)
         assertEquals(SetupStep.Watcher(Presets.DEFAULT_WATCHER), c.state.value.step)
         assertNull(c.state.value.error)
         c.loadWatcher()
@@ -790,7 +795,7 @@ class MoneroSetupControllerTest {
     @Test
     fun `a slow check says so after 3 s and times out after 15 s`() = runTest {
         val rig = Rig(FakeWatcherGateway().apply { infoGate = kotlinx.coroutines.CompletableDeferred() })
-        val c = controller(rig)
+        val c = controller(rig, upgrade = true)
         c.setWatcherUrl(url); c.loadWatcher()
         advanceTimeBy(2_999); runCurrent()
         assertEquals(SetupStep.Watcher(url, loading = true, checking = true), c.state.value.step)
@@ -854,8 +859,8 @@ class MoneroSetupControllerTest {
     }
 
     /** Started, but time is not advanced: for the start phase in virtual time. */
-    private fun TestScope.started(rig: Rig, intro: Boolean = false) = MoneroSetupController(
-        intro = intro, gateway = rig.gateway, tips = rig.tips, settings = rig.settings, secrets = rig.secrets,
+    private fun TestScope.started(rig: Rig, intro: Boolean = false, upgrade: Boolean = false) = MoneroSetupController(
+        intro = intro, upgrade = upgrade, gateway = rig.gateway, tips = rig.tips, settings = rig.settings, secrets = rig.secrets,
         relays = { rig.relays += it }, scope = eager(), selfPubkey = self, keyGen = { rig.keys }, random = Random(7), now = { NOW },
         formatTime = { "t$it" },
     ).also { it.start(); runCurrent() }
@@ -865,7 +870,7 @@ class MoneroSetupControllerTest {
         val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
         val announced = MoneroKeys.generate().address(Network.MAINNET)
         val rig = Rig(tips = FakeTips().apply { liveInfos = mapOf(self to PaymentInfo.Enabled(announced, Watcher.Http(url, watcherPk))); liveGate = gate })
-        val c = started(rig, intro = true)
+        val c = started(rig, intro = true, upgrade = true)
         assertEquals(SetupStep.Watcher(Presets.DEFAULT_WATCHER), c.state.value.step, "not loading while the lookup is pending")
         assertEquals(1, rig.tips.liveCalls)
         assertEquals(listOf(Presets.DEFAULT_WATCHER), rig.gateway.infoUrls, "the prefetch does not wait for the lookup")
@@ -893,7 +898,7 @@ class MoneroSetupControllerTest {
         val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
         val announced = MoneroKeys.generate().address(Network.MAINNET)
         val rig = Rig(tips = FakeTips().apply { liveInfos = mapOf(self to PaymentInfo.Enabled(announced, Watcher.Http(url, watcherPk))); liveGate = gate })
-        val c = started(rig, intro = true)
+        val c = started(rig, intro = true, upgrade = true)
         c.loadDefaultWatcher(); runCurrent()
         val choose = c.state.value.step
         assertTrue(choose is SetupStep.Choose, "step $choose")
@@ -917,7 +922,7 @@ class MoneroSetupControllerTest {
     fun `the announced address lookup gives up after 5 s and counts as nothing announced`() = runTest {
         val announced = MoneroKeys.generate().address(Network.MAINNET)
         val rig = Rig(tips = FakeTips().apply { liveInfos = mapOf(self to PaymentInfo.Enabled(announced, Watcher.Http(url, watcherPk))); liveDelayMs = 8_000 })
-        val c = started(rig, intro = true)
+        val c = started(rig, intro = true, upgrade = true)
         assertEquals(SetupStep.Watcher(Presets.DEFAULT_WATCHER), c.state.value.step)
         assertEquals(listOf(Presets.DEFAULT_WATCHER), rig.gateway.infoUrls, "the watcher step starts its prefetch at once")
         advanceTimeBy(5_001); runCurrent()
@@ -966,7 +971,7 @@ class MoneroSetupControllerTest {
     @Test
     fun `later drops the prefetch`() = runTest {
         val rig = Rig(FakeWatcherGateway().apply { infoGate = kotlinx.coroutines.CompletableDeferred() })
-        val c = controller(rig, intro = true)
+        val c = controller(rig, intro = true, upgrade = true)
         c.skip(); runCurrent()
         assertTrue(c.state.value.finished)
         assertEquals(1, rig.gateway.infoCancelled)
@@ -975,13 +980,379 @@ class MoneroSetupControllerTest {
     @Test
     fun `later during a check stops it`() = runTest {
         val rig = Rig(FakeWatcherGateway().apply { infoGate = kotlinx.coroutines.CompletableDeferred() })
-        val c = controller(rig, intro = true)
+        val c = controller(rig, intro = true, upgrade = true)
         c.setWatcherUrl(url); c.loadWatcher()
         c.skip()
         advanceTimeBy(20_000); runCurrent()
         assertTrue(c.state.value.finished)
         assertNull(c.state.value.error, "no timeout after leaving")
         assertEquals(2, rig.gateway.infoCancelled, "prefetch (url edited) and the check")
+    }
+
+    private val sub = "84DbuRJ1PQ4LHj5awNDtBXFDJczqxhujvgpMxmF9uxGNKjChpAUd2YobG8zibKqSyDUUxnavkHLew9YscmTLGYGgJSVxDjL"
+
+    @Test
+    fun startsAtAddressWithoutSetup() = runTest {
+        val rig = Rig()
+        val c = controller(rig)
+        assertEquals(SetupStep.Address(""), c.state.value.step)
+        assertNull(c.state.value.error)
+        assertEquals(0, rig.gateway.infoCalls, "no watcher prefetch for the address step")
+    }
+
+    @Test
+    fun startsAtWatcherWithSetup() = runTest {
+        val rig = Rig()
+        rig.settings.setupState.value = MoneroSetup(MoneroKeys.generate().address(Network.MAINNET).encode(), url, watcherPk, "mainnet", 1)
+        val c = controller(rig)
+        assertEquals(SetupStep.Watcher(url), c.state.value.step)
+    }
+
+    @Test
+    fun startsAtWatcherOnUpgrade() = runTest {
+        val c = controller(Rig(), upgrade = true)
+        assertEquals(SetupStep.Watcher(Presets.DEFAULT_WATCHER), c.state.value.step)
+    }
+
+    @Test
+    fun prefillsOwnPayto() = runTest {
+        val rig = Rig(tips = FakeTips().apply { own = OwnPayto.Known(sub) })
+        val c = controller(rig)
+        assertEquals(SetupStep.Address(sub, known = true), c.state.value.step)
+        assertFalse(c.state.value.finished, "the settings entry stays open")
+    }
+
+    @Test
+    fun publishTrimsAddress() = runTest {
+        val rig = Rig()
+        val c = controller(rig, intro = true)
+        c.setAddress("  $sub \n"); c.publishAddress(); advanceUntilIdle()
+        assertEquals(listOf<String?>(sub), rig.tips.paytoWrites)
+        assertEquals(SetupStep.AddressDone(sub), c.state.value.step)
+        assertNull(c.state.value.error)
+        assertTrue(rig.settings.seenState.value)
+        assertTrue(rig.tips.publishedInfos.isEmpty(), "no payment info without a watcher")
+        assertTrue(rig.gateway.registered.isEmpty())
+    }
+
+    @Test
+    fun publishRejectsIntegrated() = runTest {
+        val rig = Rig()
+        val c = controller(rig)
+        val primary = MoneroKeys.generate().address(Network.MAINNET)
+        c.setAddress(primary.integrated(ByteArray(8))); c.publishAddress(); advanceUntilIdle()
+        assertEquals(MoneroSetupController.ERR_ADDRESS_INTEGRATED, c.state.value.error)
+        c.setAddress("8" + "x".repeat(94)); c.publishAddress(); advanceUntilIdle()
+        assertEquals(MoneroSetupController.ERR_ADDRESS, c.state.value.error)
+        c.setAddress(MoneroKeys.generate().address(Network.STAGENET).encode()); c.publishAddress(); advanceUntilIdle()
+        assertEquals(MoneroSetupController.ERR_MAINNET, c.state.value.error)
+        assertTrue(c.state.value.step is SetupStep.Address)
+        assertTrue(rig.tips.paytoWrites.isEmpty())
+    }
+
+    @Test
+    fun relaysUnknownShowsError() = runTest {
+        val rig = Rig(tips = FakeTips().apply { paytoResult = PaytoWrite.Unknown })
+        val c = controller(rig)
+        c.setAddress(sub); c.publishAddress(); advanceUntilIdle()
+        assertEquals(MoneroSetupController.ERR_RELAYS_UNKNOWN, c.state.value.error)
+        assertEquals(SetupStep.Address(sub), c.state.value.step)
+        assertFalse(rig.settings.seenState.value)
+        rig.tips.paytoResult = PaytoWrite.NotPublished
+        c.publishAddress(); advanceUntilIdle()
+        assertEquals(MoneroSetupController.ERR_NOT_PUBLISHED, c.state.value.error)
+        assertEquals(SetupStep.Address(sub), c.state.value.step)
+    }
+
+    @Test
+    fun createWalletGoesToWatcher() = runTest {
+        val rig = Rig()
+        val c = controller(rig, intro = true)
+        c.createWallet(); advanceUntilIdle()
+        assertEquals(SetupStep.Watcher(Presets.DEFAULT_WATCHER), c.state.value.step)
+        assertEquals(1, rig.gateway.infoCalls, "the watcher step prefetches")
+        assertTrue(c.state.value.intro)
+        // the upgrade after a published address leads to the same step
+        val d = controller(Rig())
+        d.setAddress(sub); d.publishAddress(); advanceUntilIdle()
+        d.upgrade(); advanceUntilIdle()
+        assertEquals(SetupStep.Watcher(Presets.DEFAULT_WATCHER), d.state.value.step)
+    }
+
+    @Test
+    fun introClosesWhenPaytoKnown() = runTest {
+        val rig = Rig(tips = FakeTips().apply { own = OwnPayto.Known(sub) })
+        val c = controller(rig, intro = true)
+        assertTrue(c.state.value.finished)
+        assertTrue(rig.settings.seenState.value)
+        assertTrue(rig.tips.paytoWrites.isEmpty())
+        // no payto entry: the intro stays
+        val d = controller(Rig(tips = FakeTips().apply { own = OwnPayto.Known(null) }), intro = true)
+        assertFalse(d.state.value.finished)
+        val e = controller(Rig(tips = FakeTips().apply { own = OwnPayto.Unknown }), intro = true)
+        assertFalse(e.state.value.finished)
+    }
+
+    @Test
+    fun announcedKeepsTypedAddress() = runTest {
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val announced = MoneroKeys.generate().address(Network.MAINNET)
+        val rig = Rig(tips = FakeTips().apply { liveInfos = mapOf(self to PaymentInfo.Enabled(announced, Watcher.Http(url, watcherPk))); liveGate = gate })
+        val c = started(rig, intro = true)
+        assertEquals(SetupStep.Address(""), c.state.value.step)
+        c.setAddress(sub)
+        gate.complete(Unit); runCurrent()
+        assertEquals(SetupStep.Address(sub), c.state.value.step, "the typed address stays")
+        assertEquals(announced.encode(), c.state.value.announced)
+        // a shown publish error stays too
+        val gate2 = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val d = started(Rig(tips = FakeTips().apply { liveInfos = mapOf(self to PaymentInfo.Enabled(announced, Watcher.Http(url, watcherPk))); liveGate = gate2 }))
+        d.setAddress("4bad"); d.publishAddress()
+        assertEquals(MoneroSetupController.ERR_ADDRESS, d.state.value.error)
+        gate2.complete(Unit); runCurrent()
+        assertEquals(SetupStep.Address("4bad"), d.state.value.step)
+        assertEquals(MoneroSetupController.ERR_ADDRESS, d.state.value.error)
+    }
+
+    @Test
+    fun announcedSwitchesToWatcher() = runTest {
+        val announced = MoneroKeys.generate().address(Network.MAINNET)
+        val rig = Rig(tips = FakeTips().apply { liveInfos = mapOf(self to PaymentInfo.Enabled(announced, Watcher.Http(url, watcherPk))) })
+        val c = controller(rig, intro = true)
+        assertEquals(announced.encode(), c.state.value.announced)
+        assertEquals(SetupStep.Watcher(Presets.DEFAULT_WATCHER), c.state.value.step)
+        assertFalse(c.state.value.finished)
+    }
+
+    /** Path B up to the confirm step with a fresh wallet; returns its primary address. */
+    private fun TestScope.toConfirm(c: MoneroSetupController, wallet: MoneroKeys = MoneroKeys.generate()): String {
+        c.loadDefaultWatcher(); advanceUntilIdle()
+        c.startExisting(); advanceUntilIdle()
+        val address = wallet.address(Network.MAINNET).encode()
+        c.setAddress(address); c.setViewKey(wallet.viewSecret.toHex()); c.checkExisting(); advanceUntilIdle()
+        return address
+    }
+
+    @Test
+    fun registerPublishesPaytoWithTipAddress() = runTest {
+        val rig = Rig()
+        val c = controller(rig, upgrade = true)
+        val address = toConfirm(c)
+        assertEquals(SetupStep.Confirm(address, null), c.state.value.step, "no payto yet: no question")
+        c.confirm(); advanceUntilIdle()
+        assertEquals(SetupStep.Done(address, null), c.state.value.step)
+        assertEquals(listOf<String?>(address), rig.tips.paytoWrites)
+    }
+
+    @Test
+    fun conflictDefaultsToReplace() = runTest {
+        val rig = Rig(tips = FakeTips().apply { own = OwnPayto.Known(sub) })
+        val c = controller(rig, upgrade = true)
+        val address = toConfirm(c)
+        val step = c.state.value.step as SetupStep.Confirm
+        assertEquals(sub, step.paytoConflict)
+        assertTrue(step.replacePayto)
+        c.confirm(); advanceUntilIdle()
+        assertEquals(SetupStep.Done(address, null), c.state.value.step)
+        assertEquals(listOf<String?>(address), rig.tips.paytoWrites)
+        // the same address as payto: nothing to ask
+        val wallet = MoneroKeys.generate()
+        val same = wallet.address(Network.MAINNET).encode()
+        val d = controller(Rig(tips = FakeTips().apply { own = OwnPayto.Known(same) }), upgrade = true)
+        toConfirm(d, wallet)
+        assertEquals(SetupStep.Confirm(same, null), d.state.value.step)
+    }
+
+    @Test
+    fun keepLeavesPaytoAlone() = runTest {
+        val rig = Rig(tips = FakeTips().apply { own = OwnPayto.Known(sub) })
+        val c = controller(rig, upgrade = true)
+        val address = toConfirm(c)
+        c.setReplacePayto(false)
+        assertFalse((c.state.value.step as SetupStep.Confirm).replacePayto)
+        c.confirm(); advanceUntilIdle()
+        assertEquals(SetupStep.Done(address, null), c.state.value.step)
+        assertTrue(rig.tips.paytoWrites.isEmpty())
+        assertEquals(OwnPayto.Known(sub), rig.tips.own)
+    }
+
+    @Test
+    fun paytoFailureKeepsSetup() = runTest {
+        val rig = Rig()
+        rig.tips.paytoResult = PaytoWrite.NotPublished
+        val c = controller(rig, upgrade = true)
+        val address = toConfirm(c)
+        c.confirm(); advanceUntilIdle()
+        assertEquals(SetupStep.Done(address, null, paytoFailed = true), c.state.value.step)
+        assertTrue(rig.settings.setupState.value != null, "the watcher setup stays")
+        assertEquals(1, rig.gateway.registered.size)
+        assertTrue(rig.gateway.unregistered.isEmpty(), "no rollback of the watcher registration")
+        assertEquals(1, rig.tips.publishedInfos.size)
+    }
+
+    @Test
+    fun retryPaytoClearsWarning() = runTest {
+        val rig = Rig()
+        rig.tips.paytoResult = PaytoWrite.Unknown
+        val c = controller(rig, upgrade = true)
+        val address = toConfirm(c)
+        c.confirm(); advanceUntilIdle()
+        assertTrue((c.state.value.step as SetupStep.Done).paytoFailed)
+        c.retryPayto(); advanceUntilIdle()
+        assertTrue((c.state.value.step as SetupStep.Done).paytoFailed, "still failing")
+        rig.tips.paytoResult = PaytoWrite.Published
+        c.retryPayto(); advanceUntilIdle()
+        assertEquals(SetupStep.Done(address, null), c.state.value.step)
+        assertEquals(listOf<String?>(address, address, address), rig.tips.paytoWrites)
+        assertEquals(1, rig.gateway.registered.size, "only the payto write is repeated")
+        assertEquals(1, rig.tips.publishedInfos.size)
+    }
+
+    @Test
+    fun personalConfirmAlsoPublishesPayto() = runTest {
+        val rig = Rig(tips = FakeTips().apply { own = OwnPayto.Known(sub) })
+        rig.tips.statuses[watcherHex] = status()
+        val c = controller(rig, upgrade = true)
+        loadPersonal(c, nprofile("wss://w.example"))
+        val step = c.state.value.step as SetupStep.PersonalConfirm
+        assertEquals(sub, step.paytoConflict)
+        assertTrue(step.replacePayto)
+        c.confirmPersonal(); advanceUntilIdle()
+        assertEquals(SetupStep.Done(personalAddress.encode(), null), c.state.value.step)
+        assertEquals(listOf<String?>(personalAddress.encode()), rig.tips.paytoWrites)
+        // "Keep" on the personal path
+        val keep = Rig(tips = FakeTips().apply { own = OwnPayto.Known(sub) })
+        keep.tips.statuses[watcherHex] = status()
+        val d = controller(keep, upgrade = true)
+        loadPersonal(d, nprofile("wss://w.example"))
+        d.setReplacePayto(false)
+        d.confirmPersonal(); advanceUntilIdle()
+        assertTrue(d.state.value.step is SetupStep.Done)
+        assertTrue(keep.tips.paytoWrites.isEmpty())
+        // a failed payto write after the announcement is a success with a warning
+        val fail = Rig()
+        fail.tips.statuses[watcherHex] = status()
+        fail.tips.paytoResult = PaytoWrite.NotPublished
+        val e = controller(fail, upgrade = true)
+        loadPersonal(e, nprofile("wss://w.example"))
+        e.confirmPersonal(); advanceUntilIdle()
+        assertEquals(SetupStep.Done(personalAddress.encode(), null, paytoFailed = true), e.state.value.step)
+        assertTrue(fail.settings.setupState.value != null)
+    }
+
+    @Test
+    fun existingWalletPrefilledFromPrimaryPayto() = runTest {
+        val primary = MoneroKeys.generate().address(Network.MAINNET).encode()
+        val rig = Rig(tips = FakeTips().apply { own = OwnPayto.Known(primary) })
+        val c = controller(rig, upgrade = true)
+        c.loadDefaultWatcher(); advanceUntilIdle()
+        c.startExisting(); advanceUntilIdle()
+        assertEquals(primary, (c.state.value.step as SetupStep.Existing).address)
+        // a subaddress cannot be watched: the field stays empty
+        val d = controller(Rig(tips = FakeTips().apply { own = OwnPayto.Known(sub) }), upgrade = true)
+        d.loadDefaultWatcher(); advanceUntilIdle()
+        d.startExisting(); advanceUntilIdle()
+        assertEquals("", (d.state.value.step as SetupStep.Existing).address)
+    }
+
+    @Test
+    fun pathAAsksBeforePublishingWhenPaytoDiffers() = runTest {
+        val rig = Rig(tips = FakeTips().apply { own = OwnPayto.Known(sub) })
+        val expected = rig.keys.address(Network.MAINNET).encode()
+        val c = controller(rig, upgrade = true)
+        c.loadDefaultWatcher(); advanceUntilIdle()
+        c.startNew()
+        val seed = c.state.value.step as SetupStep.Seed
+        c.seedWritten()
+        val verify = c.state.value.step as SetupStep.Verify
+        c.verify(verify.positions.map { seed.words[it] }); advanceUntilIdle()
+        assertEquals(SetupStep.Confirm(expected, 3_000_000L, paytoConflict = sub), c.state.value.step)
+        assertTrue(rig.gateway.registered.isEmpty(), "nothing published before the answer")
+        c.setReplacePayto(false)
+        c.confirm(); advanceUntilIdle()
+        assertEquals(SetupStep.Done(expected, 3_000_000L), c.state.value.step)
+        assertTrue(rig.tips.paytoWrites.isEmpty())
+    }
+
+    @Test
+    fun unknownPaytoAtTheQuestionNeverReplacesSilently() = runTest {
+        val rig = Rig(tips = FakeTips().apply { own = OwnPayto.Unknown })
+        val c = controller(rig, upgrade = true)
+        val address = toConfirm(c)
+        assertEquals(SetupStep.Confirm(address, null), c.state.value.step, "unknown: no question")
+        // the relays answer completely by the time of the write
+        rig.tips.own = OwnPayto.Known(sub)
+        c.confirm(); advanceUntilIdle()
+        assertEquals(SetupStep.Done(address, null, paytoFailed = true), c.state.value.step)
+        assertTrue(rig.tips.paytoWrites.isEmpty(), "no write over an address nobody was asked about")
+        assertTrue(rig.settings.setupState.value != null)
+        c.retryPayto(); advanceUntilIdle()
+        assertTrue(rig.tips.paytoWrites.isEmpty(), "the retry is guarded too")
+        assertEquals(OwnPayto.Known(sub), rig.tips.own)
+        // unknown at the question, but no entry at the write: the tip address is written
+        val d = Rig(tips = FakeTips().apply { own = OwnPayto.Unknown })
+        val e = controller(d, upgrade = true)
+        val other = toConfirm(e)
+        d.tips.own = OwnPayto.Known(null)
+        e.confirm(); advanceUntilIdle()
+        assertEquals(SetupStep.Done(other, null), e.state.value.step)
+        assertEquals(listOf<String?>(other), d.tips.paytoWrites)
+    }
+
+    @Test
+    fun checkMovesOnAtOnceWhileThePaytoReadRuns() = runTest {
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val rig = Rig(tips = FakeTips().apply { own = OwnPayto.Known(sub); ownGate = gate })
+        val c = controller(rig, upgrade = true)
+        c.loadDefaultWatcher(); advanceUntilIdle()
+        c.startExisting()
+        val wallet = MoneroKeys.generate()
+        val address = wallet.address(Network.MAINNET).encode()
+        c.setAddress(address); c.setViewKey(wallet.viewSecret.toHex()); c.checkExisting()
+        assertEquals(SetupStep.Confirm(address, null, paytoPending = true), c.state.value.step, "no wait for the read")
+        c.confirm(); advanceUntilIdle()
+        assertTrue(rig.gateway.registered.isEmpty(), "confirming waits for the payto read")
+        assertEquals(1, rig.tips.ownCalls, "prefetch, prefill and the check share one read")
+        gate.complete(Unit); advanceUntilIdle()
+        assertEquals(SetupStep.Confirm(address, null, paytoConflict = sub), c.state.value.step)
+        c.confirm(); advanceUntilIdle()
+        assertEquals(SetupStep.Done(address, null), c.state.value.step)
+        assertEquals(1, rig.tips.ownCalls)
+    }
+
+    @Test
+    fun personalConfirmWaitsForThePaytoRead() = runTest {
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val rig = Rig(tips = FakeTips().apply { own = OwnPayto.Known(sub); ownGate = gate })
+        rig.tips.statuses[watcherHex] = status()
+        val c = controller(rig, upgrade = true)
+        loadPersonal(c, nprofile("wss://w.example"))
+        assertTrue((c.state.value.step as SetupStep.PersonalConfirm).paytoPending)
+        c.confirmPersonal(); advanceUntilIdle()
+        assertTrue(rig.tips.publishedInfos.isEmpty())
+        gate.complete(Unit); advanceUntilIdle()
+        val step = c.state.value.step as SetupStep.PersonalConfirm
+        assertFalse(step.paytoPending)
+        assertEquals(sub, step.paytoConflict)
+    }
+
+    @Test
+    fun pathAShowsProgressWhileThePaytoReadRuns() = runTest {
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val rig = Rig(tips = FakeTips().apply { ownGate = gate })
+        val expected = rig.keys.address(Network.MAINNET).encode()
+        val c = controller(rig, upgrade = true)
+        c.loadDefaultWatcher(); advanceUntilIdle()
+        c.startNew()
+        val seed = c.state.value.step as SetupStep.Seed
+        c.seedWritten()
+        val verify = c.state.value.step as SetupStep.Verify
+        c.verify(verify.positions.map { seed.words[it] })
+        assertEquals(SetupStep.Registering, c.state.value.step)
+        assertTrue(rig.gateway.registered.isEmpty())
+        gate.complete(Unit); advanceUntilIdle()
+        assertEquals(SetupStep.Done(expected, 3_000_000L), c.state.value.step)
+        assertEquals(listOf<String?>(expected), rig.tips.paytoWrites)
     }
 
     private companion object {

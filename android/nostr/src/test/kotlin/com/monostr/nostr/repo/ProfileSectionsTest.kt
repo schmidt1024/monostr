@@ -6,6 +6,7 @@ import com.monostr.nostr.SilentWsRelay
 import com.monostr.nostr.awaitTrue
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -136,6 +137,97 @@ class ProfileSectionsTest {
             e.save(EventBuilder(Kind(5u), "").tags(listOf(Tag.parse(listOf("e", roots[2].id().toHex())), Tag.parse(listOf("k", "1")))).signWithKeys(alice))
             val repo = NostrFeedRepository(e)
             assertEquals(listOf("root 4", "root 3", "root 1", "root 0"), repo.profileNotes(alice.publicKey().toHex(), ProfileSection.POSTS, fetch = false).map { it.content })
+            e.close()
+        }
+    }
+}
+
+/** Articles tab data (article reader task 6): kind 30023 only, newest version per `d`, deleted hidden, probe once. */
+class ProfileArticlesRepoTest {
+    @TempDir lateinit var dir: Path
+    private val me = Keys.generate()
+    private val alice = Keys.generate()
+
+    private fun article(kind: Int, d: String, at: Long, published: Long? = null): Event {
+        val tags = listOfNotNull(Tag.parse(listOf("d", d)), Tag.parse(listOf("title", "T $d")), published?.let { Tag.parse(listOf("published_at", "$it")) })
+        return EventBuilder(Kind(kind.toUShort()), "text").tags(tags).customCreatedAt(Timestamp.fromSecs(at.toULong())).signWithKeys(alice)
+    }
+
+    private suspend fun engine(relay: SilentWsRelay): NostrEngine {
+        val e = NostrEngine.create(dir.resolve("lmdb").toString(), LocalSigner(me.secretKey().toHex()), listOf(relay.url))
+        e.connect()
+        assertTrue(awaitTrue { e.connectedNormalRelayUrls().isNotEmpty() }, "loopback relay never connected")
+        return e
+    }
+
+    @Test
+    fun `articles are ordered by published_at, drafts and deleted ones left out`() = runTest {
+        SilentWsRelay(answerEose = true).use { relay ->
+            val e = engine(relay)
+            e.save(article(30023, "a", 1000, published = 100))
+            e.save(article(30023, "b", 900, published = 500))
+            e.save(article(30023, "c", 800))
+            e.save(article(30024, "draft", 2000))
+            val gone = article(30023, "gone", 700)
+            e.save(gone)
+            e.save(EventBuilder(Kind(5u), "").tags(listOf(Tag.parse(listOf("a", "30023:${alice.publicKey().toHex()}:gone")))).customCreatedAt(Timestamp.fromSecs(750uL)).signWithKeys(alice))
+            val repo = NostrFeedRepository(e)
+            val hex = alice.publicKey().toHex()
+            assertEquals(listOf("c", "b", "a"), repo.profileArticles(hex, fetch = false).map { it.event.identifier })
+            assertTrue(repo.hasArticles(hex))
+            e.close()
+        }
+    }
+
+    @Test
+    fun `hasArticles reads only the author's newest few articles`() = runTest {
+        SilentWsRelay(answerEose = true).use { relay ->
+            val e = engine(relay)
+            val hex = alice.publicKey().toHex()
+            val json = kotlinx.serialization.json.Json.parseToJsonElement(NostrFeedRepository(e).hasArticlesFilter(hex).asJson()).let { it as kotlinx.serialization.json.JsonObject }
+            assertEquals("5", json["limit"].toString())
+            assertEquals("[30023]", json["kinds"].toString())
+            assertEquals("[\"$hex\"]", json["authors"].toString())
+            e.close()
+        }
+    }
+
+    @Test
+    fun `a deletion naming the version's id hides the article`() = runTest {
+        SilentWsRelay(answerEose = true).use { relay ->
+            val e = engine(relay)
+            val hex = alice.publicKey().toHex()
+            val gone = article(30023, "gone", 700)
+            e.save(gone)
+            e.save(article(30023, "kept", 600))
+            e.save(EventBuilder(Kind(5u), "").tags(listOf(Tag.parse(listOf("e", gone.id().toHex())))).customCreatedAt(Timestamp.fromSecs(750uL)).signWithKeys(alice))
+            val repo = NostrFeedRepository(e)
+            assertEquals(listOf("kept"), repo.profileArticles(hex, fetch = false).map { it.event.identifier })
+            e.close()
+        }
+    }
+
+    @Test
+    fun `a probe that found nothing is asked again`() = runTest {
+        SilentWsRelay(answerEose = true).use { relay ->
+            val e = engine(relay)
+            val hex = alice.publicKey().toHex()
+            val repo = NostrFeedRepository(e)
+            assertFalse(repo.probeArticles(hex))
+            e.save(article(30023, "late", 900))
+            assertTrue(repo.probeArticles(hex))
+            e.close()
+        }
+    }
+
+    @Test
+    fun `no article means no tab`() = runTest {
+        SilentWsRelay(answerEose = true).use { relay ->
+            val e = engine(relay)
+            e.save(article(30024, "draft", 2000))
+            val repo = NostrFeedRepository(e)
+            assertFalse(repo.hasArticles(alice.publicKey().toHex()))
+            assertFalse(repo.probeArticles(alice.publicKey().toHex()))
             e.close()
         }
     }
