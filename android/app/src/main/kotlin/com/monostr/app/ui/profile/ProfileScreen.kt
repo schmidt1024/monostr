@@ -717,6 +717,8 @@ fun ProfileScreen(
     onNewListWith: (String) -> Unit = {},
     /** Backlog 29 (like X): the profile picture or banner, large. */
     onOpenPicture: (String) -> Unit = {},
+    /** Spec 2026-10-30: the accounts behind a number; true = followers. */
+    onOpenFollows: (pubkey: String, followers: Boolean) -> Unit = { _, _ -> },
     vm: ProfileViewModel = hiltViewModel(),
 ) {
     val state by vm.controller.state.collectAsStateWithLifecycle()
@@ -843,7 +845,10 @@ fun ProfileScreen(
                             Spacer(Modifier.height(4.dp))
                             NoteText(ProfileEditController.website(site), onOpen = {}, onHashtag = {}, onOpenProfile = {}, onOpenNote = {}, modifier = Modifier.testTag("profile-website"))
                         }
-                        state.followCounts?.let { Spacer(Modifier.height(8.dp)); FollowCountsLine(it) }
+                        state.followCounts?.let {
+                            Spacer(Modifier.height(8.dp))
+                            FollowCountsLine(it, onFollowing = { onOpenFollows(state.profile.pubkey, false) }, onFollowers = { onOpenFollows(state.profile.pubkey, true) })
+                        }
                         if (state.isMuted && !state.isSelf) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(stringResource(R.string.mute_profile_hint), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("profile-muted-hint"))

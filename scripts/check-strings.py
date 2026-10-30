@@ -10,6 +10,7 @@ LOCALES = ["de", "es", "ru", "tr", "pt", "fr", "it"]
 PLACEHOLDER = re.compile(r"%(?:\d+\$)?[sd]")
 ALLOW_SAME = {  # legitimately identical in some languages (loan words, symbols); about_beta: "Beta" is the same word in en/de/es/it/pt/tr
     "about_beta",
+    "settings_accent_champagne",  # Champagne is the word in en/fr/it
     "tab_feed", "thread_title", "settings_relays", "setup_watcher_heading", "tip_xmr_amount", "note_tips_chip",
     "time_minutes", "time_hours", "time_days", "setup_title", "settings_monero", "tippers_title", "notif_channel_name",
     "settings_theme_system", "settings_accent_orange", "settings_accent_blue", "settings_accent_red", "settings_accent_green",

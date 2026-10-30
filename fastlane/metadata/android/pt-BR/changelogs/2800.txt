@@ -1,0 +1,8 @@
+• Listas de seguindo e seguidores nos perfis, com bio e botão seguir
+• Editor como no X: sua foto ao lado do texto, prévia do link ao escrever
+• Prévias como no X: título sobre a imagem, domínio abaixo
+• Artigos em fonte de livro
+• Novo destaque Champanhe; destaques em lista (roxo passa para Personalizado)
+• $XMR e outros cashtags abrem uma busca
+• Imagens citadas mantêm o formato
+• Correções: espaços sob as notas, notas citadas que não estão mais nos relays

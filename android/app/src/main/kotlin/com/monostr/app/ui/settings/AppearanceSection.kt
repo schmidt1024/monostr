@@ -8,13 +8,13 @@ import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -22,7 +22,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -57,7 +56,7 @@ import com.monostr.app.ui.theme.isDark
 import com.monostr.app.ui.theme.AccentPalette
 import com.monostr.app.ui.theme.AccentSeed
 
-/** Spec 5: appearance controls, as simple as possible — a segmented mode row and six accent swatches. */
+/** Spec 5: appearance controls, as simple as possible — a segmented mode row and the accents as a list. */
 @Composable
 fun AppearanceSection(mode: ThemeMode, accent: Accent, customHue: Float, onMode: (ThemeMode) -> Unit, onAccent: (Accent) -> Unit, onHue: (Float) -> Unit) {
     val context = LocalContext.current
@@ -80,48 +79,34 @@ fun AppearanceSection(mode: ThemeMode, accent: Accent, customHue: Float, onMode:
         // the swatches show the accent as the active mode really paints it, not the raw seed (2026-10-08)
         val dark = isDark(mode)
         val customSeed = AccentSeed.fromHue(customHue)
-        // five choices (v0.12.7: black & white, Monero orange, blue, purple, own hue), each a 48-dp target with its name beneath
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Accent.entries.forEach { a ->
+        // five choices as a list, one row each (2026-10-30, was a row of swatches): Monero orange first as the default
+        Column(Modifier.fillMaxWidth()) {
+            PICKER_ORDER.forEach { a ->
                 val tokens = AccentPalette.tokens(a, dark, customSeed, black = mode == ThemeMode.BLACK)
                 val name = stringResource(accentName(a))
                 val selected = a == accent
                 val description = if (selected) stringResource(R.string.settings_accent_selected, name) else name
-                // 48-dp tap target with radio semantics; the 32-dp swatch is drawn inside.
-                Column(
+                Row(
                     Modifier
-                        .weight(1f)
+                        .fillMaxWidth()
+                        .heightIn(min = 56.dp)
                         .clip(RoundedCornerShape(12.dp))
                         .clickable(role = Role.RadioButton) { onAccent(a) }
-                        .semantics { contentDescription = description; this.selected = selected }
+                        .semantics(mergeDescendants = true) { contentDescription = description; this.selected = selected }
                         .testTag("appearance-accent-${a.name.lowercase()}")
-                        .padding(vertical = 4.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
+                        .padding(horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Box(Modifier.size(48.dp).minimumInteractiveComponentSize(), contentAlignment = Alignment.Center) {
                     Box(
                         Modifier
-                            .size(32.dp)
+                            .size(24.dp)
                             .clip(CircleShape)
                             .then(if (a == Accent.MONO) Modifier.background(Brush.horizontalGradient(0f to Color.Black, 0.5f to Color.Black, 0.5f to Color.White, 1f to Color.White)) else Modifier.background(Color(tokens.primary)))
-                            .border(if (selected) 2.dp else 1.dp, if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outlineVariant, CircleShape),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        if (selected) {
-                            if (a == Accent.MONO) {
-                                Box(Modifier.size(18.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surface), contentAlignment = Alignment.Center) {
-                                    Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(14.dp))
-                                }
-                            } else {
-                                Icon(Icons.Filled.Check, contentDescription = null, tint = Color(tokens.onPrimary))
-                            }
-                        }
-                    }
-                    }
-                    Text(
-                        name, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                        color = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape),
                     )
+                    Spacer(Modifier.width(16.dp))
+                    Text(name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    if (selected) Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 }
             }
         }
@@ -155,10 +140,12 @@ fun AppearanceSection(mode: ThemeMode, accent: Accent, customHue: Float, onMode:
     }
 }
 
+private val PICKER_ORDER = listOf(Accent.ORANGE, Accent.CHAMPAGNE, Accent.BLUE, Accent.MONO, Accent.CUSTOM)
+
 private fun accentName(a: Accent): Int = when (a) {
     Accent.MONO -> R.string.settings_accent_mono
     Accent.ORANGE -> R.string.settings_accent_orange
+    Accent.CHAMPAGNE -> R.string.settings_accent_champagne
     Accent.BLUE -> R.string.settings_accent_blue
-    Accent.PURPLE -> R.string.settings_accent_purple
     Accent.CUSTOM -> R.string.settings_accent_custom
 }

@@ -3,6 +3,7 @@ package com.monostr.app.ui.theme
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.em
 import com.monostr.app.R
@@ -14,6 +15,12 @@ object MonostrFonts {
         Font(R.font.inter_semibold, FontWeight.SemiBold),
     )
     val mono: FontFamily = FontFamily(Font(R.font.jetbrains_mono_regular, FontWeight.Normal))
+    /** Newsreader, the book face of the article reader only (2026-10-30); Compose loads it on first use. */
+    val serif: FontFamily = FontFamily(
+        Font(R.font.newsreader_regular, FontWeight.Normal),
+        Font(R.font.newsreader_medium, FontWeight.Medium),
+        Font(R.font.newsreader_italic, FontWeight.Normal, FontStyle.Italic),
+    )
 }
 
 /** M3 scale in Inter: headlines semi-bold and slightly tightened, body regular (spec 4.2). */

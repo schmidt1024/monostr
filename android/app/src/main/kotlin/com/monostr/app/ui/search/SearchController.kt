@@ -1,5 +1,6 @@
 package com.monostr.app.ui.search
 
+import com.monostr.app.ui.common.NoteLinks
 import com.monostr.nostr.repo.OwnReactions
 import com.monostr.nostr.repo.MemoryOwnReactions
 import kotlinx.coroutines.flow.map
@@ -204,7 +205,9 @@ class SearchController(
             coroutineScope {
                 // spec perf 3.8: the people show as soon as they are in; the NIP-50 notes take longer and must not hold them back
                 val people = async { search.profiles(q, relays).also { p -> _state.update { it.copy(people = p.items) } } }
-                val n = search.notes(q, relays)
+                val found = search.notes(q, relays)
+                // a cashtag search (2026-10-30): the relays ignore the `$`, so only notes that carry the exact ticker stay
+                val n = NoteLinks.cashtagOf(q)?.let { sym -> found.copy(items = found.items.filter { note -> NoteLinks.hasCashtag(note.displayContent, sym) }) } ?: found
                 val p = people.await()
                 val decorated = decorate(n.items)
                 val err = (p.error ?: n.error)?.userMessage()

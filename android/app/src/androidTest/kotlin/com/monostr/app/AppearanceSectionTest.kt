@@ -33,7 +33,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
 
-/** v0.12.7: five accent choices with their names, the hue slider only for the custom one. */
+/** v0.12.7: five accent choices with their names, the hue slider only for the custom one; a list since 2026-10-30. */
 @RunWith(AndroidJUnit4::class)
 class AppearanceSectionTest {
     @get:Rule val rule = createComposeRule()
@@ -51,10 +51,15 @@ class AppearanceSectionTest {
                 }
             }
         }
-        assertEquals(listOf("mono", "orange", "blue", "purple", "custom"), Accent.entries.map { it.name.lowercase() })
+        assertEquals(listOf("mono", "orange", "champagne", "blue", "custom"), Accent.entries.map { it.name.lowercase() })
         for (a in Accent.entries) rule.onNodeWithTag("appearance-accent-${a.name.lowercase()}").assertIsDisplayed()
+        // 2026-10-30: one row per accent, top to bottom orange, champagne, blue, mono, custom
+        val tops = listOf("orange", "champagne", "blue", "mono", "custom").map { rule.onNodeWithTag("appearance-accent-$it").fetchSemanticsNode().boundsInRoot.top }
+        assertEquals(tops.sorted(), tops)
         rule.onNodeWithText(ctx.getString(R.string.settings_accent_orange), useUnmergedTree = true).assertIsDisplayed()
         rule.onNodeWithTag("appearance-accent-mono").assertIsSelected()
+        rule.onNodeWithTag("appearance-accent-champagne").performClick()
+        rule.onNodeWithTag("appearance-accent-champagne").assertIsSelected()
         assertEquals(0, nodes("appearance-hue").size)
         rule.onNodeWithTag("appearance-accent-custom").performClick()
         rule.waitUntil(5_000) { nodes("appearance-hue").isNotEmpty() }

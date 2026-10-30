@@ -1,18 +1,20 @@
 monostr é um cliente Nostr para Android com gorjetas em Monero.
 
 <b>Nostr, do jeito que você conhece</b>
-• Feed de quem você segue, conversas, perfis com as abas Publicações e Respostas
+• Feed de quem você segue, conversas, perfis com as abas Publicações, Respostas, Reposts, Artigos e Listas
 • Curtir, repostar, citar, responder; menções, hashtags e links tocáveis
-• Imagens nas notas e uploads próprios (Blossom), conteúdo sensível desfocado
+• Imagens e vídeos de até 2 minutos nas notas e uploads próprios (Blossom), conteúdo sensível desfocado
+• Leia artigos longos (NIP-23) direto no app, com curtidas, reposts, respostas, favoritos e gorjetas; links para artigos, transmissões ao vivo e outros eventos aparecem como cartões
 • Mensagens privadas (NIP-17), favoritos e contas silenciadas privados (NIP-51)
 • Busca de pessoas e notas (NIP-50), notificações de curtidas, reposts, respostas e gorjetas
 • Sua lista de relays (NIP-65); os relays de escrita de um autor entram enquanto o perfil dele está aberto
-• Login com Amber (NIP-55) ou com uma chave; tema claro e escuro, 8 idiomas
+• Login com Amber (NIP-55), com uma chave ou com um backup da chave protegido por senha (ncryptsec, NIP-49); você também pode guardar sua chave com uma senha; tema claro e escuro, 8 idiomas
 
 <b>Gorjetas em Monero</b>
 • Dê gorjeta a uma nota ou a um perfil pelo seu próprio app de carteira (Unstoppable, monfluo, Cake …) via link monero:
 • O monostr não tem carteira nem chave de gasto
-• Para receber gorjetas, você registra seu endereço e sua chave de visualização privada em um watcher (watcher.monostr.com por padrão, ou o seu). O watcher vê seus pagamentos recebidos e publica recibos assinados no Nostr, para que todos vejam a gorjeta na nota
+• Para receber gorjetas há dois caminhos. Ou você simplesmente publica seu endereço Monero (NIP-A3 payto): os outros pagam pela carteira deles, sem recibo no monostr
+• Ou você registra seu endereço e sua chave de visualização privada em um watcher (watcher.monostr.com por padrão, ou o seu). O watcher vê seus pagamentos recebidos e publica recibos assinados no Nostr, para que todos vejam a gorjeta na nota
 • Gorjetas anônimas são possíveis
 
 <b>Aberto</b>

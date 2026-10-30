@@ -98,12 +98,13 @@ fun articleText(text: MdText, style: ArticleTextStyle, actions: ArticleLinkActio
                     val srcLen = when (sp) {
                         is NoteSpan.Plain -> { out.append(sp.text); sp.text.length }
                         is NoteSpan.Hashtag -> { out.withLink(LinkAnnotation.Clickable("tag", urlStyle) { actions.onHashtag(sp.tag) }) { append(sp.text) }; sp.text.length }
+                        is NoteSpan.Cashtag -> { out.withLink(LinkAnnotation.Clickable("cashtag", urlStyle) { actions.onHashtag(sp.text) }) { append(sp.text) }; sp.text.length }
                         is NoteSpan.Mention -> { out.withLink(LinkAnnotation.Clickable("mention", nameStyle) { actions.onProfile(sp.pubkey) }) { append(MentionNames.label(sp.pubkey, style.names)) }; sp.text.length }
                         is NoteSpan.NoteRef -> { out.withLink(LinkAnnotation.Clickable("note", nameStyle) { actions.onNote(sp.noteId) }) { append(style.noteLabel) }; sp.text.length }
                         is NoteSpan.AddressRef -> { out.withLink(LinkAnnotation.Clickable("address", nameStyle) { actions.onAddress(sp.ref) }) { append(style.addressLabel) }; sp.text.length }
                         is NoteSpan.Url -> { out.withLink(LinkAnnotation.Clickable("url", urlStyle) { actions.onUrl(sp.url) }) { append(sp.text) }; sp.url.length }
                     }
-                    map.add(src, srcLen, out.length - before, linear = sp is NoteSpan.Plain || sp is NoteSpan.Hashtag)
+                    map.add(src, srcLen, out.length - before, linear = sp is NoteSpan.Plain || sp is NoteSpan.Hashtag || sp is NoteSpan.Cashtag)
                     src += srcLen
                 }
             }

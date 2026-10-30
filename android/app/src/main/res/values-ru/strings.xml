@@ -100,6 +100,10 @@
     <string name="profile_extra_relays">Заметки также с %1$s</string>
     <!-- profile header: "12 Following · 3,373 Followers"; the numbers are formatted apart -->
     <string name="profile_following_label">Подписки</string>
+    <string name="follows_tab_followers">Подписчики</string>
+    <string name="follows_empty_following">Пока ни на кого не подписан</string>
+    <string name="follows_empty_followers">Подписчики пока неизвестны</string>
+    <string name="follows_end_followers">Релеи не знают других подписчиков</string>
     <plurals name="profile_followers_label">
         <item quantity="one">%1$s подписчик</item>
         <item quantity="few">%1$s подписчика</item>
@@ -335,6 +339,7 @@
     <string name="settings_link_previews">Превью ссылок</string>
     <string name="settings_link_previews_hint">Показывает заголовок и картинку страниц по ссылкам. Эти сайты и серверы их картинок увидят ваш IP-адрес.</string>
     <string name="link_preview_cd">Превью ссылки: %1$s, %2$s</string>
+    <string name="link_preview_remove">Убрать превью</string>
     <string name="settings_author_relays">Временно подключать релеи автора</string>
     <string name="settings_author_relays_hint">Заметки берутся и с собственных релеев других людей: при открытии профиля и когда заметка отвечает на заметку или цитирует ту, которой нет на ваших релеях. Эти релеи видят ваш IP-адрес и какие заметки вы смотрите.</string>
     <string name="settings_pow">Доказательство работы</string>
@@ -401,7 +406,7 @@
     <string name="settings_accent_mono">Моно</string>
     <string name="settings_accent_orange">Оранжевый</string>
     <string name="settings_accent_blue">Синий</string>
-    <string name="settings_accent_purple">Лиловый</string>
+    <string name="settings_accent_champagne">Шампань</string>
     <string name="settings_accent_custom">Своя</string>
     <string name="settings_accent_hue">Оттенок</string>
     <string name="settings_accent_selected">%1$s, выбран</string>
@@ -505,6 +510,7 @@
     <string name="bookmarks_error_load">Не удалось загрузить закладки</string>
     <string name="note_ref_label">заметка</string>
     <string name="quote_missing">Заметка не найдена</string>
+    <string name="quote_gone">Заметки больше нет на релеях</string>
     <string name="mute_quote_placeholder">Заметка заглушённого аккаунта</string>
     <string name="address_ref_label">событие</string>
     <string name="address_type_article">Статья</string>

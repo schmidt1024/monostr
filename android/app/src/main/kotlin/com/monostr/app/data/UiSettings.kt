@@ -19,19 +19,21 @@ import java.io.IOException
 enum class ThemeMode { SYSTEM, LIGHT, DARK, BLACK }
 
 /** Spec 4.3: the accent only colours the primary tokens; MONO keeps the interface black and white. */
-enum class Accent(val seedArgb: Long) {
+enum class Accent(val seedArgb: Long, val lightSeedArgb: Long? = null) {
     MONO(0xFF111111),
     ORANGE(0xFFFF6600), // Monero orange
+    // 2026-10-30: replaces purple. Darkened towards black the light-mode champagne turned a muddy grey-brown (#756143), so
+    // the light mode starts from its own saturated bronze (5.7:1 on white, user: «das sattere Bronze»)
+    CHAMPAGNE(0xFFD5B07A, lightSeedArgb = 0xFF865F20),
     BLUE(0xFF2F6FED),
-    PURPLE(0xFF7A4FD6),
     /** Spec 11.4 §3: the seed is a placeholder; the real one comes from [UiSettingsStore.customHue]. */
     CUSTOM(0xFF2F6FED);
 
     companion object {
         /** v0.12.8: Monero orange out of the box — the default is the app for most people, and it says what Monostr is; Mono is one tap away. */
         val DEFAULT = ORANGE
-        /** Accents that left the picker in v0.12.7 and live on as [CUSTOM] with their hue. */
-        val LEGACY_HUES = mapOf("RED" to 0f, "GREEN" to 135f)
+        /** Accents that left the picker (red, green in v0.12.7; purple 2026-10-30) and live on as [CUSTOM] with their hue. */
+        val LEGACY_HUES = mapOf("RED" to 0f, "GREEN" to 135f, "PURPLE" to 259f)
     }
 }
 

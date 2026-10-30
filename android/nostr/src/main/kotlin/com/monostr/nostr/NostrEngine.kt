@@ -744,6 +744,11 @@ class NostrEngine private constructor(
     /** Local database query. */
     suspend fun query(filter: Filter): List<Event> = ffi { client.database().query(filter).toVec() }
 
+    /** Removes what [filter] matches from the database (best-effort): events fetched for a moment only, like followers' contact lists. */
+    suspend fun forget(filter: Filter) {
+        runCatching { ffi { client.database().delete(filter) } }
+    }
+
     /** Local database query, each event read once in Kotlin (spec wave 2 B3): one `asJson` per event, no tag reads over the FFI. */
     suspend fun queryDecoded(filter: Filter): List<JsonEvent> =
         ffi { client.database().query(filter).toVec().map { EventJson.decode(it.asJson()) } }
@@ -878,11 +883,17 @@ class NostrEngine private constructor(
                 val json = runCatching { EventJson.decode(ev.asJson()) }.getOrNull() ?: continue
                 if (progress.add(json)) events += ev
                 if (progress.met) {
-                    if (exit !is Exit.NewestPerAuthor) {
+                    // a grace lets the other relays' answers in flight still arrive
+                    val grace = when (exit) {
+                        is Exit.NewestPerAuthor -> exit.grace
+                        is Exit.AtLeast -> exit.grace
+                        else -> null
+                    }
+                    if (grace == null) {
                         cut = true
                         break
                     }
-                    if (graceEnd == 0L) graceEnd = System.nanoTime() + exit.grace.toNanos()
+                    if (graceEnd == 0L) graceEnd = System.nanoTime() + grace.toNanos()
                 }
             }
         } finally {

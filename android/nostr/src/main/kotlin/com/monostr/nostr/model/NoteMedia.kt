@@ -59,7 +59,7 @@ data class NoteMedia(
                 ordered[url] = build(url, kind, attrs)
             }
             val media = ordered.values.take(MAX)
-            if (media.isEmpty()) return Parsed(emptyList(), content)
+            if (media.isEmpty()) return Parsed(emptyList(), tidy(content))
             // A URL is removed only where no further URL character follows, so `.../a.png` leaves `.../a.png.html` intact.
             val remove = media.map { it.url }.distinct().map { Regex(Regex.escape(it) + "(?=[.,;:!?)]*(?:[\\s<>\"']|$))") } // regex
             val lines = content.split('\n').mapNotNull { line ->
@@ -71,8 +71,18 @@ data class NoteMedia(
                 }
                 if (touched && out.isBlank()) null else out.trimEnd()
             }
-            return Parsed(media, lines.joinToString("\n").trim())
+            return Parsed(media, tidy(lines.joinToString("\n")))
         }
+
+        private val INVISIBLE = charArrayOf('\u200B', '\u200C', '\u200D', '\u2060', '\uFEFF')
+        private val BLANK_LINES = Regex("""\n[ \t\u00A0\u200B\u200C\u200D\u2060\uFEFF]*(?:\n[ \t\u00A0\u200B\u200C\u200D\u2060\uFEFF]*)+\n""") // regex
+
+        /**
+         * The text as shown (2026-10-30): no blank lines or invisible characters before or after it, which left a gap
+         * under some notes, and at most one blank line between paragraphs.
+         */
+        fun tidy(text: String): String =
+            text.trim { it.isWhitespace() || it in INVISIBLE }.replace(BLANK_LINES, "\n\n")
 
         /** IMAGE/VIDEO from the MIME type when given, else from the extension before `?`/`#`; null for anything else. */
         fun kindOf(url: String, mime: String?): Kind? {

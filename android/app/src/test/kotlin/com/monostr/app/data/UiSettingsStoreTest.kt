@@ -55,6 +55,9 @@ class UiSettingsStoreTest {
         assertEquals(Accent.CUSTOM, settings.accent.first()); assertEquals(0f, settings.customHue.first())
         store.edit { it[stringPreferencesKey("ui.accent")] = "GREEN" }
         assertEquals(Accent.CUSTOM, settings.accent.first()); assertEquals(135f, settings.customHue.first())
+        // 2026-10-30: purple made room for champagne the same way
+        store.edit { it[stringPreferencesKey("ui.accent")] = "PURPLE" }
+        assertEquals(Accent.CUSTOM, settings.accent.first()); assertEquals(259f, settings.customHue.first())
         settings.setCustomHue(20f); assertEquals(20f, settings.customHue.first())
         scope.cancel()
     }

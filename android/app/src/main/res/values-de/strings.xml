@@ -96,6 +96,10 @@
     <string name="profile_extra_relays">Notes auch von %1$s</string>
     <!-- profile header: "12 Following · 3,373 Followers"; the numbers are formatted apart -->
     <string name="profile_following_label">Folge ich</string>
+    <string name="follows_tab_followers">Follower</string>
+    <string name="follows_empty_following">Folgt noch niemandem</string>
+    <string name="follows_empty_followers">Noch keine Follower bekannt</string>
+    <string name="follows_end_followers">Weitere Follower sind auf den Relays nicht bekannt</string>
     <plurals name="profile_followers_label">
         <item quantity="one">%1$s Follower</item>
         <item quantity="other">%1$s Follower</item>
@@ -327,6 +331,7 @@
     <string name="settings_link_previews">Linkvorschauen</string>
     <string name="settings_link_previews_hint">Zeigt Titel und Bild verlinkter Seiten. Diese Seiten und die Server ihrer Bilder sehen dann deine IP-Adresse.</string>
     <string name="link_preview_cd">Linkvorschau: %1$s, %2$s</string>
+    <string name="link_preview_remove">Vorschau entfernen</string>
     <string name="settings_author_relays">Relays des Autors temporär verbinden</string>
     <string name="settings_author_relays_hint">Notes werden auch von den eigenen Relays anderer Leute geholt: wenn du ein Profil öffnest und wenn eine Note auf eine antwortet oder eine zitiert, die deine Relays nicht haben. Diese Relays sehen deine IP-Adresse und welche Notes du anschaust.</string>
     <string name="settings_pow">Proof of Work</string>
@@ -393,7 +398,7 @@
     <string name="settings_accent_mono">Mono</string>
     <string name="settings_accent_orange">Orange</string>
     <string name="settings_accent_blue">Blau</string>
-    <string name="settings_accent_purple">Lila</string>
+    <string name="settings_accent_champagne">Champagner</string>
     <string name="settings_accent_custom">Eigene</string>
     <string name="settings_accent_hue">Farbton</string>
     <string name="settings_accent_selected">%1$s, ausgewählt</string>
@@ -485,6 +490,7 @@
     <string name="bookmarks_error_load">Lesezeichen konnten nicht geladen werden</string>
     <string name="note_ref_label">Notiz</string>
     <string name="quote_missing">Notiz nicht gefunden</string>
+    <string name="quote_gone">Notiz nicht mehr auf den Relays</string>
     <string name="mute_quote_placeholder">Note eines stummgeschalteten Kontos</string>
     <string name="address_ref_label">Event</string>
     <string name="address_type_article">Artikel</string>

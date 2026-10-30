@@ -9,6 +9,8 @@ sealed class NoteSpan {
     abstract val text: String
     data class Plain(override val text: String) : NoteSpan()
     data class Hashtag(override val text: String, val tag: String) : NoteSpan()
+    /** `$XMR` (2026-10-30): a ticker, opens a text search for itself; no `t` tag, unlike a hashtag. */
+    data class Cashtag(override val text: String, val symbol: String) : NoteSpan()
     data class Mention(override val text: String, val pubkey: String) : NoteSpan()
     data class NoteRef(override val text: String, val noteId: String) : NoteSpan()
     /** `nostr:naddr1…` (spec 2026-10-29 naddr): reads as «event» and opens the web link. */
@@ -18,12 +20,26 @@ sealed class NoteSpan {
 
 /** Pure text scanner; URLs win over hashtags so `#` in a URL is never a tag. */
 object NoteLinks {
-    // group 1: url, group 2: nostr link (scheme and prefix case-insensitive, bech32 may be all caps), group 3: hashtag (needs a letter somewhere)
+    // group 1: url, group 2: nostr link (scheme and prefix case-insensitive, bech32 may be all caps), group 3: hashtag (needs a letter somewhere),
+    // group 4: cashtag, 2-6 capitals after a `$` that neither follows nor precedes a letter or digit ($5, $100k, US$, $path stay text)
     private val TOKEN = Regex(
         "(${HashtagTags.URL})" +
             "|((?i:nostr:(?:npub1|nprofile1|note1|nevent1|naddr1))[0-9a-zA-Z]+)" + // regex
-            "|${HashtagTags.HASHTAG}", // the hashtags a published note tags (`t`) are exactly the ones shown as links
+            "|${HashtagTags.HASHTAG}" + // the hashtags a published note tags (`t`) are exactly the ones shown as links
+            "|(?<![\\p{L}\\p{N}_$])\\$([A-Z]{2,6})(?![\\p{L}\\p{N}_])", // regex
     )
+
+    /** The search a tapped tag opens: `#tag` for a hashtag, the ticker itself (`$XMR`, text search) for a cashtag. */
+    fun searchFor(tag: String): String = if (tag.startsWith("$")) tag else "#$tag"
+
+    private val WHOLE_CASHTAG = Regex("^\\$([A-Z]{2,6})$") // regex
+
+    /** The ticker when [query] is exactly one cashtag (`$XMR` → `XMR`), else null. */
+    fun cashtagOf(query: String): String? = WHOLE_CASHTAG.find(query.trim())?.groupValues?.get(1)
+
+    /** Whether [text] shows [symbol] as a cashtag, by the same rule as the links. */
+    fun hasCashtag(text: String, symbol: String): Boolean =
+        "$$symbol" in text && annotate(text).any { it is NoteSpan.Cashtag && it.symbol == symbol }
 
     /**
      * How a link reads (user 2026-10-11, like X): no scheme, no "www.", no slash that only ends the
@@ -65,6 +81,7 @@ object NoteLinks {
                     is SearchQuery.Thread -> NoteSpan.NoteRef(m.value, q.noteId)
                     else -> null
                 }
+                m.groups[4] != null -> NoteSpan.Cashtag(m.value, m.groupValues[4])
                 else -> NoteSpan.Hashtag(m.value, m.groupValues[3].lowercase())
             }
             if (span == null) continue

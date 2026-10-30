@@ -200,7 +200,7 @@ class MediaUploadTest {
     }
 
     private fun attachAndAwaitUpload() {
-        rule.onNodeWithTag("compose-attach").performScrollTo().performClick()
+        rule.onNodeWithTag("compose-attach").performClick()
         rule.waitUntil(15_000) { nodes("compose-attachment-0").isNotEmpty() }
         rule.waitUntil(30_000) { nodes("compose-attachment-progress-0").isEmpty() }
     }
@@ -289,7 +289,7 @@ class MediaUploadTest {
 
         rule.onNodeWithTag("compose-sensitive").performScrollTo().performClick()
         rule.onNodeWithTag("compose-text").performTextInput("picture test")
-        rule.onNodeWithTag("compose-send").performScrollTo().performClick()
+        rule.onNodeWithTag("compose-send").performClick()
         rule.waitUntil(30_000) { relay.events.any { it.contains("picture test") } }
         val event = relay.events.first { it.contains("picture test") }
         assertTrue(event, event.contains("picture test\\n\\n$base/$hash.jpg"))
@@ -307,17 +307,17 @@ class MediaUploadTest {
     fun aRefusedPictureShowsTheReasonAndBlocksSending() {
         refuseAs = "nsfw"
         reachComposer()
-        rule.onNodeWithTag("compose-attach").performScrollTo().performClick()
+        rule.onNodeWithTag("compose-attach").performClick()
         rule.waitUntil(30_000) { nodes("compose-attachment-error-0").isNotEmpty() }
         rule.onNodeWithTag("compose-text").performTextInput("should not go out")
-        rule.onNodeWithTag("compose-send").performScrollTo().assertIsNotEnabled()
+        rule.onNodeWithTag("compose-send").assertIsNotEnabled()
 
         // the server relents: "try again" uploads, and the note can be sent
         refuseAs = null
         rule.onNodeWithTag("compose-attachment-retry-0").performScrollTo().performClick()
         rule.waitUntil(30_000) { nodes("compose-attachment-error-0").isEmpty() && nodes("compose-attachment-progress-0").isEmpty() }
         assertEquals(1, stored.size)
-        rule.onNodeWithTag("compose-send").performScrollTo().performClick()
+        rule.onNodeWithTag("compose-send").performClick()
         rule.waitUntil(30_000) { relay.events.any { it.contains("should not go out") } }
     }
 

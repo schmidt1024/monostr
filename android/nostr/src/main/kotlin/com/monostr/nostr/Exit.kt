@@ -23,6 +23,11 @@ sealed interface Exit {
         override val label: String get() = "NewestPerAuthor"
     }
 
+    /** A page (spec 2026-10-30 follow lists): stop [grace] after [count] different events arrived, from whichever relays. */
+    data class AtLeast(val count: Int, val grace: Duration = Duration.ofMillis(400)) : Exit {
+        override val label: String get() = "AtLeast"
+    }
+
     /** Existence: stop at the first event. */
     data object AnyEvent : Exit {
         override val label: String get() = "AnyEvent"
@@ -48,6 +53,7 @@ internal class ExitProgress(private val exit: Exit) {
         get() = when (exit) {
             is Exit.AllIds -> ids.isEmpty()
             is Exit.NewestPerAuthor -> authors.isEmpty()
+            is Exit.AtLeast -> exit.count <= 0
             Exit.AnyEvent -> false
         }
 
@@ -62,6 +68,7 @@ internal class ExitProgress(private val exit: Exit) {
         get() = when (exit) {
             is Exit.AllIds -> seenIds.containsAll(ids)
             is Exit.NewestPerAuthor -> seenAuthors.containsAll(authors)
+            is Exit.AtLeast -> seenIds.size >= exit.count
             Exit.AnyEvent -> seenIds.isNotEmpty()
         }
 }

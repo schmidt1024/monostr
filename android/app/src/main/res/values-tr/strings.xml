@@ -96,6 +96,10 @@
     <string name="profile_extra_relays">Notlar ayrıca %1$s üzerinden</string>
     <!-- profile header: "12 Following · 3,373 Followers"; the numbers are formatted apart -->
     <string name="profile_following_label">Takip edilen</string>
+    <string name="follows_tab_followers">Takipçiler</string>
+    <string name="follows_empty_following">Henüz kimseyi takip etmiyor</string>
+    <string name="follows_empty_followers">Henüz bilinen takipçi yok</string>
+    <string name="follows_end_followers">Relay\'ler başka takipçi bilmiyor</string>
     <plurals name="profile_followers_label">
         <item quantity="one">%1$s Takipçi</item>
         <item quantity="other">%1$s Takipçi</item>
@@ -327,6 +331,7 @@
     <string name="settings_link_previews">Bağlantı önizlemeleri</string>
     <string name="settings_link_previews_hint">Bağlantı verilen sayfaların başlığını ve görselini gösterir. Bu siteler ve görsellerinin sunucuları IP adresinizi görür.</string>
     <string name="link_preview_cd">Bağlantı önizlemesi: %1$s, %2$s</string>
+    <string name="link_preview_remove">Önizlemeyi kaldır</string>
     <string name="settings_author_relays">Yazarın rölelerini geçici olarak bağla</string>
     <string name="settings_author_relays_hint">Notlar başka kişilerin kendi rölelerinden de alınır: bir profil açıldığında ve bir not, rölelerinizde olmayan bir nota yanıt verdiğinde veya onu alıntıladığında. Bu röleler IP adresinizi ve hangi notlara baktığınızı görür.</string>
     <string name="settings_pow">İş ispatı</string>
@@ -393,7 +398,7 @@
     <string name="settings_accent_mono">Mono</string>
     <string name="settings_accent_orange">Turuncu</string>
     <string name="settings_accent_blue">Mavi</string>
-    <string name="settings_accent_purple">Mor</string>
+    <string name="settings_accent_champagne">Şampanya</string>
     <string name="settings_accent_custom">Özel</string>
     <string name="settings_accent_hue">Renk tonu</string>
     <string name="settings_accent_selected">%1$s, seçili</string>
@@ -485,6 +490,7 @@
     <string name="bookmarks_error_load">Yer imleri yüklenemedi</string>
     <string name="note_ref_label">not</string>
     <string name="quote_missing">Not bulunamadı</string>
+    <string name="quote_gone">Not artık relay\'lerde değil</string>
     <string name="mute_quote_placeholder">Sessize alınmış bir hesabın notu</string>
     <string name="address_ref_label">etkinlik</string>
     <string name="address_type_article">Makale</string>

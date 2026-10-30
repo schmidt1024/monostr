@@ -1,5 +1,8 @@
 package com.monostr.app.media
 
+import androidx.annotation.OptIn
+import androidx.media3.common.util.ExperimentalApi
+import androidx.media3.common.util.UnstableApi
 import android.content.Context
 import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
@@ -89,6 +92,8 @@ interface VideoPreparer {
     suspend fun prepare(source: String, onProgress: (Float) -> Unit = {}): PreparedVideo
 }
 
+// Media3's Transformer and its HDR modes are marked unstable/experimental; the app relies on them on purpose (lint)
+@OptIn(UnstableApi::class, ExperimentalApi::class)
 class TransformerVideoPreparer(private val context: Context) : VideoPreparer {
     /** One encode at a time: the hardware encoder is shared, and a second one would only slow both. */
     private val oneAtATime = Mutex()

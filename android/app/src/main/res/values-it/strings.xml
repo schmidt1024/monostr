@@ -96,6 +96,10 @@
     <string name="profile_extra_relays">Note anche da %1$s</string>
     <!-- profile header: "12 Following · 3,373 Followers"; the numbers are formatted apart -->
     <string name="profile_following_label">Seguiti</string>
+    <string name="follows_tab_followers">Follower</string>
+    <string name="follows_empty_following">Non segue ancora nessuno</string>
+    <string name="follows_empty_followers">Ancora nessun follower noto</string>
+    <string name="follows_end_followers">I relay non conoscono altri follower</string>
     <plurals name="profile_followers_label">
         <item quantity="one">%1$s Follower</item>
         <item quantity="other">%1$s Follower</item>
@@ -328,6 +332,7 @@
     <string name="settings_link_previews">Anteprime dei link</string>
     <string name="settings_link_previews_hint">Mostra titolo e immagine delle pagine collegate. Quei siti e i server delle loro immagini vedranno il tuo indirizzo IP.</string>
     <string name="link_preview_cd">Anteprima del link: %1$s, %2$s</string>
+    <string name="link_preview_remove">Rimuovi anteprima</string>
     <string name="settings_author_relays">Collega temporaneamente i relay dell\'autore</string>
     <string name="settings_author_relays_hint">Le note vengono prese anche dai relay propri di altre persone: quando apri un profilo e quando una nota risponde a una nota o ne cita una che i tuoi relay non hanno. Quei relay vedono il tuo indirizzo IP e quali note guardi.</string>
     <string name="settings_pow">Proof of work</string>
@@ -394,7 +399,7 @@
     <string name="settings_accent_mono">Mono</string>
     <string name="settings_accent_orange">Arancione</string>
     <string name="settings_accent_blue">Blu</string>
-    <string name="settings_accent_purple">Viola</string>
+    <string name="settings_accent_champagne">Champagne</string>
     <string name="settings_accent_custom">Personalizzato</string>
     <string name="settings_accent_hue">Tonalità</string>
     <string name="settings_accent_selected">%1$s, selezionato</string>
@@ -490,6 +495,7 @@
     <string name="bookmarks_error_load">Impossibile caricare i segnalibri</string>
     <string name="note_ref_label">nota</string>
     <string name="quote_missing">Nota non trovata</string>
+    <string name="quote_gone">Nota non più sui relay</string>
     <string name="mute_quote_placeholder">Nota di un account silenziato</string>
     <string name="address_ref_label">evento</string>
     <string name="address_type_article">Articolo</string>

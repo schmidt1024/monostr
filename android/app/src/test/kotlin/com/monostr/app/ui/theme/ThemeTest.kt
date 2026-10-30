@@ -25,14 +25,16 @@ class ThemeTest {
                 val t = AccentPalette.tokens(accent, dark, black = black)
                 val surface = if (dark) MonoColors.darkSurface(black) else MonoColors.LightSurface
                 // primary is the colour of every TextButton label, icon tint and link: it must read on the surface (spec 11.1: AAA)
-                val rawReads = Contrast.ratio(accent.seedArgb, surface) >= AccentPalette.primaryMin(dark, black) &&
-                    Contrast.ratio(accent.seedArgb, Contrast.onColorFor(accent.seedArgb)) >= AccentPalette.ON_PRIMARY_MIN
-                if (rawReads) assertEquals(accent.seedArgb, t.primary, "$accent dark=$dark black=$black keeps the raw seed")
-                else assertTrue(t.primary != accent.seedArgb, "$accent dark=$dark black=$black seed was adjusted")
+                // an accent may bring its own light-mode seed (champagne's bronze); the rules hold for the seed in use
+                val seed = accent.lightSeedArgb?.takeIf { !dark } ?: accent.seedArgb
+                val rawReads = Contrast.ratio(seed, surface) >= AccentPalette.primaryMin(dark, black) &&
+                    Contrast.ratio(seed, Contrast.onColorFor(seed)) >= AccentPalette.ON_PRIMARY_MIN
+                if (rawReads) assertEquals(seed, t.primary, "$accent dark=$dark black=$black keeps the raw seed")
+                else assertTrue(t.primary != seed, "$accent dark=$dark black=$black seed was adjusted")
                 assertTrue(Contrast.ratio(t.primary, surface) >= AccentPalette.primaryMin(dark, black), "$accent dark=$dark black=$black primary on surface: ${Contrast.ratio(t.primary, surface)}")
                 assertTrue(Contrast.ratio(t.primary, t.onPrimary) >= AccentPalette.ON_PRIMARY_MIN, "$accent dark=$dark black=$black onPrimary")
                 assertTrue(Contrast.ratio(t.primaryContainer, t.onPrimaryContainer) >= AccentPalette.CONTAINER_MIN, "$accent dark=$dark black=$black container")
-                assertEquals(AccentPalette.blend(accent.seedArgb, surface, 0.12), t.primaryContainer, "$accent dark=$dark black=$black container blend")
+                assertEquals(AccentPalette.blend(seed, surface, 0.12), t.primaryContainer, "$accent dark=$dark black=$black container blend")
             }
         }
     }
@@ -70,10 +72,10 @@ class ThemeTest {
         val expected = mapOf(
             "ORANGE light" to "FFB34700", "ORANGE dark" to "FFFF6600", "ORANGE black" to "FFFF6600",
             "BLUE light" to "FF285EC9", "BLUE dark" to "FF6393F2", "BLUE black" to "FF6D9AF2",
-            "PURPLE light" to "FF744BCB", "PURPLE dark" to "FFA284E2", "PURPLE black" to "FFA98DE4",
+            "CHAMPAGNE light" to "FF865F20", "CHAMPAGNE dark" to "FFD5B07A", "CHAMPAGNE black" to "FFD5B07A",
         )
         val actual = LinkedHashMap<String, String>()
-        for (accent in listOf(Accent.ORANGE, Accent.BLUE, Accent.PURPLE)) {
+        for (accent in listOf(Accent.ORANGE, Accent.BLUE, Accent.CHAMPAGNE)) {
             for ((name, mode) in listOf("light" to (false to false), "dark" to (true to false), "black" to (true to true))) {
                 actual["$accent $name"] = "%08X".format(AccentPalette.tokens(accent, mode.first, black = mode.second).primary)
             }

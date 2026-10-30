@@ -58,7 +58,12 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.em
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.widthIn
+import com.monostr.app.ui.theme.MonostrFonts
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -295,7 +300,7 @@ private fun Reader(
     LazyColumn(state = listState, modifier = Modifier.fillMaxSize().testTag("article-body")) {
         item(key = "header") { Header(s, ctx, onOpenProfile) }
         items(s.blocks.size, key = { "b$it" }) { i ->
-            Box(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) { BlockView(s.blocks[i], ctx) }
+            ReaderColumn(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) { BlockView(s.blocks[i], ctx) }
         }
         item(key = "actions") {
             Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
@@ -365,13 +370,15 @@ private fun Header(s: ArticleUi.Shown, ctx: RenderContext, onOpenProfile: (Strin
     val author = s.note.author
     Column {
         article.image?.let { ArticlePicture(it, ctx, 0, Modifier.fillMaxWidth().testTag("article-cover"), cover = true) }
-        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-            Text(article.title, style = MaterialTheme.typography.headlineMedium, modifier = Modifier.testTag("article-title"))
+        ReaderColumn(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+          Column {
+            Text(article.title, style = ReaderType.title(), modifier = Modifier.testTag("article-title"))
             Row(Modifier.padding(top = 12.dp).clickable { onOpenProfile(article.event.pubkey) }.testTag("article-author"), verticalAlignment = Alignment.CenterVertically) {
                 Avatar(author.picture, size = 40.dp)
                 Spacer(Modifier.width(12.dp))
                 Column {
-                    Text(author.shownName, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    // the byline in spaced capitals, like a newspaper (2026-10-30)
+                    Text(author.shownName.uppercase(), style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 0.08.em), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     val date = DateUtils.formatDateTime(LocalContext.current, article.publishedAt * 1000, DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_SHOW_YEAR or DateUtils.FORMAT_ABBREV_MONTH)
                     Text(
                         date + " · " + pluralStringResource(R.plurals.article_read_time, s.minutes, s.minutes),
@@ -379,32 +386,48 @@ private fun Header(s: ArticleUi.Shown, ctx: RenderContext, onOpenProfile: (Strin
                     )
                 }
             }
+          }
         }
     }
 }
 
+/**
+ * The reader's book typography (2026-10-30, «Feuilleton»): Newsreader for title, headings and text; code, tables, cards
+ * and the replies below keep the app's faces.
+ */
+private object ReaderType {
+    @Composable fun title() = MaterialTheme.typography.headlineMedium.let { it.copy(fontFamily = MonostrFonts.serif, fontWeight = FontWeight.Normal, lineHeight = it.fontSize * 1.25, letterSpacing = (-0.005).em) }
+    @Composable fun body() = MaterialTheme.typography.bodyLarge.copy(fontFamily = MonostrFonts.serif, fontSize = 18.sp, lineHeight = (18 * 1.55).sp)
+    @Composable fun quote() = body().copy(fontStyle = FontStyle.Italic)
+    @Composable fun heading(level: Int) = when (level) {
+        1 -> MaterialTheme.typography.headlineSmall
+        2 -> MaterialTheme.typography.titleLarge
+        else -> MaterialTheme.typography.titleMedium
+    }.copy(fontFamily = MonostrFonts.serif, fontWeight = FontWeight.Medium)
+}
+
+/** Keeps the text at a readable measure on tablets and in landscape: at most 640 dp wide, centred. */
 @Composable
-private fun BlockView(block: MdBlock, ctx: RenderContext) {
+private fun ReaderColumn(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
+        Box(Modifier.widthIn(max = 640.dp).fillMaxWidth().then(modifier)) { content() }
+    }
+}
+
+@Composable
+private fun BlockView(block: MdBlock, ctx: RenderContext, quote: Boolean = false) {
     when (block) {
-        is MdBlock.Heading -> Text(
-            richText(block.text, ctx),
-            style = when (block.level) {
-                1 -> MaterialTheme.typography.headlineSmall
-                2 -> MaterialTheme.typography.titleLarge
-                else -> MaterialTheme.typography.titleMedium
-            }.copy(fontWeight = FontWeight.Bold),
-            modifier = Modifier.padding(top = 8.dp),
-        )
-        is MdBlock.Paragraph -> ParagraphView(block, ctx)
+        is MdBlock.Heading -> Text(richText(block.text, ctx), style = ReaderType.heading(block.level), modifier = Modifier.padding(top = 8.dp))
+        is MdBlock.Paragraph -> ParagraphView(block, ctx, quote)
         is MdBlock.Quote -> Row(Modifier.height(IntrinsicSize.Min)) {
-            Box(Modifier.width(3.dp).fillMaxHeight().background(MaterialTheme.colorScheme.outlineVariant))
-            Column(Modifier.padding(start = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { block.blocks.forEach { BlockView(it, ctx) } }
+            Box(Modifier.width(2.dp).fillMaxHeight().background(MaterialTheme.colorScheme.primary))
+            Column(Modifier.padding(start = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { block.blocks.forEach { BlockView(it, ctx, quote = true) } }
         }
         is MdBlock.ListBlock -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             block.items.forEachIndexed { i, item ->
                 Row {
-                    Text(if (block.ordered) "${block.start + i}." else "•", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.width(28.dp))
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) { item.forEach { BlockView(it, ctx) } }
+                    Text(if (block.ordered) "${block.start + i}." else "•", style = if (quote) ReaderType.quote() else ReaderType.body(), modifier = Modifier.width(28.dp))
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) { item.forEach { BlockView(it, ctx, quote) } }
                 }
             }
         }
@@ -422,7 +445,7 @@ private fun BlockView(block: MdBlock, ctx: RenderContext) {
 
 /** A paragraph that is one `nostr:note`/`naddr` token on its own is the same card a note shows; anything else is text. */
 @Composable
-private fun ParagraphView(block: MdBlock.Paragraph, ctx: RenderContext) {
+private fun ParagraphView(block: MdBlock.Paragraph, ctx: RenderContext, quote: Boolean = false) {
     val own = if (block.text.spans.isEmpty()) NoteLinks.annotate(block.text.text.trim()).singleOrNull() else null
     when {
         own is NoteSpan.AddressRef && own.text.startsWith("nostr:", ignoreCase = true) -> {
@@ -431,7 +454,7 @@ private fun ParagraphView(block: MdBlock.Paragraph, ctx: RenderContext) {
         }
         own is NoteSpan.NoteRef && own.text.startsWith("nostr:", ignoreCase = true) ->
             QuoteCard(own.noteId, emptyList(), ctx.text.names, onOpenNote = ctx.onOpenNote, onOpenProfile = ctx.onOpenProfile, onHashtag = ctx.onHashtag)
-        else -> Text(richText(block.text, ctx), style = MaterialTheme.typography.bodyLarge.copy(lineHeight = MaterialTheme.typography.bodyLarge.fontSize * 1.55))
+        else -> Text(richText(block.text, ctx), style = if (quote) ReaderType.quote() else ReaderType.body())
     }
 }
 

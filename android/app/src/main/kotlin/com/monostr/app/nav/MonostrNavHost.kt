@@ -1,5 +1,6 @@
 package com.monostr.app.nav
 
+import com.monostr.app.ui.common.NoteLinks
 import com.monostr.app.data.linkpreview.PreviewImages
 import com.monostr.app.ui.media.LocalPreviewImageLoader
 import com.monostr.app.data.linkpreview.LinkPreviews
@@ -56,6 +57,7 @@ import com.monostr.app.ui.notifications.NotificationsScreen
 import com.monostr.app.ui.profile.ProfileEditScreen
 import com.monostr.app.ui.profile.ProfileScreen
 import com.monostr.app.ui.search.SearchScreen
+import com.monostr.app.ui.follows.FollowsScreen
 import com.monostr.app.ui.settings.AboutScreen
 import com.monostr.app.ui.settings.MutedScreen
 import com.monostr.app.ui.settings.SettingsScreen
@@ -96,6 +98,8 @@ object Routes {
     /** Spec 2026-10-29 article reader: [naddr] is the bech32 `naddr1…` (letters and digits only, so no encoding). */
     fun article(naddr: String, foreign: Boolean = true) = "article/$naddr?foreign=$foreign"
     fun profile(pubkey: String) = "profile/$pubkey"
+    /** Spec 2026-10-30 follow lists: [followers] opens the second tab. */
+    fun follows(pubkey: String, followers: Boolean) = "follows/$pubkey?followers=$followers"
     fun dm(pubkey: String) = "dm/$pubkey"
     /** Spec 2026-10-29 article reader: [article] is the bech32 `naddr1…` of the article commented on, [parent] the comment answered. */
     fun commentOn(article: String, parent: String? = null) = "compose?article=$article" + (parent?.let { "&parent=$it" } ?: "")
@@ -204,7 +208,7 @@ private fun LoggedInNavHost(ready: Ready, gate: OnboardingGateViewModel = hiltVi
                     onSearch = { nav.navigate(Routes.search()) { popUpTo(Routes.FEED); launchSingleTop = true } },
                     onMessages = onMessages,
                     onNotifications = { nav.navigate(Routes.NOTIFICATIONS) { popUpTo(Routes.FEED); launchSingleTop = true } },
-                    onHashtag = { nav.navigate(Routes.search("#$it")) },
+                    onHashtag = { nav.navigate(Routes.search(NoteLinks.searchFor(it))) },
                     onBookmarks = onBookmarks,
                     onOpenMedia = onOpenMedia,
                     onOpenVideo = onOpenVideo,
@@ -221,7 +225,7 @@ private fun LoggedInNavHost(ready: Ready, gate: OnboardingGateViewModel = hiltVi
                     onOpenProfile = { nav.navigate(Routes.profile(it)) },
                     onReply = { nav.navigate(Routes.compose(it)) },
                     onQuote = { nav.navigate(Routes.compose(quote = it)) },
-                    onHashtag = { nav.navigate(Routes.search("#$it")) },
+                    onHashtag = { nav.navigate(Routes.search(NoteLinks.searchFor(it))) },
                     onOpenMedia = onOpenMedia,
                     onOpenVideo = onOpenVideo,
                 )
@@ -250,7 +254,7 @@ private fun LoggedInNavHost(ready: Ready, gate: OnboardingGateViewModel = hiltVi
                     onBack = { nav.popBackStack() },
                     onOpenProfile = { nav.navigate(Routes.profile(it)) },
                     onOpenThread = { nav.navigate(Routes.thread(it)) },
-                    onHashtag = { nav.navigate(Routes.search("#$it")) },
+                    onHashtag = { nav.navigate(Routes.search(NoteLinks.searchFor(it))) },
                     onOpenMedia = { urls, i -> nav.navigate(Routes.mediaUrls(urls, i)) },
                     onOpenVideo = onOpenVideo,
                 )
@@ -278,7 +282,7 @@ private fun LoggedInNavHost(ready: Ready, gate: OnboardingGateViewModel = hiltVi
                     onReply = { nav.navigate(Routes.compose(it)) },
                     onQuote = { nav.navigate(Routes.compose(quote = it)) },
                     onOpenThread = { nav.navigate(Routes.thread(it)) },
-                    onHashtag = { nav.navigate(Routes.search("#$it")) },
+                    onHashtag = { nav.navigate(Routes.search(NoteLinks.searchFor(it))) },
                     onOpenMedia = onOpenMedia,
                     onOpenVideo = onOpenVideo,
                 )
@@ -297,7 +301,7 @@ private fun LoggedInNavHost(ready: Ready, gate: OnboardingGateViewModel = hiltVi
                     onQuoteNote = { nav.navigate(Routes.compose(quote = it)) },
                     onOpenNoteMedia = onOpenMedia,
                     onOpenVideo = onOpenVideo,
-                    onHashtag = { nav.navigate(Routes.search("#$it")) },
+                    onHashtag = { nav.navigate(Routes.search(NoteLinks.searchFor(it))) },
                     onOpenMedia = { urls, i -> nav.navigate(Routes.mediaUrls(urls, i)) },
                 )
             }
@@ -309,7 +313,7 @@ private fun LoggedInNavHost(ready: Ready, gate: OnboardingGateViewModel = hiltVi
                     onReply = { nav.navigate(Routes.compose(it)) },
                     onQuote = { nav.navigate(Routes.compose(quote = it)) },
                     onOpenProfile = { nav.navigate(Routes.profile(it)) },
-                    onHashtag = { nav.navigate(Routes.search("#$it")) },
+                    onHashtag = { nav.navigate(Routes.search(NoteLinks.searchFor(it))) },
                     onOpenMedia = onOpenMedia,
                     onOpenVideo = onOpenVideo,
                     onMessage = { nav.navigate(Routes.dm(it)) },
@@ -317,7 +321,14 @@ private fun LoggedInNavHost(ready: Ready, gate: OnboardingGateViewModel = hiltVi
                     onCreateList = { nav.navigate(Routes.listEdit()) },
                     onNewListWith = { nav.navigate(Routes.listEdit(add = it)) },
                     onOpenPicture = { nav.navigate(Routes.mediaUrls(listOf(it))) },
+                    onOpenFollows = { pubkey, followers -> nav.navigate(Routes.follows(pubkey, followers)) },
                 )
+            }
+            composable(
+                "follows/{pubkey}?followers={followers}",
+                arguments = listOf(navArgument("pubkey") { type = NavType.StringType }, navArgument("followers") { type = NavType.BoolType; defaultValue = false }),
+            ) {
+                FollowsScreen(onBack = { nav.popBackStack() }, onOpenProfile = { nav.navigate(Routes.profile(it)) })
             }
             composable(Routes.LIST, arguments = listOf(navArgument("address") { type = NavType.StringType })) {
                 ListScreen(
@@ -327,7 +338,7 @@ private fun LoggedInNavHost(ready: Ready, gate: OnboardingGateViewModel = hiltVi
                     onOpenThread = { nav.navigate(Routes.thread(it)) },
                     onReply = { nav.navigate(Routes.compose(it)) },
                     onQuote = { nav.navigate(Routes.compose(quote = it)) },
-                    onHashtag = { nav.navigate(Routes.search("#$it")) },
+                    onHashtag = { nav.navigate(Routes.search(NoteLinks.searchFor(it))) },
                     onOpenMedia = onOpenMedia,
                     onOpenVideo = onOpenVideo,
                 )

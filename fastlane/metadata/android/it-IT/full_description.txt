@@ -1,18 +1,20 @@
 monostr è un client Nostr per Android con mance in Monero.
 
 <b>Nostr, come lo conosci</b>
-• Feed delle persone che segui, thread, profili con le schede Post e Risposte
+• Feed delle persone che segui, thread, profili con le schede Post, Risposte, Ripubblicati, Articoli e Liste
 • Mi piace, ripubblica, cita, rispondi; menzioni, hashtag e link toccabili
-• Immagini nelle note e caricamenti propri (Blossom), contenuti sensibili sfocati
+• Immagini e video fino a 2 minuti nelle note e caricamenti propri (Blossom), contenuti sensibili sfocati
+• Leggi articoli lunghi (NIP-23) direttamente nell'app, con mi piace, ripubblicazioni, risposte, segnalibri e mance; i link ad articoli, dirette e altri eventi appaiono come schede
 • Messaggi privati (NIP-17), segnalibri e account silenziati privati (NIP-51)
 • Ricerca di persone e note (NIP-50), notifiche per mi piace, ripubblicazioni, risposte e mance
 • La tua lista di relay (NIP-65); i relay di scrittura di un autore si aggiungono finché il suo profilo è aperto
-• Accesso con Amber (NIP-55) o con una chiave; tema chiaro e scuro, 8 lingue
+• Accesso con Amber (NIP-55), con una chiave o con un backup della chiave protetto da password (ncryptsec, NIP-49); puoi anche salvare la chiave con una password; tema chiaro e scuro, 8 lingue
 
 <b>Mance in Monero</b>
 • Lascia una mancia a una nota o a un profilo dalla tua app wallet (Unstoppable, monfluo, Cake …) tramite un link monero:
 • monostr non contiene un wallet né una chiave di spesa
-• Per ricevere mance registri indirizzo e chiave di visualizzazione privata presso un watcher (watcher.monostr.com di default, o il tuo). Il watcher vede i pagamenti in entrata e pubblica ricevute firmate su Nostr, così tutti vedono la mancia sotto la nota
+• Per ricevere mance ci sono due strade. O pubblichi semplicemente il tuo indirizzo Monero (NIP-A3 payto): gli altri pagano dal proprio wallet, senza ricevuta in monostr
+• Oppure registri indirizzo e chiave di visualizzazione privata presso un watcher (watcher.monostr.com di default, o il tuo). Il watcher vede i pagamenti in entrata e pubblica ricevute firmate su Nostr, così tutti vedono la mancia sotto la nota
 • Sono possibili mance anonime
 
 <b>Aperto</b>

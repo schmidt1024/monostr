@@ -1,5 +1,6 @@
 package com.monostr.app.ui.search
 
+import com.monostr.app.ui.common.NoteLinks
 import com.monostr.app.ui.discover.DiscoverController
 import com.monostr.app.ui.discover.discoverItems
 import com.monostr.nostr.PerfTrace
@@ -141,7 +142,7 @@ fun SearchScreen(
     LaunchedEffect(Unit) { if (state.query.isEmpty()) runCatching { focus.requestFocus() } }
     MessageSnackbar(state.message, snackbar, onUnmute = vm.controller::unmute, onShown = vm.controller::clearMessage)
     DeletionMessages(vm.deletions, snackbar)
-    val hashtag: (String) -> Unit = { vm.controller.onQueryChange("#$it"); vm.controller.submit() }
+    val hashtag: (String) -> Unit = { vm.controller.onQueryChange(NoteLinks.searchFor(it)); vm.controller.submit() }
     val hide = rememberHideOnScroll()
     val listState = rememberLazyListState()
     ShowBarsWhenStuck(hide, listState, contentKey = state.mode) // a new search mode replaces the results

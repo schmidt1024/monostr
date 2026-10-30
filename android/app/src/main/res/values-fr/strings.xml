@@ -96,6 +96,10 @@
     <string name="profile_extra_relays">Notes aussi depuis %1$s</string>
     <!-- profile header: "12 Following · 3,373 Followers"; the numbers are formatted apart -->
     <string name="profile_following_label">Abonnements</string>
+    <string name="follows_tab_followers">Abonnés</string>
+    <string name="follows_empty_following">Ne suit encore personne</string>
+    <string name="follows_empty_followers">Aucun abonné connu pour l’instant</string>
+    <string name="follows_end_followers">Les relais ne connaissent pas d’autres abonnés</string>
     <plurals name="profile_followers_label">
         <item quantity="one">%1$s Abonné</item>
         <item quantity="other">%1$s Abonnés</item>
@@ -328,6 +332,7 @@
     <string name="settings_link_previews">Aperçus des liens</string>
     <string name="settings_link_previews_hint">Affiche le titre et l’image des pages liées. Ces sites et les serveurs de leurs images voient alors votre adresse IP.</string>
     <string name="link_preview_cd">Aperçu du lien : %1$s, %2$s</string>
+    <string name="link_preview_remove">Retirer l’aperçu</string>
     <string name="settings_author_relays">Connecter temporairement les relais de l\'auteur</string>
     <string name="settings_author_relays_hint">Les notes sont aussi récupérées depuis les relais propres d\'autres personnes : à l\'ouverture d\'un profil, et quand une note répond à une note ou en cite une que vos relais n\'ont pas. Ces relais voient votre adresse IP et quelles notes vous consultez.</string>
     <string name="settings_pow">Preuve de travail</string>
@@ -394,7 +399,7 @@
     <string name="settings_accent_mono">Mono</string>
     <string name="settings_accent_orange">Orange</string>
     <string name="settings_accent_blue">Bleu</string>
-    <string name="settings_accent_purple">Violet</string>
+    <string name="settings_accent_champagne">Champagne</string>
     <string name="settings_accent_custom">Personnalisé</string>
     <string name="settings_accent_hue">Teinte</string>
     <string name="settings_accent_selected">%1$s, sélectionné</string>
@@ -490,6 +495,7 @@
     <string name="bookmarks_error_load">Les signets n’ont pas pu être chargés</string>
     <string name="note_ref_label">note</string>
     <string name="quote_missing">Note introuvable</string>
+    <string name="quote_gone">Note plus disponible sur les relais</string>
     <string name="mute_quote_placeholder">Note d’un compte masqué</string>
     <string name="address_ref_label">événement</string>
     <string name="address_type_article">Article</string>

@@ -76,6 +76,8 @@ import com.monostr.nostr.repo.CountLimiter
 import com.monostr.nostr.repo.CountsRepository
 import com.monostr.nostr.repo.FollowCountsRepository
 import com.monostr.nostr.repo.NostrFollowCountsRepository
+import com.monostr.nostr.repo.FollowListsRepository
+import com.monostr.nostr.repo.NostrFollowListsRepository
 import com.monostr.nostr.repo.DmRelaysRepository
 import com.monostr.nostr.repo.FeedRepository
 import com.monostr.nostr.repo.FollowRepository
@@ -177,6 +179,8 @@ class Ready(
     val follows: FollowRepository,
     /** Follower and following numbers for the profile header. */
     val followCounts: FollowCountsRepository,
+    /** Spec 2026-10-30: the accounts behind the profile's Following and Followers numbers. */
+    val followLists: FollowListsRepository,
     /** Plan 10e: prepares and uploads pictures for notes and the profile. */
     val media: MediaUploader,
     /** Plan 11-A: own notes deleted in this session. */
@@ -653,6 +657,8 @@ class NostrSession @Inject constructor(
             val followCounts = NostrFollowCountsRepository(engine, limiter = countLimiter)
             // a follow or unfollow changes the own Following number and the target's Followers: counted afresh
             engine.backgroundScope.launch { follows.changes.collect { followCounts.invalidateAll() } }
+            // the user's own list and the lists of whom they follow stay stored; other followers' lists are passing
+            val followLists = NostrFollowListsRepository(engine, kept = { feed.followsLocal().toHashSet() + signer.pubkey })
             val blossom = BlossomClient(http, signer)
             val mediaServer = uiSettings.mediaServer.stateIn(engine.backgroundScope, SharingStarted.Eagerly, MediaServer.DEFAULT)
             val pictures = OwnPictures(
@@ -697,6 +703,7 @@ class NostrSession @Inject constructor(
                 articleReplies = com.monostr.nostr.repo.NostrArticleRepliesRepository(engine, foreign = foreign),
                 follows = follows,
                 followCounts = followCounts,
+                followLists = followLists,
                 deletions = NoteDeletions(engine.backgroundScope),
                 media = media,
                 pictures = pictures,

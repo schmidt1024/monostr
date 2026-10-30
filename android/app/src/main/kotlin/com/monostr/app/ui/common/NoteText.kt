@@ -70,6 +70,7 @@ fun NoteText(
             when (s) {
                 is NoteSpan.Plain -> append(s.text)
                 is NoteSpan.Hashtag -> withLink(LinkAnnotation.Clickable("tag", styles) { onHashtag(s.tag) }) { append(s.text) }
+                is NoteSpan.Cashtag -> withLink(LinkAnnotation.Clickable("cashtag", styles) { onHashtag(s.text) }) { append(s.text) }
                 is NoteSpan.Mention -> withLink(LinkAnnotation.Clickable("mention", nameStyles) { onOpenProfile(s.pubkey) }) { append(MentionNames.label(s.pubkey, names)) }
                 is NoteSpan.NoteRef -> withLink(LinkAnnotation.Clickable("note", nameStyles) { onOpenNote(s.noteId) }) { append(noteLabel) }
                 is NoteSpan.AddressRef -> withLink(LinkAnnotation.Clickable("address", nameStyles) {

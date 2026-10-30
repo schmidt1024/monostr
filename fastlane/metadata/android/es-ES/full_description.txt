@@ -1,18 +1,20 @@
 monostr es un cliente Nostr para Android con propinas en Monero.
 
 <b>Nostr, como ya lo conoces</b>
-• Feed de las personas que sigues, hilos, perfiles con las pestañas Publicaciones y Respuestas
+• Feed de las personas que sigues, hilos, perfiles con las pestañas Publicaciones, Respuestas, Reposts, Artículos y Listas
 • Me gusta, republicar, citar, responder; menciones, hashtags y enlaces que se pueden tocar
-• Imágenes en las notas y subidas propias (Blossom), contenido sensible difuminado
+• Imágenes y vídeos de hasta 2 minutos en las notas y subidas propias (Blossom), contenido sensible difuminado
+• Lee artículos largos (NIP-23) directamente en la app, con me gusta, republicaciones, respuestas, marcadores y propinas; los enlaces a artículos, directos y otros eventos se muestran como tarjetas
 • Mensajes privados (NIP-17), marcadores y silenciados privados (NIP-51)
 • Búsqueda de personas y notas (NIP-50), notificaciones de me gusta, republicaciones, respuestas y propinas
 • Tu lista de relays (NIP-65); los relays de escritura de un autor se añaden mientras su perfil está abierto
-• Inicio de sesión con Amber (NIP-55) o con una clave; tema claro y oscuro, 8 idiomas
+• Inicio de sesión con Amber (NIP-55), con una clave o con una copia de seguridad de la clave protegida con contraseña (ncryptsec, NIP-49); también puedes guardar tu clave con una contraseña; tema claro y oscuro, 8 idiomas
 
 <b>Propinas en Monero</b>
 • Da propina a una nota o a un perfil desde tu propia app de cartera (Unstoppable, monfluo, Cake …) mediante un enlace monero:
 • monostr no tiene cartera ni clave de gasto
-• Para recibir propinas registras tu dirección y tu clave privada de visualización en un watcher (watcher.monostr.com por defecto, o el tuyo). El watcher ve tus pagos entrantes y publica recibos firmados en Nostr, para que todos vean la propina en la nota
+• Para recibir propinas hay dos vías. O simplemente publicas tu dirección de Monero (NIP-A3 payto): los demás pagan desde su cartera, sin recibo en monostr
+• O registras tu dirección y tu clave privada de visualización en un watcher (watcher.monostr.com por defecto, o el tuyo). El watcher ve tus pagos entrantes y publica recibos firmados en Nostr, para que todos vean la propina en la nota
 • Las propinas anónimas son posibles
 
 <b>Abierto</b>

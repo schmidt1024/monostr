@@ -1,0 +1,8 @@
+• Profillerde takip edilenler ve takipçiler listesi, bio ve takip butonuyla
+• X gibi editör: resmin metnin yanında, yazarken bağlantı önizlemesi
+• X gibi önizlemeler: başlık resmin üstünde, alan adı altında
+• Makaleler kitap yazı tipinde
+• Yeni vurgu rengi Şampanya; vurgular liste halinde (mor artık Özel'de)
+• $XMR ve diğer cashtag'ler arama açar
+• Alıntılardaki resimler biçimini korur
+• Düzeltmeler: notların altındaki boşluklar, artık relay'lerde olmayan alıntılar

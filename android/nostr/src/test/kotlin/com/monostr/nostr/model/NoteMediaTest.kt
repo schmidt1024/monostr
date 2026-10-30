@@ -122,4 +122,12 @@ class NoteMediaTest {
             "thumb https://v.example/t.jpg", "image https://v.example/i.jpg")))
         assertEquals("https://v.example/i.jpg", p.media.single().poster)
     }
+
+    @Test
+    fun `the shown text has no blank lines or invisible characters around it and one blank line at most inside`() {
+        assertEquals("Ask ChatGPT. 😉", NoteMedia.parse("Ask ChatGPT. 😉\n\n\n", emptyList()).displayContent)
+        assertEquals("a", NoteMedia.parse("\u200B\n a \n\uFEFF", emptyList()).displayContent)
+        assertEquals("one\n\ntwo", NoteMedia.parse("one\n\n\n\n  \ntwo", emptyList()).displayContent)
+        assertEquals("one\ntwo", NoteMedia.parse("one\ntwo", emptyList()).displayContent)
+    }
 }

@@ -31,7 +31,7 @@ object AccentPalette {
             else AccentTokens(MonoColors.LightPrimary, MonoColors.LightOnPrimary, MonoColors.LightSurfaceContainer, MonoColors.LightOnSurface)
         }
         val surface = if (dark) MonoColors.darkSurface(black) else MonoColors.LightSurface
-        val seed = if (accent == Accent.CUSTOM) customSeed else accent.seedArgb
+        val seed = if (accent == Accent.CUSTOM) customSeed else accent.lightSeedArgb?.takeIf { !dark } ?: accent.seedArgb
         // primary colours every TextButton label, icon tint and link, so it must read on the surface: a seed
         // that already does stays raw (neon green on black), otherwise it is mixed towards black on the light
         // surface (cypherpunk green ends up a deep green) or towards white on the dark one (a dark purple lifts)

@@ -1,0 +1,8 @@
+• Following- und Follower-Listen im Profil, mit Bio und Folgen-Button
+• Editor wie bei X: dein Bild neben dem Text, Linkvorschau beim Schreiben
+• Linkvorschau wie bei X: Titel auf dem Bild, Domain darunter
+• Artikel in Buchschrift
+• Neue Akzentfarbe Champagner; Akzente als Liste (Lila jetzt unter «Eigene»)
+• $XMR und andere Cashtags öffnen eine Suche
+• Bilder in Zitaten behalten ihr Format
+• Korrekturen: Lücken unter Notizen, zitierte Notizen nicht mehr auf den Relays

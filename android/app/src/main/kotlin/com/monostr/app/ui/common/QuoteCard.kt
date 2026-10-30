@@ -40,6 +40,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.monostr.app.ui.media.MediaRatios
+import com.monostr.app.ui.media.MediaBoxes
+import androidx.compose.foundation.layout.BoxWithConstraints
 import com.monostr.app.R
 import com.monostr.app.ui.media.rememberBlurhash
 import com.monostr.app.ui.media.MediaCoverBadge
@@ -180,7 +183,8 @@ fun QuoteCard(
                 modifier = Modifier.testTag("quote-muted-${quotedId.take(8)}"),
             )
             QuoteUi.Missing -> {
-                Text(stringResource(R.string.quote_missing), style = MaterialTheme.typography.bodyMedium)
+                // the relays asked have nothing (old notes get pruned, user 2026-10-30): say so, not «not found»
+                Text(stringResource(R.string.quote_gone), style = MaterialTheme.typography.bodyMedium)
                 Text(QuoteLoader.shortRef(quotedId), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             is QuoteUi.Found -> {
@@ -205,31 +209,48 @@ fun QuoteCard(
     }
 }
 
-/** First picture of a quoted note, 16:9; a sensitive note is covered and "media on tap" waits for a tap, like NoteMediaRow. */
+/**
+ * First picture of a quoted note in its own shape, like a note's single picture (2026-10-30, was always 16:9 and cut
+ * screenshots): full width, the real ratio from `dim` or learned on load, only a picture taller than [QUOTE_MAX_HEIGHT_DP]
+ * is cropped, from the top. A sensitive note is covered and "media on tap" waits for a tap, like NoteMediaRow.
+ */
 @Composable
 private fun QuoteImage(note: Note, media: NoteMedia, onOpen: () -> Unit) {
     val (covered, waiting) = rememberMediaCover(note, hasImages = true)
     val placeholder = rememberBlurhash(media.blurhash)
-    Box(
-        Modifier
-            .padding(top = 8.dp)
-            .fillMaxWidth()
-            .aspectRatio(16f / 9f)
-            .clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .clickable { if (covered || waiting) MediaReveals.reveal(note.id) else onOpen() }
-            .testTag("quote-media-${note.id.take(8)}"),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (covered || waiting) {
-            // covered or waiting media is never fetched: only the blurhash (or the plain box) shows
-            placeholder?.let { Image(it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
-            MediaCoverBadge(
-                if (covered) Icons.Filled.VisibilityOff else Icons.Outlined.Image,
-                title = stringResource(if (covered) R.string.media_sensitive else R.string.media_tap_to_load),
-            )
-        } else {
-            AsyncImage(model = media.url, contentDescription = media.alt, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+    var learned by remember(media.url) { mutableStateOf(MediaRatios[media.url]) }
+    BoxWithConstraints(Modifier.padding(top = 8.dp).fillMaxWidth()) {
+        val box = MediaBoxes.single(media.dim ?: learned, widthDp = maxWidth.value, maxHeightDp = QUOTE_MAX_HEIGHT_DP)
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .aspectRatio(box.ratio)
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .clickable { if (covered || waiting) MediaReveals.reveal(note.id) else onOpen() }
+                .testTag("quote-media-${note.id.take(8)}"),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (covered || waiting) {
+                // covered or waiting media is never fetched: only the blurhash (or the plain box) shows
+                placeholder?.let { Image(it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
+                MediaCoverBadge(
+                    if (covered) Icons.Filled.VisibilityOff else Icons.Outlined.Image,
+                    title = stringResource(if (covered) R.string.media_sensitive else R.string.media_tap_to_load),
+                )
+            } else {
+                AsyncImage(
+                    model = media.url, contentDescription = media.alt,
+                    // a tall screenshot keeps its top (where its text starts); everything else fits whole
+                    contentScale = if (box.crop) ContentScale.Crop else ContentScale.Fit,
+                    alignment = if (box.crop) Alignment.TopCenter else Alignment.Center,
+                    onSuccess = { s -> if (media.dim == null) { MediaRatios.put(media.url, s.result.image.width, s.result.image.height); learned = MediaRatios[media.url] } },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         }
     }
 }
+
+/** A quote sits inside another note: its picture stops lower than a note's own (400 dp). */
+private const val QUOTE_MAX_HEIGHT_DP = 320f

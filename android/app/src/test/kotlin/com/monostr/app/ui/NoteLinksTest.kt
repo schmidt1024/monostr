@@ -122,4 +122,30 @@ class NoteLinksTest {
             NoteLinks.annotate("https://monostr.com/ http://www.example.org/a/"),
         )
     }
+
+    @Test
+    fun `cashtags are 2 to 6 capitals after a free standing dollar sign`() {
+        fun tags(text: String) = NoteLinks.annotate(text).filterIsInstance<NoteSpan.Cashtag>().map { it.symbol }
+        assertEquals(listOf("XMR", "BTC"), tags("tip in \$XMR, not \$BTC."))
+        assertEquals(listOf("XMR"), tags("(\$XMR)"))
+        assertEquals(emptyList<String>(), tags("costs \$5 or \$100k"))
+        assertEquals(emptyList<String>(), tags("US\$ 20, a\$XMR, \$xmr, \$X, \$TOOLONG, \$XMR2, echo \$PATH_X"))
+        assertEquals(listOf(NoteSpan.Plain("buy "), NoteSpan.Cashtag("\$XMR", "XMR")), NoteLinks.annotate("buy \$XMR"))
+    }
+
+    @Test
+    fun `a tapped tag searches for itself`() {
+        assertEquals("#monero", NoteLinks.searchFor("monero"))
+        assertEquals("\$XMR", NoteLinks.searchFor("\$XMR"))
+    }
+
+    @Test
+    fun `a cashtag search keeps only notes with the exact ticker`() {
+        assertEquals("XMR", NoteLinks.cashtagOf(" \$XMR "))
+        assertEquals(null, NoteLinks.cashtagOf("\$xmr"))
+        assertEquals(null, NoteLinks.cashtagOf("XMR"))
+        assertEquals(true, NoteLinks.hasCashtag("long \$XMR here", "XMR"))
+        assertEquals(false, NoteLinks.hasCashtag("XMR without dollar", "XMR"))
+        assertEquals(false, NoteLinks.hasCashtag("\$XMRX is another", "XMR"))
+    }
 }

@@ -38,7 +38,16 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.material3.HorizontalDivider
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.Switch
@@ -48,6 +57,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -74,6 +86,8 @@ import com.monostr.app.media.VideoRules
 import com.monostr.app.session.NostrSession
 import com.monostr.app.ui.common.Avatar
 import com.monostr.app.ui.common.QuoteCard
+import com.monostr.app.ui.media.LinkPreviewCard
+import com.monostr.app.ui.media.rememberDraftLink
 import com.monostr.app.ui.common.UiText
 import com.monostr.app.ui.common.asString
 import com.monostr.app.ui.common.uiText
@@ -624,6 +638,8 @@ class ComposeViewModel @Inject constructor(
         addresses = ready.addresses,
     )
     val prefill: String? = handle["text"]
+    /** The user's own picture beside the text, like X's editor (2026-10-30). */
+    val self: StateFlow<Profile> = ready.profiles.observe(ready.pubkey).stateIn(viewModelScope, SharingStarted.Eagerly, Profile.empty(ready.pubkey))
     init {
         ReceivedImages.sweep(received, System.currentTimeMillis())
         controller.start()
@@ -697,29 +713,63 @@ fun ComposeScreen(onDone: () -> Unit, vm: ComposeViewModel = hiltViewModel()) {
     // spec 2026-10-27 video §3: exactly one video
     val pickVideo = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let { vm.controller.attachVideo(it.toString()) } }
     val videoOnly = remember { PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly) }
-    Scaffold(topBar = {
-        TopAppBar(
-            title = { Text(stringResource(if (state.replyTo != null || state.article != null) R.string.compose_title_reply else R.string.compose_title_new)) },
-            navigationIcon = { IconButton(onClick = onDone) { Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.action_close)) } },
-        )
-    }) { padding ->
-        Column(Modifier.padding(padding).imePadding().padding(16.dp).fillMaxSize().verticalScroll(rememberScrollState())) {
+    val self by vm.self.collectAsStateWithLifecycle()
+    val canSend = !state.sending && (field.text.isNotBlank() || vm.quoteId != null || state.attachments.isNotEmpty()) &&
+        state.attachmentsReady && !state.replyUnresolved && !state.quoteUnresolved && !state.articleUnresolved
+    // 2026-10-30, like X's editor: close left, a small «Post» pill right, the picture beside a frameless text, the tools above the keyboard
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {},
+                navigationIcon = { IconButton(onClick = onDone) { Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.action_close)) } },
+                actions = {
+                    Button(
+                        onClick = { vm.controller.send(field.text.toString()) },
+                        enabled = canSend,
+                        contentPadding = PaddingValues(horizontal = 18.dp),
+                        modifier = Modifier.padding(end = 12.dp).height(36.dp).testTag("compose-send"),
+                    ) {
+                        Text(stringResource(when {
+                            state.sending -> R.string.state_sending
+                            state.pendingResend -> R.string.action_send_again
+                            else -> R.string.action_send
+                        }), style = MaterialTheme.typography.labelLarge)
+                    }
+                },
+            )
+        },
+    ) { padding ->
+        Column(Modifier.padding(padding).consumeWindowInsets(padding).imePadding().padding(horizontal = 16.dp, vertical = 8.dp).fillMaxSize().verticalScroll(rememberScrollState())) {
             // the comment answered, else the article commented on
             (state.replyTo?.displayContent ?: state.articleTitle)?.let {
                 Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 3, modifier = Modifier.testTag("compose-article-target"))
                 Spacer(Modifier.height(12.dp))
             }
-            // after an offline send the stored event is re-sent as is, so the text is frozen
-            OutlinedTextField(
+            Row {
+            Avatar(self.picture, size = 40.dp)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+            // after an offline send the stored event is re-sent as is, so the text is frozen; no frame, the text looks as it will in the feed
+            val textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface)
+            // the keyboard opens with the editor, like X
+            val focus = remember { FocusRequester() }
+            LaunchedEffect(Unit) { focus.requestFocus() }
+            BasicTextField(
                 state = field,
                 readOnly = state.pendingResend,
                 inputTransformation = mentionInput,
                 outputTransformation = mentionOutput,
-                modifier = Modifier.fillMaxWidth().height(200.dp).contentReceiver(receiver).testTag("compose-text"),
-                placeholder = { Text(stringResource(R.string.compose_placeholder)) },
-                isError = state.error != null,
-                supportingText = { state.error?.let { Text(it.asString()) } },
+                textStyle = textStyle,
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp).padding(top = 8.dp).focusRequester(focus).contentReceiver(receiver).testTag("compose-text"),
+                decorator = { inner ->
+                    Box {
+                        if (field.text.isEmpty()) Text(stringResource(R.string.compose_placeholder), style = textStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        inner()
+                    }
+                },
             )
+            state.error?.let { Text(it.asString(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 4.dp)) }
             if (state.suggestions.isNotEmpty()) {
                 // spec 4.2: right under the field, i.e. above the keyboard (imePadding on the column)
                 LazyColumn(Modifier.fillMaxWidth().heightIn(max = 280.dp).testTag("mention-list")) {
@@ -742,6 +792,14 @@ fun ComposeScreen(onDone: () -> Unit, vm: ComposeViewModel = hiltViewModel()) {
                     }
                 }
             }
+            // 2026-10-30, like X's editor: the card the note's first link will get, with an X to put it away while writing;
+            // a quote or attached media mean no card, so none shows. The X only hides it here (other clients decide themselves).
+            var dismissedLink by rememberSaveable { mutableStateOf<String?>(null) }
+            rememberDraftLink(field.text.toString(), blocked = vm.quoteId != null || state.attachments.isNotEmpty())
+                ?.takeIf { (_, link) -> link.url != dismissedLink }
+                ?.let { (draft, link) ->
+                    Box(Modifier.testTag("compose-link-preview")) { LinkPreviewCard(draft, link.url, link.preview, onDismiss = { dismissedLink = link.url }) }
+                }
             vm.quoteId?.let { id ->
                 Spacer(Modifier.height(12.dp))
                 Text(stringResource(R.string.compose_quote_hint), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -767,7 +825,9 @@ fun ComposeScreen(onDone: () -> Unit, vm: ComposeViewModel = hiltViewModel()) {
                     )
                 }
             }
-            Row {
+            // like X: the tools right under what is written, not at the screen's foot; with the keyboard open they sit on it
+            HorizontalDivider(Modifier.padding(top = 12.dp))
+            Row(Modifier.offset(x = (-12).dp).padding(vertical = 4.dp).testTag("compose-tools")) {
                 IconButton(
                     onClick = {
                         val free = NoteMedia.MAX_ATTACH - state.attachments.size
@@ -777,28 +837,17 @@ fun ComposeScreen(onDone: () -> Unit, vm: ComposeViewModel = hiltViewModel()) {
                     enabled = state.canAttachPictures,
                     modifier = Modifier.testTag("compose-attach"),
                 ) {
-                    Icon(Icons.Outlined.Image, contentDescription = stringResource(R.string.compose_attach))
+                    Icon(Icons.Outlined.Image, contentDescription = stringResource(R.string.compose_attach), tint = if (state.canAttachPictures) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f))
                 }
                 IconButton(
                     onClick = { pickVideo.launch(videoOnly) },
                     enabled = state.canAttachVideo,
                     modifier = Modifier.testTag("compose-attach-video"),
                 ) {
-                    Icon(Icons.Outlined.VideoLibrary, contentDescription = stringResource(R.string.compose_add_video))
+                    Icon(Icons.Outlined.VideoLibrary, contentDescription = stringResource(R.string.compose_add_video), tint = if (state.canAttachVideo) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f))
                 }
             }
-            Spacer(Modifier.height(12.dp))
-            Button(
-                onClick = { vm.controller.send(field.text.toString()) },
-                enabled = !state.sending && (field.text.isNotBlank() || vm.quoteId != null || state.attachments.isNotEmpty()) &&
-                    state.attachmentsReady && !state.replyUnresolved && !state.quoteUnresolved && !state.articleUnresolved,
-                modifier = Modifier.fillMaxWidth().testTag("compose-send"),
-            ) {
-                Text(stringResource(when {
-                    state.sending -> R.string.state_sending
-                    state.pendingResend -> R.string.action_send_again
-                    else -> R.string.action_send
-                }))
+            }
             }
         }
     }

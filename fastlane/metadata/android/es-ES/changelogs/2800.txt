@@ -1,0 +1,8 @@
+• Listas de seguidos y seguidores en los perfiles, con bio y botón de seguir
+• Editor como en X: tu foto junto al texto, vista previa del enlace al escribir
+• Vistas previas como en X: título sobre la imagen, dominio debajo
+• Artículos en tipografía de libro
+• Nuevo acento Champán; acentos en lista (morado pasa a Personalizado)
+• $XMR y otros cashtags abren una búsqueda
+• Las imágenes citadas conservan su forma
+• Correcciones: huecos bajo las notas, notas citadas que ya no están en los relays

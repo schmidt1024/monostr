@@ -135,6 +135,7 @@ private fun MediaGrid(media: List<NoteMedia>, tag: String, blurred: Boolean, pla
             MediaCell(
                 m, 0, tag, Modifier.fillMaxWidth().aspectRatio(box.ratio).clip(shape), blurred, placeholderOnly, enabled, onOpenMedia, onOpenVideo,
                 contentScale = if (box.crop) ContentScale.Crop else ContentScale.Fit,
+                alignment = if (box.crop && !video) Alignment.TopCenter else Alignment.Center,
                 onSize = if (m.dim == null) { w, h -> MediaRatios.put(m.url, w, h); learned = MediaRatios[m.url] } else null,
             )
         }
@@ -185,6 +186,8 @@ private fun MediaGrid(media: List<NoteMedia>, tag: String, blurred: Boolean, pla
 private fun MediaCell(
     m: NoteMedia, index: Int, tag: String, modifier: Modifier, blurred: Boolean, placeholderOnly: Boolean, enabled: Boolean, onOpenMedia: (Int) -> Unit, onOpenVideo: (String) -> Unit,
     contentScale: ContentScale = ContentScale.Crop,
+    /** Where a cropped picture is anchored; a single too-tall picture keeps its top (user 2026-10-30, screenshots start there). */
+    alignment: Alignment = Alignment.Center,
     /** Called with the loaded picture's (or poster's) size; only for a single item without `dim`. */
     onSize: ((Int, Int) -> Unit)? = null,
 ) {
@@ -210,7 +213,7 @@ private fun MediaCell(
             placeholder != null && (placeholderOnly || source == null) -> Image(placeholder, contentDescription = m.alt, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             placeholderOnly || source == null -> Unit
             else -> SubcomposeAsyncImage(
-                model = source, contentDescription = m.alt, contentScale = contentScale, modifier = Modifier.fillMaxSize(),
+                model = source, contentDescription = m.alt, contentScale = contentScale, alignment = alignment, modifier = Modifier.fillMaxSize(),
                 loading = { if (placeholder != null) Image(placeholder, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) },
                 error = { Icon(Icons.Filled.BrokenImage, contentDescription = stringResource(R.string.media_failed), tint = MaterialTheme.colorScheme.outline) },
                 onSuccess = { s -> onSize?.invoke(s.result.image.width, s.result.image.height) },

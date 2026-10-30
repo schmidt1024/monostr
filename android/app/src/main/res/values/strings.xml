@@ -98,6 +98,10 @@
     <string name="profile_extra_relays">Notes also from %1$s</string>
     <!-- profile header: "12 Following · 3,373 Followers"; the numbers are formatted apart -->
     <string name="profile_following_label">Following</string>
+    <string name="follows_tab_followers">Followers</string>
+    <string name="follows_empty_following">Follows nobody yet</string>
+    <string name="follows_empty_followers">No followers known yet</string>
+    <string name="follows_end_followers">No more followers known on the relays</string>
     <plurals name="profile_followers_label">
         <item quantity="one">%1$s Follower</item>
         <item quantity="other">%1$s Followers</item>
@@ -331,6 +335,7 @@
     <string name="settings_link_previews">Link previews</string>
     <string name="settings_link_previews_hint">Shows title and picture of linked pages. Those sites, and the servers of their pictures, then see your IP address.</string>
     <string name="link_preview_cd">Link preview: %1$s, %2$s</string>
+    <string name="link_preview_remove">Remove preview</string>
     <string name="settings_author_relays">Connect the author\'s relays temporarily</string>
     <string name="settings_author_relays_hint">Notes are also fetched from other people\'s own relays: when you open a profile, and when a note answers or quotes one your relays don\'t have. Those relays see your IP address and which notes you look at.</string>
     <string name="settings_pow">Proof of work</string>
@@ -397,7 +402,7 @@
     <string name="settings_accent_mono">Mono</string>
     <string name="settings_accent_orange">Orange</string>
     <string name="settings_accent_blue">Blue</string>
-    <string name="settings_accent_purple">Purple</string>
+    <string name="settings_accent_champagne">Champagne</string>
     <string name="settings_accent_custom">Custom</string>
     <string name="settings_accent_hue">Hue</string>
     <string name="settings_accent_selected">%1$s, selected</string>
@@ -490,6 +495,7 @@
     <string name="bookmarks_error_load">Bookmarks could not be loaded</string>
     <string name="note_ref_label">note</string>
     <string name="quote_missing">Note not found</string>
+    <string name="quote_gone">Note no longer on the relays</string>
     <string name="mute_quote_placeholder">Note from a muted account</string>
     <string name="address_ref_label">event</string>
     <string name="address_type_article">Article</string>

@@ -96,6 +96,10 @@
     <string name="profile_extra_relays">Notas também de %1$s</string>
     <!-- profile header: "12 Following · 3,373 Followers"; the numbers are formatted apart -->
     <string name="profile_following_label">Seguindo</string>
+    <string name="follows_tab_followers">Seguidores</string>
+    <string name="follows_empty_following">Ainda não segue ninguém</string>
+    <string name="follows_empty_followers">Ainda não há seguidores conhecidos</string>
+    <string name="follows_end_followers">Os relays não conhecem mais seguidores</string>
     <plurals name="profile_followers_label">
         <item quantity="one">%1$s Seguidor</item>
         <item quantity="other">%1$s Seguidores</item>
@@ -328,6 +332,7 @@
     <string name="settings_link_previews">Pré-visualização de links</string>
     <string name="settings_link_previews_hint">Mostra o título e a imagem das páginas vinculadas. Esses sites e os servidores das imagens verão seu endereço IP.</string>
     <string name="link_preview_cd">Pré-visualização do link: %1$s, %2$s</string>
+    <string name="link_preview_remove">Remover pré-visualização</string>
     <string name="settings_author_relays">Conectar temporariamente os relays do autor</string>
     <string name="settings_author_relays_hint">As notas também são buscadas nos próprios relays de outras pessoas: ao abrir um perfil e quando uma nota responde ou cita uma que seus relays não têm. Esses relays veem seu endereço IP e quais notas você olha.</string>
     <string name="settings_pow">Prova de trabalho</string>
@@ -394,7 +399,7 @@
     <string name="settings_accent_mono">Mono</string>
     <string name="settings_accent_orange">Laranja</string>
     <string name="settings_accent_blue">Azul</string>
-    <string name="settings_accent_purple">Roxo</string>
+    <string name="settings_accent_champagne">Champanhe</string>
     <string name="settings_accent_custom">Personalizado</string>
     <string name="settings_accent_hue">Tom</string>
     <string name="settings_accent_selected">%1$s, selecionado</string>
@@ -490,6 +495,7 @@
     <string name="bookmarks_error_load">Não foi possível carregar os marcadores</string>
     <string name="note_ref_label">nota</string>
     <string name="quote_missing">Nota não encontrada</string>
+    <string name="quote_gone">A nota já não está nos relays</string>
     <string name="mute_quote_placeholder">Nota de uma conta silenciada</string>
     <string name="address_ref_label">evento</string>
     <string name="address_type_article">Artigo</string>

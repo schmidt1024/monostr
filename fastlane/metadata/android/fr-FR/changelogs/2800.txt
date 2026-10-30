@@ -1,0 +1,8 @@
+• Listes d’abonnements et d’abonnés dans les profils, avec bio et bouton suivre
+• Éditeur comme sur X : ta photo à côté du texte, aperçu du lien en écrivant
+• Aperçus comme sur X : titre sur l’image, domaine dessous
+• Articles en caractères de livre
+• Nouvel accent Champagne ; accents en liste (violet passe en Personnalisé)
+• $XMR et autres cashtags ouvrent une recherche
+• Les images citées gardent leur format
+• Corrections : espaces sous les notes, notes citées absentes des relais

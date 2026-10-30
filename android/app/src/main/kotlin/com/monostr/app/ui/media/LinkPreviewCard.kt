@@ -15,6 +15,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -36,16 +38,18 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
+import androidx.compose.ui.text.font.FontWeight
 import coil3.compose.AsyncImage
 import com.monostr.app.R
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Brush
 import com.monostr.app.data.linkpreview.LinkPreview
 import com.monostr.app.data.linkpreview.LinkPreviews
 import com.monostr.app.ui.common.NoteLinks
 import com.monostr.app.ui.common.NoteSpan
 import com.monostr.nostr.model.Note
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import com.monostr.nostr.repo.ListState
@@ -73,7 +77,12 @@ object LinkPreviewRules {
 
     fun firstPreviewUrl(note: Note): String? {
         if (note.media.isNotEmpty() || note.quotedId != null) return null
-        val url = NoteLinks.annotate(note.displayContent).firstNotNullOfOrNull { (it as? NoteSpan.Url)?.url } ?: return null
+        return firstPreviewUrl(note.displayContent)
+    }
+
+    /** The first link of [text] that gets a card: no direct picture, video or sound file. */
+    fun firstPreviewUrl(text: String): String? {
+        val url = NoteLinks.annotate(text).firstNotNullOfOrNull { (it as? NoteSpan.Url)?.url } ?: return null
         val path = url.toHttpUrlOrNull()?.encodedPath?.lowercase() ?: return null
         if (path.substringAfterLast('/').substringAfterLast('.', "") in MEDIA_EXT) return null
         return url
@@ -92,6 +101,10 @@ class LinkPreviewLoader(private val previews: LinkPreviews, private val muted: S
         // checked again afterwards: the author may have been muted while the page loaded
         return previews.get(url)?.takeIf { note.author !in muted.value }
     }
+
+    /** The user's own draft: no mute check, the link is theirs. */
+    fun cachedOwn(url: String): LinkPreview? = previews.cached(url)
+    suspend fun loadOwn(url: String): LinkPreview? = previews.get(url)
 }
 
 val LocalLinkPreviewLoader = staticCompositionLocalOf<LinkPreviewLoader?> { null }
@@ -118,6 +131,27 @@ fun rememberNoteLink(note: Note): NoteLink? {
     return preview?.let { NoteLink(url, it) }
 }
 
+/** How long the composer waits after the last keystroke before it loads a card, so a link typed by hand is not fetched letter by letter. */
+private const val DRAFT_DEBOUNCE_MS = 600L
+
+/**
+ * The card the composer shows under the text (2026-10-30, like X's editor): the first qualifying link of [text], same
+ * setting and rules as a note, null while [blocked] (pictures attached or a quote: the note will get no card either).
+ */
+@Composable
+fun rememberDraftLink(text: String, blocked: Boolean): Pair<Note, NoteLink>? {
+    if (!LocalMediaSettings.current.linkPreviews || blocked) return null
+    val loader = LocalLinkPreviewLoader.current ?: return null
+    val url = remember(text) { LinkPreviewRules.firstPreviewUrl(text) } ?: return null
+    var preview by remember(url) { mutableStateOf(loader.cachedOwn(url)) }
+    LaunchedEffect(url) { if (preview == null) { delay(DRAFT_DEBOUNCE_MS); preview = loader.loadOwn(url) } }
+    // a stand-in note for the card: the user's own, never sensitive; its id keys the tap that loads a waiting picture
+    val draft = remember { Note(DRAFT_ID, author = "", content = "", createdAt = 0, kind = 1, rootId = null, replyToId = null, repostOf = null, mentionedPubkeys = emptyList()) }
+    return preview?.let { draft to NoteLink(url, it) }
+}
+
+const val DRAFT_ID = "draft-link"
+
 /** The card under a note's text, for [rememberNoteLink]'s result. */
 @Composable
 fun NoteLinkPreview(note: Note, link: NoteLink?) {
@@ -125,7 +159,7 @@ fun NoteLinkPreview(note: Note, link: NoteLink?) {
 }
 
 @Composable
-fun LinkPreviewCard(note: Note, url: String, preview: LinkPreview) {
+fun LinkPreviewCard(note: Note, url: String, preview: LinkPreview, onDismiss: (() -> Unit)? = null) {
     val uriHandler = LocalUriHandler.current
     val id8 = note.id.take(8)
     val domain = remember(url) { LinkPreviewRules.shownDomain(url) }
@@ -136,29 +170,49 @@ fun LinkPreviewCard(note: Note, url: String, preview: LinkPreview) {
     val open: () -> Unit = { runCatching { uriHandler.openUri(url) } }
     val shape = RoundedCornerShape(12.dp)
     val textPart = Modifier.clickable(onClickLabel = cd, onClick = open).semantics { contentDescription = cd }.padding(12.dp)
-    Column(Modifier.fillMaxWidth().padding(top = 8.dp).clip(shape).border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape).testTag("link-preview-$id8")) {
-        if (preview.large && image != null) {
-            // the domain and the title on a dark gradient over the picture's lower edge: one block, nothing under it
-            Box(Modifier.fillMaxWidth().aspectRatio(1.91f)) {
+    if (preview.large && image != null) {
+        // like X (2026-10-30): the title on one line in a small dark label on the picture, the domain under the card
+        Column(Modifier.fillMaxWidth().padding(top = 8.dp).testTag("link-preview-$id8")) {
+            Box(Modifier.fillMaxWidth().aspectRatio(1.91f).clip(shape).border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)) {
                 PreviewImage(image, note, covered, waiting, open, onFailed = { imageFailed = true }, Modifier.fillMaxSize())
-                Column(
-                    Modifier.align(Alignment.BottomStart).fillMaxWidth()
-                        // dark well before the text starts: the title stays readable on bright pictures full of their own text
-                        .background(Brush.verticalGradient(0f to Color.Transparent, 0.35f to Color.Black.copy(alpha = 0.62f), 1f to Color.Black.copy(alpha = 0.88f)))
+                onDismiss?.let { DismissButton(it, Modifier.align(Alignment.TopStart)) }
+                Text(
+                    preview.title, style = MaterialTheme.typography.labelMedium, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.align(Alignment.BottomStart).padding(8.dp)
+                        .clip(RoundedCornerShape(4.dp)).background(Color.Black.copy(alpha = 0.75f))
                         .clickable(onClickLabel = cd, onClick = open).semantics { contentDescription = cd }
-                        .padding(start = 12.dp, end = 12.dp, top = 36.dp, bottom = 10.dp)
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
                         .testTag("link-preview-overlay-$id8"),
-                ) {
-                    Text(domain, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.8f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(preview.title, style = MaterialTheme.typography.titleSmall, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                }
+                )
             }
-        } else {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                image?.let { PreviewImage(it, note, covered, waiting, open, onFailed = { imageFailed = true }, Modifier.size(72.dp)) }
-                PreviewText(domain, preview.title, Modifier.weight(1f).then(textPart))
-            }
+            Text(
+                // small and light: the domain is a quiet note under the picture, not a heading (user 2026-10-30)
+                domain, style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Normal, letterSpacing = 0.02.em), color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 4.dp).clickable(onClickLabel = cd, onClick = open),
+            )
         }
+    } else {
+        Row(
+            Modifier.fillMaxWidth().padding(top = 8.dp).clip(shape).border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape).testTag("link-preview-$id8"),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            image?.let { PreviewImage(it, note, covered, waiting, open, onFailed = { imageFailed = true }, Modifier.size(72.dp)) }
+            PreviewText(domain, preview.title, Modifier.weight(1f).then(textPart))
+            onDismiss?.let { DismissButton(it) }
+        }
+    }
+}
+
+/** The composer's «no card» button (like X's editor): a small dark round X. */
+@Composable
+private fun DismissButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Box(
+        modifier.padding(8.dp).size(28.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.75f))
+            .clickable(onClickLabel = stringResource(R.string.link_preview_remove), onClick = onClick)
+            .testTag("link-preview-dismiss"),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.link_preview_remove), tint = Color.White, modifier = Modifier.size(16.dp))
     }
 }
 

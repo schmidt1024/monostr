@@ -17,6 +17,13 @@ class LinkPreviewRulesTest {
     }
 
     @Test
+    fun `a draft's text follows the same link rules`() {
+        assertEquals("https://a.example/x", LinkPreviewRules.firstPreviewUrl("see https://a.example/x and https://b.example/"))
+        assertNull(LinkPreviewRules.firstPreviewUrl("pic https://a.example/p.JPG"))
+        assertNull(LinkPreviewRules.firstPreviewUrl("no link here"))
+    }
+
+    @Test
     fun `media links, notes with media or a quote, and text without links get none`() {
         assertNull(LinkPreviewRules.firstPreviewUrl(note("pic https://a.example/p.JPG")))
         assertNull(LinkPreviewRules.firstPreviewUrl(note("clip https://a.example/v.mp4?t=3")))
