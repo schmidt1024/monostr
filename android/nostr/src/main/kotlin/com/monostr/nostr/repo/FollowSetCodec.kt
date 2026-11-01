@@ -14,6 +14,13 @@ internal object FollowSetCodec {
     /** The tags monostr edits; everything else goes to [FollowSet.extra]. */
     private val EDITED = setOf("d", "title", "name", "description", "p")
     private val HEX64 = Regex("[0-9a-f]{64}")
+    private val BASE64 = Regex("[A-Za-z0-9+/]+={0,2}")
+
+    /** NIP-04 (`…?iv=…`) or NIP-44 (base64, at least 132 characters: version, nonce, one padded block, MAC). */
+    internal fun looksEncrypted(content: String): Boolean {
+        val c = content.trim()
+        return c.contains("?iv=") || (c.length >= 132 && BASE64.matches(c))
+    }
 
     /**
      * The list behind [event] (read once in Kotlin, spec perf 3.7), or null when it is hidden: mute list, empty
@@ -24,7 +31,9 @@ internal object FollowSetCodec {
         val tags = event.tags.filter { it.isNotEmpty() }
         val d = tags.firstOrNull { it[0] == "d" }?.getOrNull(1) ?: return null
         if (d in HIDDEN_D) return null
-        val content = event.content
+        // content that is no ciphertext is no private part: an old client kept "last opened" timestamps as
+        // kind 30000 (only `d`, plain digits); read as one, they showed as locked untitled lists
+        val content = event.content.takeIf { looksEncrypted(it) } ?: ""
         if (tags.all { it[0] == "d" } && content.isBlank()) return null
         val author = event.pubkey
         val public = tags.filter { it[0] != "d" }

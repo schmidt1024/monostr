@@ -726,4 +726,12 @@
     <string name="backup_password_note">Guarde a senha em separado. Sem ela, este backup é inútil. Amethyst e outras apps Nostr podem importá-lo.</string>
     <string name="backup_copy">Copiar backup</string>
     <string name="backup_copied">Backup copiado, a área de transferência será limpa em breve</string>
+    <string name="invoice_title">Fatura Lightning</string>
+    <string name="invoice_sats">%s sats</string>
+    <string name="invoice_any_amount">Qualquer valor</string>
+    <string name="invoice_expired">Expirada</string>
+    <string name="invoice_open">Abrir na carteira</string>
+    <string name="invoice_copied">Fatura copiada</string>
+    <string name="invoice_inline">fatura</string>
+    <string name="invoice_testnet">testnet</string>
 </resources>

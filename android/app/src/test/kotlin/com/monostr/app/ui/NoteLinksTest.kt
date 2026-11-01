@@ -148,4 +148,14 @@ class NoteLinksTest {
         assertEquals(false, NoteLinks.hasCashtag("XMR without dollar", "XMR"))
         assertEquals(false, NoteLinks.hasCashtag("\$XMRX is another", "XMR"))
     }
+
+    @Test
+    fun `an invoice mid text is one invoice span, its bech32 never becomes a cashtag or a link`() {
+        val invoice = "lnbc210u1p4wwjrypp5kgphh5lvzpptnsxay3rclz803akay574hxz64qv2cpe5qyx66p9qhp54k6ularuecp7avwy2fy0sywvse0gjrxf34ws4tcuyalpukl87pzqcqzysxqrrssrzjqv3dpepm8kfdxrk3sl6wzqdf49s9c0h9ljtjrek6c08r6aejlwcnur0dwyqqvusqqqqqqqlgqqqq86qqjqsp5vxyxnphtncx2scesrfrhmygqz2s4etxsjvzyz8nqwhh0qz75eg8q9qxpqysgqf6uk2y0rqql8re7pyrp9d8cthrlzhdnftx4dahu6jeusvvn0emj88q4280k6f8pmpkpczhvnwx4tm5p6098yuvzxky928ktmyfw7mmgp33s5vq"
+        val spans = NoteLinks.annotate("pay lightning:${invoice.uppercase()} #coffee thanks")
+        assertEquals(NoteSpan.Plain("pay "), spans[0])
+        assertEquals(21_000L, (spans[1] as NoteSpan.Invoice).invoice.amountSat)
+        assertEquals(NoteSpan.Hashtag("#coffee", "coffee"), spans[3])
+        assertEquals(5, spans.size)
+    }
 }

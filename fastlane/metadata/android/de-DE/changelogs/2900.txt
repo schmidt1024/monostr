@@ -1,0 +1,6 @@
+• Lightning-Rechnungen erscheinen als Karte mit «In Wallet öffnen»
+• «Zur Liste hinzufügen» folgt der Reihenfolge von Profil > Listen
+• Korrektur: Tip-Wallet erstellen schloss die App unter Android 8 bis 12
+• Korrektur: Video anhängen schloss die App unter Android 8 bis 11
+• Korrektur: Eine verschobene Liste springt nicht mehr zurück
+• Korrektur: Alte Chat-Zeitstempel anderer Clients erscheinen nicht mehr als Listen

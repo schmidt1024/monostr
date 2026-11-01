@@ -278,6 +278,7 @@ private fun ListNoteCard(
                     QuoteCard(qid, ForeignRule.quoteHints(shown.quoteRelays, foreign), names, onOpenNote = onOpenNote, onOpenProfile = onOpenProfile, onHashtag = onHashtag, modifier = Modifier.padding(top = 8.dp), author = ForeignRule.quoteAuthor(shown.quoteAuthor, foreign))
                 }
                 shown.addressRef?.let { val (ref, f) = ForeignRule.address(it, foreign); AddressCard(ref, names, onOpenProfile = onOpenProfile, modifier = Modifier.padding(top = 8.dp), sensitive = shown.isSensitive, allowForeign = f) }
+                shown.invoice?.let { InvoiceCard(it, Modifier.padding(top = 8.dp)) }
                 NoteMediaRow(shown, onOpenMedia = { i -> onOpenMedia(shown.id, i) }, onOpenVideo = onOpenVideo)
                 NoteLinkPreview(shown, link)
                 if (showActions) {
@@ -354,6 +355,7 @@ private fun DetailNoteCard(
             QuoteCard(qid, ForeignRule.quoteHints(shown.quoteRelays, foreign), names, onOpenNote = onOpenNote, onOpenProfile = onOpenProfile, onHashtag = onHashtag, modifier = Modifier.padding(top = 8.dp), author = ForeignRule.quoteAuthor(shown.quoteAuthor, foreign))
         }
         shown.addressRef?.let { val (ref, f) = ForeignRule.address(it, foreign); AddressCard(ref, names, onOpenProfile = onOpenProfile, modifier = Modifier.padding(top = 8.dp), sensitive = shown.isSensitive, allowForeign = f) }
+        shown.invoice?.let { InvoiceCard(it, Modifier.padding(top = 8.dp)) }
         NoteMediaRow(shown, onOpenMedia = { i -> onOpenMedia(shown.id, i) }, onOpenVideo = onOpenVideo)
         NoteLinkPreview(shown, link)
         Spacer(Modifier.height(12.dp))

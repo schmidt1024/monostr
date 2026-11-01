@@ -28,6 +28,18 @@ class AddToListControllerTest {
     private fun AddToListController.checked() = state.value.rows!!.associate { it.set.address.d to it.checked }
 
     @Test
+    fun `backlog 56 - the rows follow the order of Profile Lists`() = runTest {
+        val a = followSet("a", emptyList(), author = self); val b = followSet("b", emptyList(), author = self); val c3 = followSet("c", emptyList(), author = self)
+        val pins = com.monostr.app.ui.FakeFeedTabs().apply { orderState.value = listOf(c3.address, a.address, b.address) }
+        val c = AddToListController(bob, FakeLists(listOf(a, b, c3)), eager(), pins = pins)
+        c.start(); runCurrent()
+        assertEquals(listOf("c", "a", "b"), c.state.value.rows!!.map { it.set.address.d })
+        pins.orderState.value = listOf(b.address, c3.address, a.address) // dragged in Profile > Lists
+        runCurrent()
+        assertEquals(listOf("b", "c", "a"), c.state.value.rows!!.map { it.set.address.d })
+    }
+
+    @Test
     fun `rows show membership, a tick shows at once and saves`() = runTest {
         val lists = FakeLists(listOf(followSet("a", listOf(bob), author = self), followSet("b", emptyList(), author = self)))
         val c = AddToListController(bob, lists, eager())

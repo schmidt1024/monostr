@@ -264,10 +264,13 @@ private fun Reader(
     val codeBg = MaterialTheme.colorScheme.surfaceVariant
     val noteLabel = stringResource(R.string.note_ref_label)
     val addressLabel = stringResource(R.string.address_ref_label)
+    val invoiceLabel = stringResource(R.string.invoice_inline)
+    val invoiceCopied = stringResource(R.string.invoice_copied)
+    val context = androidx.compose.ui.platform.LocalContext.current
     val article = s.article
     val ctx = remember(s.article.event.id, names, link, codeBg, s.pictures, allowForeign) {
         RenderContext(
-            text = ArticleTextStyle(link, noteLabel, addressLabel, names, codeBg),
+            text = ArticleTextStyle(link, noteLabel, addressLabel, names, codeBg, invoiceLabel),
             actions = ArticleLinkActions(
                 onUrl = { runCatching { uriHandler.openUri(it) } },
                 onHashtag = onHashtag,
@@ -277,6 +280,7 @@ private fun Reader(
                     val (target, foreign) = embedTarget(ref, allowForeign)
                     if (ref.kind == Article.KIND) onOpenArticle(target, foreign) else runCatching { uriHandler.openUri(AddressLinks.web(target)) }
                 },
+                onInvoice = { com.monostr.app.ui.common.openInvoice(context, it, invoiceCopied) },
             ),
             articleId = article.event.id,
             sensitive = article.contentWarning != null,

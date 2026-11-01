@@ -691,7 +691,7 @@ class ProfileViewModel @Inject constructor(
     /** The Lists tab (spec 2026-10-18 §2.2); pin writes run on the background scope so leaving does not cancel them. */
     val lists = ProfileListsController(pubkey, ready.pubkey, ready.lists, ready.feedTabs, viewModelScope, writeScope = ready.engine.backgroundScope, cache = ready.profileCache)
     /** The "Add to list" sheet; started when it opens, so other profiles do not load the own lists for nothing. */
-    val addToList = AddToListController(pubkey, ready.lists, viewModelScope, writeScope = ready.engine.backgroundScope)
+    val addToList = AddToListController(pubkey, ready.lists, viewModelScope, writeScope = ready.engine.backgroundScope, pins = ready.feedTabs)
     init {
         controller.start()
         if (pubkey != ready.pubkey) tipWatch.start()

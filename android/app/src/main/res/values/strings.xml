@@ -725,4 +725,12 @@
     <string name="backup_password_note">Keep the password separately. Without it this backup is useless. Amethyst and other Nostr apps can import it.</string>
     <string name="backup_copy">Copy backup</string>
     <string name="backup_copied">Backup copied. The clipboard clears itself shortly.</string>
+    <string name="invoice_title">Lightning invoice</string>
+    <string name="invoice_sats">%s sats</string>
+    <string name="invoice_any_amount">Any amount</string>
+    <string name="invoice_expired">Expired</string>
+    <string name="invoice_open">Open in wallet</string>
+    <string name="invoice_copied">Invoice copied</string>
+    <string name="invoice_inline">invoice</string>
+    <string name="invoice_testnet">testnet</string>
 </resources>

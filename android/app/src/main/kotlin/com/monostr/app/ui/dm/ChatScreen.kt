@@ -237,6 +237,7 @@ private fun Bubble(
                 }
                 // spec 8: no hint relays from a DM, as for the quote above
                 note.addressRef?.let { AddressCard(dmAddressRef(it), names, onOpenProfile = onOpenProfile, modifier = Modifier.padding(top = 6.dp), sensitive = note.isSensitive, allowForeign = false) }
+                note.invoice?.let { com.monostr.app.ui.common.InvoiceCard(it, Modifier.padding(top = 6.dp)) }
                 NoteMediaRow(note, onOpenMedia = { i -> openPictures(note.media, i, onOpenMedia) }, onOpenVideo = onOpenVideo)
                 Row(Modifier.align(Alignment.End).testTag("chat-status-${m.rumorId.take(8)}"), verticalAlignment = Alignment.CenterVertically) {
                     Text(relativeTime(m.createdAt).asString(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

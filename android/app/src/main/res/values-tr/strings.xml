@@ -719,4 +719,12 @@
     <string name="backup_password_note">Parolayı ayrı sakla. Onsuz bu yedek işe yaramaz. Amethyst ve diğer Nostr uygulamaları içe aktarabilir.</string>
     <string name="backup_copy">Yedeği kopyala</string>
     <string name="backup_copied">Yedek kopyalandı, pano kısa süre içinde temizlenecek</string>
+    <string name="invoice_title">Lightning faturası</string>
+    <string name="invoice_sats">%s sat</string>
+    <string name="invoice_any_amount">Herhangi bir tutar</string>
+    <string name="invoice_expired">Süresi doldu</string>
+    <string name="invoice_open">Cüzdanda aç</string>
+    <string name="invoice_copied">Fatura kopyalandı</string>
+    <string name="invoice_inline">fatura</string>
+    <string name="invoice_testnet">testnet</string>
 </resources>

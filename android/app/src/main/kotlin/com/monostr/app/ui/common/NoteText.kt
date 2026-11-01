@@ -65,6 +65,9 @@ fun NoteText(
     val nameStyles = TextLinkStyles(style = SpanStyle(color = primary))
     val noteLabel = stringResource(R.string.note_ref_label)
     val addressLabel = stringResource(R.string.address_ref_label)
+    val invoiceLabel = stringResource(R.string.invoice_inline)
+    val invoiceCopied = stringResource(R.string.invoice_copied)
+    val context = androidx.compose.ui.platform.LocalContext.current
     val text = buildAnnotatedString {
         for (s in spans) {
             when (s) {
@@ -77,6 +80,7 @@ fun NoteText(
                     if (s.ref.kind == Article.KIND && openArticle != null) openArticle(s.ref, true) else runCatching { uriHandler.openUri(AddressLinks.web(s.ref)) }
                 }) { append(addressLabel) }
                 is NoteSpan.Url -> withLink(LinkAnnotation.Clickable("url", styles) { runCatching { uriHandler.openUri(s.url) } }) { append(s.text) }
+                is NoteSpan.Invoice -> withLink(LinkAnnotation.Clickable("invoice", nameStyles) { openInvoice(context, s.invoice.raw, invoiceCopied) }) { append("⚡ " + invoiceLabel) }
             }
         }
     }

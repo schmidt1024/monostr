@@ -1,0 +1,6 @@
+• Le fatture Lightning appaiono come scheda con «Apri nel wallet»
+• «Aggiungi alla lista» segue l'ordine di Profilo > Liste
+• Correzione: creare un wallet per le mance chiudeva l'app su Android 8-12
+• Correzione: allegare un video chiudeva l'app su Android 8-11
+• Correzione: una lista spostata non torna più indietro
+• Correzione: vecchi timestamp di chat di altri client non appaiono più come liste

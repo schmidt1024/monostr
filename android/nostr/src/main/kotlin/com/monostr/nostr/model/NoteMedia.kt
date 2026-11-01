@@ -16,7 +16,7 @@ data class NoteMedia(
     enum class Kind { IMAGE, VIDEO }
 
     /** Media in display order, the note text with those URLs (and a freestanding quote link) removed, and the quote or, without one, the addressable event it points at. */
-    data class Parsed(val media: List<NoteMedia>, val displayContent: String, val quote: QuoteRef? = null, val address: AddressRef? = null)
+    data class Parsed(val media: List<NoteMedia>, val displayContent: String, val quote: QuoteRef? = null, val address: AddressRef? = null, val invoice: LightningInvoice? = null)
 
     companion object {
         /** Backlog 39: five and more show as 2 x 2 with «+N»; the viewer holds them all. */
@@ -35,12 +35,15 @@ data class NoteMedia(
             val quote = if (withQuote) NoteQuote.find(content, tags) else null
             // a quote wins over an naddr: one card per note (spec 2026-10-29 naddr)
             val address = if (withQuote && quote == null) NoteAddress.find(content) else null
+            // spec 2026-11-01: a Lightning invoice is the card only when there is no quote and no naddr
+            val invoice = if (withQuote && quote == null && address == null) Bolt11.find(content) else null
             val text = when {
                 quote != null -> NoteQuote.strip(content, quote.id)
                 address != null -> NoteAddress.strip(content, address)
+                invoice != null -> Bolt11.strip(content, invoice)
                 else -> content
             }
-            return parseMedia(text, tags).copy(quote = quote, address = address)
+            return parseMedia(text, tags).copy(quote = quote, address = address, invoice = invoice)
         }
 
         private fun parseMedia(content: String, tags: List<List<String>>): Parsed {

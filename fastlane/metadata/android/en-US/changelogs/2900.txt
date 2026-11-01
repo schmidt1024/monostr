@@ -1,0 +1,6 @@
+• Lightning invoices show as a card with «Open in wallet»
+• «Add to list» follows the order of Profile > Lists
+• Fix: creating a tip wallet closed the app on Android 8 to 12
+• Fix: adding a video closed the app on Android 8 to 11
+• Fix: a dragged list no longer jumps back
+• Fix: old chat timestamps of other clients no longer show as lists

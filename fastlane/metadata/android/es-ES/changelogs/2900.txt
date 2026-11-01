@@ -1,0 +1,6 @@
+• Las facturas Lightning se muestran como tarjeta con «Abrir en la billetera»
+• «Añadir a la lista» sigue el orden de Perfil > Listas
+• Corrección: crear una billetera de propinas cerraba la app en Android 8 a 12
+• Corrección: adjuntar un vídeo cerraba la app en Android 8 a 11
+• Corrección: una lista movida ya no vuelve atrás
+• Corrección: marcas de tiempo de chats de otros clientes ya no aparecen como listas

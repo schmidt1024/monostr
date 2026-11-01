@@ -109,8 +109,8 @@ class CreateAccountTest {
         rule.onNodeWithTag("create-name").performTextInput("Testperson")
         rule.onNodeWithTag("create-next").performClick()
         rule.waitUntil(5_000) { nodes("create-follows").isNotEmpty() }
-        rule.onNodeWithTag("create-follows").performScrollToNode(hasTestTag("create-follow-82341f88"))
-        rule.onNodeWithTag("create-follow-82341f88").performClick()
+        rule.onNodeWithTag("create-follows").performScrollToNode(hasTestTag("create-follow-a6038971"))
+        rule.onNodeWithTag("create-follow-a6038971").performClick()
         rule.onNodeWithTag("create-finish").performClick()
 
         rule.waitUntil(30_000) { nodes("fab-compose").isNotEmpty() || nodes("setup-skip").isNotEmpty() }
@@ -127,7 +127,7 @@ class CreateAccountTest {
         val tags = contacts.getJSONArray("tags")
         val ps = (0 until tags.length()).map { tags.getJSONArray(it) }.filter { it.getString(0) == "p" }.map { it.getString(1) }
         assertEquals(13, ps.size)
-        assertFalse(ps.any { it.startsWith("82341f88") })
+        assertFalse(ps.any { it.startsWith("a6038971") })
         rule.waitUntil(15_000) { runBlocking { entry.pendingSetup().load(pk) } == null }
 
         // logout removes a pending record of the account (§7): put one back right before it

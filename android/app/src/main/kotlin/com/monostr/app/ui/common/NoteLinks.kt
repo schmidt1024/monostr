@@ -1,6 +1,8 @@
 package com.monostr.app.ui.common
 
+import com.monostr.nostr.model.Bolt11
 import com.monostr.nostr.model.HashtagTags
+import com.monostr.nostr.model.LightningInvoice
 import com.monostr.nostr.model.NoteAddress
 import com.monostr.nostr.search.SearchQuery
 
@@ -16,6 +18,8 @@ sealed class NoteSpan {
     /** `nostr:naddr1…` (spec 2026-10-29 naddr): reads as «event» and opens the web link. */
     data class AddressRef(override val text: String, val ref: com.monostr.nostr.model.AddressRef) : NoteSpan()
     data class Url(override val text: String, val url: String) : NoteSpan()
+    /** A BOLT11 invoice that stayed in the text (spec 2026-11-01): reads «invoice», opens the wallet. */
+    data class Invoice(override val text: String, val invoice: LightningInvoice) : NoteSpan()
 }
 
 /** Pure text scanner; URLs win over hashtags so `#` in a URL is never a tag. */
@@ -62,7 +66,23 @@ object NoteLinks {
 
     private val SCHEME = Regex("^https?://", RegexOption.IGNORE_CASE) // regex
 
+    /** Invoices first (their bech32 must not turn into cashtags or URLs), the rest of the text in between as before. */
     fun annotate(content: String): List<NoteSpan> {
+        if (content.isEmpty()) return emptyList()
+        val invoices = if (Bolt11.mayContain(content)) Bolt11.refs(content) else emptyList()
+        if (invoices.isEmpty()) return annotateText(content)
+        val out = ArrayList<NoteSpan>()
+        var last = 0
+        for ((range, invoice) in invoices) {
+            if (range.first > last) out += annotateText(content.substring(last, range.first))
+            out += NoteSpan.Invoice(content.substring(range), invoice)
+            last = range.last + 1
+        }
+        if (last < content.length) out += annotateText(content.substring(last))
+        return mergePlain(out)
+    }
+
+    private fun annotateText(content: String): List<NoteSpan> {
         if (content.isEmpty()) return emptyList()
         val out = ArrayList<NoteSpan>()
         var last = 0

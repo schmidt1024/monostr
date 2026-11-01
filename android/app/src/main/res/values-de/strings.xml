@@ -719,4 +719,12 @@
     <string name="backup_password_note">Bewahre das Passwort getrennt auf. Ohne es ist diese Sicherung wertlos. Amethyst und andere Nostr-Apps können sie importieren.</string>
     <string name="backup_copy">Sicherung kopieren</string>
     <string name="backup_copied">Sicherung kopiert, die Zwischenablage wird in Kürze geleert</string>
+    <string name="invoice_title">Lightning-Rechnung</string>
+    <string name="invoice_sats">%s Sats</string>
+    <string name="invoice_any_amount">Beliebiger Betrag</string>
+    <string name="invoice_expired">Abgelaufen</string>
+    <string name="invoice_open">In Wallet öffnen</string>
+    <string name="invoice_copied">Rechnung kopiert</string>
+    <string name="invoice_inline">Rechnung</string>
+    <string name="invoice_testnet">Testnetz</string>
 </resources>

@@ -6,7 +6,8 @@ import java.math.BigInteger
 /** ed25519 scalar helpers in Monero's little-endian convention. */
 object Scalar {
     /** Group order l = 2^252 + 27742317777372353535851937790883648493. */
-    val L: BigInteger = BigInteger.TWO.pow(252).add(BigInteger("27742317777372353535851937790883648493"))
+    // not BigInteger.TWO: Android has it only from 13 (API 33); on older phones creating a wallet closed the app
+    val L: BigInteger = BigInteger.ONE.shiftLeft(252).add(BigInteger("27742317777372353535851937790883648493"))
 
     private val basePoint = EdDSANamedCurveTable.getByName("Ed25519").b
 

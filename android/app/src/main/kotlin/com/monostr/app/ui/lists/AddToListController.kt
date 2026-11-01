@@ -7,6 +7,7 @@ import com.monostr.app.ui.common.uiText
 import com.monostr.nostr.model.FollowSet
 import com.monostr.nostr.model.ListAddress
 import com.monostr.nostr.model.SaveResult
+import com.monostr.nostr.repo.FeedTabsRepository
 import com.monostr.nostr.repo.ListsRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -34,6 +35,8 @@ class AddToListController(
     private val lists: ListsRepository,
     private val scope: CoroutineScope,
     private val writeScope: CoroutineScope = scope,
+    /** Backlog 56: the order of Profile > Lists (dragged order, pinned first without one); null keeps the lists' own order. */
+    private val pins: FeedTabsRepository? = null,
 ) {
     private val _state = MutableStateFlow(AddToListState())
     val state: StateFlow<AddToListState> = _state.asStateFlow()
@@ -47,7 +50,8 @@ class AddToListController(
         if (started) return
         started = true
         scope.launch {
-            combine(lists.own(), pending) { own, p ->
+            val ordered = if (pins == null) lists.own() else combine(lists.own(), pins.order(), pins.tabs()) { own, order, tabs -> ListOrder.arrange(own, order, tabs) }
+            combine(ordered, pending) { own, p ->
                 own.map { s -> AddToListRow(s, p[s.address]?.first ?: (pubkey in s.members)) }
             }.collect { rows -> _state.update { it.copy(rows = rows) } }
         }

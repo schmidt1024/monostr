@@ -1,0 +1,6 @@
+• Faturas Lightning aparecem como cartão com "Abrir na carteira"
+• "Adicionar à lista" segue a ordem de Perfil > Listas
+• Correção: criar uma carteira de gorjetas fechava o app no Android 8 a 12
+• Correção: anexar um vídeo fechava o app no Android 8 a 11
+• Correção: uma lista movida não volta mais
+• Correção: marcas de tempo antigas de chats de outros clientes não aparecem mais como listas

@@ -928,7 +928,7 @@ class FakeMediaUploader : MediaUploader {
     /** "TARGET:source" of every upload that ran to its end. */
     val completed = ArrayList<String>()
     var gate: CompletableDeferred<Unit>? = null
-    var failure: Exception? = null
+    var failure: Throwable? = null
     /** What the results say about the blob being new on the server. */
     var fresh = true
     /** When set, every upload gets this hash, whatever its source (two sources of one picture). */
@@ -1106,8 +1106,11 @@ class FakeFeedTabs(initial: List<ListAddress> = emptyList()) : FeedTabsRepositor
     val calls = ArrayList<String>()
     override fun tabs(): Flow<List<ListAddress>> = state
     override fun order(): Flow<List<ListAddress>> = orderState
+    /** When set, a reorder waits here before it lands (a write still signing and sending). */
+    var reorderGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
     override suspend fun reorder(order: List<ListAddress>): SaveResult {
         calls += "reorder:" + order.joinToString(",") { it.d }
+        reorderGate?.await()
         if (result == SaveResult.Ok) orderState.value = order
         return result
     }

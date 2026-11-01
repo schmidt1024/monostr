@@ -41,6 +41,8 @@ data class Note(
     val addressRef: AddressRef? = null,
     /** Spec 2026-10-29 article reader: a NIP-22 comment (kind 1111) written directly under a long-form article (root `A` tag `30023:…`, parent `a` the same); null for any other note. */
     val articleParent: AddressRef? = null,
+    /** Spec 2026-11-01: the BOLT11 invoice shown as a card; null with a quote or an naddr (one card per note). */
+    val invoice: LightningInvoice? = null,
 ) {
     val isReply: Boolean get() = replyToId != null
     val isRepost: Boolean get() = kind == 6

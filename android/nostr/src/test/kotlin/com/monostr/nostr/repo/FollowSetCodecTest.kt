@@ -37,6 +37,37 @@ class FollowSetCodecTest {
         assertNull(FollowSetCodec.decode(NoteMapper.decoded(ev), null, interactive = false))
     }
 
+    /** An old client kept "last opened" timestamps as kind 30000 (seen on a real account, 2023): only `d`, plain content. */
+    private fun lastOpened(d: String, content: String) = EventBuilder(Kind(30000u), content)
+        .tags(listOf(Tag.parse(listOf("d", d)))).signWithKeys(alice)
+
+    @Test
+    fun `an own event with only d and plain content is no list, and nothing is decrypted`() = runTest {
+        var decrypts = 0
+        val signer = object : com.monostr.nostr.Signer by com.monostr.nostr.LocalSigner(alice.secretKey().toHex()) {
+            override suspend fun nip44DecryptSilent(peerPubkey: String, payload: String): String? { decrypts++; return null }
+            override suspend fun nip44Decrypt(peerPubkey: String, payload: String): String { decrypts++; throw IllegalStateException() }
+        }
+        val own = PrivateTags(signer)
+        for (ev in listOf(lastOpened("notifications/lastOpened", "1692622489"), lastOpened("chats/null/lastOpened", "1677505371"))) {
+            assertNull(FollowSetCodec.decode(NoteMapper.decoded(ev), own, interactive = false))
+        }
+        assertEquals(0, decrypts)
+    }
+
+    @Test
+    fun `an own private list with only d is still read, and locked when it cannot be decrypted`() = runTest {
+        val signer = com.monostr.nostr.LocalSigner(alice.secretKey().toHex())
+        val content = PrivateTags(signer).encrypt(listOf(listOf("title", "Friends"), listOf("p", b)))
+        val ev = lastOpened("abc", content)
+        val set = FollowSetCodec.decode(NoteMapper.decoded(ev), PrivateTags(signer), interactive = false)!!
+        assertEquals("Friends", set.title); assertEquals(listOf(b), set.members); assertEquals(true, set.private)
+        val silent = object : com.monostr.nostr.Signer by signer {
+            override suspend fun nip44DecryptSilent(peerPubkey: String, payload: String): String? = null
+        }
+        assertEquals(true, FollowSetCodec.decode(NoteMapper.decoded(ev), PrivateTags(silent), interactive = false)!!.locked)
+    }
+
     @Test
     fun `the newest version of each d is kept`() {
         val old = list("x", "Old", 1000u)

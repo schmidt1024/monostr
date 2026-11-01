@@ -139,6 +139,22 @@ class ProfileListsControllerTest {
     }
 
     @Test
+    fun `bug 57 - a second drop while the first write still sends shows its order at once`() = runTest {
+        val a = followSet("a", emptyList(), author = self); val b = followSet("b", emptyList(), author = self); val c3 = followSet("c", emptyList(), author = self)
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val pins = FakeFeedTabs().apply { orderState.value = listOf(a.address, b.address, c3.address); reorderGate = gate }
+        val c = ProfileListsController(self, self, FakeLists(listOf(a, b, c3)), pins, eager())
+        c.open(); runCurrent()
+        c.move(from = 2, to = 0); runCurrent() // c a b, still being written
+        assertEquals(listOf("c", "a", "b"), c.state.value.lists!!.map { it.address.d })
+        c.move(from = 2, to = 1); runCurrent() // c b a: must not jump back to c a b while the first write runs
+        assertEquals(listOf("c", "b", "a"), c.state.value.lists!!.map { it.address.d })
+        gate.complete(Unit); runCurrent()
+        assertEquals(listOf("c", "b", "a"), c.state.value.lists!!.map { it.address.d })
+        assertEquals(listOf(c3.address, b.address, a.address), pins.orderState.value)
+    }
+
+    @Test
     fun `a failed move says so and keeps the old order`() = runTest {
         val a = followSet("a", emptyList(), author = self); val b = followSet("b", emptyList(), author = self)
         val pins = FakeFeedTabs().apply { result = com.monostr.nostr.model.SaveResult.Failed }

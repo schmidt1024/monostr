@@ -77,11 +77,18 @@ class ProfileListsController(
     /** Backlog 38: the own list at [from] dropped at [to]; stores the whole shown order (one write), says so when no relay took it. */
     fun move(from: Int, to: Int) {
         if (!isSelf) return
-        val shown = _state.value.lists?.map { it.address } ?: return
+        val before = _state.value.lists ?: return
+        val shown = before.map { it.address }
         val next = ListOrder.move(shown, from, to)
         if (next == shown) return
+        // bug 57: shown at once. The write signs and sends (seconds with Amber), and a second drop waits for the first;
+        // the screen showing the stored order meanwhile made the row jump back until it landed
+        val moved = before.toMutableList().apply { add(to, removeAt(from)) }
+        _state.update { it.copy(lists = moved) }
         writeScope.launch {
             if (pins.reorder(next) != SaveResult.Ok) {
+                // back to the order before this drop, unless a later drop already replaced it
+                _state.update { s -> if (s.lists == moved) s.copy(lists = before) else s }
                 _state.update { it.copy(message = Message(uiText(R.string.list_save_failed), retry = { move(from, to) })) }
             }
         }

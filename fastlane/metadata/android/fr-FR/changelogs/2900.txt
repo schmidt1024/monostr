@@ -1,0 +1,6 @@
+• Les factures Lightning s’affichent en carte avec « Ouvrir dans le portefeuille »
+• « Ajouter à une liste » suit l’ordre de Profil > Listes
+• Correctif : créer un portefeuille de pourboires fermait l’app sous Android 8 à 12
+• Correctif : joindre une vidéo fermait l’app sous Android 8 à 11
+• Correctif : une liste déplacée ne revient plus en arrière
+• Correctif : d’anciens horodatages de chat d’autres clients n’apparaissent plus comme listes

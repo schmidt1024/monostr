@@ -38,6 +38,7 @@ object NoteMapper {
                     rootHint = refs.rootHint, replyHint = refs.replyHint,
                     quoteAuthor = parsed.quote?.author,
                     addressRef = parsed.address,
+                    invoice = parsed.invoice,
                     articleParent = if (event.kind == Kinds.COMMENT) articleParent(tags) else null,
                 )
             }

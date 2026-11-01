@@ -1,0 +1,6 @@
+• Lightning faturaları «Cüzdanda aç» ile bir kart olarak görünür
+• «Listeye ekle», Profil > Listeler sırasını izler
+• Düzeltme: bahşiş cüzdanı oluşturmak Android 8–12'de uygulamayı kapatıyordu
+• Düzeltme: video eklemek Android 8–11'de uygulamayı kapatıyordu
+• Düzeltme: taşınan liste artık geri sıçramıyor
+• Düzeltme: diğer istemcilerin eski sohbet zaman damgaları artık liste olarak görünmüyor

@@ -162,17 +162,18 @@ class TransformerVideoPreparer(private val context: Context) : VideoPreparer {
     private suspend fun encodeOnce(uri: Uri, out: File, width: Int, height: Int, bitrate: Int, hdrMode: Int, onProgress: (Float) -> Unit): Encoded =
         withContext(Dispatchers.Main) {
             coroutineScope {
-                lateinit var transformer: Transformer
+                // null until built: a cancel or a failure before that has no transformer to stop
+                var transformer: Transformer? = null
                 val ticker = launch {
                     val holder = ProgressHolder()
                     while (true) {
                         delay(PROGRESS_EVERY_MS)
-                        if (transformer.getProgress(holder) == Transformer.PROGRESS_STATE_AVAILABLE) onProgress(holder.progress / 100f)
+                        if (transformer?.getProgress(holder) == Transformer.PROGRESS_STATE_AVAILABLE) onProgress(holder.progress / 100f)
                     }
                 }
                 try {
                     suspendCancellableCoroutine { cont ->
-                        transformer = Transformer.Builder(context)
+                        val built = Transformer.Builder(context)
                             .setVideoMimeType(MimeTypes.VIDEO_H264)
                             .setAudioMimeType(MimeTypes.AUDIO_AAC)
                             .setEncoderFactory(
@@ -196,6 +197,7 @@ class TransformerVideoPreparer(private val context: Context) : VideoPreparer {
                                 }
                             })
                             .build()
+                        transformer = built
                         val item = EditedMediaItem.Builder(MediaItem.fromUri(uri))
                             .setEffects(
                                 Effects(
@@ -208,11 +210,11 @@ class TransformerVideoPreparer(private val context: Context) : VideoPreparer {
                             )
                             .build()
                         val composition = Composition.Builder(EditedMediaItemSequence.Builder(item).build()).setHdrMode(hdrMode).build()
-                        transformer.start(composition, out.absolutePath)
+                        built.start(composition, out.absolutePath)
                     }
                 } catch (e: CancellationException) {
                     // on the main looper, where the transformer runs: it stops before the caller deletes its file
-                    transformer.cancel()
+                    transformer?.cancel()
                     throw e
                 } finally {
                     ticker.cancel()

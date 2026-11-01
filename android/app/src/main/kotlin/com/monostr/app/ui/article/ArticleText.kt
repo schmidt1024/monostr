@@ -31,6 +31,8 @@ class ArticleLinkActions(
     val onProfile: (String) -> Unit,
     val onNote: (String) -> Unit,
     val onAddress: (AddressRef) -> Unit,
+    /** Spec 2026-11-01: a BOLT11 invoice in the text, handed to the wallet. */
+    val onInvoice: (String) -> Unit = {},
 )
 
 class ArticleTextStyle(
@@ -39,6 +41,7 @@ class ArticleTextStyle(
     val addressLabel: String,
     val names: Map<String, String>,
     val codeBackground: Color,
+    val invoiceLabel: String = "invoice",
 )
 
 /** Spans styled per paragraph; a hostile paragraph's text beyond the first [MAX_SPANS] spans stays plain (final review I3). */
@@ -103,6 +106,7 @@ fun articleText(text: MdText, style: ArticleTextStyle, actions: ArticleLinkActio
                         is NoteSpan.NoteRef -> { out.withLink(LinkAnnotation.Clickable("note", nameStyle) { actions.onNote(sp.noteId) }) { append(style.noteLabel) }; sp.text.length }
                         is NoteSpan.AddressRef -> { out.withLink(LinkAnnotation.Clickable("address", nameStyle) { actions.onAddress(sp.ref) }) { append(style.addressLabel) }; sp.text.length }
                         is NoteSpan.Url -> { out.withLink(LinkAnnotation.Clickable("url", urlStyle) { actions.onUrl(sp.url) }) { append(sp.text) }; sp.url.length }
+                        is NoteSpan.Invoice -> { out.withLink(LinkAnnotation.Clickable("invoice", nameStyle) { actions.onInvoice(sp.invoice.raw) }) { append("⚡ " + style.invoiceLabel) }; sp.text.length }
                     }
                     map.add(src, srcLen, out.length - before, linear = sp is NoteSpan.Plain || sp is NoteSpan.Hashtag || sp is NoteSpan.Cashtag)
                     src += srcLen

@@ -172,6 +172,7 @@ class ChatController(
             media = parsed.media, displayContent = parsed.displayContent,
             quotedId = parsed.quote?.id, quoteRelays = parsed.quote?.relays.orEmpty(), quoteAuthor = parsed.quote?.author,
             addressRef = parsed.address,
+            invoice = parsed.invoice,
         )
     }
 

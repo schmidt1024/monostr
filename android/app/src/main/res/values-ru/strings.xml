@@ -747,4 +747,12 @@
     <string name="backup_password_note">Храните пароль отдельно. Без него эта копия бесполезна. Amethyst и другие приложения Nostr могут её импортировать.</string>
     <string name="backup_copy">Скопировать копию</string>
     <string name="backup_copied">Копия скопирована, буфер обмена скоро очистится</string>
+    <string name="invoice_title">Счёт Lightning</string>
+    <string name="invoice_sats">%s сат</string>
+    <string name="invoice_any_amount">Любая сумма</string>
+    <string name="invoice_expired">Истёк</string>
+    <string name="invoice_open">Открыть в кошельке</string>
+    <string name="invoice_copied">Счёт скопирован</string>
+    <string name="invoice_inline">счёт</string>
+    <string name="invoice_testnet">тестнет</string>
 </resources>

@@ -16,6 +16,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.monostr.app.session.NostrSessionEntryPoint
 import dagger.hilt.android.EntryPointAccessors
+import com.monostr.app.data.PrefsRelayStore
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -31,11 +32,11 @@ import rust.nostr.sdk.Keys
 import rust.nostr.sdk.Kind
 import rust.nostr.sdk.Metadata
 
-/** Spec 11: muting from the menu with Undo, the settings list, the muted profile. Needs network (the list goes to the default relays). */
+/** Spec 11: muting from the menu with Undo, the settings list, the muted profile. Offline: the list goes to a loopback relay. */
 @RunWith(AndroidJUnit4::class)
 class MutedTest {
     @get:Rule val rule = createAndroidComposeRule<MainActivity>()
-    /** A fresh key per run: the kind 10000 this test publishes to the real relays never lands on a shared, well-known account. */
+    /** A fresh key per run: the kind 10000 this test publishes never lands on a shared, well-known account. */
     private val me = Keys.generate()
     private val secret = me.secretKey().toHex()
     private val ctx get() = InstrumentationRegistry.getInstrumentation().targetContext
@@ -46,11 +47,21 @@ class MutedTest {
     private fun textShown(text: String) = rule.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
 
     // the session must not stay Active for whatever test class the runner picks next in the same process
-    @After fun logout() { runBlocking { runCatching { entry.session().logout() } } }
+    /** Every read and write of the test account stays on the emulator: real relays made these tests flaky (2026-11-01). */
+    private val relay = LoopbackRelay()
+
+    @After fun logout() {
+        runBlocking {
+            runCatching { entry.session().logout() }
+            runCatching { entry.session().applyRelays(PrefsRelayStore.DEFAULT_RELAYS) }
+        }
+        relay.close()
+    }
 
     private fun reachFeed() {
         rule.waitUntil(30_000) { nodes("login-secret").isNotEmpty() || nodes("fab-compose").isNotEmpty() || nodes("setup-skip").isNotEmpty() }
         if (nodes("login-secret").isNotEmpty()) {
+            runBlocking { entry.session().applyRelays(listOf(relay.url)) }
             rule.onNodeWithTag("login-secret").performTextInput(secret)
             rule.onNodeWithTag("login-secret-button").performClick()
             rule.waitUntil(30_000) { nodes("fab-compose").isNotEmpty() || nodes("setup-skip").isNotEmpty() }

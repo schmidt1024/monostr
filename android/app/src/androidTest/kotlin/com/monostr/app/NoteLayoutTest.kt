@@ -17,6 +17,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.monostr.app.session.NostrSessionEntryPoint
 import com.monostr.nostr.Npub
 import dagger.hilt.android.EntryPointAccessors
+import com.monostr.app.data.PrefsRelayStore
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertTrue
@@ -40,11 +41,21 @@ class NoteLayoutTest {
     private val entry get() = EntryPointAccessors.fromApplication(ctx, NostrSessionEntryPoint::class.java)
     private fun nodes(tag: String) = rule.onAllNodes(hasTestTag(tag)).fetchSemanticsNodes()
 
-    @After fun logout() { runBlocking { runCatching { entry.session().logout() } } }
+    /** Every read and write of the test account stays on the emulator: real relays made these tests flaky (2026-11-01). */
+    private val relay = LoopbackRelay()
+
+    @After fun logout() {
+        runBlocking {
+            runCatching { entry.session().logout() }
+            runCatching { entry.session().applyRelays(PrefsRelayStore.DEFAULT_RELAYS) }
+        }
+        relay.close()
+    }
 
     private fun reachFeed() {
         runBlocking { runCatching { entry.session().logout() } }
         rule.waitUntil(15_000) { nodes("login-secret").isNotEmpty() }
+        runBlocking { entry.session().applyRelays(listOf(relay.url)) }
         rule.onNodeWithTag("login-secret").performTextInput(secret)
         rule.onNodeWithTag("login-secret-button").performClick()
         rule.waitUntil(30_000) { nodes("fab-compose").isNotEmpty() || nodes("setup-skip").isNotEmpty() }

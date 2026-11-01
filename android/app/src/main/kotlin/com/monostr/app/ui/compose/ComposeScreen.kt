@@ -438,7 +438,7 @@ class ComposeController(
                 up.videoDurationMs(source)
             } catch (e: CancellationException) {
                 throw e
-            } catch (e: Exception) {
+            } catch (e: Throwable) { // an Error too (out of memory, a media library's own Error): a message, never a closed app
                 _state.update { it.copy(error = e.uploadMessage()) }
                 release(source)
                 return@launch
@@ -468,7 +468,8 @@ class ComposeController(
                 scheduleSave()
             } catch (e: CancellationException) {
                 throw e
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
+                // an encode can end in an Error (out of memory on a large video): the tile says so, the app stays open
                 val message = if (e is UploadException.TooLarge) uiText(R.string.upload_video_too_large) else e.uploadMessage()
                 patch(id) { it.copy(error = message, preparing = null) }
             }

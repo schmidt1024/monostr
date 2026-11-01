@@ -119,6 +119,17 @@ class ComposeVideoTest {
     }
 
     @Test
+    fun `a video that runs out of memory shows an error on its tile instead of closing the app`() = runTest {
+        val up = FakeMediaUploader().apply { failure = OutOfMemoryError("encode") }
+        val c = controller(uploader = up)
+        c.attachVideo("content://v/1")
+        advanceUntilIdle()
+        val tile = c.state.value.attachments.single()
+        assertTrue(tile.error != null && tile.video)
+        assertNull(tile.preparing)
+    }
+
+    @Test
     fun `closing the composer while encoding cancels and discards nothing that is not up`() = runTest {
         val up = FakeMediaUploader().apply { videoGate = CompletableDeferred() }
         val c = controller(uploader = up)

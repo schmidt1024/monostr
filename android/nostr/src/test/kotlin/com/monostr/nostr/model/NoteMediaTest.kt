@@ -130,4 +130,17 @@ class NoteMediaTest {
         assertEquals("one\n\ntwo", NoteMedia.parse("one\n\n\n\n  \ntwo", emptyList()).displayContent)
         assertEquals("one\ntwo", NoteMedia.parse("one\ntwo", emptyList()).displayContent)
     }
+
+    private val invoice = "lnbc210u1p4wwjrypp5kgphh5lvzpptnsxay3rclz803akay574hxz64qv2cpe5qyx66p9qhp54k6ularuecp7avwy2fy0sywvse0gjrxf34ws4tcuyalpukl87pzqcqzysxqrrssrzjqv3dpepm8kfdxrk3sl6wzqdf49s9c0h9ljtjrek6c08r6aejlwcnur0dwyqqvusqqqqqqqlgqqqq86qqjqsp5vxyxnphtncx2scesrfrhmygqz2s4etxsjvzyz8nqwhh0qz75eg8q9qxpqysgqf6uk2y0rqql8re7pyrp9d8cthrlzhdnftx4dahu6jeusvvn0emj88q4280k6f8pmpkpczhvnwx4tm5p6098yuvzxky928ktmyfw7mmgp33s5vq"
+
+    @Test
+    fun `an invoice on its own becomes the card and leaves the text, a quote or an naddr wins over it`() {
+        val p = NoteMedia.parse("☕ $invoice", emptyList())
+        assertEquals(21_000L, p.invoice!!.amountSat)
+        assertEquals("☕", p.displayContent)
+        val quoted = NoteMedia.parse("nostr:nevent1qqsqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqgaffult\n$invoice", emptyList())
+        assertNull(quoted.invoice)
+        assertTrue(quoted.displayContent.contains(invoice))
+        assertNull(NoteMedia.parse("☕ $invoice", emptyList(), withQuote = false).invoice) // inside a quote card: no card
+    }
 }

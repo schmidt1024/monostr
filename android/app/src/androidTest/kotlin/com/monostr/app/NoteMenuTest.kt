@@ -18,6 +18,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.monostr.app.session.NostrSessionEntryPoint
 import dagger.hilt.android.EntryPointAccessors
+import com.monostr.app.data.PrefsRelayStore
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -34,11 +35,11 @@ import rust.nostr.sdk.Kind
 import rust.nostr.sdk.Metadata
 import rust.nostr.sdk.Timestamp
 
-/** Spec 11: the menu, the deletion of an own note, collapsed long notes, the wordmark. Needs network (default relays). */
+/** Spec 11: the menu, the deletion of an own note, collapsed long notes, the wordmark. Offline: a loopback relay. */
 @RunWith(AndroidJUnit4::class)
 class NoteMenuTest {
     @get:Rule val rule = createAndroidComposeRule<MainActivity>()
-    /** A fresh key per run: the kind 1 and kind 5 this test publishes to the real relays never lands on a shared, well-known account. */
+    /** A fresh key per run: the kind 1 and kind 5 this test publishes never land on a shared, well-known account. */
     private val me = Keys.generate()
     private val secret = me.secretKey().toHex()
     private val ctx get() = InstrumentationRegistry.getInstrumentation().targetContext
@@ -49,11 +50,21 @@ class NoteMenuTest {
     // this test logs in with its own local-signer secret and never logs out on its own;
     // without this, the session stays Active for whatever test class the runner picks next in
     // the same instrumentation process, e.g. SmokeTest's own login screen would never appear
-    @After fun logout() { runBlocking { runCatching { entry.session().logout() } } }
+    /** Every read and write of the test account stays on the emulator: real relays made these tests flaky (2026-11-01). */
+    private val relay = LoopbackRelay()
+
+    @After fun logout() {
+        runBlocking {
+            runCatching { entry.session().logout() }
+            runCatching { entry.session().applyRelays(PrefsRelayStore.DEFAULT_RELAYS) }
+        }
+        relay.close()
+    }
 
     private fun reachFeed() {
         rule.waitUntil(30_000) { nodes("login-secret").isNotEmpty() || nodes("fab-compose").isNotEmpty() || nodes("setup-skip").isNotEmpty() }
         if (nodes("login-secret").isNotEmpty()) {
+            runBlocking { entry.session().applyRelays(listOf(relay.url)) }
             rule.onNodeWithTag("login-secret").performTextInput(secret)
             rule.onNodeWithTag("login-secret-button").performClick()
             rule.waitUntil(30_000) { nodes("fab-compose").isNotEmpty() || nodes("setup-skip").isNotEmpty() }

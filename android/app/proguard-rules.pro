@@ -19,3 +19,9 @@
     public static *** d(...);
     public static *** v(...);
 }
+
+# Media3 keeps LogSessionId (Android 12+) in fields. R8's class merging turned such fields into
+# Object and read them back with a check-cast to LogSessionId, which fails on Android 8-11 even
+# for null: the video encode closed the app there (OnePlus, Android 11, 0.26.0-0.28.1).
+# A kept field keeps its type, so no cast is added.
+-keepclassmembers class androidx.media3.** { android.media.metrics.** *; }

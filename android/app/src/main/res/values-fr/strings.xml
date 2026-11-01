@@ -726,4 +726,12 @@
     <string name="backup_password_note">Conservez le mot de passe séparément. Sans lui, cette sauvegarde est inutilisable. Amethyst et d’autres applications Nostr peuvent l’importer.</string>
     <string name="backup_copy">Copier la sauvegarde</string>
     <string name="backup_copied">Sauvegarde copiée, le presse-papiers sera vidé sous peu</string>
+    <string name="invoice_title">Facture Lightning</string>
+    <string name="invoice_sats">%s sats</string>
+    <string name="invoice_any_amount">Montant libre</string>
+    <string name="invoice_expired">Expirée</string>
+    <string name="invoice_open">Ouvrir dans le portefeuille</string>
+    <string name="invoice_copied">Facture copiée</string>
+    <string name="invoice_inline">facture</string>
+    <string name="invoice_testnet">testnet</string>
 </resources>
