@@ -1,6 +1,6 @@
 • Following- und Follower-Listen im Profil, mit Bio und Folgen-Button
-• Editor wie bei X: dein Bild neben dem Text, Linkvorschau beim Schreiben
-• Linkvorschau wie bei X: Titel auf dem Bild, Domain darunter
+• Verbesserter Editor: dein Bild neben dem Text, Linkvorschau beim Schreiben
+• Verbesserte Linkvorschau: Titel auf dem Bild, Domain darunter
 • Artikel in Buchschrift
 • Neue Akzentfarbe Champagner; Akzente als Liste (Lila jetzt unter «Eigene»)
 • $XMR und andere Cashtags öffnen eine Suche

@@ -426,7 +426,8 @@ fun MonostrBottomBar(
 /** Bottom-bar icons are larger than Material's 24 dp: the bar has no labels (user decision 2026-09-29). */
 private val TAB_ICON = 28.dp
 
+/** The unread count of a tab or a list row; nothing at 0. */
 @Composable
-private fun CountBadge(count: Int) {
-    if (count > 0) Badge { Text(if (count > 99) "99+" else count.toString()) }
+fun CountBadge(count: Int, modifier: Modifier = Modifier) {
+    if (count > 0) Badge(modifier) { Text(if (count > 99) "99+" else count.toString()) }
 }

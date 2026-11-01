@@ -1,0 +1,5 @@
+• Messages : nombre de non-lus sur chaque conversation et sur les demandes
+• Après une nouvelle connexion, les anciens messages ne comptent plus comme non lus
+• Correctif : suivre échouait avec « Impossible de charger votre liste d’abonnements » si elle n’était que sur d’autres relais
+• Correctif : la configuration des pourboires ne publie plus de liste de relais à ta place, ce qui pouvait masquer d’anciennes notes
+• Les réglages des relais cherchent aussi ta liste sur des relais d’index

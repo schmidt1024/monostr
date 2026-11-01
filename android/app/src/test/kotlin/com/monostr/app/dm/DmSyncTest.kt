@@ -182,6 +182,96 @@ class DmSyncTest {
         assertEquals(listOf(relay), r.detached.last())
     }
 
+    /** Each wrap unwraps to its own incoming message from [bob], dated by [dates] (wrap id -> created_at). */
+    private fun Rig.answering(dates: Map<String, Long>) {
+        repo.unwrapAnswers = { w, _ -> val id = w.id().toHex(); DmIncoming(id.reversed(), bob, false, "hi", dates.getValue(id), id) }
+    }
+
+    @Test
+    fun `the first round of a fresh store makes everything before it read`() = runTest {
+        val r = Rig(eager(), own = OwnDmRelays.Found(listOf(relay)))
+        val old = wrapEvent(); val live = wrapEvent()
+        r.answering(mapOf(old.id().toHex() to r.clock - 10 * day, live.id().toHex() to r.clock + 5))
+        r.repo.fetched = listOf(old)
+        r.dms.start()
+        assertEquals(r.clock, r.store.readFloor())
+        assertEquals(0, r.store.unreadTotal().first(), "the 30-day backlog of a fresh login is not news")
+        r.repo.wraps.emit(live)
+        assertEquals(1, r.store.unreadTotal().first())
+    }
+
+    @Test
+    fun `a backlog that lands only after a lastSync reset stays read`() = runTest {
+        val r = Rig(eager(), own = OwnDmRelays.Found(listOf(relay)))
+        val loginAt = r.clock
+        r.dms.start() // the first round finds nothing (a relay that answers only after AUTH, the default list)
+        r.clock += 60
+        val old = wrapEvent(); val news = wrapEvent()
+        r.answering(mapOf(old.id().toHex() to loginAt - 10 * day, news.id().toHex() to loginAt + 30))
+        r.repo.fetched = listOf(old, news)
+        r.store.setLastSync(0) // what an adopted own list does
+        r.dms.sync(interactive = false)
+        assertEquals(loginAt, r.store.readFloor(), "set once")
+        assertEquals(1, r.store.unreadTotal().first(), "only the message after the login counts")
+    }
+
+    @Test
+    fun `an incomplete first fetch still sets the floor`() = runTest {
+        val r = Rig(eager(), own = OwnDmRelays.Found(listOf(relay)))
+        val old = wrapEvent()
+        r.answering(mapOf(old.id().toHex() to r.clock - 10 * day))
+        r.repo.fetched = listOf(old)
+        r.repo.fetchCompleted = false
+        r.dms.start()
+        assertEquals(r.clock, r.store.readFloor())
+        assertEquals(0, r.store.unreadTotal().first())
+    }
+
+    @Test
+    fun `a store synced before the floor existed keeps its unread messages`() = runTest {
+        val r = Rig(eager(), own = OwnDmRelays.Found(listOf(relay)))
+        r.store.setLastSync(r.clock - day) // an update from a version without the floor
+        r.store.upsert(DmMessage("u".repeat(64), bob, false, "unread", r.clock - 3_600, r.clock - 3_600, DmStatus.RECEIVED, "w".repeat(64)))
+        r.dms.start()
+        assertEquals(0L, r.store.readFloor())
+        assertEquals(1, r.store.unreadTotal().first())
+    }
+
+    @Test
+    fun `a store with messages but no lastSync keeps its unread messages`() = runTest {
+        val r = Rig(eager(), own = OwnDmRelays.Found(listOf(relay)))
+        // an older version whose fetch never completed (a dead own inbox relay): lastSync stayed 0
+        r.store.upsert(DmMessage("u".repeat(64), bob, false, "unread", r.clock - 3_600, r.clock - 3_600, DmStatus.RECEIVED, "w".repeat(64)))
+        r.dms.start()
+        assertEquals(0L, r.store.readFloor())
+        assertEquals(1, r.store.unreadTotal().first())
+    }
+
+    @Test
+    fun `the floor is set at start even when no round can run, and later messages count`() = runTest {
+        val r = Rig(eager(), own = OwnDmRelays.None)
+        r.settings.relayState.value = emptyList() // no own inbox list known yet: setUp stops before any round
+        val loginAt = r.clock
+        r.dms.start()
+        assertEquals(loginAt, r.store.readFloor())
+        r.clock += day
+        val news = wrapEvent()
+        r.answering(mapOf(news.id().toHex() to r.clock - 10))
+        r.repo.wraps.emit(news)
+        assertEquals(1, r.store.unreadTotal().first(), "a message after the login is news, whenever the first round runs")
+    }
+
+    @Test
+    fun `a second start keeps the floor`() = runTest {
+        val r = Rig(eager(), own = OwnDmRelays.Found(listOf(relay)))
+        r.dms.start()
+        val first = r.store.readFloor()
+        r.dms.stop()
+        r.clock += day
+        r.dms.start()
+        assertEquals(first, r.store.readFloor())
+    }
+
     @Test
     fun `storing an unwrapped message reads no row first`() = runTest {
         val r = Rig(eager(), own = OwnDmRelays.Found(listOf(relay)))

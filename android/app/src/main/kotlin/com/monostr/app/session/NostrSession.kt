@@ -644,7 +644,8 @@ class NostrSession @Inject constructor(
             val notifications = NostrNotificationsRepository(engine, tips)
             // one pipeline for the badge, the screen and the tip check; started by the first of them (spec perf 3.6)
             val notificationsStore = NotificationsStore(notifications, profiles, tipSettings, engine.backgroundScope, muted = mute.muted, me = signer.pubkey, startupGate = startupGate)
-            val follows = NostrFollowRepository(engine, feed)
+            // issue 5: a list kept only elsewhere still counts as current when an index relay delivers it
+            val follows = NostrFollowRepository(engine, feed, indexRelays = NostrProfileRepository.OWN_LIST_RELAYS)
             // the database at once, the relays' latest behind the startup gate and only since the last completed fetch (spec perf2 A5)
             val syncMarks = SyncMarks(File(dir, SyncMarks.FILE_NAME))
             val relaySeen = SyncMarks(File(dir, RELAY_SEEN_FILE))
@@ -742,23 +743,23 @@ class NostrSession @Inject constructor(
     }
 
     /**
-     * Makes sure receipts can reach the app (spec 3.3): adds [extra] relays (the watcher's) to
-     * the user's relay list and publishes a kind 10002 when the user has none yet. Best effort.
+     * Makes sure receipts can reach the app (spec 3.3): adds [extra] relays (the watcher's) to the
+     * app's relay list. Nothing is published: the watcher always sends receipts to its own relays,
+     * and a kind 10002 made up here once hid a user's notes that lived only on relays we did not
+     * know (bug 54). Publishing a list stays the user's step in Settings.
      */
     suspend fun ensureRelays(extra: List<String>) {
         val current = relayStore.relays.first()
         // the watcher names these relays, not the user: only public wss ones join the user's list
         val wanted = (current + extra.map { it.trim().trimEnd('/') }.filter { isValidRelayUrl(it) && RelayHosts.isPublicWss(it) }).distinct()
         if (wanted != current) applyRelays(wanted)
-        val ready = (_state.value as? SessionState.Active)?.ready ?: return
-        if (ready.engine.ownRelayList() == null) runCatching { ready.publish.relayList(wanted) }
     }
 
     /** Replaces the relay list with the user's NIP-65 list; false when the user has none. */
     suspend fun adoptRelayList(): Boolean {
         val ready = (_state.value as? SessionState.Active)?.ready ?: return false
         // backlog 36: the list as the relays have it now, not one stored before an edit in another app
-        val list = ready.engine.ownRelayList(fresh = true) ?: return false
+        val list = ready.engine.ownRelayList(fresh = true, extra = NostrProfileRepository.OWN_LIST_RELAYS) ?: return false
         val relays = (list.read + list.write).distinct().filter { isValidRelayUrl(it) }
         if (relays.isEmpty()) return false
         applyRelays(relays)

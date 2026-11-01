@@ -1,0 +1,5 @@
+• Nachrichten: Zahl der Ungelesenen bei jeder Unterhaltung und bei den Anfragen
+• Nach einem neuen Login zählen alte Nachrichten nicht mehr als ungelesen
+• Korrektur: Folgen schlug mit «Deine Folgeliste konnte nicht geladen werden» fehl, wenn sie nur auf anderen Relays lag
+• Korrektur: Die Tip-Einrichtung veröffentlicht keine Relay-Liste mehr für dich, die ältere Notizen verstecken konnte
+• Die Relay-Einstellungen suchen deine Liste auch auf Index-Relays

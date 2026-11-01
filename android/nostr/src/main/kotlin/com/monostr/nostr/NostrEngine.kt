@@ -1145,14 +1145,29 @@ class NostrEngine private constructor(
      * missing. With [fresh] the relays are asked first, so a list changed in another app wins
      * over the stored one (backlog 36); the database keeps the newer of the two. An `r` tag
      * without marker counts for both lists. Null when the user has none.
+     *
+     * Bug 54: when neither has one, [extra] (index relays) are asked last, so a list that lives elsewhere (only on
+     * the user's own relays, mirrored by an indexer) is not taken for "none" and overwritten. Only then: they are
+     * extra connections, and their operators see the user's address.
      */
-    suspend fun ownRelayList(fresh: Boolean = false): RelayList? {
+    suspend fun ownRelayList(fresh: Boolean = false, extra: List<String> = emptyList()): RelayList? {
         val pk = pubkey ?: return null
         val filter = Filter().kind(Kind(10002u)).author(PublicKey.parse(pk)).limit(1u)
-        if (fresh) runCatching { fetch(filter, OWN_LIST_TIMEOUT) }
+        if (fresh) ignoringErrors { fetch(filter, OWN_LIST_TIMEOUT) }
         var event = query(filter).firstOrNull()
         if (event == null && !fresh) {
-            runCatching { fetch(filter) }
+            ignoringErrors { fetch(filter) }
+            event = query(filter).firstOrNull()
+        }
+        val others = extra.map { it.trim().trimEnd('/') }.distinct() - relayUrls().toSet()
+        if (event == null && others.isNotEmpty()) {
+            // NonCancellable attach: a cut-off attach would leak the relays it took
+            val held = withContext(NonCancellable) { attachTemporary(others) }
+            try {
+                ignoringErrors { fetchFrom(others, filter, OWN_LIST_TIMEOUT, attach = false) }
+            } finally {
+                withContext(NonCancellable) { detachTemporary(held) }
+            }
             event = query(filter).firstOrNull()
         }
         val r = event?.tags()?.toVec()?.map { it.asVec() }?.filter { it.size >= 2 && it[0] == "r" } ?: return null

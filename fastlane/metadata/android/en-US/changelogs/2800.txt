@@ -1,6 +1,6 @@
 • Following and followers lists in profiles, with bio and follow button
-• Editor like X: your picture beside the text, link preview while writing
-• Link previews like X: title on the picture, domain below
+• Improved editor: your picture beside the text, link preview while writing
+• Improved link previews: title on the picture, domain below
 • Articles in a book typeface
 • New accent colour Champagne; accents as a list (purple is now Custom)
 • $XMR and other cashtags open a search

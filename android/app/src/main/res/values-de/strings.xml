@@ -26,7 +26,7 @@
     <string name="relay_resting">nicht erreichbar, neuer Versuch alle 10 Minuten</string>
     <string name="relay_last_seen">zuletzt verbunden: %1$s</string>
     <string name="relay_never_seen">noch nie verbunden</string>
-    <string name="relays_none_found">Keine veröffentlichte Relay-Liste gefunden. Andere Apps und der Tip-Watcher suchen dich auf den Relays dieser Liste.</string>
+    <string name="relays_none_found">Keine veröffentlichte Relay-Liste gefunden. Andere Apps und der Tip-Watcher suchen dich auf den Relays dieser Liste. Sobald du eine veröffentlichst, suchen sie nur noch dort: Füge zuerst die Relays mit deinen älteren Notes hinzu, sonst wirken diese verschwunden.</string>
     <plurals name="relays_unpublished">
         <item quantity="one">%d Relay hier ist nicht in deiner veröffentlichten Liste: Andere Apps und der Tip-Watcher suchen dich dort nicht.</item>
         <item quantity="other">%d Relays hier sind nicht in deiner veröffentlichten Liste: Andere Apps und der Tip-Watcher suchen dich dort nicht.</item>

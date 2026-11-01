@@ -1,0 +1,5 @@
+• Mesajlar: her sohbette ve isteklerde okunmamış sayısı
+• Yeniden giriş yaptıktan sonra eski mesajlar artık okunmamış sayılmaz
+• Düzeltme: listen yalnızca başka rölelerdeyse takip etme «Takip listen yüklenemedi» hatasıyla başarısız oluyordu
+• Düzeltme: bahşiş kurulumu artık senin yerine röle listesi yayınlamıyor; bu liste eski notları gizleyebiliyordu
+• Röle ayarları listeni dizin rölelerinde de arar

@@ -125,6 +125,51 @@ class DmDatabaseTest {
         }
     }
 
+    @Test fun theReadFloorCountsOlderIncomingMessagesAsReadWheneverTheyArrive() = runBlocking {
+        val s = store()
+        assertNull(s.readFloor())
+        s.upsert(msg('1', bob, 100)); s.upsert(msg('2', carol, 600))
+        assertEquals(2, s.unreadTotal().first())
+        s.setReadFloor(300)
+        assertEquals(300L, s.readFloor())
+        assertEquals(1, s.unreadTotal().first())
+        s.upsert(msg('3', bob, 200))
+        assertEquals(1, s.unreadTotal().first())
+        val c = s.conversations().first().associateBy { it.peer }
+        assertEquals(0, c.getValue(bob).unread); assertEquals(300L, c.getValue(bob).readAt)
+        assertEquals(1, c.getValue(carol).unread)
+        s.markRead(carol, 700)
+        assertEquals(0, s.unreadTotal().first())
+        s.upsert(msg('4', bob, 400))
+        assertEquals(1, s.unreadTotal().first())
+    }
+
+    @Test fun markReadBelowTheFloorStaysSilent() = runBlocking {
+        val s = store()
+        val scope = CoroutineScope(Dispatchers.Default + Job())
+        try {
+            s.upsert(msg('1', bob, 100))
+            s.setReadFloor(300)
+            val list = scope.record(s.conversations())
+            eventually { list.isNotEmpty() && list.last()[0].unread == 0 }
+            val queries = s.queryCount; val size = list.size
+            s.markRead(bob, 200); s.markRead(bob, 300); delay(300)
+            assertEquals(queries, s.queryCount); assertEquals(size, list.size)
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    @Test fun theReadFloorSurvivesReopeningAndGoesWithClear() = runBlocking {
+        val s = store()
+        s.setReadFloor(0)
+        s.close()
+        val again = store()
+        assertEquals(0L, again.readFloor())
+        again.clear()
+        assertNull(again.readFloor())
+    }
+
     @Test fun clearEmptiesEveryReaderAndWakesThem() = runBlocking {
         val s = store()
         val scope = CoroutineScope(Dispatchers.Default + Job())

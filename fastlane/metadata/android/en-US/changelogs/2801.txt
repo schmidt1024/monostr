@@ -1,0 +1,5 @@
+• Messages: unread count on every conversation and on the requests row
+• After a new login, old messages no longer count as unread
+• Fix: following failed with "Your follow list could not be loaded" when your list lived only on other relays
+• Fix: the tip setup no longer publishes a relay list for you, which could hide older notes
+• Relay settings also look for your published list on index relays

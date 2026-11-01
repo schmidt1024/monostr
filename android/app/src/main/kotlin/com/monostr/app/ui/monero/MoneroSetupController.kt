@@ -133,7 +133,7 @@ class MoneroSetupController(
     private val tips: TipsRepository,
     private val settings: TipSettingsStore,
     private val secrets: SecretStore,
-    /** Adds the watcher's relays to the user's list and publishes kind 10002 if missing (NostrSession.ensureRelays). */
+    /** Adds the watcher's relays to the app's relay list (NostrSession.ensureRelays); never publishes a kind 10002 (bug 54). */
     private val relays: suspend (List<String>) -> Unit,
     private val scope: CoroutineScope,
     /** The logged-in user: what the relays announce for them decides whether a failed setup may remove the watcher account. */

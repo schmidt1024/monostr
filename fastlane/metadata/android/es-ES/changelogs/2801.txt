@@ -1,0 +1,5 @@
+• Mensajes: número de no leídos en cada conversación y en las solicitudes
+• Tras iniciar sesión de nuevo, los mensajes antiguos ya no cuentan como no leídos
+• Corrección: seguir fallaba con «No se pudo cargar tu lista de seguidos» si tu lista estaba solo en otros relays
+• Corrección: la configuración de propinas ya no publica una lista de relays por ti, que podía ocultar notas antiguas
+• Los ajustes de relays también buscan tu lista en relays índice

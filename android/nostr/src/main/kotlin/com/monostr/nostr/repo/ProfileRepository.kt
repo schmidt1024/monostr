@@ -305,6 +305,13 @@ class NostrProfileRepository(
     companion object {
         /** Relays that keep everybody's profile and relay list; asked only for profiles the user's relays lack. */
         val INDEX_RELAYS = listOf("wss://purplepag.es")
+
+        /**
+         * Bug 54: where the user's own kind 10002 is looked for besides the session's relays, before the app says
+         * "none found". Wider than [INDEX_RELAYS] (asked only in Settings and on adopting the list, never on the
+         * feed's paths): a list the user published elsewhere must not be taken for missing and overwritten.
+         */
+        val OWN_LIST_RELAYS = INDEX_RELAYS + listOf("wss://indexer.coracle.social", "wss://user.kindpag.es")
         private const val DEFAULT_MAX_AGE = 3600L
         private val HEX64 = Regex("[0-9a-f]{64}")
     }

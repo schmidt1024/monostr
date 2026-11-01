@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -58,6 +59,7 @@ import androidx.lifecycle.viewModelScope
 import com.monostr.app.R
 import com.monostr.app.session.NostrSession
 import com.monostr.app.ui.common.Avatar
+import com.monostr.app.ui.common.CountBadge
 import com.monostr.app.ui.common.BottomTab
 import com.monostr.app.ui.common.MonostrBottomBar
 import com.monostr.app.ui.common.HideOnScrollFooter
@@ -164,6 +166,8 @@ fun ConversationsScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Text(pluralStringResource(R.plurals.messages_requests, state.requests.size, state.requests.size), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                                // closed, the section would hide unread messages the bottom badge counts
+                                CountBadge(state.requests.sumOf { it.conversation.unread }, Modifier.padding(end = 8.dp).testTag("messages-requests-unread"))
                                 Icon(if (requestsOpen) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, contentDescription = null)
                             }
                             HorizontalDivider()
@@ -197,7 +201,14 @@ private fun ConversationRow(row: ConversationUi, onOpenChat: (String) -> Unit) {
             Text(c.lastText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Spacer(Modifier.width(8.dp))
-        Text(relativeTime(c.lastAt).asString(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        // the count under the time, so the badge's total can be found in the list
+        Column(horizontalAlignment = Alignment.End) {
+            Text(relativeTime(c.lastAt).asString(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (c.unread > 0) {
+                Spacer(Modifier.height(4.dp))
+                CountBadge(c.unread, Modifier.testTag("conversation-unread-${c.peer.take(8)}"))
+            }
+        }
     }
     HorizontalDivider()
 }

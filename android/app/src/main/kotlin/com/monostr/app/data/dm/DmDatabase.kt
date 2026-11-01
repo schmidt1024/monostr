@@ -196,7 +196,7 @@ class DmDatabase(context: Context, pubkey: String) :
 
     private fun queryUnreadTotal(): Int {
         val sql = "SELECT COUNT(*) FROM messages m WHERE m.outgoing = 0 AND " +
-            "m.created_at > COALESCE((SELECT read_at FROM conversations WHERE peer = m.peer), 0)" // sql
+            "m.created_at > MAX(COALESCE((SELECT read_at FROM conversations WHERE peer = m.peer), 0), $FLOOR_SQL)" // sql
         readableDatabase.rawQuery(sql, null).use { c ->
             c.moveToFirst()
             return c.getInt(0)
@@ -336,8 +336,9 @@ class DmDatabase(context: Context, pubkey: String) :
                 }
                 // spec perf2 D2: the unread count changes only when an incoming message lies in (old, new],
                 // the bounds of the unread count (created_at > read_at)
+                // below the read floor nothing is unread to cross
                 val crossed = moved > current && db.rawQuery(
-                    "SELECT EXISTS(SELECT 1 FROM messages WHERE peer = ? AND outgoing = 0 AND created_at > ? AND created_at <= ?)", // sql
+                    "SELECT EXISTS(SELECT 1 FROM messages WHERE peer = ? AND outgoing = 0 AND created_at > MAX(CAST(? AS INTEGER), $FLOOR_SQL) AND created_at <= ?)", // sql
                     arrayOf(peer, current.toString(), moved.toString()),
                 ).use { c -> c.moveToFirst(); c.getInt(0) != 0 }
                 db.setTransactionSuccessful()
@@ -347,6 +348,17 @@ class DmDatabase(context: Context, pubkey: String) :
             }
         }
         if (crossed) signals.readChanged()
+    }
+
+    override suspend fun readFloor(): Long? = withContext(Dispatchers.IO) {
+        readableDatabase.rawQuery("SELECT value FROM sync WHERE key = ?", arrayOf(KEY_READ_FLOOR)).use { c -> // sql
+            if (c.moveToFirst()) c.getLong(0) else null
+        }
+    }
+
+    override suspend fun setReadFloor(at: Long) {
+        withContext(Dispatchers.IO) { writeSyncValue(KEY_READ_FLOOR, at) }
+        signals.readChanged() // once per account: no need to check whether it crossed a message
     }
 
     override suspend fun hasWrap(wrapId: String): Boolean = withContext(Dispatchers.IO) {
@@ -473,14 +485,21 @@ class DmDatabase(context: Context, pubkey: String) :
         private const val KEY_LAST_SYNC = "last_sync"
         private const val KEY_LAST_NOTIFIED = "last_notified"
         private const val KEY_PENDING_SUMMARY = "pending_summary"
+        private const val KEY_READ_FLOOR = "read_floor"
 
-        /** Spec perf2 D3: one statement instead of 3P + 1; unread = incoming with created_at > read_at, as before. */
+        /** The read floor ([readFloor]) as an SQL expression, 0 when unset; one primary-key lookup. */
+        private const val FLOOR_SQL = "(SELECT COALESCE(MAX(value), 0) FROM sync WHERE key = '$KEY_READ_FLOOR')" // sql
+
+        /** The read marker of a conversation: its own or the read floor, whichever is later. */
+        private const val READ_SQL = "MAX(COALESCE(c.read_at, 0), f.v)" // sql
+
+        /** Spec perf2 D3: one statement instead of 3P + 1; unread = incoming with created_at > read_at, as before (read_at: the effective marker, see READ_SQL). */
         private const val CONVERSATIONS_SQL =
-            "SELECT m.peer, MAX(m.created_at) AS last_at, COALESCE(c.read_at, 0) AS read_at, " +
-                "SUM(m.outgoing = 0 AND m.created_at > COALESCE(c.read_at, 0)) AS unread, " +
+            "SELECT m.peer, MAX(m.created_at) AS last_at, $READ_SQL AS read_at, " +
+                "SUM(m.outgoing = 0 AND m.created_at > $READ_SQL) AS unread, " +
                 "SUM(m.outgoing) AS outgoing_n, " +
                 "(SELECT x.content FROM messages x WHERE x.peer = m.peer ORDER BY x.created_at DESC LIMIT 1) AS last_content " +
-                "FROM messages m LEFT JOIN conversations c ON c.peer = m.peer GROUP BY m.peer ORDER BY last_at DESC" // sql
+                "FROM messages m CROSS JOIN (SELECT $FLOOR_SQL AS v) f LEFT JOIN conversations c ON c.peer = m.peer GROUP BY m.peer ORDER BY last_at DESC" // sql
 
         private fun fileName(pubkey: String) = "dms-${pubkey.take(16)}.db"
 

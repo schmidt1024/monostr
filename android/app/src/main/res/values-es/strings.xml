@@ -26,7 +26,7 @@
     <string name="relay_resting">inaccesible, se reintenta cada 10 minutos</string>
     <string name="relay_last_seen">última conexión: %1$s</string>
     <string name="relay_never_seen">nunca conectado</string>
-    <string name="relays_none_found">No se encontró una lista de relays publicada. Otras apps y el watcher de propinas te buscan en los relays de esa lista.</string>
+    <string name="relays_none_found">No se encontró una lista de relays publicada. Otras apps y el watcher de propinas te buscan en los relays de esa lista. En cuanto publiques una, solo buscarán allí: añade primero los relays con tus notas antiguas, o parecerán desaparecidas.</string>
     <plurals name="relays_unpublished">
         <item quantity="one">%d relay de aquí no está en tu lista publicada: otras apps y el watcher de propinas no te buscan allí.</item>
         <item quantity="other">%d relays de aquí no están en tu lista publicada: otras apps y el watcher de propinas no te buscan allí.</item>

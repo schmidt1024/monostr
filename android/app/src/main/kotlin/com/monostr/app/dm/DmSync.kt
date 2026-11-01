@@ -101,6 +101,10 @@ class DmSync(
     private val ownListMutex = Mutex()
     private var ownListSettled = false // guarded by [ownListMutex]
     private val staleFailed = AtomicBoolean(false)
+    /** Serialises [settleReadFloor]: two starts must not both find no floor and write different ones. */
+    private val floorMutex = Mutex()
+    /** Completed once the read floor is settled; [handle] stores nothing before (see [settleReadFloor]). */
+    private val floorSettled = kotlinx.coroutines.CompletableDeferred<Unit>()
     /** Relay → the AUTH OK seq a live subscription was last renewed for ([subscriptionRefused]); one renewal per OK. */
     private val renewedFor = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
@@ -136,6 +140,7 @@ class DmSync(
         // Stale hints go; the new subscription's CLOSED frames report the relays that still refuse.
         _state.update { it.copy(authFailed = emptySet(), authRejected = emptyMap()) }
         val runScope = CoroutineScope(scope.coroutineContext + run.job)
+        runScope.launch { settleReadFloor() }
         runScope.launch {
             closed.collect { c ->
                 // only NIP-42's auth-required can be healed by an AUTH; restricted etc. leave the round incomplete, nothing more
@@ -282,6 +287,28 @@ class DmSync(
         }.join()
     }
 
+    /**
+     * Once per account, at the first start, before any wrap is stored: a fresh store (login, reinstall) gets the
+     * read floor "now", so the 30-day backlog is history, not news, also when it lands days later (an adopted own
+     * list refetches it). A store that already holds messages (an update) gets 0 and keeps its unread messages.
+     * Never fails the start: on an error the floor stays unset and [handle] goes on as before.
+     */
+    private suspend fun settleReadFloor() {
+        try {
+            floorMutex.withLock {
+                if (store.readFloor() != null) return@withLock
+                val fresh = store.lastSync() == 0L && store.conversations().first().isEmpty()
+                store.setReadFloor(if (fresh) now() else 0L)
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // best effort
+        } finally {
+            floorSettled.complete(Unit)
+        }
+    }
+
     private suspend fun setUp(run: Run) {
         // Once per session, before anything else: a SENDING row left by a previous process can never finish.
         if (staleFailed.compareAndSet(false, true)) bestEffort { store.failStaleSending() }
@@ -413,6 +440,8 @@ class DmSync(
 
     /** Null when the wrap was already stored or dropped, or could not be unwrapped. */
     private suspend fun handle(wrap: Event, interactive: Boolean): Handled? {
+        // a store reached without start (a worker round, a send) settles it here; afterwards this is a flag check
+        if (!floorSettled.isCompleted) settleReadFloor()
         val wrapId = wrap.id().toHex()
         // spec perf2 D4: a known wrap (a replay of the window, a worker round) is skipped from memory,
         // so it never queues behind a real decrypt under [handling]

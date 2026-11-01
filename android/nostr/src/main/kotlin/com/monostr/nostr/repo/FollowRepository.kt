@@ -3,6 +3,9 @@ package com.monostr.nostr.repo
 import com.monostr.nostr.NostrEngine
 import com.monostr.nostr.PublishResult
 import com.monostr.nostr.model.NoteMapper
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -74,6 +77,11 @@ class NostrFollowRepository(
     private val send: suspend (EventBuilder) -> PublishResult = { engine.signAndPublish(it) },
     private val fetchTimeout: Duration = Duration.ofSeconds(5),
     private val localMaxAgeSeconds: Long = 300,
+    /**
+     * Issue 5: asked when the session's relays deliver no list. A list kept only elsewhere (the user's other
+     * relays, mirrored by an indexer) would otherwise never count as current, and every follow failed.
+     */
+    private val indexRelays: List<String> = emptyList(),
 ) : FollowRepository {
     private val self = requireNotNull(engine.pubkey) { "follows need a logged-in user" }
     private val mutex = Mutex()
@@ -133,9 +141,33 @@ class NostrFollowRepository(
         _changes.tryEmit(Unit)
     }
 
-    /** One relay fetch of the own kind 3 (stored by the engine), see [fetchOwn]; a found list marks the contacts fetched. */
-    private suspend fun fetchList(): OwnFetch =
-        engine.fetchOwn(filter(), fetchTimeout).also { if (it.found) feed.markContactsFetched(now()) }
+    /**
+     * One relay fetch of the own kind 3 (stored by the engine), see [fetchOwn]; the index relays only when the session's
+     * relays found none (extra connections). A found list marks the contacts fetched.
+     */
+    private suspend fun fetchList(): OwnFetch {
+        val own = engine.fetchOwn(filter(), fetchTimeout)
+        val fetch = if (own.found) own else OwnFetch(found = fromIndex(), completed = own.completed)
+        if (fetch.found) feed.markContactsFetched(now())
+        return fetch
+    }
+
+    /** True when one of [indexRelays] delivered the own kind 3 (stored by the engine); a failure counts as none. */
+    private suspend fun fromIndex(): Boolean {
+        val urls = indexRelays.map { it.trim().trimEnd('/') }.distinct() - engine.relayUrls().toSet()
+        if (urls.isEmpty()) return false
+        // NonCancellable attach: a cut-off attach would leak the relays it took
+        val held = withContext(NonCancellable) { engine.attachTemporary(urls) }
+        return try {
+            engine.fetchFrom(urls, filter(), fetchTimeout, attach = false).isNotEmpty()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            false
+        } finally {
+            withContext(NonCancellable) { engine.detachTemporary(held) }
+        }
+    }
 
     private suspend fun load(): Snapshot {
         var list = engine.query(filter()).firstOrNull()

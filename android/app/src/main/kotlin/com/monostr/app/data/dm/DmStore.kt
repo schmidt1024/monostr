@@ -37,6 +37,7 @@ data class PendingSince(val count: Int, val newestReceivedAt: Long)
 data class Conversation(
     val peer: String,
     val lastAt: Long,
+    /** The effective read marker: the peer's own or the store's read floor, whichever is later. */
     val readAt: Long,
     val lastText: String,
     val unread: Int,
@@ -84,6 +85,14 @@ interface DmStore {
     suspend fun replaceId(oldRumorId: String, newRumorId: String, status: DmStatus, wrapId: String? = null)
 
     suspend fun markRead(peer: String, at: Long)
+
+    /**
+     * Incoming messages dated at or before the floor count as read in every conversation, whenever they are
+     * stored: a fresh store's backlog is history, not news. Null until set; gone with [clear].
+     */
+    suspend fun readFloor(): Long?
+
+    suspend fun setReadFloor(at: Long)
 
     suspend fun hasWrap(wrapId: String): Boolean
 

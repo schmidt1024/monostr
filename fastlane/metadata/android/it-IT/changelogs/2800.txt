@@ -1,6 +1,6 @@
 • Liste di seguiti e follower nei profili, con bio e pulsante segui
-• Editor come su X: la tua foto accanto al testo, anteprima del link mentre scrivi
-• Anteprime come su X: titolo sull’immagine, dominio sotto
+• Editor migliorato: la tua foto accanto al testo, anteprima del link mentre scrivi
+• Anteprime migliorate: titolo sull’immagine, dominio sotto
 • Articoli in carattere da libro
 • Nuovo accento Champagne; accenti in elenco (viola passa a Personalizzato)
 • $XMR e altri cashtag aprono una ricerca

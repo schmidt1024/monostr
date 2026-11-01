@@ -26,7 +26,7 @@
     <string name="relay_resting">injoignable, nouvel essai toutes les 10 minutes</string>
     <string name="relay_last_seen">dernière connexion : %1$s</string>
     <string name="relay_never_seen">jamais connecté</string>
-    <string name="relays_none_found">Aucune liste de relais publiée trouvée. Les autres apps et le watcher de pourboires te cherchent sur les relais de cette liste.</string>
+    <string name="relays_none_found">Aucune liste de relais publiée trouvée. Les autres apps et le watcher de pourboires te cherchent sur les relais de cette liste. Dès que tu en publies une, ils ne cherchent plus que là : ajoute d’abord les relais qui ont tes anciennes notes, sinon elles sembleront disparues.</string>
     <plurals name="relays_unpublished">
         <item quantity="one">%d relais ici n’est pas dans ta liste publiée : les autres apps et le watcher de pourboires ne t’y cherchent pas.</item>
         <item quantity="other">%d relais ici ne sont pas dans ta liste publiée : les autres apps et le watcher de pourboires ne t’y cherchent pas.</item>

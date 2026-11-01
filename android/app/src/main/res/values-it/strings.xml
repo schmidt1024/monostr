@@ -26,7 +26,7 @@
     <string name="relay_resting">irraggiungibile, nuovo tentativo ogni 10 minuti</string>
     <string name="relay_last_seen">ultima connessione: %1$s</string>
     <string name="relay_never_seen">mai connesso</string>
-    <string name="relays_none_found">Nessuna lista di relay pubblicata trovata. Le altre app e il watcher delle mance ti cercano sui relay di quella lista.</string>
+    <string name="relays_none_found">Nessuna lista di relay pubblicata trovata. Le altre app e il watcher delle mance ti cercano sui relay di quella lista. Appena ne pubblichi una, cercano solo lì: aggiungi prima i relay con le tue note più vecchie, altrimenti sembreranno sparite.</string>
     <plurals name="relays_unpublished">
         <item quantity="one">%d relay qui non è nella tua lista pubblicata: le altre app e il watcher delle mance non ti cercano lì.</item>
         <item quantity="other">%d relay qui non sono nella tua lista pubblicata: le altre app e il watcher delle mance non ti cercano lì.</item>

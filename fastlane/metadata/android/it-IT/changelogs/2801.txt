@@ -1,0 +1,5 @@
+• Messaggi: numero di non letti su ogni conversazione e sulle richieste
+• Dopo un nuovo accesso i vecchi messaggi non contano più come non letti
+• Correzione: seguire falliva con «Impossibile caricare la tua lista dei seguiti» se la lista era solo su altri relay
+• Correzione: la configurazione delle mance non pubblica più una lista di relay al posto tuo, che poteva nascondere note vecchie
+• Le impostazioni dei relay cercano la tua lista anche sui relay indice

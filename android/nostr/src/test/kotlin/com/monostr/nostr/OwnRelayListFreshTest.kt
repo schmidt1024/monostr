@@ -2,6 +2,7 @@ package com.monostr.nostr
 
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import rust.nostr.sdk.EventBuilder
@@ -45,6 +46,52 @@ class OwnRelayListFreshTest {
                 assertEquals(listOf("wss://new.example"), e.ownRelayList(fresh = true)!!.read)
             } finally {
                 e.close()
+            }
+        }
+    }
+
+    @Test
+    fun `a list only the index relays have is found, fresh or not, and without them it is none`() = runTest {
+        val published = list(1500, "wss://mom.example")
+        SilentWsRelay(answerEose = true).use { own ->
+            SilentWsRelay(answerEose = true, serve = listOf(published.asJson())).use { index ->
+                val e = connectedEngine(dir, own, sk)
+                try {
+                    assertNull(e.ownRelayList(fresh = true), "the session's relays do not have it")
+                    assertEquals(listOf("wss://mom.example"), e.ownRelayList(fresh = true, extra = listOf(index.url))!!.read)
+                } finally {
+                    e.close()
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `the stored path asks the index relays too when the session's relays have nothing`() = runTest {
+        val published = list(1500, "wss://mom.example")
+        SilentWsRelay(answerEose = true).use { own ->
+            SilentWsRelay(answerEose = true, serve = listOf(published.asJson())).use { index ->
+                val e = connectedEngine(dir, own, sk)
+                try {
+                    assertEquals(listOf("wss://mom.example"), e.ownRelayList(extra = listOf(index.url))!!.write)
+                } finally {
+                    e.close()
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `the index relays are not asked when the session's relays have the list`() = runTest {
+        SilentWsRelay(serve = listOf(list(1500, "wss://own.example").asJson())).use { own ->
+            SilentWsRelay(answerEose = true, recordRequests = true).use { index ->
+                val e = connectedEngine(dir, own, sk)
+                try {
+                    assertEquals(listOf("wss://own.example"), e.ownRelayList(fresh = true, extra = listOf(index.url))!!.read)
+                    assertEquals(emptyList<String>(), index.requests.toList(), "no extra connection for a list found at home")
+                } finally {
+                    e.close()
+                }
             }
         }
     }

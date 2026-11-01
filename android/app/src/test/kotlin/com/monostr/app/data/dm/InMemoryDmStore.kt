@@ -14,6 +14,7 @@ class InMemoryDmStore : DmStore {
     private var summaryShown = false
     private var lastSyncAt = 0L
     private var lastNotifiedAt = 0L
+    private var floor: Long? = null
     private val signals = DmSignals()
     /** Query evaluations so far; a test hook (spec perf2 §6). */
     val queryCount: Int get() = signals.queries.get()
@@ -25,10 +26,13 @@ class InMemoryDmStore : DmStore {
     private val previews = PreviewMemo()
     private val sharedConversations = SharedConversations(storeScope, signals) { counted { computeConversations() } }
 
+    /** The marker a count compares with: the peer's own, or the floor if that lies later. */
+    private fun readOf(peer: String): Long = maxOf(readAt[peer] ?: 0L, floor ?: 0L)
+
     private fun computeConversations(): List<Conversation> =
         messages.groupBy { it.peer }.map { (peer, msgs) ->
             val last = msgs.maxBy { it.createdAt }
-            val read = readAt[peer] ?: 0L
+            val read = readOf(peer)
             val unread = msgs.count { !it.outgoing && it.createdAt > read }
             val hasOutgoing = msgs.any { it.outgoing }
             Conversation(peer, last.createdAt, read, previews.of(peer, last.createdAt, last.content), unread, hasOutgoing)
@@ -42,7 +46,7 @@ class InMemoryDmStore : DmStore {
     override suspend fun message(rumorId: String): DmMessage? = messages.firstOrNull { it.rumorId == rumorId }
 
     override fun unreadTotal(): Flow<Int> =
-        signals.conversationStamp.map { counted { messages.count { !it.outgoing && it.createdAt > (readAt[it.peer] ?: 0L) } } }.distinctUntilChanged()
+        signals.conversationStamp.map { counted { messages.count { !it.outgoing && it.createdAt > readOf(it.peer) } } }.distinctUntilChanged()
 
     override suspend fun upsert(message: DmMessage): Boolean {
         val index = messages.indexOfFirst { it.rumorId == message.rumorId }
@@ -87,11 +91,18 @@ class InMemoryDmStore : DmStore {
     }
 
     override suspend fun markRead(peer: String, at: Long) {
-        val old = readAt[peer] ?: 0L
+        val old = readOf(peer)
         val moved = maxOf(old, at)
-        readAt[peer] = moved
+        readAt[peer] = maxOf(readAt[peer] ?: 0L, at)
         // spec perf2 D2: the same bounds as the unread count
         if (messages.any { it.peer == peer && !it.outgoing && it.createdAt > old && it.createdAt <= moved }) signals.readChanged()
+    }
+
+    override suspend fun readFloor(): Long? = floor
+
+    override suspend fun setReadFloor(at: Long) {
+        floor = at
+        signals.readChanged()
     }
 
     override suspend fun hasWrap(wrapId: String): Boolean = messages.any { it.wrapId == wrapId }
@@ -147,7 +158,7 @@ class InMemoryDmStore : DmStore {
     }
 
     override suspend fun clear() {
-        messages.clear(); readAt.clear(); pendingWraps.clear(); droppedWraps.clear()
+        messages.clear(); readAt.clear(); pendingWraps.clear(); droppedWraps.clear(); floor = null
         attempts.clear(); summaryShown = false
         lastSyncAt = 0L; lastNotifiedAt = 0L
         signals.allChanged()

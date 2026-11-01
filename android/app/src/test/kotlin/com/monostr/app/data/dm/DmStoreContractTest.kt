@@ -354,6 +354,47 @@ abstract class DmStoreContractTest {
     }
 
     @Test
+    fun `the read floor counts older incoming messages as read, whenever they arrive`() = runTest {
+        val s = store()
+        assertNull(s.readFloor())
+        s.upsert(msg('1', bob, 100)); s.upsert(msg('2', carol, 600))
+        val unread = record(s.unreadTotal())
+        assertEquals(2, unread.last())
+        s.setReadFloor(300)
+        assertEquals(300L, s.readFloor())
+        assertEquals(1, unread.last())
+        s.upsert(msg('3', bob, 200)) // an old message landing late
+        assertEquals(1, unread.last())
+        val c = s.conversations().first().associateBy { it.peer }
+        assertEquals(0, c.getValue(bob).unread); assertEquals(300L, c.getValue(bob).readAt)
+        assertEquals(1, c.getValue(carol).unread)
+        s.markRead(carol, 700)
+        assertEquals(0, unread.last())
+        s.upsert(msg('4', bob, 400))
+        assertEquals(1, unread.last(), "a message after the floor is news")
+    }
+
+    @Test
+    fun `markRead below the floor crosses nothing and wakes no query`() = runTest {
+        val s = store()
+        s.upsert(msg('1', bob, 100))
+        s.setReadFloor(300)
+        val list = record(s.conversations())
+        val queries = queryCount(s)
+        s.markRead(bob, 200); s.markRead(bob, 300)
+        assertEquals(queries, queryCount(s)); assertEquals(1, list.size)
+    }
+
+    @Test
+    fun `clear removes the read floor`() = runTest {
+        val s = store()
+        s.setReadFloor(0)
+        assertEquals(0L, s.readFloor())
+        s.clear()
+        assertNull(s.readFloor())
+    }
+
+    @Test
     fun `messages with a limit are the newest ones, oldest first`() = runTest {
         val s = store()
         s.upsert(msg('1', bob, 100)); s.upsert(msg('2', bob, 200)); s.upsert(msg('3', bob, 300)); s.upsert(msg('4', carol, 400))

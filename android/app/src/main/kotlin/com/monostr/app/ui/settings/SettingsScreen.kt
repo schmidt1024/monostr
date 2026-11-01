@@ -92,6 +92,7 @@ import com.monostr.app.ui.common.statusColor
 import com.monostr.app.ui.common.asString
 import com.monostr.app.ui.common.label
 import com.monostr.app.ui.common.uiText
+import com.monostr.nostr.repo.NostrProfileRepository
 import com.monostr.nostr.RelayList
 import com.monostr.nostr.model.Profile
 import com.monostr.nostr.model.RelayInfo
@@ -250,7 +251,7 @@ class SettingsViewModel @Inject constructor(
     private fun readPublished() = viewModelScope.launch {
         val engine = session.requireReady().engine
         val asked = runCatching { engine.connectedNormalRelayUrls().isNotEmpty() }.getOrDefault(false)
-        val list = runCatching { engine.ownRelayList(fresh = true) }.getOrNull()
+        val list = runCatching { engine.ownRelayList(fresh = true, extra = NostrProfileRepository.OWN_LIST_RELAYS) }.getOrNull()
         published.value = list
         publishedRead.value = list != null || asked
     }

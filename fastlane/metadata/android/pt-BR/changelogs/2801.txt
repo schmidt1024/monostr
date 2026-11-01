@@ -1,0 +1,5 @@
+• Mensagens: número de não lidas em cada conversa e nas solicitações
+• Depois de um novo login, mensagens antigas não contam mais como não lidas
+• Correção: seguir falhava com "Não foi possível carregar sua lista de seguidos" quando ela estava só em outros relays
+• Correção: a configuração de gorjetas não publica mais uma lista de relays por você, o que podia esconder notas antigas
+• As configurações de relays também procuram sua lista em relays de índice

@@ -100,8 +100,9 @@ class ArticleScreenTest {
             val card = "address-card-${d.take(8)}"
             rule.onNodeWithTag("feed-list").performScrollToNode(hasTestTag(card))
             rule.waitUntil(15_000) { nodes("address-card-generic").isNotEmpty() }
-            // the card frame (not the person row) opens the reader
-            rule.onNodeWithTag(card).performTouchInput { click(Offset(centerX, height - 4.dp.toPx())) }
+            // the card frame (not the person row) opens the reader: tapped at its top edge, since the person row sits
+            // right above the bottom edge and took a tap 4 dp above it (2026-10-30: the test opened bob's profile)
+            rule.onNodeWithTag(card).performTouchInput { click(Offset(centerX, 4.dp.toPx())) }
             rule.waitUntil(15_000) { nodes("article-screen").isNotEmpty() && nodes("article-title").isNotEmpty() }
             assertTrue(rule.onAllNodesWithText("Reader article $ts").fetchSemanticsNodes().isNotEmpty())
             rule.waitUntil(15_000) { rule.onAllNodesWithText("Heading $ts").fetchSemanticsNodes().isNotEmpty() }

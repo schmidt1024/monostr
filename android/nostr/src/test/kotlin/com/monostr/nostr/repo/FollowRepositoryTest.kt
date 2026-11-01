@@ -189,6 +189,49 @@ class FollowRepositoryTest {
     }
 
     @Test
+    fun `issue 5 - a list only an index relay delivers counts as current and the follow is written`() = runTest {
+        val list = kind3(listOf(listOf("p", bob)))
+        SilentWsRelay(answerEose = true, acceptEvents = true).use { own -> // the session's relay: answers, has no list
+            SilentWsRelay(answerEose = true, serve = listOf(list.asJson())).use { index ->
+                val e = connected(own)
+                e.save(list) // stored earlier (e.g. by a profile visit), never delivered by the session's relays
+                val repo = NostrFollowRepository(e, feed(e, 2_000, ago = 3_600), now = { 2_000 }, send = okSend(e), indexRelays = listOf(index.url))
+                repo.follow(carol)
+                assertEquals(listOf(listOf("p", bob), listOf("p", carol)), newest(e)!!.tagList())
+                assertEquals(1, sends)
+                e.close()
+            }
+        }
+    }
+
+    @Test
+    fun `without index relays the same situation stays NoList`() = runTest {
+        val list = kind3(listOf(listOf("p", bob)))
+        SilentWsRelay(answerEose = true, acceptEvents = true).use { own ->
+            val e = connected(own)
+            e.save(list)
+            val repo = NostrFollowRepository(e, feed(e, 2_000, ago = 3_600), now = { 2_000 }, send = okSend(e))
+            assertTrue(failure { repo.follow(carol) } is FollowError.NoList)
+            assertEquals(0, sends)
+            e.close()
+        }
+    }
+
+    @Test
+    fun `the index relays are not asked when the session's relays deliver the list`() = runTest {
+        val list = kind3(listOf(listOf("p", bob)))
+        SilentWsRelay(serve = listOf(list.asJson()), acceptEvents = true).use { own ->
+            SilentWsRelay(answerEose = true, recordRequests = true).use { index ->
+                val e = connected(own)
+                val repo = NostrFollowRepository(e, NostrFeedRepository(e), send = okSend(e), indexRelays = listOf(index.url))
+                repo.follow(carol)
+                assertEquals(emptyList<String>(), index.requests.toList())
+                e.close()
+            }
+        }
+    }
+
+    @Test
     fun `a fetch that ran into the timeout without any list publishes nothing`() = runTest {
         SilentWsRelay().use { relay -> // connected, never answers
             val e = connected(relay)
