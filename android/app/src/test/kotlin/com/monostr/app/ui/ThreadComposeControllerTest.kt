@@ -235,7 +235,7 @@ class ThreadComposeControllerTest {
         advanceUntilIdle()
         c.like(c.state.value.items[0].note)
         advanceUntilIdle()
-        assertEquals(uiText(R.string.action_like_sent), c.state.value.message?.text)
+        assertNull(c.state.value.message) // a success says nothing (backlog 61)
         assertTrue(c.state.value.items[0].liked)
     }
 

@@ -124,7 +124,7 @@ class FeedControllerTest {
         assertEquals(listOf("like:1111"), publish.calls)
         assertTrue(c.state.value.notes[0].liked)
         assertTrue(c.state.value.notes[2].liked) // same target
-        assertEquals(uiText(R.string.action_like_sent), c.state.value.message?.text)
+        assertNull(c.state.value.message) // a success says nothing (backlog 61)
         c.clearMessage()
         assertNull(c.state.value.message)
         c.loadMore()
@@ -294,7 +294,7 @@ class FeedControllerTest {
         assertNull(c.state.value.message)
         publish.gate!!.complete(Unit); advanceUntilIdle()
         assertTrue(c.state.value.notes[0].liked)
-        assertEquals(uiText(R.string.action_like_sent), c.state.value.message?.text)
+        assertNull(c.state.value.message) // a success says nothing (backlog 61)
 
         val failing = FakePublish(fail = true).apply { gate = CompletableDeferred() }
         val c2 = FeedController(feed, profiles, failing, decorations(), BookmarkActions(FakeBookmarks(), eager()), FakeCounts(), eager())

@@ -187,6 +187,91 @@ class BookmarksRepositoryTest {
     }
 
     @Test
+    fun `a toggle while another write waits for the relays shows at once and is written after it`() = runTest {
+        val e = engine()
+        seedEmptyList(e)
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val sending = kotlinx.coroutines.CompletableDeferred<Unit>()
+        var sends = 0
+        val repo = NostrBookmarksRepository(e, signer, now = { 2000 }, send = { b -> sends++; sending.complete(Unit); gate.await(); okSend(e)(b) })
+        repo.ensureLoaded()
+        val first = async { repo.toggle(n1) }
+        sending.await()
+        // the first write hangs on its relay OK: the next taps must not queue behind it
+        val second = async { repo.toggle(n1) }
+        val third = async { repo.toggle(n2) }
+        kotlinx.coroutines.yield()
+        assertEquals(listOf(n2), repo.state.value.ids, "the later taps must show before the first write is done")
+        gate.complete(Unit)
+        assertEquals(listOf(BookmarkOutcome.Ok, BookmarkOutcome.Ok, BookmarkOutcome.Ok), listOf(first, second, third).awaitAll())
+        assertEquals(listOf(listOf("e", n2)), privateTags(e))
+        assertEquals(listOf(n2), repo.state.value.ids)
+        assertEquals(2, sends, "the taps behind the first write go out as one list")
+    }
+
+    @Test
+    fun `a quick series of taps goes out as one list`() = runTest {
+        // one event per tap got the user rate-limited and banned by relay.damus.io (Pixel 2026-11-02)
+        val e = engine()
+        seedEmptyList(e)
+        var sends = 0
+        val repo = NostrBookmarksRepository(e, signer, now = { 2000 }, send = { b -> sends++; okSend(e)(b) })
+        repo.ensureLoaded()
+        val taps = listOf(async { repo.toggle(n1) }, async { repo.toggle(n1) }, async { repo.toggle(n2) }, async { repo.toggle(n3) })
+        assertEquals(List(4) { BookmarkOutcome.Ok }, taps.awaitAll())
+        assertEquals(1, sends)
+        assertEquals(listOf(listOf("e", n3), listOf("e", n2)), privateTags(e))
+    }
+
+    @Test
+    fun `a failed write takes back only its own change, a later tap stays`() = runTest {
+        val e = engine()
+        seedEmptyList(e)
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val sending = kotlinx.coroutines.CompletableDeferred<Unit>()
+        var calls = 0
+        val repo = NostrBookmarksRepository(e, signer, now = { 2000 }, send = { b ->
+            calls++
+            if (calls == 1) { sending.complete(Unit); gate.await(); failSend(b) } else okSend(e)(b)
+        })
+        repo.ensureLoaded()
+        val first = async { repo.toggle(n1) }
+        sending.await()
+        val second = async { repo.toggle(n2) }
+        kotlinx.coroutines.yield()
+        assertEquals(listOf(n2, n1), repo.state.value.ids)
+        gate.complete(Unit)
+        assertEquals(BookmarkOutcome.PublishFailed, first.await())
+        assertEquals(BookmarkOutcome.Ok, second.await())
+        assertEquals(listOf(n2), repo.state.value.ids)
+        assertEquals(listOf(listOf("e", n2)), privateTags(e))
+    }
+
+    @Test
+    fun `a watched list writes without waiting for a relay that does not answer the refresh`() = runTest {
+        SilentWsRelay().use { relay ->
+            val e = NostrEngine.create(dir.resolve("lmdb").toString(), signer, listOf(relay.url))
+            e.connect()
+            assertTrue(awaitTrue { e.connectedNormalRelayUrls().isNotEmpty() }, "loopback relay never connected")
+            seedEmptyList(e)
+            val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default)
+            try {
+                val repo = NostrBookmarksRepository(e, signer, now = { 2000 }, send = okSend(e),
+                    fetchTimeout = Duration.ofMillis(200), refreshTimeout = Duration.ofSeconds(30), watch = scope)
+                repo.ensureLoaded()
+                val ms = kotlin.system.measureTimeMillis {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { assertEquals(BookmarkOutcome.Ok, repo.toggle(n1)) }
+                }
+                assertTrue(ms < 5000, "the live subscription keeps the list fresh, the write must not wait for the refresh (took $ms ms)")
+                assertEquals(listOf(n1), repo.state.value.ids)
+            } finally {
+                scope.coroutineContext[kotlinx.coroutines.Job]!!.cancel()
+                e.close()
+            }
+        }
+    }
+
+    @Test
     fun `entries resolve local notes in list order and keep unknown ids as placeholders`() = runTest {
         val e = engine()
         seedEmptyList(e)

@@ -76,6 +76,7 @@
     <string name="mute_settings_empty">Nobody is muted. Mute an account from a note’s menu or its profile.</string>
     <string name="note_tips_open">Show who tipped</string>
     <string name="note_reposted_by">%1$s reposted</string>
+    <string name="repost_original_unavailable">Reposted note not available. Tap to look for it.</string>
     <string name="note_tip_pending">Tip sent, waiting for confirmation</string>
     <string name="note_tips_chip">%1$s · %2$d</string>
     <string name="media_sensitive">Sensitive content</string>
@@ -111,10 +112,6 @@
     <string name="settings_msg_amber_cancelled">Cancelled</string>
     <string name="settings_msg_amber_wrong_key">A different key was chosen – nothing changed</string>
     <string name="notification_has_media" translatable="false">📷 %1$s</string>
-    <string name="action_like_sent">Like sent</string>
-    <string name="action_repost_sent">Repost sent</string>
-    <string name="action_unlike_sent">Like removed</string>
-    <string name="action_unrepost_sent">Repost removed</string>
     <string name="action_undo_repost">Undo repost</string>
     <string name="action_no_relay_local">No relay reachable, kept locally</string>
 

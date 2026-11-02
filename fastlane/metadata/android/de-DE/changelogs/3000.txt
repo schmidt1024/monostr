@@ -1,0 +1,7 @@
+• Lesezeichen und Stummschalten wirken sofort, schnelle Tipps gehen gemeinsam raus
+• Senden dauert rund 1 s statt bis zu 10 s, wenn ein Relay schweigt
+• Schnellerer Start: viel weniger Daten und Speicher nach dem Öffnen
+• Weniger Akku im Hintergrund: eine Prüfung alle 15 Minuten statt zwei
+• Bilder werden höher angezeigt, bis fast zur Bildschirmhöhe
+• Kein «Like gesendet» mehr über dem Schreiben-Knopf
+• Korrektur: Reposts mit unlesbarem Original erschienen als leere Notes

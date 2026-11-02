@@ -52,6 +52,7 @@ object NoteMapper {
                     repostOf = original?.let { note(it) },
                     mentionedPubkeys = emptyList(),
                     client = client(tags),
+                    repostedId = referencedId ?: original?.id()?.toHex(),
                 )
             }
             else -> null

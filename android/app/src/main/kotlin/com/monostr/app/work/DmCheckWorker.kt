@@ -11,29 +11,21 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
-import androidx.work.Constraints
 import androidx.work.CoroutineWorker
-import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.NetworkType
-import androidx.work.PeriodicWorkRequestBuilder
-import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.monostr.app.MainActivity
 import com.monostr.app.R
 import com.monostr.app.data.DmSettingsStore
 import com.monostr.app.session.NostrSession
+import com.monostr.app.session.Ready
 import com.monostr.app.session.SessionState
 import com.monostr.app.ui.common.resolve
 import com.monostr.nostr.model.Profile
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
-import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.withContext
-import java.util.concurrent.TimeUnit
 
 /** Local notifications for received direct messages, tagged [TAG] so logout can cancel exactly these. */
 class DmNotifier(private val context: Context) {
@@ -94,94 +86,76 @@ class DmCheckWorker(context: Context, params: WorkerParameters) : CoroutineWorke
         fun dmSettings(): DmSettingsStore
     }
 
-    override suspend fun doWork(): Result {
-        if (MainActivity.inForeground.get()) return Result.success()
-        val deps = EntryPointAccessors.fromApplication(applicationContext, Deps::class.java)
-        val session = deps.session()
-        // the process may have been woken only for this job; track whether we are the ones starting the engine
-        val startedHere = session.state.value !is SessionState.Active
-        try {
-            session.restore()
-            val ready = (session.state.value as? SessionState.Active)?.ready ?: return Result.success()
-            // spec perf2 A2 (4): a worker session has no feed to protect
-            ready.startupGate.open("worker")
-            val store = ready.dmStore
-            val lastNotified = store.lastNotified()
-            try {
-                ready.dms.sync(interactive = false)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                return Result.retry()
-            }
-            // logged out while this run synced: nothing of that account may be posted any more
-            if ((session.state.value as? SessionState.Active)?.ready !== ready) return Result.success()
-            // from the store, not sync's result: the live subscription also stores messages while the app is in the background
-            val totalPending = store.pendingCount().first()
-            val selection = DmCheckPlan.select(
-                lastNotified, store.incomingSince(lastNotified), store.pendingSince(lastNotified), totalPending,
-                now = System.currentTimeMillis() / 1000,
-                summaryShown = store.pendingSummaryShown(),
-            )
-            val fresh = selection.fresh
-            val names = fresh.map { it.peer }.distinct().associateWith { peer ->
-                try {
-                    ready.profiles.fetched(peer).shownName
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    Profile.shortPubkey(peer)
-                }
-            }
-            val settings = deps.dmSettings()
-            // silent load first: right after a restore the muted set is still empty and a muted peer would alert
-            try {
-                ready.mute.ensureLoaded(interactive = false)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                // the current set is what we have
-            }
-            val plan = DmNotificationPlanner.plan(
-                fresh, names, pending = selection.pending,
-                showName = settings.previewName.first(), showText = settings.previewText.first(),
-                muted = ready.muted.value,
-            )
-            val notifier = DmNotifier(applicationContext)
-            plan.forEach { notifier.show(it) }
-            try {
-                if (selection.pending > 0) store.setPendingSummaryShown(true)
-                // the wraps were unwrapped meanwhile (chat tab): drop the stale summary; the next parked wrap may post again
-                if (totalPending == 0) {
-                    notifier.cancel(DmNotificationPlanner.PENDING_ID)
-                    store.setPendingSummaryShown(false)
-                }
-                store.setLastNotified(selection.watermark)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                return Result.retry()
-            }
-            return Result.success()
-        } finally {
-            // don't tear down an engine the foreground app is now using
-            if (startedHere && !MainActivity.inForeground.get()) withContext(NonCancellable) { session.release() }
-        }
-    }
+    /** Replaced by [BackgroundCheckWorker] (2026-11-02); kept so a run WorkManager still has queued under this name ends at once. */
+    override suspend fun doWork(): Result = Result.success()
 
     companion object {
-        private const val WORK_NAME = "dm-check"
+        /** The unique work name it ran under; [BackgroundCheckWorker.schedule] cancels it. */
+        internal const val WORK_NAME = "dm-check"
+    }
+}
 
-        /** Logout: no DM check runs (and so no DM notification appears) until the next login schedules it again. */
-        fun cancel(context: Context) {
-            WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
-        }
-
-        fun schedule(context: Context) {
-            val request = PeriodicWorkRequestBuilder<DmCheckWorker>(15, TimeUnit.MINUTES)
-                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
-                .build()
-            WorkManager.getInstance(context).enqueueUniquePeriodicWork(WORK_NAME, ExistingPeriodicWorkPolicy.KEEP, request)
+/**
+ * The DM part of [BackgroundCheckWorker]: fetches new gift wraps silently (never prompts the signer; wraps that need one stay
+ * parked and show up as the pending summary) and notifies per peer. False: try again later.
+ */
+internal suspend fun checkDms(context: Context, session: NostrSession, ready: Ready, dmSettings: DmSettingsStore): Boolean {
+    val store = ready.dmStore
+    val lastNotified = store.lastNotified()
+    try {
+        ready.dms.sync(interactive = false)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        return false
+    }
+    // logged out while this run synced: nothing of that account may be posted any more
+    if ((session.state.value as? SessionState.Active)?.ready !== ready) return true
+    // from the store, not sync's result: the live subscription also stores messages while the app is in the background
+    val totalPending = store.pendingCount().first()
+    val selection = DmCheckPlan.select(
+        lastNotified, store.incomingSince(lastNotified), store.pendingSince(lastNotified), totalPending,
+        now = System.currentTimeMillis() / 1000,
+        summaryShown = store.pendingSummaryShown(),
+    )
+    val fresh = selection.fresh
+    val names = fresh.map { it.peer }.distinct().associateWith { peer ->
+        try {
+            ready.profiles.fetched(peer).shownName
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Profile.shortPubkey(peer)
         }
     }
+    val settings = dmSettings
+    // silent load first: right after a restore the muted set is still empty and a muted peer would alert
+    try {
+        ready.mute.ensureLoaded(interactive = false)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        // the current set is what we have
+    }
+    val plan = DmNotificationPlanner.plan(
+        fresh, names, pending = selection.pending,
+        showName = settings.previewName.first(), showText = settings.previewText.first(),
+        muted = ready.muted.value,
+    )
+    val notifier = DmNotifier(context)
+    plan.forEach { notifier.show(it) }
+    try {
+        if (selection.pending > 0) store.setPendingSummaryShown(true)
+        // the wraps were unwrapped meanwhile (chat tab): drop the stale summary; the next parked wrap may post again
+        if (totalPending == 0) {
+            notifier.cancel(DmNotificationPlanner.PENDING_ID)
+            store.setPendingSummaryShown(false)
+        }
+        store.setLastNotified(selection.watermark)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        return false
+    }
+    return true
 }

@@ -75,6 +75,7 @@
     <string name="mute_settings_empty">Niemand ist stummgeschaltet. Schalte ein Konto über das Menü einer Note oder sein Profil stumm.</string>
     <string name="note_tips_open">Tipper anzeigen</string>
     <string name="note_reposted_by">%1$s hat repostet</string>
+    <string name="repost_original_unavailable">Repostete Note nicht verfügbar. Tippen, um sie zu suchen.</string>
     <string name="note_tip_pending">Tip gesendet, wartet auf Bestätigung</string>
     <string name="note_tips_chip">%1$s · %2$d</string>
     <string name="media_sensitive">Sensibler Inhalt</string>
@@ -108,10 +109,6 @@
     <string name="settings_msg_amber_updated">Berechtigungen aktualisiert</string>
     <string name="settings_msg_amber_cancelled">Abgebrochen</string>
     <string name="settings_msg_amber_wrong_key">Anderer Schlüssel gewählt – nichts geändert</string>
-    <string name="action_like_sent">Like gesendet</string>
-    <string name="action_repost_sent">Repost gesendet</string>
-    <string name="action_unlike_sent">Like entfernt</string>
-    <string name="action_unrepost_sent">Repost entfernt</string>
     <string name="action_undo_repost">Repost rückgängig machen</string>
     <string name="action_no_relay_local">Kein Relay erreichbar, wird lokal gehalten</string>
 

@@ -596,8 +596,19 @@ class NostrEngine private constructor(
         }
 
         override suspend fun handleMsg(relayUrl: RelayUrl, msg: RelayMessage) {
+            // rust-nostr calls this for every relay message, EVENT included (Pixel 2026-11-02: ~4300 in the first 8 s
+            // after a start, each crossing JNA several times): one FFI call to read the message, the relay's name only for
+            // the few kinds that need it, and the handles freed here instead of by the Cleaner thread later
+            val m = msg.asEnum()
+            msg.destroy()
+            if (m is RelayMessageEnum.EventMsg) m.event.destroy()
+            if (m !is RelayMessageEnum.Closed && m !is RelayMessageEnum.Ok) {
+                relayUrl.destroy()
+                return
+            }
             val relay = relayUrl.toString().trimEnd('/')
-            when (val m = msg.asEnum()) {
+            relayUrl.destroy()
+            when (m) {
                 is RelayMessageEnum.Closed -> {
                     // recorded before the emit, so a caller checking closedSince right after its own call sees it
                     val seq = closedSeq.incrementAndGet()
@@ -1196,13 +1207,55 @@ class NostrEngine private constructor(
         val connected = connectedOnceSettled(all)
         val (ready, skipped) = all.partition { it.toString().trimEnd('/') in connected }
         val targets = if (ready.isEmpty()) all else ready
-        val out = ffi { client.sendEventTo(targets, event) }
+        val sendStart = System.nanoTime()
+        val (ok, failed) = sendEach(targets, event)
+        if (PerfTrace.enabled) PerfTrace.mark("send kind ${event.kind().asU16()} ${(System.nanoTime() - sendStart) / 1_000_000}ms, ${ok.size} ok, failed=$failed")
         val notSent = if (ready.isEmpty()) emptyMap() else skipped.associate { it.toString() to NOT_CONNECTED }
-        PublishResult(event.id().toHex(), event.kind().asU16().toInt(), out.success.map { it.toString() }, out.failed.mapKeys { it.key.toString() } + notSent).also { logFailures(it) }
+        PublishResult(event.id().toHex(), event.kind().asU16().toInt(), ok, failed + notSent).also { logFailures(it) }
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
         PublishResult(event.id().toHex(), event.kind().asU16().toInt(), emptyList(), mapOf("*" to (e.message ?: "send failed"))).also { logFailures(it) }
+    }
+
+    /**
+     * Sends [event] to each of [targets] on its own, side by side, on the engine's scope. Returns once every relay answered,
+     * or [OK_GRACE] after the first `OK true`: rust-nostr's one send to all of them waits for the slowest relay, and a
+     * connected relay that takes events without ever answering held every publish up for its 10 s timeout (Pixel
+     * 2026-11-02: relay.snort.social, a bookmark write took 10 s each time). A relay that has not answered by then is
+     * reported as [NO_ANSWER]; its send goes on in the background and may still deliver the event.
+     */
+    private suspend fun sendEach(targets: List<RelayUrl>, event: Event): Pair<List<String>, Map<String, String>> {
+        val answers = Channel<Pair<String, String?>>(Channel.UNLIMITED) // relay to error, null = accepted
+        targets.forEach { url ->
+            scope.launch {
+                val error = try {
+                    val out = ffi { client.sendEventTo(listOf(url), event) }
+                    if (out.success.isNotEmpty()) null else out.failed.values.firstOrNull() ?: "send failed"
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    e.message ?: "send failed"
+                }
+                answers.trySend(url.toString() to error)
+            }
+        }
+        val ok = ArrayList<String>()
+        val failed = LinkedHashMap<String, String>()
+        var deadline = 0L
+        while (ok.size + failed.size < targets.size) {
+            val next = if (deadline == 0L) answers.receive()
+            else withTimeoutOrNull(((deadline - System.nanoTime()) / 1_000_000).coerceAtLeast(0)) { answers.receive() } ?: break
+            val error = next.second
+            if (error == null) {
+                ok += next.first
+                if (deadline == 0L) deadline = System.nanoTime() + OK_GRACE.toNanos()
+            } else {
+                failed[next.first] = error
+            }
+        }
+        targets.map { it.toString() }.filter { it !in ok && it !in failed }.forEach { failed[it] = NO_ANSWER }
+        return ok to failed
     }
 
     /**

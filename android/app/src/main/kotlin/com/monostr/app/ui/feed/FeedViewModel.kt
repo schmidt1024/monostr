@@ -1,5 +1,8 @@
 package com.monostr.app.ui.feed
 
+import com.monostr.app.ui.common.mapKeep
+import com.monostr.app.ui.common.mapValuesKeep
+
 import com.monostr.app.ui.discover.DiscoverController
 import com.monostr.app.ui.discover.DiscoverVisibility
 import kotlinx.coroutines.delay
@@ -456,8 +459,10 @@ class FeedController(
     private fun mutedAncestors(): Map<String, NoteUi> =
         visibility.mutedOnly(allAncestors.values.map(::flagged)).associateBy { it.note.id }
 
-    private fun FeedUiState.mapAll(f: (NoteUi) -> NoteUi) =
-        copy(notes = notes.map(f), ancestors = ancestors.mapValues { (_, n) -> f(n) }, mutedAncestors = mutedAncestors.mapValues { (_, n) -> f(n) })
+    private fun FeedUiState.mapAll(f: (NoteUi) -> NoteUi): FeedUiState {
+        val n = notes.mapKeep(f); val a = ancestors.mapValuesKeep(f); val m = mutedAncestors.mapValuesKeep(f)
+        return if (n === notes && a === ancestors && m === mutedAncestors) this else copy(notes = n, ancestors = a, mutedAncestors = m)
+    }
 
     /**
      * Sets the note list and keeps the receipt subscription in step with what is shown. The flags are applied inside the
@@ -566,7 +571,7 @@ class FeedController(
     }
 
     /** [ui] with its current count, so a list rebuild (live/refresh/loadMore) never drops a count the collector already had (spec 4.2). */
-    private fun withCounts(ui: NoteUi): NoteUi = ui.copy(counts = counts.counts.value[ui.target.id])
+    private fun withCounts(ui: NoteUi): NoteUi = counts.counts.value[ui.target.id].let { c -> if (c == ui.counts) ui else ui.copy(counts = c) }
 
     /**
      * Notes with the profiles stored now; the flags follow in [setNotes] / [visibleAncestors]. Missing or stale

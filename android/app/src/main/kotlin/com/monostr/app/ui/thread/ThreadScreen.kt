@@ -1,5 +1,7 @@
 package com.monostr.app.ui.thread
 
+import com.monostr.app.ui.common.mapKeep
+
 import com.monostr.nostr.repo.OwnReactions
 import com.monostr.nostr.repo.MemoryOwnReactions
 import kotlinx.coroutines.Dispatchers
@@ -188,10 +190,10 @@ class ThreadController(
         }
         mentions.follow(_state.map { s -> s.items.map { it.note } })
         bookmarks.ensureLoaded()
-        scope.launch { bookmarks.changes.collect { _state.update { s -> s.copy(items = s.items.map(bookmarks::flags)) } } }
-        scope.launch { actions.changes.collect { _state.update { s -> s.copy(items = s.items.map(actions::flags)) } } }
+        scope.launch { bookmarks.changes.collect { _state.update { s -> s.copy(items = s.items.mapKeep(bookmarks::flags)) } } }
+        scope.launch { actions.changes.collect { _state.update { s -> s.copy(items = s.items.mapKeep(actions::flags)) } } }
         // a request started on another screen greys the entry here too, and frees it again when it failed
-        scope.launch { deletions.pending.collect { _state.update { s -> s.copy(items = s.items.map(actions::flags)) } } }
+        scope.launch { deletions.pending.collect { _state.update { s -> s.copy(items = s.items.mapKeep(actions::flags)) } } }
         scope.launch {
             deletions.deleted.collect { gone ->
                 // spec 4.2: the focused note is gone, so the screen closes; another one just leaves the list below
@@ -201,10 +203,10 @@ class ThreadController(
         // a deleted note or a muted account leaves the list; replies to it and the focused note stay (spec 4.2, 9.3)
         scope.launch { visibility.changes.collect { refilter() } }
         decorations.start()
-        scope.launch { decorations.changes.collect { _state.update { s -> s.copy(items = s.items.map(decorations::decorate)) } } }
+        scope.launch { decorations.changes.collect { _state.update { s -> s.copy(items = s.items.mapKeep(decorations::decorate)) } } }
         scope.launch {
             counts.counts.collect {
-                _state.update { s -> s.copy(items = s.items.map(::withCounts)) }
+                _state.update { s -> s.copy(items = s.items.mapKeep(::withCounts)) }
                 markFocusedCounts()
             }
         }
@@ -266,7 +268,7 @@ class ThreadController(
     fun react(note: Note, emoji: String) = actions.react(note, emoji, ::onActionResult)
     fun delete(note: Note) = actions.delete(note)
     fun repost(note: Note) = actions.repost(note, ::onActionResult)
-    fun bookmark(note: Note) = bookmarks.toggle(note) { m -> _state.update { s -> s.copy(items = s.items.map(bookmarks::flags), message = m?.asMessage() ?: s.message) } }
+    fun bookmark(note: Note) = bookmarks.toggle(note) { m -> _state.update { s -> s.copy(items = s.items.mapKeep(bookmarks::flags), message = m?.asMessage() ?: s.message) } }
     fun clearMessage() = _state.update { it.copy(message = null) }
 
     /** Spec 9.4: mutes the note's author at once; the publish runs behind it, a failure brings the account back with the usual message. */
@@ -304,11 +306,11 @@ class ThreadController(
     }
 
     private fun onActionResult(message: UiText) {
-        _state.update { s -> s.copy(items = s.items.map(actions::flags), message = message.asMessage()) }
+        _state.update { s -> s.copy(items = s.items.mapKeep(actions::flags), message = message.asMessage()) }
     }
 
     /** [ui] with its current count, so a list rebuild never drops a count the collector already had (spec 4.2). */
-    private fun withCounts(ui: NoteUi): NoteUi = ui.copy(counts = counts.counts.value[ui.target.id])
+    private fun withCounts(ui: NoteUi): NoteUi = counts.counts.value[ui.target.id].let { c -> if (c == ui.counts) ui else ui.copy(counts = c) }
 }
 
 @HiltViewModel

@@ -1,0 +1,7 @@
+• Yer imleri ve sessize alma anında değişir, hızlı dokunuşlar birlikte gider
+• Bir relay yanıt vermediğinde gönderim 10 s yerine ~1 s sürer
+• Daha hızlı açılış: açılışta çok daha az veri ve bellek
+• Arka planda daha az pil: iki yerine 15 dakikada bir kontrol
+• Resimler daha uzun gösterilir, neredeyse tüm ekran
+• Yaz düğmesinin üstünde artık «Beğeni gönderildi» yok
+• Düzeltme: orijinali okunamayan yeniden paylaşımlar boş görünüyordu

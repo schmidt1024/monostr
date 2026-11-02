@@ -254,7 +254,9 @@ class NostrTipsRepository(
         require(!prepared.intent.anonymous) { "an anonymous intent must not go out under the user's key" }
         val own = engine.signAndSend(prepared.unsignedEvent)
         if (watcherRelays.isEmpty()) return own
+        val watcherStart = System.nanoTime()
         val more = engine.sendTo(watcherRelays, own.eventId)
+        if (com.monostr.nostr.PerfTrace.enabled) com.monostr.nostr.PerfTrace.mark("tip intent to watcher relays ${(System.nanoTime() - watcherStart) / 1_000_000}ms, ok=${more.successRelays} failed=${more.failedRelays}")
         return PublishResult(own.eventId, own.kind, (own.successRelays + more.successRelays).distinct(), own.failedRelays + more.failedRelays)
     }
 

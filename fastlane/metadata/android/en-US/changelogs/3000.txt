@@ -1,0 +1,7 @@
+• Bookmarks and mutes switch at once, quick taps go out together
+• Sending takes about 1 s instead of up to 10 s when a relay stays silent
+• Faster start: far less data and memory after opening the app
+• Less battery in the background: one check every 15 minutes instead of two
+• Pictures show taller, up to most of the screen
+• No more «Like sent» pop-up over the write button
+• Fix: reposts whose original could not be read showed as empty notes

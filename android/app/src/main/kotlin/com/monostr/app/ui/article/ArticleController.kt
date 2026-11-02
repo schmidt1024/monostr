@@ -1,5 +1,7 @@
 package com.monostr.app.ui.article
 
+import com.monostr.app.ui.common.mapKeep
+
 import com.monostr.app.ui.common.BookmarkActions
 import com.monostr.app.ui.common.Message
 import com.monostr.app.ui.common.MuteActions
@@ -276,7 +278,7 @@ class ArticleController(
 
     private fun fresh(ui: NoteUi): NoteUi = withCounts(actions.flags(bookmarks?.flags(decorations.decorate(ui)) ?: decorations.decorate(ui)))
 
-    private fun withCounts(ui: NoteUi): NoteUi = ui.copy(counts = counts.counts.value[ui.target.id])
+    private fun withCounts(ui: NoteUi): NoteUi = counts.counts.value[ui.target.id].let { c -> if (c == ui.counts) ui else ui.copy(counts = c) }
 
     /** Visible reply ids from the list: their counts are asked (like the thread screen). */
     fun visible(noteIds: List<String>) {
@@ -294,7 +296,7 @@ class ArticleController(
     }
 
     fun bookmark(note: Note) {
-        bookmarks?.let { b -> b.toggle(note) { m -> _replies.update { r -> r.copy(items = r.items.map(b::flags)) }; m?.let { _message.value = it.asMessage() } } }
+        bookmarks?.let { b -> b.toggle(note) { m -> _replies.update { r -> r.copy(items = r.items.mapKeep(b::flags)) }; m?.let { _message.value = it.asMessage() } } }
     }
 
     /** Mutes the author at once (the reply list loses the account's notes), the publish runs behind it. */

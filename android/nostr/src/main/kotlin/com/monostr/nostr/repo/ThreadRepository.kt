@@ -161,7 +161,12 @@ class NostrThreadRepository(
             quietly { engine.fetch(Filter().id(EventId.parse(id)), fetchTimeout, exit = Exit.AllIds(setOf(id))) }
             engine.eventById(id)
         }
-        return ev?.takeUnless { Withdrawn.isWithdrawn(engine, it) }?.let { NoteMapper.note(it) }
+        // through NoteLoader: a repost opened here shows its stored original, not an empty card (backlog 60)
+        val note = ev?.takeUnless { Withdrawn.isWithdrawn(engine, it) }?.let { NoteLoader.notes(engine, listOf(it)).firstOrNull() } ?: return null
+        val missing = note.repostedId?.takeIf { note.isRepost && note.repostOf == null } ?: return note
+        // the thread waits for the relays anyway: the original is asked for here, not only in the background
+        quietly { engine.fetch(Filter().id(EventId.parse(missing)), fetchTimeout, exit = Exit.AllIds(setOf(missing))) }
+        return NoteLoader.notes(engine, listOf(ev)).firstOrNull() ?: note
     }
 
     /**
@@ -311,7 +316,9 @@ class NostrThreadRepository(
             .distinctBy { it.id }
             .mapNotNull { NoteMapper.note(it) }
             .sortedBy { it.createdAt }
-        return ThreadView(rootNow?.let { NoteMapper.note(it) }, s.focused, replies, gone = focusedNow == null, ancestors = ancestors, repliesFetched = fetched)
+        // the focused note as loaded (a repost with its original resolved, backlog 60) when it is the root itself
+        val root = if (rootNow != null && s.rootId == s.focused.id) s.focused else rootNow?.let { NoteMapper.note(it) }
+        return ThreadView(root, s.focused, replies, gone = focusedNow == null, ancestors = ancestors, repliesFetched = fetched)
     }
 
     /**

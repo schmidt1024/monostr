@@ -9,6 +9,7 @@ import com.monostr.nostr.model.Note
 import com.monostr.nostr.model.NoteMapper
 import com.monostr.tips.event.Event as JsonEvent
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -26,6 +27,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import rust.nostr.sdk.EventId
+import com.monostr.nostr.Exit
 import rust.nostr.sdk.Filter
 import rust.nostr.sdk.Kind
 import rust.nostr.sdk.PublicKey
@@ -125,6 +128,15 @@ internal suspend fun quietly(block: suspend () -> Unit) {
     }
 }
 
+/** [quietly] with a result: [fallback] when the call fails. */
+internal suspend fun <T> quietlyOr(fallback: T, block: suspend () -> T): T = try {
+    block()
+} catch (e: CancellationException) {
+    throw e
+} catch (e: Exception) {
+    fallback
+}
+
 /**
  * Home feed: kind 1 and 6 from the accounts the user follows (kind 3),
  * newest first, read from the local database. [refresh] pulls the latest
@@ -139,9 +151,15 @@ class NostrFeedRepository(
      */
     private val excluded: () -> Set<String> = { emptySet() },
     private val profileTtlSeconds: Long = 60,
+    /**
+     * Where [deletionsAnswered] is kept across starts (beside the account's database, which holds the requests fetched
+     * before); null: this process only. Without it every cold start asked each relay for up to 200 requests per author
+     * chunk again (Pixel 2026-11-02: 2365 of the first 3700 events after a start were kind 5).
+     */
+    private val marks: com.monostr.nostr.SyncMarks? = null,
 ) : FeedRepository {
     private val pubkey = requireNotNull(engine.pubkey) { "feed needs a logged-in user" }
-    /** When the deletion requests of an author set (sorted, joined) were last fetched for the newest page; this process only. */
+    /** When the deletion requests of an author set (hashed, see [deletionKey]) were last fetched for the newest page. */
     private val deletionsAnswered = java.util.concurrent.ConcurrentHashMap<String, Long>()
     @Volatile private var fetchedAt: Long? = null
     override val contactsFetchedAt: Long? get() = fetchedAt
@@ -225,9 +243,15 @@ class NostrFeedRepository(
                     if (untilTs != null) notes = notes.until(untilTs)
                     // side by side: each waits for the slowest relay, one after the other they added up
                     // a relay whose connection failed must not hold the page to the timeout (engine.fetchSettled)
-                    val n = async { quietly { engine.fetchSettled(notes) } }
-                    fetchDeletions(chunk, untilTs)
-                    n.await()
+                    if (untilTs == null) {
+                        val n = async { quietly { engine.fetchSettled(notes) } }
+                        fetchDeletions(chunk, null)
+                        n.await()
+                    } else {
+                        // an older page: only the requests naming its notes, not up to 200 per relay of every author
+                        val page = quietlyOr(emptyList()) { engine.fetchSettled(notes) }
+                        fetchDeletionsNaming(page.map { it.id() })
+                    }
                 }
             }.awaitAll()
         }
@@ -239,14 +263,32 @@ class NostrFeedRepository(
         if (untilTs != null) requests = requests.until(untilTs)
         // the newest page asks only for what came since the last answer for the same authors: the relays
         // otherwise send the same few hundred requests every time, and taking them in costs seconds on a phone
-        val key = if (untilTs == null) authors.sorted().joinToString(",") else null
-        val since = key?.let { deletionsAnswered[it] }
+        val key = if (untilTs == null) deletionKey(authors) else null
+        val since = key?.let { deletionsAnswered[it] ?: marks?.get(it)?.also { at -> deletionsAnswered[it] = at } }
         if (since != null) requests = requests.since(Timestamp.fromSecs((since - DELETION_SKEW).coerceAtLeast(0).toULong()))
         val askedAt = now()
         quietly {
             engine.fetchSettled(requests)
-            if (key != null) deletionsAnswered[key] = askedAt
+            // a fetch that reached no relay returns quietly: remembered, it would hide the requests of the time between
+            if (key != null && engine.connectedNormalRelayUrls().isNotEmpty()) {
+                deletionsAnswered[key] = askedAt
+                marks?.put(key, askedAt)
+            }
         }
+    }
+
+    /** The deletion requests naming [ids] (a page fetched from the relays), in chunks of [DELETION_IDS_CHUNK]. */
+    private suspend fun fetchDeletionsNaming(ids: List<EventId>) {
+        if (ids.isEmpty()) return
+        coroutineScope {
+            ids.chunked(DELETION_IDS_CHUNK).map { chunk -> async { quietly { engine.fetchSettled(Filter().kind(Kind(5u)).events(chunk)) } } }.awaitAll()
+        }
+    }
+
+    /** The key of an author set in [deletionsAnswered] and [marks]: short, a set of 200 joined pubkeys is about 13 KB. */
+    private fun deletionKey(authors: List<String>): String {
+        val digest = java.security.MessageDigest.getInstance("SHA-256").digest(authors.sorted().joinToString(",").toByteArray())
+        return "deletions:" + digest.take(12).joinToString("") { "%02x".format(it) }
     }
 
     /** The authors of [source] without [excluded]. */
@@ -357,6 +399,8 @@ class NostrFeedRepository(
             engine.incoming
                 .filter { inc ->
                     val kind = inc.json.kind
+                    // any subscription's or fetch's event, not only this subscription's: rust-nostr reports an event once,
+                    // under the subscription it came on first, so an overlapping one (notifications, a thread) may carry it
                     (kind == 1 || kind == 6 || kind == 5) && inc.json.pubkey in wanted
                 }
                 .conflate()
@@ -534,12 +578,35 @@ internal object NoteLoader {
                 if (id !in referenced) referenced[id] = runCatching { engine.eventById(id) }.getOrNull()
             }
         }
+        // backlog 60: originals neither embedded validly nor stored are asked of the relays once, in the background; the
+        // next read of the list shows them (the card meanwhile says the reposted note is not available)
+        askMissing(engine, referenced.filterValues { it == null }.keys)
         return events.filterNot { it.second.id in withdrawn }.mapNotNull { (_, ev) -> NoteMapper.note(ev) { id -> referenced[id] } }
     }
+
+    /** Ids [askMissing] asked this process (bounded: cleared when full). */
+    private val asked: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
+    private fun askMissing(engine: NostrEngine, ids: Collection<String>) {
+        if (asked.size > ASKED_CAP) asked.clear()
+        val fresh = ids.filter { it.matches(HEX64_ID) && asked.add(it) }
+        if (fresh.isEmpty()) return
+        engine.backgroundScope.launch {
+            fresh.chunked(DELETION_IDS_CHUNK).forEach { chunk ->
+                quietly { engine.fetch(Filter().ids(chunk.map { EventId.parse(it) }), REPOST_FETCH_TIMEOUT, Exit.AllIds(chunk.toSet())) }
+            }
+        }
+    }
+
+    private const val ASKED_CAP = 5_000
+    private val HEX64_ID = Regex("[0-9a-f]{64}")
+    private val REPOST_FETCH_TIMEOUT: java.time.Duration = java.time.Duration.ofSeconds(6)
 }
 
 /** Deletion requests fetched with a page of notes, under their own limit. */
 private const val DELETION_LIMIT = 200uL
+/** Ids per kind 5 `#e` filter of an older page (relays cap filter ids). */
+private const val DELETION_IDS_CHUNK = 100
 
 /** Margin for [NostrFeedRepository]'s incremental deletion fetch: a request signed by a clock a bit behind still comes. */
 private const val DELETION_SKEW = 600L

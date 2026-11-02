@@ -53,7 +53,13 @@ android {
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     buildFeatures { compose = true; buildConfig = true }
     testOptions.unitTests.all { it.useJUnitPlatform() }
-    packaging { resources.excludes += setOf("META-INF/LICENSE.md", "META-INF/LICENSE-notice.md") }
+    packaging {
+        resources.excludes += setOf(
+            "META-INF/LICENSE.md", "META-INF/LICENSE-notice.md",
+            // BouncyCastle is used for Keccak only (:monero): its post-quantum tables and X.509 texts were 1.3 MB of the APK
+            "org/bouncycastle/pqc/**", "org/bouncycastle/x509/**",
+        )
+    }
     androidResources {
         // spec 3.1: the eight app languages; AGP also writes locales_config.xml for the per-app language picker (Android 13+)
         localeFilters += setOf("en", "de", "es", "ru", "tr", "pt", "fr", "it")

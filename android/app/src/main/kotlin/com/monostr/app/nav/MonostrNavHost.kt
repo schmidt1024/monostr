@@ -137,6 +137,8 @@ fun MonostrNavHost(session: NostrSession) {
     // restore on start and again whenever background work released the engine (state back to Loading);
     // restore() is mutex-guarded and a no-op while Active, so a repeat call costs nothing
     LaunchedEffect(state) { if (state is SessionState.Loading) session.restore() }
+    // the app is visible with this session: what only the UI needs starts now (a background check's session leaves it out)
+    LaunchedEffect(state) { (state as? SessionState.Active)?.ready?.startForegroundWork?.invoke() }
     when (val s = state) {
         SessionState.Loading -> StartScreen()
         is SessionState.LoggedOut -> {

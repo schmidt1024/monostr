@@ -2,11 +2,15 @@ package com.monostr.nostr.repo
 
 import com.monostr.nostr.Nip44UnsupportedException
 import com.monostr.nostr.NostrEngine
+import com.monostr.nostr.PerfTrace
 import com.monostr.nostr.PublishResult
 import com.monostr.nostr.Signer
 import com.monostr.nostr.StartupGate
 import com.monostr.nostr.SigningRejectedException
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -14,6 +18,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import rust.nostr.sdk.Event
 import rust.nostr.sdk.EventBuilder
 import rust.nostr.sdk.Filter
@@ -73,6 +78,11 @@ class NostrPrivateList(
     private val gate: StartupGate = StartupGate.OPEN,
     /** A second tag whose entries are edited too, inside the encrypted part only when added by this app (bookmarks: `a` for articles). */
     private val extraTag: String? = null,
+    /**
+     * A write waits this long after the tap that started it, so a quick series of taps goes out as one list: one event per
+     * tap got the user rate-limited and then banned by relay.damus.io (Pixel 2026-11-02). The screen shows each tap at once.
+     */
+    private val writeDelay: Duration = Duration.ofSeconds(2),
 ) {
     private val _state = MutableStateFlow(ListState())
     val state: StateFlow<ListState> = _state.asStateFlow()
@@ -84,8 +94,6 @@ class NostrPrivateList(
     private var privateOther: List<List<String>> = emptyList()
     /** Our tags' private entries as written (hints, markers and all); only [0] and [1] are used to identify one. */
     private var privateEntries: List<List<String>> = emptyList()
-    private val publicEntries: List<List<String>> get() = publicTags.filter { it.size >= 2 && isMine(it[0]) }
-    private fun holds(t: String, id: String) = (privateEntries + publicEntries).any { it[0] == t && it[1] == id }
     private fun isMine(t: String) = t == tag || (extraTag != null && t == extraTag)
 
     /**
@@ -179,6 +187,7 @@ class NostrPrivateList(
             gate.await()
             if (engine.relayUrls().isEmpty()) return@launch
             quietly { engine.fetch(filter(), fetchTimeout) }
+            askedAt = System.nanoTime()
             val newest = try {
                 engine.query(filter()).firstOrNull()
             } catch (e: CancellationException) {
@@ -190,7 +199,7 @@ class NostrPrivateList(
         }
     }
 
-    private var watching = false
+    @Volatile private var watching = false
     private val watchMutex = Mutex()
 
     /**
@@ -201,6 +210,8 @@ class NostrPrivateList(
         if (watching) return@withLock
         val scope = watch ?: return@withLock
         runCatching { engine.subscribe(filter()) }.getOrNull() ?: return@withLock
+        // the subscription's first answer is the relays' newest list, like an ask
+        askedAt = System.nanoTime()
         watching = true
         scope.launch {
             engine.incoming.collect { inc ->
@@ -258,122 +269,215 @@ class NostrPrivateList(
         return Decrypt.OK
     }
 
-    /**
-     * Before a write: picks up a newer list another device published since our load (best-effort
-     * 3 s fetch, then the newest local copy). Null to go on, or the outcome that stops the write.
-     */
-    /** Result of [refreshLocked]: whether a newer remote list replaced ours, and a failure outcome if it could not be read. */
-    private class Refresh(val adopted: Boolean, val outcome: ListOutcome?)
-
-    /**
-     * Pulls the newest copy of the list and adopts it when it is newer than what we read. Does not emit
-     * state: the caller decides what the user sees (a toggle in flight has already flipped the UI).
-     */
-    private suspend fun refreshLocked(): Refresh {
-        quietly { engine.fetch(filter(), refreshTimeout) }
-        val newest = engine.query(filter()).firstOrNull() ?: return Refresh(false, null)
-        if (newest.createdAt().asSecs().toLong() <= snapshotCreatedAt) return Refresh(false, null)
-        return when (adopt(newest, interactive = true)) {
-            Decrypt.OK -> Refresh(true, null)
-            Decrypt.UNREADABLE -> Refresh(true, ListOutcome.Unsupported)
-            Decrypt.NO_SILENT_ANSWER, Decrypt.REJECTED -> Refresh(true, ListOutcome.Rejected)
-        }
-    }
-
-    /** Applies the direction the user chose; idempotent, so it can be re-applied after a refresh. */
-    private fun applyToggle(t: String, id: String, remove: Boolean) {
-        if (remove) {
-            privateEntries = privateEntries.filterNot { it[0] == t && it[1] == id }
-            publicTags = publicTags.filterNot { it.size >= 2 && it[0] == t && it[1] == id }
-        } else if (!holds(t, id)) {
-            privateEntries = listOf(listOf(t, id)) + privateEntries
-        }
+    /** One tap: put [id] (of tag [t]) in or take it out; done once [result] is set. */
+    private class Op(val t: String, val id: String, val remove: Boolean) {
+        val result = CompletableDeferred<ListOutcome>()
     }
 
     /**
-     * Flips [id]: takes it out of both parts when the list the user saw holds it, else adds it
+     * Taps applied to the screen but not yet confirmed by a relay, oldest first (written under [mutex], replaced, never
+     * mutated, so [clear] can drop it from outside). What the user sees is the list read last ([publicTags], [privateEntries])
+     * with these applied on top, so a newer list from another device keeps them.
+     */
+    @Volatile private var pending: List<Op> = emptyList()
+    /** The taps of the write that is out at the relays right now (under [mutex]). */
+    @Volatile private var inFlight: List<Op> = emptyList()
+    /** One write at a time; taps that come in meanwhile wait in [pending] and go out together as the next list. */
+    private val writeMutex = Mutex()
+    /** Bumped by [clear] (sign-out, account switch): a write that started before must not bring its list back. */
+    @Volatile private var generation = 0
+    /** [System.nanoTime] of the last time the relays were asked for the list; 0 = never this session. */
+    @Volatile private var askedAt = 0L
+
+    private fun applied(ops: List<Op>): Pair<List<List<String>>, List<List<String>>> {
+        var pub = publicTags; var priv = privateEntries
+        for (op in ops) {
+            if (op.remove) {
+                priv = priv.filterNot { it[0] == op.t && it[1] == op.id }
+                pub = pub.filterNot { it.size >= 2 && it[0] == op.t && it[1] == op.id }
+            } else if ((priv + pub.filter { it.size >= 2 && isMine(it[0]) }).none { it[0] == op.t && it[1] == op.id }) {
+                priv = listOf(listOf(op.t, op.id)) + priv
+            }
+        }
+        return pub to priv
+    }
+
+    /**
+     * Flips [id]: takes it out of both parts when the list the user sees holds it, else adds it
      * privately. Semantics as documented on [BookmarksRepository.toggle].
      */
-    suspend fun toggle(id: String, entryTag: String = tag): ListOutcome = mutex.withLock {
-        val load = loadLocked(interactive = true)
-        if (load == Load.REJECTED) return@withLock ListOutcome.Rejected
-        if (!_state.value.loaded) return@withLock ListOutcome.NotLoaded
-        if (!_state.value.writable) return@withLock ListOutcome.Unsupported
-        // The direction comes from the list the user saw (read after the load, inside the lock).
-        setLocked(entryTag, id, present = !holds(entryTag, id), load)
-    }
+    suspend fun toggle(id: String, entryTag: String = tag): ListOutcome = change(entryTag, id, present = null)
 
     /** Puts [id] into the list ([present]) or takes it out of both parts; idempotent. Semantics as documented on [BookmarksRepository.toggle]. */
-    suspend fun set(id: String, present: Boolean, entryTag: String = tag): ListOutcome = mutex.withLock {
-        val load = loadLocked(interactive = true)
-        if (load == Load.REJECTED) return@withLock ListOutcome.Rejected
-        if (!_state.value.loaded) return@withLock ListOutcome.NotLoaded
-        if (!_state.value.writable) return@withLock ListOutcome.Unsupported
-        setLocked(entryTag, id, present, load)
+    suspend fun set(id: String, present: Boolean, entryTag: String = tag): ListOutcome = change(entryTag, id, present)
+
+    /**
+     * The screen flips at once (only the in-memory part runs under [mutex]); the relays get the list afterwards in [write].
+     * A tap while an earlier write still waits for its relay OK no longer waits for it to show (Pixel 2026-11-02: a
+     * bookmark set, taken out and another one set took seconds, each tap behind the previous one's 3 s refresh + publish).
+     */
+    private suspend fun change(t: String, id: String, present: Boolean?): ListOutcome {
+        var load = Load.ALREADY
+        var own = true
+        val op = mutex.withLock {
+            load = loadLocked(interactive = true)
+            if (load == Load.REJECTED) return ListOutcome.Rejected
+            if (!_state.value.loaded) return ListOutcome.NotLoaded
+            if (!_state.value.writable) return ListOutcome.Unsupported
+            // The direction comes from the list the user sees (read after the load, inside the lock).
+            val shown = applied(pending)
+            val wanted = present ?: (shown.first + shown.second).none { it.size >= 2 && it[0] == t && it[1] == id }
+            val op = Op(t, id, remove = !wanted)
+            if (applied(pending + op) == shown) {
+                // Nothing changed (muting a muted account, unmuting one that is not): no signature, no publish. When an
+                // unconfirmed tap put the list in this state, this call fares as that tap's write does.
+                val earlier = pending.lastOrNull { it.t == t && it.id == id } ?: return ListOutcome.Ok
+                own = false
+                earlier
+            } else {
+                pending = pending + op
+                publish(writable = true, loaded = true)
+                if (PerfTrace.enabled) PerfTrace.mark("list $kind tap shown, ${pending.size} pending")
+                op
+            }
+        }
+        return try {
+            write(op, load)
+        } catch (e: CancellationException) {
+            // the caller left (e.g. back from a thread during the refresh or before the relay OK): a change that
+            // reached no relay must not stay in memory; one inside another caller's write is settled by that write
+            if (own) withContext(NonCancellable) { mutex.withLock { dropUnsent(op) } }
+            throw e
+        } catch (e: Exception) {
+            // the local read before the send failed: this tap is taken back, the others go out with their own calls
+            if (own) withContext(NonCancellable) { mutex.withLock { dropUnsent(op) } }
+            if (op.result.isCompleted) op.result.await() else ListOutcome.PublishFailed
+        }
     }
 
-    /** The write behind [toggle] and [set]; the caller holds [mutex] and has loaded a writable list. */
-    private suspend fun setLocked(t: String, id: String, present: Boolean, load: Load): ListOutcome {
-        // The UI flips at once, the relays are reconciled afterwards (a refresh may bring a newer
-        // list, the same direction is re-applied).
-        val remove = !present
-        var revertPublic = publicTags; var revertPrivate = privateEntries
-        applyToggle(t, id, remove)
-        // Nothing changed (muting a muted account, unmuting one that is not): no signature, no publish.
-        if (publicTags == revertPublic && privateEntries == revertPrivate) return ListOutcome.Ok
+    /** Takes [op] back unless a write already settled it or has it out at the relays; the caller holds [mutex]. */
+    private fun dropUnsent(op: Op) {
+        if (op.result.isCompleted || op in inFlight) return
+        pending = pending - op
+        op.result.complete(ListOutcome.PublishFailed)
         publish(writable = true, loaded = true)
-        try {
-            // A load that just fetched has the relays' copy already; a local-only load or an older snapshot needs the refresh.
-            if (load == Load.ALREADY || load == Load.LOCAL) {
-                val refresh = refreshLocked()
-                if (refresh.outcome != null) {
-                    publicTags = revertPublic; privateEntries = revertPrivate
-                    publish(writable = refresh.outcome != ListOutcome.Unsupported, loaded = refresh.outcome != ListOutcome.Rejected)
-                    return refresh.outcome
-                }
-                if (refresh.adopted) {
-                    revertPublic = publicTags; revertPrivate = privateEntries
-                    applyToggle(t, id, remove)
-                    publish(writable = true, loaded = true)
-                }
+    }
+
+    /**
+     * Sends the list with every pending tap (one write at a time) unless an earlier write already took [op] along.
+     * Before writing a stored or long-loaded list the relays are asked for a newer copy, except within [ASK_AGAIN_NANOS]
+     * of the last ask while the live subscription runs ([watching]): a newer list then arrives through [onListEvent], and
+     * only the local copy is read.
+     */
+    private suspend fun write(op: Op, load: Load): ListOutcome = writeMutex.withLock {
+        if (op.result.isCompleted) return@withLock op.result.await()
+        // taps until the end of the delay join this write
+        if (!writeDelay.isZero) delay(writeDelay.toMillis())
+        val started = System.nanoTime()
+        // A load that just fetched has the relays' copy already; a local-only load or an older snapshot needs the refresh.
+        val recent = watching && askedAt != 0L && started - askedAt < ASK_AGAIN_NANOS
+        if ((load == Load.ALREADY || load == Load.LOCAL) && !recent) {
+            quietly { engine.fetch(filter(), refreshTimeout) }
+            askedAt = System.nanoTime()
+        }
+        class Out(val batch: List<Op>, val pub: List<List<String>>, val other: List<List<String>>, val priv: List<List<String>>, val ts: Long, val generation: Int)
+        val out = mutex.withLock {
+            if (op.result.isCompleted) return@withLock null
+            val failed = refreshLocked()
+            if (failed != null) {
+                pending.forEach { it.result.complete(failed) }
+                pending = emptyList()
+                publish(writable = failed != ListOutcome.Unsupported, loaded = failed != ListOutcome.Rejected)
+                return@withLock null
             }
+            val batch = pending
+            val (pub, priv) = applied(batch)
+            if (pub == publicTags && priv == privateEntries) {
+                // the taps cancel out, or a newer list already holds them: nothing to send
+                settle(batch, ListOutcome.Ok, writable = true)
+                return@withLock null
+            }
+            inFlight = batch
             val ts = maxOf(now(), lastCreatedAt + 1)
             lastCreatedAt = ts
-            val outcome = try {
-                val content = privateTags.encrypt(privateOther + privateEntries)
-                val builder = EventBuilder(Kind(kind.toUShort()), content).tags(publicTags.map { Tag.parse(it) }).customCreatedAt(Timestamp.fromSecs(ts.toULong()))
-                if (send(builder).sentToAny) ListOutcome.Ok else ListOutcome.PublishFailed
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: SigningRejectedException) {
-                ListOutcome.Rejected
-            } catch (e: Nip44UnsupportedException) {
-                ListOutcome.Unsupported
-            } catch (e: Exception) {
-                ListOutcome.PublishFailed
-            }
-            if (outcome == ListOutcome.Ok) snapshotCreatedAt = ts
-            if (outcome != ListOutcome.Ok) {
-                publicTags = revertPublic; privateEntries = revertPrivate
-                publish(writable = outcome != ListOutcome.Unsupported, loaded = true)
-            }
-            return outcome
+            Out(batch, pub, privateOther, priv, ts, generation)
+        } ?: return@withLock op.result.await()
+        val outcome = try {
+            val t0 = System.nanoTime()
+            val content = privateTags.encrypt(out.other + out.priv)
+            val t1 = System.nanoTime()
+            val builder = EventBuilder(Kind(kind.toUShort()), content).tags(out.pub.map { Tag.parse(it) }).customCreatedAt(Timestamp.fromSecs(out.ts.toULong()))
+            val r = send(builder)
+            if (PerfTrace.enabled) PerfTrace.mark("list $kind before send ${(t0 - started) / 1_000_000}ms, encrypt ${(t1 - t0) / 1_000_000}ms, send ${(System.nanoTime() - t1) / 1_000_000}ms ok=${r.successRelays} failed=${r.failedRelays}")
+            if (r.sentToAny) ListOutcome.Ok else ListOutcome.PublishFailed
         } catch (e: CancellationException) {
-            // the caller left (e.g. back from a thread during the refresh or before the relay OK): a change
-            // that reached no relay must not stay in memory
-            publicTags = revertPublic; privateEntries = revertPrivate
-            publish(writable = true, loaded = true)
+            withContext(NonCancellable) { mutex.withLock { settle(out.batch, ListOutcome.PublishFailed, writable = true, out.generation) } }
             throw e
+        } catch (e: SigningRejectedException) {
+            ListOutcome.Rejected
+        } catch (e: Nip44UnsupportedException) {
+            ListOutcome.Unsupported
+        } catch (e: Exception) {
+            ListOutcome.PublishFailed
         }
+        // settled even when the caller is cancelled meanwhile: its tap is out of reach of [dropUnsent]
+        withContext(NonCancellable) {
+            mutex.withLock {
+                // our own list may already be back through the subscription; a newer one from another device wins
+                if (outcome == ListOutcome.Ok && out.generation == generation && out.ts > snapshotCreatedAt) {
+                    publicTags = out.pub; privateOther = out.other; privateEntries = out.priv; snapshotCreatedAt = out.ts
+                }
+                settle(out.batch, outcome, writable = outcome != ListOutcome.Unsupported, out.generation)
+            }
+        }
+        if (PerfTrace.enabled) PerfTrace.mark("list $kind write ${(System.nanoTime() - started) / 1_000_000}ms, ${out.batch.size} taps, $outcome")
+        op.result.await()
+    }
+
+    /**
+     * Ends a write: its taps leave [pending] (a failed one is thereby taken back) and get [outcome]; the caller holds [mutex].
+     * After a [clear] since the write began ([gen] is older) only the waiting callers are answered.
+     */
+    private fun settle(batch: List<Op>, outcome: ListOutcome, writable: Boolean, gen: Int = generation) {
+        if (gen != generation) { batch.forEach { it.result.complete(ListOutcome.NotLoaded) }; return }
+        val sent = batch.toSet()
+        pending = pending.filterNot { it in sent }
+        inFlight = emptyList()
+        batch.forEach { it.result.complete(outcome) }
+        publish(writable = writable, loaded = true)
+    }
+
+    /**
+     * Before a write: picks up a newer list another device published since our read (the newest local copy, which a
+     * refresh fetch or the subscription keeps current). Null to go on, or the outcome that stops the write; the pending
+     * taps stay on top of an adopted list. A list that cannot be read leaves the one we had.
+     */
+    private suspend fun refreshLocked(): ListOutcome? {
+        val newest = engine.query(filter()).firstOrNull() ?: return null
+        if (newest.createdAt().asSecs().toLong() <= snapshotCreatedAt) return null
+        val pub = publicTags; val other = privateOther; val priv = privateEntries
+        val failed = when (adopt(newest, interactive = true)) {
+            Decrypt.OK -> return null
+            Decrypt.UNREADABLE -> ListOutcome.Unsupported
+            Decrypt.NO_SILENT_ANSWER, Decrypt.REJECTED -> ListOutcome.Rejected
+        }
+        publicTags = pub; privateOther = other; privateEntries = priv
+        return failed
     }
 
     fun clear() {
+        generation++
         publicTags = emptyList(); privateOther = emptyList(); privateEntries = emptyList(); lastCreatedAt = 0; snapshotCreatedAt = 0
+        val dropped = pending
+        pending = emptyList(); inFlight = emptyList(); askedAt = 0L
+        dropped.forEach { it.result.complete(ListOutcome.NotLoaded) }
         emit(ListState())
     }
 
+    /** Emits the list the user sees: the one read last with the [pending] taps on top. */
     private fun publish(writable: Boolean, loaded: Boolean) {
-        val all = (privateEntries + publicEntries).map { it[0] to it[1] }.distinct()
+        val (pub, priv) = applied(pending)
+        val all = (priv + pub.filter { it.size >= 2 && isMine(it[0]) }).map { it[0] to it[1] }.distinct()
         emit(ListState(
             ids = all.filter { it.first == tag }.map { it.second },
             writable = writable, loaded = loaded,
@@ -385,5 +489,10 @@ class NostrPrivateList(
     private fun emit(state: ListState) {
         _state.value = state
         onState(state)
+    }
+
+    private companion object {
+        /** A write asks the relays for a newer list at most this often while the live subscription runs. */
+        const val ASK_AGAIN_NANOS = 5 * 60 * 1_000_000_000L
     }
 }

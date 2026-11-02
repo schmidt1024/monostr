@@ -187,6 +187,24 @@ class RepositoriesTest {
     }
 
     @Test
+    fun `a repost whose original is not readable keeps its id, the thread resolves a stored one`() = runTest {
+        // backlog 60: an invalid embedded copy and no stored original left an empty card without any way to the original
+        val e = engine()
+        val original = note(alice, "orig", 100)
+        val tampered = original.asJson().replace("\"orig\"", "\"forged\"")
+        val repost = EventBuilder(rust.nostr.sdk.Kind(6u), tampered).tags(listOf(Tag.event(original.id()))).signWithKeys(bob)
+        val unresolved = NoteMapper.note(repost)!!
+        assertNull(unresolved.repostOf)
+        assertEquals(original.id().toHex(), unresolved.repostedId)
+        // an empty content (allowed by NIP-18) names the original too
+        val empty = EventBuilder(rust.nostr.sdk.Kind(6u), "").tags(listOf(Tag.event(original.id()))).signWithKeys(bob)
+        assertEquals(original.id().toHex(), NoteMapper.note(empty)!!.repostedId)
+        // stored meanwhile: the thread's read (NoteLoader) shows the original
+        e.save(original); e.save(repost)
+        assertEquals("orig", NostrThreadRepository(e).note(repost.id().toHex())?.repostOf?.content)
+    }
+
+    @Test
     fun `an embedded note whose id differs from the e tag is ignored`() = runTest {
         val embedded = note(alice, "embedded", 100)
         val other = note(alice, "other", 200)

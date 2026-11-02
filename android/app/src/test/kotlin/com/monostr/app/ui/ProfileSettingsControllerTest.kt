@@ -97,14 +97,14 @@ class ProfileSettingsControllerTest {
     }
 
     @Test
-    fun `profile like success marks the note and reports it`() = runTest {
+    fun `profile like success marks the note and says nothing`() = runTest {
         val feed = FakeFeed().apply { byAuthor = mapOf(alice to listOf(note('1', alice, 100))) }
         val c = ProfileController(alice, alice, feed, profiles, FakePublish(), decorations(), BookmarkActions(FakeBookmarks(), eager()), FakeCounts(), FakeAuthorRelays(), { false }, eager())
         c.start()
         advanceUntilIdle()
         c.repost(c.state.value.notes[0].note)
         advanceUntilIdle()
-        assertEquals(uiText(R.string.action_repost_sent), c.state.value.message?.text)
+        assertNull(c.state.value.message) // a success says nothing (backlog 61)
         assertTrue(c.state.value.notes[0].reposted)
     }
 

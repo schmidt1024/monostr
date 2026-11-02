@@ -165,8 +165,16 @@ class TipDecorations(
         @Volatile var failed = false
     }
 
-    fun decorate(note: NoteUi): NoteUi =
-        note.copy(tips = _summaries.value[note.target.id], tipped = selfPubkey != null && _summaries.value[note.target.id]?.receipts?.any { it.senderPubkey == selfPubkey } == true, pendingTip = note.target.id in _pendingNotes.value, canTip = note.target.author != selfPubkey, isOwn = note.target.author == selfPubkey)
+    fun decorate(note: NoteUi): NoteUi {
+        val tips = _summaries.value[note.target.id]
+        val tipped = selfPubkey != null && tips?.receipts?.any { it.senderPubkey == selfPubkey } == true
+        val pendingTip = note.target.id in _pendingNotes.value
+        val canTip = note.target.author != selfPubkey
+        val isOwn = note.target.author == selfPubkey
+        // the same object when nothing changed: a copy recomposed the card (see mapKeep)
+        return if (tips == note.tips && tipped == note.tipped && pendingTip == note.pendingTip && canTip == note.canTip && isOwn == note.isOwn) note
+        else note.copy(tips = tips, tipped = tipped, pendingTip = pendingTip, canTip = canTip, isOwn = isOwn)
+    }
 
     /** Tippers of the note's target with sender names, newest first. */
     suspend fun tippers(note: Note): List<TipperUi> {

@@ -116,8 +116,10 @@ class NostrOwnReactions(
 
     suspend fun load(fetch: Boolean = true) {
         val filter = ownFilter().limit(limit.toULong())
+        val t0 = System.nanoTime()
         val local = read(filter)
         merge(local)
+        if (com.monostr.nostr.PerfTrace.enabled) com.monostr.nostr.PerfTrace.mark("own reactions local ${(System.nanoTime() - t0) / 1_000_000}ms, ${local.stored} events")
         if (!fetch) return
         gate.await()
         val relays = engine.relayUrls()

@@ -1,5 +1,7 @@
 package com.monostr.app.ui.profile
 
+import com.monostr.app.ui.common.mapKeep
+
 import com.monostr.app.ui.lists.DragHandle
 import com.monostr.app.ui.lists.rememberListReorderState
 import com.monostr.app.ui.lists.reorderable
@@ -301,7 +303,7 @@ class ProfileController(
         mentions.follow(_state.map { s -> s.allNotes.map { it.note } })
         scope.launch { deletions.deleted.collect { _state.update { s -> s.mapNotes(deletions::visible) } } }
         // a request started on another screen greys the entry here too, and frees it again when it failed
-        scope.launch { deletions.pending.collect { _state.update { s -> s.mapNotes { l -> l.map(actions::flags) } } } }
+        scope.launch { deletions.pending.collect { _state.update { s -> s.mapNotes { l -> l.mapKeep(actions::flags) } } } }
         mute?.let { m -> scope.launch { m.state.collect { l -> _state.update { it.copy(canMute = offersMute(pubkey, selfPubkey, l)) } } } }
         mute?.let { m -> scope.launch { m.muted.collect { set -> _state.update { it.copy(isMuted = pubkey in set) } } } }
         if (!_state.value.isSelf && follows != null) {
@@ -341,11 +343,11 @@ class ProfileController(
             }
         }
         bookmarks.ensureLoaded()
-        scope.launch { bookmarks.changes.collect { _state.update { s -> s.mapNotes { l -> l.map(bookmarks::flags) } } } }
-        scope.launch { actions.changes.collect { _state.update { s -> s.mapNotes { l -> l.map(actions::flags) } } } }
+        scope.launch { bookmarks.changes.collect { _state.update { s -> s.mapNotes { l -> l.mapKeep(bookmarks::flags) } } } }
+        scope.launch { actions.changes.collect { _state.update { s -> s.mapNotes { l -> l.mapKeep(actions::flags) } } } }
         decorations.start()
-        scope.launch { decorations.changes.collect { _state.update { s -> s.mapNotes { l -> l.map(decorations::decorate) } } } }
-        scope.launch { counts.counts.collect { _state.update { s -> s.mapNotes { l -> l.map(::withCounts) } } } }
+        scope.launch { decorations.changes.collect { _state.update { s -> s.mapNotes { l -> l.mapKeep(decorations::decorate) } } } }
+        scope.launch { counts.counts.collect { _state.update { s -> s.mapNotes { l -> l.mapKeep(::withCounts) } } } }
         // spec perf 3.5: independent jobs; the notes never wait for the author's relays, nor the other way round
         notesJob = scope.launch { loadNotes() }
         // This one coroutine owns the whole outbox lifecycle: it attaches the author's write relays
@@ -600,7 +602,7 @@ class ProfileController(
     fun react(note: Note, emoji: String) = actions.react(note, emoji, ::onActionResult)
     fun delete(note: Note) = actions.delete(note)
     fun repost(note: Note) = actions.repost(note, ::onActionResult)
-    fun bookmark(note: Note) = bookmarks.toggle(note) { m -> _state.update { s -> s.mapNotes { l -> l.map(bookmarks::flags) }.copy(message = m?.asMessage() ?: s.message) } }
+    fun bookmark(note: Note) = bookmarks.toggle(note) { m -> _state.update { s -> s.mapNotes { l -> l.mapKeep(bookmarks::flags) }.copy(message = m?.asMessage() ?: s.message) } }
     fun clearMessage() = _state.update { it.copy(message = null) }
 
     /** Spec 9.4: mutes the note's author at once; the publish runs behind it, a failure brings the account back with the usual message. */
@@ -655,11 +657,11 @@ class ProfileController(
     }
 
     private fun onActionResult(message: UiText) {
-        _state.update { s -> s.mapNotes { l -> l.map(actions::flags) }.copy(message = message.asMessage()) }
+        _state.update { s -> s.mapNotes { l -> l.mapKeep(actions::flags) }.copy(message = message.asMessage()) }
     }
 
     /** [ui] with its current count, so a list rebuild never drops a count the collector already had (spec 4.2). */
-    private fun withCounts(ui: NoteUi): NoteUi = ui.copy(counts = counts.counts.value[ui.target.id])
+    private fun withCounts(ui: NoteUi): NoteUi = counts.counts.value[ui.target.id].let { c -> if (c == ui.counts) ui else ui.copy(counts = c) }
 }
 
 @HiltViewModel

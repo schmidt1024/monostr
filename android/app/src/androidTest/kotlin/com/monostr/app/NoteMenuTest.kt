@@ -73,6 +73,9 @@ class NoteMenuTest {
             rule.onNodeWithTag("setup-skip").performClick()
             rule.waitUntil(15_000) { nodes("fab-compose").isNotEmpty() }
         }
+        // the test account follows fewer than 10: the discover block's decision lands a moment later and pushed the
+        // test's notes off the screen (red since the block came, 2026-10-27); dismissed as a user would
+        entry.session().requireReady().discoverDecision.dismiss()
     }
 
     private fun lines(n: Int) = (1..n).joinToString("\n") { "line $it" }

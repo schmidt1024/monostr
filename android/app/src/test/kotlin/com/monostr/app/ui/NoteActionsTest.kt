@@ -31,13 +31,13 @@ class NoteActionsTest {
     private fun TestScope.eager(): CoroutineScope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher(testScheduler))
 
     @Test
-    fun `success sets the flag and reports the send`() = runTest {
+    fun `success sets the flag and says nothing, like X`() = runTest {
         val actions = NoteActions(FakePublish(), eager())
         val messages = ArrayList<UiText>()
         actions.like(n) { messages += it }
         actions.repost(n) { messages += it }
         advanceUntilIdle()
-        assertEquals(listOf(uiText(R.string.action_like_sent), uiText(R.string.action_repost_sent)), messages)
+        assertEquals(emptyList<UiText>(), messages) // backlog 61: the filled heart is the answer
         assertTrue(actions.flags(ui).liked)
         assertTrue(actions.flags(ui).reposted)
     }
@@ -68,7 +68,7 @@ class NoteActionsTest {
         actions.like(n) { messages += it }
         advanceUntilIdle()
         assertFalse(actions.flags(ui).liked)
-        assertEquals(listOf(uiText(R.string.action_unlike_sent)), messages)
+        assertEquals(emptyList<UiText>(), messages)
         actions.repost(n) {}
         advanceUntilIdle()
         actions.repost(n) {}

@@ -79,6 +79,7 @@
     <string name="mute_settings_empty">Никто не заглушён. Заглушите аккаунт через меню заметки или его профиль.</string>
     <string name="note_tips_open">Показать, кто дал чаевые</string>
     <string name="note_reposted_by">Репост от %1$s</string>
+    <string name="repost_original_unavailable">Репостнутая заметка недоступна. Нажмите, чтобы найти её.</string>
     <string name="note_tip_pending">Чаевые отправлены, ожидают подтверждения</string>
     <string name="note_tips_chip">%1$s · %2$d</string>
     <string name="media_sensitive">Чувствительный контент</string>
@@ -114,10 +115,6 @@
     <string name="settings_msg_amber_updated">Разрешения обновлены</string>
     <string name="settings_msg_amber_cancelled">Отменено</string>
     <string name="settings_msg_amber_wrong_key">Выбран другой ключ – ничего не изменилось</string>
-    <string name="action_like_sent">Отметка «Нравится» отправлена</string>
-    <string name="action_repost_sent">Репост отправлен</string>
-    <string name="action_unlike_sent">Лайк убран</string>
-    <string name="action_unrepost_sent">Репост убран</string>
     <string name="action_undo_repost">Отменить репост</string>
     <string name="action_no_relay_local">Нет доступных релеев, сохранено локально</string>
 

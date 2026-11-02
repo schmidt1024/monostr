@@ -140,7 +140,7 @@ class DeletionFetchTest {
 
             from = relay.requests.size
             repo.loadMore(before = 9_000)
-            assertTrue(deletionFilters(relay, from).all { since(it) == null }, "an older page needs the older requests")
+            assertEquals(emptyList<kotlinx.serialization.json.JsonObject>(), deletionFilters(relay, from), "an older page asks by note id, not per author")
 
             // a new follow changes the author set: its old requests are asked for once
             val carol = Keys.generate()
@@ -149,6 +149,45 @@ class DeletionFetchTest {
             from = relay.requests.size
             repo.refresh()
             assertEquals(listOf<Long?>(null), deletionFilters(relay, from).map(::since))
+            e.close()
+        }
+    }
+
+    /** Every kind 5 filter the relay received since request [from], with or without authors. */
+    private fun allDeletionFilters(relay: SilentWsRelay, from: Int): List<kotlinx.serialization.json.JsonObject> =
+        relay.requests.drop(from).flatMap { req -> kotlinx.serialization.json.Json.parseToJsonElement(req).let { it as kotlinx.serialization.json.JsonArray }.drop(2) }
+            .map { it as kotlinx.serialization.json.JsonObject }
+            .filter { f -> f["kinds"]?.toString() == "[5]" }
+
+    @Test
+    fun `an older page asks only for the deletion requests naming its notes`() = runTest {
+        // Pixel 2026-11-02: every older page asked each relay for up to 200 requests of every followed author
+        val old = (1..3).map { EventBuilder.textNote("old $it").customCreatedAt(rust.nostr.sdk.Timestamp.fromSecs(8_000uL + it.toULong())).signWithKeys(alice) }
+        SilentWsRelay(serve = old.map { it.asJson() }, answerEose = true).use { relay ->
+            val e = engine(relay)
+            val repo = NostrFeedRepository(e)
+            val from = relay.requests.size
+            repo.loadMore(before = 9_000)
+            val filters = allDeletionFilters(relay, from)
+            assertTrue(filters.isNotEmpty(), "no kind 5 request for the page: ${relay.requests.drop(from)}")
+            assertTrue(filters.all { it["authors"] == null }, "an older page must not ask per author: $filters")
+            val named = filters.flatMap { f -> (f["#e"] as kotlinx.serialization.json.JsonArray).map { (it as kotlinx.serialization.json.JsonPrimitive).content } }.toSet()
+            assertEquals(old.map { it.id().toHex() }.toSet(), named)
+            e.close()
+        }
+    }
+
+    @Test
+    fun `the last deletion answer survives a restart, the next start asks only since then`() = runTest {
+        SilentWsRelay(answerEose = true).use { relay ->
+            val e = engine(relay)
+            val marks = com.monostr.nostr.SyncMarks(dir.resolve("sync-marks.json").toFile())
+            fun since(f: kotlinx.serialization.json.JsonObject) = f["since"]?.toString()?.toLong()
+            NostrFeedRepository(e, now = { 10_000L }, marks = marks).refresh()
+            // a new process: a fresh repository with the same file
+            val from = relay.requests.size
+            NostrFeedRepository(e, now = { 10_500L }, marks = com.monostr.nostr.SyncMarks(dir.resolve("sync-marks.json").toFile())).refresh()
+            assertEquals(listOf<Long?>(10_000L - 600), deletionFilters(relay, from).map(::since))
             e.close()
         }
     }

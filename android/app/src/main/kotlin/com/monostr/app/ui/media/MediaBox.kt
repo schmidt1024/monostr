@@ -5,14 +5,19 @@ package com.monostr.app.ui.media
  * picture is cropped to it.
  *
  * The picture always spans the full width; its height follows the real ratio (no clamping, so a
- * panorama is a flat, fully visible strip) up to [MediaBoxes.MAX_HEIGHT_DP]. Only a picture taller
+ * panorama is a flat, fully visible strip) up to a cap (a share of the screen height, see NoteMediaRow). Only a picture taller
  * than that cap is cropped (centre). Without known dimensions a 4:3 box shows the picture fitted,
  * never cut. A video's poster always fills its box (crop); without dimensions a video is 16:9.
  */
 data class MediaBox(val ratio: Float, val crop: Boolean)
 
 object MediaBoxes {
+    /** The cap where the screen height is unknown, and the least a screen-based cap may be. */
     const val MAX_HEIGHT_DP = 400f
+    /** Backlog 62: a feed picture may take this share of the screen height (bars, header and action row stay in view). */
+    const val FEED_SCREEN_SHARE = 0.7f
+    /** Backlog 62: the opened note's picture may take this share. */
+    const val DETAIL_SCREEN_SHARE = 0.9f
     /** A box flatter than this would be unusable to tap; the picture is fitted into it instead. */
     const val MIN_HEIGHT_DP = 80f
     const val FALLBACK_RATIO = 4f / 3f

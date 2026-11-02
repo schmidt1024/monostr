@@ -66,9 +66,27 @@ object NoteLinks {
 
     private val SCHEME = Regex("^https?://", RegexOption.IGNORE_CASE) // regex
 
+    /**
+     * The spans of the last texts read, by content: a note is annotated by its text, its link preview and the feed's mention
+     * lookup, and again every time it scrolls back in (a regex pass, and a JNI bech32 decode per `nostr:` link). Spans are
+     * immutable, so they are shared.
+     */
+    private val cache = object : LinkedHashMap<String, List<NoteSpan>>(256, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<NoteSpan>>) = size > CACHE_SIZE
+    }
+    private const val CACHE_SIZE = 500
+    private const val CACHE_MAX_CHARS = 4_000
+
     /** Invoices first (their bech32 must not turn into cashtags or URLs), the rest of the text in between as before. */
     fun annotate(content: String): List<NoteSpan> {
         if (content.isEmpty()) return emptyList()
+        // a long text (an article's) is not kept: 500 of them would hold megabytes for little gain
+        if (content.length > CACHE_MAX_CHARS) return annotateUncached(content)
+        synchronized(cache) { cache[content] }?.let { return it }
+        return annotateUncached(content).also { synchronized(cache) { cache[content] = it } }
+    }
+
+    private fun annotateUncached(content: String): List<NoteSpan> {
         val invoices = if (Bolt11.mayContain(content)) Bolt11.refs(content) else emptyList()
         if (invoices.isEmpty()) return annotateText(content)
         val out = ArrayList<NoteSpan>()

@@ -43,6 +43,11 @@ data class Note(
     val articleParent: AddressRef? = null,
     /** Spec 2026-11-01: the BOLT11 invoice shown as a card; null with a quote or an naddr (one card per note). */
     val invoice: LightningInvoice? = null,
+    /**
+     * Backlog 60: the id a repost (kind 6) names, also when [repostOf] could not be read (no valid embedded copy and the
+     * original not stored): the card offers to open it instead of showing nothing. Null for anything but a repost.
+     */
+    val repostedId: String? = null,
 ) {
     val isReply: Boolean get() = replyToId != null
     val isRepost: Boolean get() = kind == 6

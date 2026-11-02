@@ -9,6 +9,7 @@ import com.monostr.nostr.awaitTrue
 import com.monostr.nostr.connectedEngine
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
@@ -85,6 +86,45 @@ class PrivateListTest {
         assertEquals(listOf(listOf("t", "nsfw")), stored.tags().toVec().map { it.asVec() })
         val decrypted = signer.nip44Decrypt(signer.pubkey, stored.content())
         assertTrue(decrypted.contains("spam")); assertTrue(decrypted.contains(b)); assertFalse(decrypted.contains(a))
+        e.close()
+    }
+
+    @Test
+    fun `a mute of an account an unconfirmed mute already shows fares as that write`() = runTest {
+        val e = engine()
+        seedEmptyList(e)
+        val gate = CompletableDeferred<Unit>()
+        val sending = CompletableDeferred<Unit>()
+        val fail = PublishResult("0".repeat(64), 10000, emptyList(), mapOf("wss://r" to "closed"))
+        var sends = 0
+        val list = NostrPrivateList(e, signer, kind = 10000, tag = "p", now = { 2000 }, send = { sends++; sending.complete(Unit); gate.await(); fail })
+        list.ensureLoaded(interactive = true)
+        val first = async { list.set(a, present = true) }
+        sending.await()
+        val again = async { list.set(a, present = true) }
+        kotlinx.coroutines.yield()
+        gate.complete(Unit)
+        assertEquals(ListOutcome.PublishFailed, first.await())
+        assertEquals(ListOutcome.PublishFailed, again.await(), "the second call must not report a mute that never reached a relay")
+        assertEquals(1, sends)
+        assertFalse(a in list.state.value.ids)
+        e.close()
+    }
+
+    @Test
+    fun `a write that finishes after clear does not bring the old list back`() = runTest {
+        val e = engine()
+        seedEmptyList(e)
+        val gate = CompletableDeferred<Unit>()
+        val sending = CompletableDeferred<Unit>()
+        val list = NostrPrivateList(e, signer, kind = 10000, tag = "p", now = { 2000 }, send = { b -> sending.complete(Unit); gate.await(); okSend(e)(b) })
+        list.ensureLoaded(interactive = true)
+        val job = async { list.set(a, present = true) }
+        sending.await()
+        list.clear() // sign-out while the relay OK is outstanding
+        gate.complete(Unit)
+        assertEquals(ListOutcome.NotLoaded, job.await())
+        assertEquals(ListState(), list.state.value)
         e.close()
     }
 

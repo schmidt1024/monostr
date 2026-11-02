@@ -12,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -61,26 +62,39 @@ fun NoteText(
     val uriHandler = LocalUriHandler.current
     val openArticle = LocalOpenArticle.current
     val primary = MaterialTheme.colorScheme.primary
-    val styles = TextLinkStyles(style = SpanStyle(color = primary, textDecoration = TextDecoration.Underline))
-    val nameStyles = TextLinkStyles(style = SpanStyle(color = primary))
     val noteLabel = stringResource(R.string.note_ref_label)
     val addressLabel = stringResource(R.string.address_ref_label)
     val invoiceLabel = stringResource(R.string.invoice_inline)
     val invoiceCopied = stringResource(R.string.invoice_copied)
     val context = androidx.compose.ui.platform.LocalContext.current
-    val text = buildAnnotatedString {
-        for (s in spans) {
-            when (s) {
-                is NoteSpan.Plain -> append(s.text)
-                is NoteSpan.Hashtag -> withLink(LinkAnnotation.Clickable("tag", styles) { onHashtag(s.tag) }) { append(s.text) }
-                is NoteSpan.Cashtag -> withLink(LinkAnnotation.Clickable("cashtag", styles) { onHashtag(s.text) }) { append(s.text) }
-                is NoteSpan.Mention -> withLink(LinkAnnotation.Clickable("mention", nameStyles) { onOpenProfile(s.pubkey) }) { append(MentionNames.label(s.pubkey, names)) }
-                is NoteSpan.NoteRef -> withLink(LinkAnnotation.Clickable("note", nameStyles) { onOpenNote(s.noteId) }) { append(noteLabel) }
-                is NoteSpan.AddressRef -> withLink(LinkAnnotation.Clickable("address", nameStyles) {
-                    if (s.ref.kind == Article.KIND && openArticle != null) openArticle(s.ref, true) else runCatching { uriHandler.openUri(AddressLinks.web(s.ref)) }
-                }) { append(addressLabel) }
-                is NoteSpan.Url -> withLink(LinkAnnotation.Clickable("url", styles) { runCatching { uriHandler.openUri(s.url) } }) { append(s.text) }
-                is NoteSpan.Invoice -> withLink(LinkAnnotation.Clickable("invoice", nameStyles) { openInvoice(context, s.invoice.raw, invoiceCopied) }) { append("⚡ " + invoiceLabel) }
+    // the links call the newest callbacks through these holders, so the text below is built once per content and names
+    // (it was rebuilt, with fresh links that compare unequal, on every recomposition: every like, count or profile batch)
+    val hashtag by rememberUpdatedState(onHashtag)
+    val profile by rememberUpdatedState(onOpenProfile)
+    val note by rememberUpdatedState(onOpenNote)
+    val article by rememberUpdatedState(openArticle)
+    val uris by rememberUpdatedState(uriHandler)
+    // only the names this text shows: a profile batch for other notes leaves it alone
+    val labels = spans.mapNotNull { (it as? NoteSpan.Mention)?.let { m -> MentionNames.label(m.pubkey, names) } }
+    val text = remember(spans, labels, primary, noteLabel, addressLabel, invoiceLabel, invoiceCopied) {
+        val styles = TextLinkStyles(style = SpanStyle(color = primary, textDecoration = TextDecoration.Underline))
+        val nameStyles = TextLinkStyles(style = SpanStyle(color = primary))
+        var mention = 0
+        buildAnnotatedString {
+            for (s in spans) {
+                when (s) {
+                    is NoteSpan.Plain -> append(s.text)
+                    is NoteSpan.Hashtag -> withLink(LinkAnnotation.Clickable("tag", styles) { hashtag(s.tag) }) { append(s.text) }
+                    is NoteSpan.Cashtag -> withLink(LinkAnnotation.Clickable("cashtag", styles) { hashtag(s.text) }) { append(s.text) }
+                    is NoteSpan.Mention -> withLink(LinkAnnotation.Clickable("mention", nameStyles) { profile(s.pubkey) }) { append(labels[mention++]) }
+                    is NoteSpan.NoteRef -> withLink(LinkAnnotation.Clickable("note", nameStyles) { note(s.noteId) }) { append(noteLabel) }
+                    is NoteSpan.AddressRef -> withLink(LinkAnnotation.Clickable("address", nameStyles) {
+                        val open = article
+                        if (s.ref.kind == Article.KIND && open != null) open(s.ref, true) else runCatching { uris.openUri(AddressLinks.web(s.ref)) }
+                    }) { append(addressLabel) }
+                    is NoteSpan.Url -> withLink(LinkAnnotation.Clickable("url", styles) { runCatching { uris.openUri(s.url) } }) { append(s.text) }
+                    is NoteSpan.Invoice -> withLink(LinkAnnotation.Clickable("invoice", nameStyles) { openInvoice(context, s.invoice.raw, invoiceCopied) }) { append("⚡ " + invoiceLabel) }
+                }
             }
         }
     }

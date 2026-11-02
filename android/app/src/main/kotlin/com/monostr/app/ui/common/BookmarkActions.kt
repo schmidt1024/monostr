@@ -36,7 +36,9 @@ class BookmarkActions(
 
     fun flags(note: NoteUi): NoteUi {
         val s = bookmarks.state.value
-        return note.copy(bookmarked = note.target.id in s.ids, bookmarkEnabled = s.writable || !s.loaded)
+        val bookmarked = note.target.id in s.ids
+        val enabled = s.writable || !s.loaded
+        return if (bookmarked == note.bookmarked && enabled == note.bookmarkEnabled) note else note.copy(bookmarked = bookmarked, bookmarkEnabled = enabled)
     }
 
     /** [note] (an article's) flagged by its coordinate: bookmarked when the list holds it, enabled while the list may be written. */

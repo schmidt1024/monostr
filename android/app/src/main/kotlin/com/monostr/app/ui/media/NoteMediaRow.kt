@@ -47,7 +47,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil3.compose.SubcomposeAsyncImage
+import coil3.compose.AsyncImage
 import com.monostr.app.R
 import com.monostr.nostr.model.Note
 import com.monostr.nostr.model.NoteMedia
@@ -65,10 +65,17 @@ fun rememberMediaCover(note: Note, hasImages: Boolean): MediaCover {
     return MediaCover(covered, waiting)
 }
 
+/** Decoded blurhashes by hash: a cell scrolled back in (its `remember` gone) does not decode on the main thread again. */
+private val blurhashes = android.util.LruCache<String, ImageBitmap>(200)
+
 /** The decoded 32x32 blurhash of a picture, or null. */
 @Composable
 fun rememberBlurhash(hash: String?): ImageBitmap? =
-    remember(hash) { hash?.let { Blurhash.decode(it, 32, 32) }?.let { Bitmap.createBitmap(it, 32, 32, Bitmap.Config.ARGB_8888).asImageBitmap() } }
+    remember(hash) {
+        hash?.let { h ->
+            blurhashes.get(h) ?: Blurhash.decode(h, 32, 32)?.let { Bitmap.createBitmap(it, 32, 32, Bitmap.Config.ARGB_8888).asImageBitmap() }?.also { blurhashes.put(h, it) }
+        }
+    }
 
 /**
  * Spec 3.2: one picture full width, two to four in a two-column grid; videos as a poster with a
@@ -76,14 +83,21 @@ fun rememberBlurhash(hash: String?): ImageBitmap? =
  * for a tap. Tapping a picture opens the viewer, tapping a video the player.
  */
 @Composable
-fun NoteMediaRow(note: Note, onOpenMedia: (index: Int) -> Unit, onOpenVideo: (url: String) -> Unit) {
+fun NoteMediaRow(
+    note: Note, onOpenMedia: (index: Int) -> Unit, onOpenVideo: (url: String) -> Unit,
+    /** The opened note (thread focus): a single picture may take [MediaBoxes.DETAIL_SCREEN_SHARE] of the screen, else [MediaBoxes.FEED_SCREEN_SHARE]. */
+    detail: Boolean = false,
+) {
     if (note.media.isEmpty()) return
     val tag = note.id.take(8)
     // A video poster is an image download too, so it waits like a picture.
     val (covered, waiting) = rememberMediaCover(note, hasImages = note.media.any { it.kind == NoteMedia.Kind.IMAGE || it.poster != null })
     Box(Modifier.fillMaxWidth().padding(top = 8.dp)) {
         // Covered or waiting media is never fetched: only the blurhash placeholder (or a grey box) shows.
-        MediaGrid(note.media, tag, blurred = covered, placeholderOnly = covered || waiting, onOpenMedia = onOpenMedia, onOpenVideo = onOpenVideo, enabled = !covered && !waiting)
+        // backlog 62: a single picture as tall as the screen allows (header, actions and bars still in view), never below the old cap
+        val screenShare = if (detail) MediaBoxes.DETAIL_SCREEN_SHARE else MediaBoxes.FEED_SCREEN_SHARE
+        val maxHeightDp = maxOf(MediaBoxes.MAX_HEIGHT_DP, androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp * screenShare)
+        MediaGrid(note.media, tag, blurred = covered, placeholderOnly = covered || waiting, onOpenMedia = onOpenMedia, onOpenVideo = onOpenVideo, enabled = !covered && !waiting, maxHeightDp = maxHeightDp)
         if (covered) {
             Cover(tag = "note-media-cover-$tag", icon = Icons.Filled.VisibilityOff, title = stringResource(R.string.media_sensitive),
                 subtitle = note.contentWarning?.takeIf { it.isNotBlank() } ?: stringResource(R.string.media_tap_to_show)) { MediaReveals.reveal(note.id) }
@@ -120,7 +134,7 @@ fun MediaCoverBadge(icon: ImageVector, title: String?, subtitle: String? = null,
 }
 
 @Composable
-private fun MediaGrid(media: List<NoteMedia>, tag: String, blurred: Boolean, placeholderOnly: Boolean, enabled: Boolean, onOpenMedia: (Int) -> Unit, onOpenVideo: (String) -> Unit) {
+private fun MediaGrid(media: List<NoteMedia>, tag: String, blurred: Boolean, placeholderOnly: Boolean, enabled: Boolean, onOpenMedia: (Int) -> Unit, onOpenVideo: (String) -> Unit, maxHeightDp: Float = MediaBoxes.MAX_HEIGHT_DP) {
     val shape = RoundedCornerShape(12.dp)
     if (media.size == 1) {
         val m = media[0]
@@ -131,7 +145,7 @@ private fun MediaGrid(media: List<NoteMedia>, tag: String, blurred: Boolean, pla
         // Full width, height from the real ratio up to a cap (see MediaBoxes): only a picture taller
         // than the cap is cropped, everything else is fully visible.
         BoxWithConstraints(Modifier.fillMaxWidth()) {
-            val box = MediaBoxes.single(m.dim ?: learned, widthDp = maxWidth.value, video = video)
+            val box = MediaBoxes.single(m.dim ?: learned, widthDp = maxWidth.value, maxHeightDp = maxHeightDp, video = video)
             MediaCell(
                 m, 0, tag, Modifier.fillMaxWidth().aspectRatio(box.ratio).clip(shape), blurred, placeholderOnly, enabled, onOpenMedia, onOpenVideo,
                 contentScale = if (box.crop) ContentScale.Crop else ContentScale.Fit,
@@ -212,14 +226,15 @@ private fun MediaCell(
         when {
             placeholder != null && (placeholderOnly || source == null) -> Image(placeholder, contentDescription = m.alt, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             placeholderOnly || source == null -> Unit
-            else -> SubcomposeAsyncImage(
+            // AsyncImage, not SubcomposeAsyncImage: no subcomposition per loading state in a scrolling list (Coil's advice)
+            else -> AsyncImage(
                 model = source, contentDescription = m.alt, contentScale = contentScale, alignment = alignment, modifier = Modifier.fillMaxSize(),
-                loading = { if (placeholder != null) Image(placeholder, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) },
-                error = { Icon(Icons.Filled.BrokenImage, contentDescription = stringResource(R.string.media_failed), tint = MaterialTheme.colorScheme.outline) },
+                placeholder = remember(placeholder) { placeholder?.let { androidx.compose.ui.graphics.painter.BitmapPainter(it) } },
                 onSuccess = { s -> onSize?.invoke(s.result.image.width, s.result.image.height) },
                 onError = { failed = true },
             )
         }
+        if (failed && !placeholderOnly && source != null) Icon(Icons.Filled.BrokenImage, contentDescription = stringResource(R.string.media_failed), tint = MaterialTheme.colorScheme.outline)
         if (m.kind == NoteMedia.Kind.VIDEO) Icon(Icons.Filled.PlayArrow, contentDescription = videoLabel, tint = Color.White, modifier = Modifier.background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.5f), RoundedCornerShape(50)).padding(12.dp))
     }
 }

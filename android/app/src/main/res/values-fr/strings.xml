@@ -75,6 +75,7 @@
     <string name="mute_settings_empty">Aucun compte n’est masqué. Masquez un compte depuis le menu d’une note ou depuis son profil.</string>
     <string name="note_tips_open">Voir qui a donné un pourboire</string>
     <string name="note_reposted_by">%1$s a reposté</string>
+    <string name="repost_original_unavailable">Note repostée indisponible. Touchez pour la chercher.</string>
     <string name="note_tip_pending">Pourboire envoyé, en attente de confirmation</string>
     <string name="note_tips_chip">%1$s · %2$d</string>
     <string name="media_sensitive">Contenu sensible</string>
@@ -108,10 +109,6 @@
     <string name="settings_msg_amber_updated">Autorisations mises à jour</string>
     <string name="settings_msg_amber_cancelled">Annulé</string>
     <string name="settings_msg_amber_wrong_key">Une autre clé a été choisie – rien n\'a changé</string>
-    <string name="action_like_sent">J\'aime envoyé</string>
-    <string name="action_repost_sent">Repost envoyé</string>
-    <string name="action_unlike_sent">J’aime retiré</string>
-    <string name="action_unrepost_sent">Republication retirée</string>
     <string name="action_undo_repost">Annuler la republication</string>
     <string name="action_no_relay_local">Aucun relais joignable, conservé localement</string>
 

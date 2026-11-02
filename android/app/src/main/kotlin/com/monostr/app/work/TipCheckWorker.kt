@@ -13,18 +13,14 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
-import androidx.work.Constraints
 import androidx.work.CoroutineWorker
-import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.NetworkType
-import androidx.work.PeriodicWorkRequestBuilder
-import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.monostr.app.MainActivity
 import com.monostr.app.R
 import com.monostr.app.data.Presets
 import com.monostr.app.data.TipSettingsStore
 import com.monostr.app.session.NostrSession
+import com.monostr.app.session.Ready
 import com.monostr.app.session.SessionState
 import com.monostr.nostr.model.Profile
 import com.monostr.nostr.repo.NotificationItem
@@ -32,12 +28,8 @@ import com.monostr.nostr.repo.NotificationKind
 import com.monostr.nostr.repo.NotificationsRepository
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
-import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.withContext
-import java.util.concurrent.TimeUnit
 
 /**
  * Pure part of the background check: which tips are new since the watermark. The first run only sets the
@@ -100,69 +92,57 @@ class TipCheckWorker(context: Context, params: WorkerParameters) : CoroutineWork
         fun settings(): TipSettingsStore
     }
 
-    override suspend fun doWork(): Result {
-        // the foreground app shows tips itself; a due run during a cold start would add an 8 s lookup beside the feed (spec perf2 A7)
-        if (MainActivity.inForeground.get()) return Result.success()
-        val deps = EntryPointAccessors.fromApplication(applicationContext, Deps::class.java)
-        val session = deps.session()
-        // the process may have been woken only for this job; track whether we are the ones starting the engine
-        val startedHere = session.state.value !is SessionState.Active
-        try {
-            session.restore()
-            val ready = (session.state.value as? SessionState.Active)?.ready ?: return Result.success()
-            // spec perf2 A2 (4): a worker session has no feed to protect
-            ready.startupGate.open("worker")
-            val settings = deps.settings()
-            val outcome = try {
-                TipChecker.check(ready.notifications, settings.lastTipNotifiedAt(), System.currentTimeMillis() / 1000, notified = settings.notifiedReceiptIds())
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                return Result.retry()
-            }
-            if (outcome.fresh.isNotEmpty()) {
-                val notifier = TipNotifier(applicationContext)
-                for (item in outcome.fresh) {
-                    val sender = item.from
-                    val name = if (sender == null) {
-                        applicationContext.getString(R.string.tip_anonymous)
-                    } else {
-                        try {
-                            ready.profiles.fetched(sender).shownName
-                        } catch (e: CancellationException) {
-                            throw e
-                        } catch (e: Exception) {
-                            Profile.shortPubkey(sender)
-                        }
-                    }
-                    notifier.show(name, item, settings.amountUnit.first())
-                }
-            }
-            // receipts the check stored show in the badge and an open screen without waiting for their next reload (spec perf 3.6)
-            ready.notificationsStore.reloadLocal()
-            try {
-                settings.setLastTipNotifiedAt(outcome.watermark)
-                settings.setNotifiedReceiptIds(outcome.notified)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                return Result.retry()
-            }
-            return Result.success()
-        } finally {
-            // don't tear down an engine the foreground app is now using
-            if (startedHere && !MainActivity.inForeground.get()) withContext(NonCancellable) { session.release() }
-        }
-    }
+    /** Replaced by [BackgroundCheckWorker] (2026-11-02); kept so a run WorkManager still has queued under this name ends at once. */
+    override suspend fun doWork(): Result = Result.success()
 
     companion object {
-        private const val WORK_NAME = "tip-check"
+        /** The unique work name it ran under; [BackgroundCheckWorker.schedule] cancels it. */
+        internal const val WORK_NAME = "tip-check"
+    }
+}
 
-        fun schedule(context: Context) {
-            val request = PeriodicWorkRequestBuilder<TipCheckWorker>(15, TimeUnit.MINUTES)
-                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
-                .build()
-            WorkManager.getInstance(context).enqueueUniquePeriodicWork(WORK_NAME, ExistingPeriodicWorkPolicy.KEEP, request)
+/** The tip part of [BackgroundCheckWorker]: new receipts since the watermark become notifications. False: try again later. */
+internal suspend fun checkTips(context: Context, session: NostrSession, ready: Ready, settings: TipSettingsStore): Boolean {
+    // logged out while this ran (the lookups suspend): nothing of that account may be posted or marked any more
+    fun gone() = (session.state.value as? SessionState.Active)?.ready !== ready
+    val outcome = try {
+        TipChecker.check(ready.notifications, settings.lastTipNotifiedAt(), System.currentTimeMillis() / 1000, notified = settings.notifiedReceiptIds())
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        return false
+    }
+    if (gone()) return true
+    if (outcome.fresh.isNotEmpty()) {
+        val notifier = TipNotifier(context)
+        for (item in outcome.fresh) {
+            val sender = item.from
+            val name = if (sender == null) {
+                context.getString(R.string.tip_anonymous)
+            } else {
+                try {
+                    ready.profiles.fetched(sender).shownName
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Profile.shortPubkey(sender)
+                }
+            }
+            val unit = settings.amountUnit.first()
+            if (gone()) return true
+            notifier.show(name, item, unit)
         }
     }
+    // receipts the check stored show in the badge and an open screen without waiting for their next reload (spec perf 3.6)
+    ready.notificationsStore.reloadLocal()
+    if (gone()) return true
+    try {
+        settings.setLastTipNotifiedAt(outcome.watermark)
+        settings.setNotifiedReceiptIds(outcome.notified)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        return false
+    }
+    return true
 }

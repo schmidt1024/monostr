@@ -245,7 +245,7 @@ class BookmarksController(
     }
 
     /** [ui] with its current count, so a list rebuild never drops a count the collector already had (spec 4.2). */
-    private fun withCounts(ui: NoteUi): NoteUi = ui.copy(counts = counts.counts.value[ui.target.id])
+    private fun withCounts(ui: NoteUi): NoteUi = counts.counts.value[ui.target.id].let { c -> if (c == ui.counts) ui else ui.copy(counts = c) }
 
     /** [fresh] plus the rows of [shown] whose removal is still pending, at their previous position. */
     private fun keepPending(shown: List<BookmarkUi>, fresh: List<BookmarkUi>, pending: Set<String>, ids: List<String>): List<BookmarkUi> {

@@ -52,7 +52,7 @@ import com.monostr.app.ui.profile.ProfileCache
 import com.monostr.app.ui.common.pluralText
 import com.monostr.app.ui.common.uiText
 import com.monostr.app.ui.media.MediaReveals
-import com.monostr.app.work.DmCheckWorker
+import com.monostr.app.work.BackgroundCheckWorker
 import com.monostr.app.work.DmNotifier
 import com.monostr.nostr.LocalSigner
 import com.monostr.nostr.NostrEngine
@@ -211,6 +211,12 @@ class Ready(
     val ownLists: SessionOwnListsCache? = null,
     /** Spec perf2 A2: this session's background network work waits here until the home feed's first page is in (or 3 s). */
     val startupGate: StartupGate = StartupGate.OPEN,
+    /**
+     * Starts the work only a visible app needs (own reactions, relay-seen tracking, draft expiry); once per session, any
+     * later call does nothing. The UI calls it when it shows the session, so a background check (which never shows any)
+     * leaves it out: Pixel 2026-11-02, a worker run spent up to 5.5 s CPU reading the own reactions alone.
+     */
+    val startForegroundWork: () -> Unit = {},
     /** Spec perf2 A5: per-relay-set fetch stamps of this account (timestamps only); deleted at logout (D7). */
     val syncMarks: SyncMarks? = null,
     /** 0.24.3: when each relay was last seen connected ([RELAY_SEEN_FILE]); logout deletes it. */
@@ -323,7 +329,9 @@ class NostrSession @Inject constructor(
                 _state.value = SessionState.LoggedOut()
                 return@withLock
             }
+            PerfTrace.mark("restore: session read")
             val signer = signerFor(info)
+            PerfTrace.mark("restore: signer ${info.signerType}")
             if (signer == null) {
                 clearStaleSession(info.pubkey)
                 return@withLock
@@ -406,7 +414,7 @@ class NostrSession @Inject constructor(
         _state.value = SessionState.Active(ready)
         PerfTrace.mark("session ready")
         markFirstLogin(ready.pubkey)
-        bestEffort { DmCheckWorker.schedule(context) } // logout cancelled it
+        bestEffort { BackgroundCheckWorker.schedule(context) } // logout cancelled it
         resumeSetupLater(ready)
     }
 
@@ -460,7 +468,7 @@ class NostrSession @Inject constructor(
             // the next account must not see which links this one opened (spec link previews 3.4)
             bestEffort { linkPreviews.clear() }
             // a run in flight is cancelled too; the next login schedules the check again
-            bestEffort { DmCheckWorker.cancel(context) }
+            bestEffort { BackgroundCheckWorker.cancel(context) }
             bestEffort { DmNotifier(context).cancelAll() }
             // a notification tapped while logged out must not open a chat for the next account
             MainActivity.pendingDm.value = null
@@ -592,12 +600,14 @@ class NostrSession @Inject constructor(
     private suspend fun start(signer: Signer): Ready {
         val dir = accountDir(context.filesDir, signer.pubkey).apply { mkdirs() }
         val engine = NostrEngine.create(dir.absolutePath, signer, relayStore.relays.first())
+        PerfTrace.mark("restore: engine created")
         try {
             engine.connect()
         } catch (e: Exception) {
             engine.close()
             throw e
         }
+        PerfTrace.mark("restore: connect returned")
         // spec perf2 A2: on the engine's scope, so logout (engine close) ends the timer and every waiter
         val startupGate = TimedStartupGate(engine.backgroundScope)
         val dmStore = DmDatabase(context, signer.pubkey)
@@ -639,19 +649,17 @@ class NostrSession @Inject constructor(
             // Spec 9.3: the lists filter from the start; silent, so Amber is never asked here (the settings screen asks)
             engine.backgroundScope.launch { bestEffort { mute.ensureLoaded(interactive = false) } }
             // muted accounts are left out at the query, so a flooding account cannot fill the feed's pages
-            val feed = NostrFeedRepository(engine, excluded = { mute.muted.value })
+            // the database at once, the relays' latest behind the startup gate and only since the last completed fetch (spec perf2 A5)
+            val syncMarks = SyncMarks(File(dir, SyncMarks.FILE_NAME))
+            val feed = NostrFeedRepository(engine, excluded = { mute.muted.value }, marks = syncMarks)
             val profiles = NostrProfileRepository(engine, indexRelays = NostrProfileRepository.INDEX_RELAYS)
             val notifications = NostrNotificationsRepository(engine, tips)
             // one pipeline for the badge, the screen and the tip check; started by the first of them (spec perf 3.6)
             val notificationsStore = NotificationsStore(notifications, profiles, tipSettings, engine.backgroundScope, muted = mute.muted, me = signer.pubkey, startupGate = startupGate)
             // issue 5: a list kept only elsewhere still counts as current when an index relay delivers it
             val follows = NostrFollowRepository(engine, feed, indexRelays = NostrProfileRepository.OWN_LIST_RELAYS)
-            // the database at once, the relays' latest behind the startup gate and only since the last completed fetch (spec perf2 A5)
-            val syncMarks = SyncMarks(File(dir, SyncMarks.FILE_NAME))
             val relaySeen = SyncMarks(File(dir, RELAY_SEEN_FILE))
-            engine.backgroundScope.launch { trackRelaysSeen({ engine.relayStates().first() }, relaySeen) }
             val ownReactions = NostrOwnReactions(engine, scope = engine.backgroundScope, gate = startupGate, marks = syncMarks)
-            engine.backgroundScope.launch { bestEffort { ownReactions.load() } }
             // followers = the largest NIP-45 COUNT of the relays (0.22.4: no proprietary index any more)
             // spec perf2 A6: one COUNT cap per relay for the note and the follower counts
             val countLimiter = CountLimiter()
@@ -680,9 +688,17 @@ class NostrSession @Inject constructor(
             val conversations = NostrConversationRepository(engine, locator = locator)
             // spec 2026-10-16 §8: a discarded draft or composer picture stays while a published note or the profile shows it
             val media = BlossomMediaUploader(ImagePreparer(context.contentResolver), blossom, uiSettings, engine.backgroundScope, inUse = pictures::published, videos = TransformerVideoPreparer(context))
-            // spec 2026-10-16 §8.2: drafts untouched for 30 days go with their pictures; silent, best effort, off the start path
-            engine.backgroundScope.launch { startupGate.await(); bestEffort { expireDrafts(drafts, signer.pubkey, System.currentTimeMillis() / 1000, media) } }
+            val foregroundStarted = java.util.concurrent.atomic.AtomicBoolean(false)
+            val startForegroundWork = {
+                if (foregroundStarted.compareAndSet(false, true)) {
+                    engine.backgroundScope.launch { trackRelaysSeen({ engine.relayStates().first() }, relaySeen) }
+                    engine.backgroundScope.launch { bestEffort { ownReactions.load() } }
+                    // spec 2026-10-16 §8.2: drafts untouched for 30 days go with their pictures; silent, best effort, off the start path
+                    engine.backgroundScope.launch { startupGate.await(); bestEffort { expireDrafts(drafts, signer.pubkey, System.currentTimeMillis() / 1000, media) } }
+                }
+            }
             return Ready(
+                startForegroundWork = startForegroundWork,
                 startupGate = startupGate,
                 syncMarks = syncMarks,
                 relaySeen = relaySeen,

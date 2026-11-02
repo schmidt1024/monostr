@@ -75,6 +75,7 @@
     <string name="mute_settings_empty">Nadie está silenciado. Silencia una cuenta desde el menú de una nota o desde su perfil.</string>
     <string name="note_tips_open">Ver quién dio propina</string>
     <string name="note_reposted_by">%1$s reposteó</string>
+    <string name="repost_original_unavailable">Nota reposteada no disponible. Toca para buscarla.</string>
     <string name="note_tip_pending">Propina enviada, esperando confirmación</string>
     <string name="note_tips_chip">%1$s · %2$d</string>
     <string name="media_sensitive">Contenido sensible</string>
@@ -108,10 +109,6 @@
     <string name="settings_msg_amber_updated">Permisos actualizados</string>
     <string name="settings_msg_amber_cancelled">Cancelado</string>
     <string name="settings_msg_amber_wrong_key">Se eligió otra clave – nada cambió</string>
-    <string name="action_like_sent">Me gusta enviado</string>
-    <string name="action_repost_sent">Repost enviado</string>
-    <string name="action_unlike_sent">Me gusta eliminado</string>
-    <string name="action_unrepost_sent">Republicación eliminada</string>
     <string name="action_undo_repost">Deshacer republicación</string>
     <string name="action_no_relay_local">Ningún relay accesible, se guarda localmente</string>
 

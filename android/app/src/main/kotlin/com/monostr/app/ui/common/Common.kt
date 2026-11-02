@@ -223,6 +223,9 @@ private fun ListNoteCard(
     val shown = note.note.repostOf ?: note.note
     val shownAuthor = if (note.note.isRepost) note.repostedAuthor else note.author
     val id8 = shown.id.take(8)
+    // backlog 60: a repost whose original is neither validly embedded nor stored (yet) says so instead of an empty card
+    // and offers to open the original (the thread looks for it)
+    val missingOriginal = note.note.isRepost && note.note.repostOf == null
     // the 48 dp action targets carry 13 dp of air around their 22 dp glyphs; 4 dp on top of that above the row and
     // a 4 dp card bottom give the row the same 17 dp to the text and to the divider
     val lineColor = MaterialTheme.colorScheme.outlineVariant
@@ -267,20 +270,31 @@ private fun ListNoteCard(
             Column(Modifier.weight(1f)) {
                 NoteHeaderLine(note, onOpen = onOpen, onOpenProfile = onOpenProfile, menu = menu.takeIf { showActions })
                 if (replyContext) ReplyContextLine(shown, names, onOpenProfile)
-                val foreign = LocalAllowForeign.current
-                val link = rememberNoteLink(shown)
-                val text = link?.let { LinkPreviewRules.textWithCard(shown.displayContent, it.url) } ?: shown.displayContent
-                if (text.isNotBlank()) {
-                    Spacer(Modifier.height(2.dp))
-                    NoteText(text, onOpen = onOpen, onHashtag = onHashtag, onOpenProfile = onOpenProfile, onOpenNote = onOpenNote, names = names, collapsible = collapsed, stateKey = shown.id, modifier = Modifier.fillMaxWidth().testTag("note-text-$id8"))
+                if (missingOriginal) {
+                    val missingLabel = stringResource(R.string.repost_original_unavailable)
+                    Text(
+                        missingLabel, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 2.dp).fillMaxWidth()
+                            .clickable(enabled = note.note.repostedId != null) { note.note.repostedId?.let(onOpenNote) }
+                            .testTag("note-repost-missing-$id8"),
+                    )
+                } else {
+                    val foreign = LocalAllowForeign.current
+                    val link = rememberNoteLink(shown)
+                    val text = link?.let { LinkPreviewRules.textWithCard(shown.displayContent, it.url) } ?: shown.displayContent
+                    if (text.isNotBlank()) {
+                        Spacer(Modifier.height(2.dp))
+                        NoteText(text, onOpen = onOpen, onHashtag = onHashtag, onOpenProfile = onOpenProfile, onOpenNote = onOpenNote, names = names, collapsible = collapsed, stateKey = shown.id, modifier = Modifier.fillMaxWidth().testTag("note-text-$id8"))
+                    }
+                    shown.quotedId?.let { qid ->
+                        QuoteCard(qid, ForeignRule.quoteHints(shown.quoteRelays, foreign), names, onOpenNote = onOpenNote, onOpenProfile = onOpenProfile, onHashtag = onHashtag, modifier = Modifier.padding(top = 8.dp), author = ForeignRule.quoteAuthor(shown.quoteAuthor, foreign))
+                    }
+                    shown.addressRef?.let { val (ref, f) = ForeignRule.address(it, foreign); AddressCard(ref, names, onOpenProfile = onOpenProfile, modifier = Modifier.padding(top = 8.dp), sensitive = shown.isSensitive, allowForeign = f) }
+                    shown.invoice?.let { InvoiceCard(it, Modifier.padding(top = 8.dp)) }
+                    NoteMediaRow(shown, onOpenMedia = { i -> onOpenMedia(shown.id, i) }, onOpenVideo = onOpenVideo)
+                    NoteLinkPreview(shown, link)
                 }
-                shown.quotedId?.let { qid ->
-                    QuoteCard(qid, ForeignRule.quoteHints(shown.quoteRelays, foreign), names, onOpenNote = onOpenNote, onOpenProfile = onOpenProfile, onHashtag = onHashtag, modifier = Modifier.padding(top = 8.dp), author = ForeignRule.quoteAuthor(shown.quoteAuthor, foreign))
-                }
-                shown.addressRef?.let { val (ref, f) = ForeignRule.address(it, foreign); AddressCard(ref, names, onOpenProfile = onOpenProfile, modifier = Modifier.padding(top = 8.dp), sensitive = shown.isSensitive, allowForeign = f) }
-                shown.invoice?.let { InvoiceCard(it, Modifier.padding(top = 8.dp)) }
-                NoteMediaRow(shown, onOpenMedia = { i -> onOpenMedia(shown.id, i) }, onOpenVideo = onOpenVideo)
-                NoteLinkPreview(shown, link)
+                // the actions stay: a repost bookmarked by mistake (backlog 60) can still be taken out of the bookmarks
                 if (showActions) {
                     Spacer(Modifier.height(4.dp))
                     NoteActionRow(note, shown, onReply, onRepost, onQuote, onLike, onBookmark, onTip, onShowTippers, onReact = onReact)
@@ -344,6 +358,15 @@ private fun DetailNoteCard(
     ) {
         NoteDetailHeader(note, onOpenProfile = onOpenProfile, menu = menu.takeIf { showActions }, avatarModifier = if (lineAbove) Modifier.onPlaced { placed.avatar = it } else Modifier)
         Spacer(Modifier.height(12.dp))
+        if (note.note.isRepost && note.note.repostOf == null) {
+            // backlog 60: the thread looked for the original and found none (yet)
+            Text(
+                stringResource(R.string.repost_original_unavailable), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.fillMaxWidth()
+                    .clickable(enabled = note.note.repostedId != null) { note.note.repostedId?.let(onOpenNote) }
+                    .testTag("note-repost-missing-$id8"),
+            )
+        }
         val foreign = LocalAllowForeign.current
         val link = rememberNoteLink(shown)
         val text = link?.let { LinkPreviewRules.textWithCard(shown.displayContent, it.url) } ?: shown.displayContent
@@ -356,7 +379,7 @@ private fun DetailNoteCard(
         }
         shown.addressRef?.let { val (ref, f) = ForeignRule.address(it, foreign); AddressCard(ref, names, onOpenProfile = onOpenProfile, modifier = Modifier.padding(top = 8.dp), sensitive = shown.isSensitive, allowForeign = f) }
         shown.invoice?.let { InvoiceCard(it, Modifier.padding(top = 8.dp)) }
-        NoteMediaRow(shown, onOpenMedia = { i -> onOpenMedia(shown.id, i) }, onOpenVideo = onOpenVideo)
+        NoteMediaRow(shown, onOpenMedia = { i -> onOpenMedia(shown.id, i) }, onOpenVideo = onOpenVideo, detail = true)
         NoteLinkPreview(shown, link)
         Spacer(Modifier.height(12.dp))
         Text(detailTimeLine(fullTime(shown.createdAt), shown.client, stringResource(R.string.note_via)), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("note-time-$id8"))

@@ -104,7 +104,7 @@ class FeedSourceTest {
             repo.refresh(followedOnly)
             repo.loadMore(followedOnly, before = 5000)
             repo.live(followedOnly).first()
-            assertTrue(awaitTrue { authorSets(from).size >= 4 }, "list requests never reached the relay")
+            assertTrue(awaitTrue { authorSets(from).size >= 3 }, "list requests never reached the relay") // refresh notes + deletions, older page, live
             assertTrue(authorSets(from).all { it == home }, "a request named a set other than the home feed's: ${authorSets(from)}")
 
             // a member the user does not follow is added to the home feed's authors, not asked for alone

@@ -1,5 +1,7 @@
 package com.monostr.app.ui.search
 
+import com.monostr.app.ui.common.mapKeep
+
 import com.monostr.app.ui.common.NoteLinks
 import com.monostr.nostr.repo.OwnReactions
 import com.monostr.nostr.repo.MemoryOwnReactions
@@ -114,15 +116,15 @@ class SearchController(
         mentions.follow(_state.map { s -> s.notes.map { it.note } })
         recentSearches?.let { r -> scope.launch { r.recent.collect { list -> _state.update { it.copy(recent = list) } } } }
         bookmarks.ensureLoaded()
-        scope.launch { bookmarks.changes.collect { _state.update { s -> s.copy(notes = s.notes.map(bookmarks::flags)) } } }
-        scope.launch { actions.changes.collect { _state.update { s -> s.copy(notes = s.notes.map(actions::flags)) } } }
+        scope.launch { bookmarks.changes.collect { _state.update { s -> s.copy(notes = s.notes.mapKeep(bookmarks::flags)) } } }
+        scope.launch { actions.changes.collect { _state.update { s -> s.copy(notes = s.notes.mapKeep(actions::flags)) } } }
         scope.launch { visibility.changes.collect { _state.update { s -> s.copy(notes = visibility.visible(s.notes)) } } }
         // a request started on another screen greys the entry here too, and frees it again when it failed
-        scope.launch { deletions.pending.collect { _state.update { s -> s.copy(notes = s.notes.map(actions::flags)) } } }
+        scope.launch { deletions.pending.collect { _state.update { s -> s.copy(notes = s.notes.mapKeep(actions::flags)) } } }
         decorations.start()
         // the people index is built behind the screen, so the first search does not wait for it (spec perf 3.8)
         search.warmUp()
-        scope.launch { decorations.changes.collect { _state.update { s -> s.copy(notes = s.notes.map(decorations::decorate)) } } }
+        scope.launch { decorations.changes.collect { _state.update { s -> s.copy(notes = s.notes.mapKeep(decorations::decorate)) } } }
         scope.launch {
             searchRelays.collect { relays ->
                 if (attached.isNotEmpty()) search.detach(attached)
@@ -261,7 +263,7 @@ class SearchController(
     fun react(note: Note, emoji: String) = actions.react(note, emoji, ::onActionResult)
     fun delete(note: Note) = actions.delete(note)
     fun repost(note: Note) = actions.repost(note, ::onActionResult)
-    fun bookmark(note: Note) = bookmarks.toggle(note) { m -> _state.update { s -> s.copy(notes = s.notes.map(bookmarks::flags), message = m?.asMessage() ?: s.message) } }
+    fun bookmark(note: Note) = bookmarks.toggle(note) { m -> _state.update { s -> s.copy(notes = s.notes.mapKeep(bookmarks::flags), message = m?.asMessage() ?: s.message) } }
     fun clearMessage() = _state.update { it.copy(message = null) }
 
     /**
@@ -285,7 +287,7 @@ class SearchController(
     }
 
     private fun onActionResult(message: UiText) {
-        _state.update { s -> s.copy(notes = s.notes.map(actions::flags), message = message.asMessage()) }
+        _state.update { s -> s.copy(notes = s.notes.mapKeep(actions::flags), message = message.asMessage()) }
     }
 
     /** [ui] with the current tips and flags; applied inside `_state.update`, so a change during a slow profile lookup is not undone. */

@@ -1,0 +1,7 @@
+• Marcadores y silenciados cambian al instante, los toques rápidos salen juntos
+• Enviar tarda ~1 s en vez de hasta 10 s cuando un relay no responde
+• Inicio más rápido: muchos menos datos y memoria al abrir
+• Menos batería en segundo plano: una comprobación cada 15 minutos en vez de dos
+• Las imágenes se ven más altas, casi toda la pantalla
+• Sin aviso «Like enviado» sobre el botón de escribir
+• Corrección: los reposts con original ilegible salían vacíos

@@ -39,18 +39,22 @@ class NoteActions(
     /** Emits whenever a like/repost flag (also one set on another screen or loaded from the database) or a deletion changes, so screens re-flag at once. */
     val changes: Flow<Any> = merge(_changes, own.liked, own.reactions, own.reposted)
 
-    /** Like, or unlike when the note carries the user's reaction already (X: a tap on the filled heart takes it back). */
+    /**
+     * Like, or unlike when the note carries the user's reaction already (X: a tap on the filled heart takes it back). Like X,
+     * a success says nothing (the filled heart is the answer; the snackbar sat over the compose button, backlog 61): only
+     * failures and "stored here only" reach [onResult]. Same for [react] and [repost].
+     */
     fun like(target: Note, onResult: (UiText) -> Unit) =
-        if (target.id in own.liked.value) withdraw(target, 7, uiText(R.string.action_unlike_sent), onResult) else react(target, LIKE, onResult)
+        if (target.id in own.liked.value) withdraw(target, 7, onResult) else react(target, LIKE, onResult)
 
     /** A NIP-25 reaction: "+" is the like; an emoji shows in place of the heart. One reaction per note, like the like. */
     fun react(target: Note, content: String, onResult: (UiText) -> Unit) =
-        act(target, 7, uiText(R.string.action_like_sent), onResult, content) { publish.react(target, content) }
+        act(target, 7, onResult, content) { publish.react(target, content) }
 
     /** Repost, or undo the user's repost of the note. */
     fun repost(target: Note, onResult: (UiText) -> Unit) =
-        if (target.id in own.reposted.value) withdraw(target, repostKind(target), uiText(R.string.action_unrepost_sent), onResult)
-        else act(target, repostKind(target), uiText(R.string.action_repost_sent), onResult) { publish.repost(target) }
+        if (target.id in own.reposted.value) withdraw(target, repostKind(target), onResult)
+        else act(target, repostKind(target), onResult) { publish.repost(target) }
 
     /** A repost of an article is a generic repost (kind 16, NIP-18); of anything else kind 6. */
     private fun repostKind(target: Note) = if (target.kind == 30023) 16 else 6
@@ -59,14 +63,14 @@ class NoteActions(
      * NIP-09 for the user's own reaction ([kind] 7) or repost (6) of [target]: unmarked at once, a request names
      * the events. Nothing stored to name: the mark just goes. A refusal or failure puts the mark back.
      */
-    private fun withdraw(target: Note, kind: Int, okMessage: UiText, onResult: (UiText) -> Unit) {
+    private fun withdraw(target: Note, kind: Int, onResult: (UiText) -> Unit) {
         val previous = own.reactions.value[target.id] ?: LIKE
         own.remove(kind, target.id)
         counts?.bump(target.id, kind, -1)
         scope.launch {
             val message = try {
                 val result = publish.withdraw(target.id, kind)
-                if (result == null || result.sentToAny) okMessage else {
+                if (result == null || result.sentToAny) null else {
                     restore(target, kind, previous)
                     uiText(R.string.error_send_failed)
                 }
@@ -76,7 +80,7 @@ class NoteActions(
                 restore(target, kind, previous)
                 e.userMessage()
             }
-            onResult(message)
+            message?.let(onResult)
         }
     }
 
@@ -88,8 +92,16 @@ class NoteActions(
     fun check(targets: Collection<String>) = own.check(targets)
 
     /** [note] with the user's own like and repost of its target, and whether its deletion is on its way. */
-    fun flags(note: NoteUi): NoteUi =
-        note.copy(liked = note.target.id in own.liked.value, reaction = own.reactions.value[note.target.id], reposted = note.target.id in own.reposted.value, deleting = note.target.id in deletions.pending.value)
+    fun flags(note: NoteUi): NoteUi {
+        val id = note.target.id
+        val liked = id in own.liked.value
+        val reaction = own.reactions.value[id]
+        val reposted = id in own.reposted.value
+        val deleting = id in deletions.pending.value
+        // the same object when nothing changed: a copy recomposed the card (see mapKeep)
+        return if (liked == note.liked && reaction == note.reaction && reposted == note.reposted && deleting == note.deleting) note
+        else note.copy(liked = liked, reaction = reaction, reposted = reposted, deleting = deleting)
+    }
 
     /**
      * Spec 4.1: asks the relays to delete [note]. It counts as deleted only once a relay accepted the
@@ -126,12 +138,12 @@ class NoteActions(
     }
 
     // once only: a note the user liked or reposted already gets no second event
-    private fun act(target: Note, kind: Int, okMessage: UiText, onResult: (UiText) -> Unit, content: String = LIKE, block: suspend () -> PublishResult) {
+    private fun act(target: Note, kind: Int, onResult: (UiText) -> Unit, content: String = LIKE, block: suspend () -> PublishResult) {
         if (!own.add(kind, target.id, content)) return
         counts?.bump(target.id, kind, +1)
         scope.launch {
             val message = try {
-                if (block().sentToAny) okMessage else uiText(R.string.action_no_relay_local)
+                if (block().sentToAny) null else uiText(R.string.action_no_relay_local)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -139,7 +151,7 @@ class NoteActions(
                 counts?.bump(target.id, kind, -1)
                 e.userMessage()
             }
-            onResult(message)
+            message?.let(onResult)
         }
     }
 }

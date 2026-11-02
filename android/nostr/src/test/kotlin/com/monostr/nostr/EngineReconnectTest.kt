@@ -109,6 +109,27 @@ class EngineReconnectTest {
     }
 
     @Test
+    fun `a connected relay that never answers OK does not hold the publish up`() = runTest {
+        // Pixel 2026-11-02: relay.snort.social took every event without an OK, each publish waited rust-nostr's 10 s
+        SilentWsRelay(acceptEvents = true).use { good ->
+            SilentWsRelay().use { quiet ->
+                val e = NostrEngine.create(dir.resolve("lmdb").toString(), LocalSigner(sk), listOf(good.url, quiet.url))
+                try {
+                    e.connect()
+                    assertTrue(awaitTrue { e.connectedNormalRelayUrls().size == 2 }, "relays never connected")
+                    val started = System.nanoTime()
+                    val result = withContext(Dispatchers.Default) { e.signAndPublish(EventBuilder.textNote("not waiting for the quiet one")) }
+                    val ms = (System.nanoTime() - started) / 1_000_000
+                    assertTrue(result.successRelays.any { it.contains(":${good.port}") }, "sent to ${result.successRelays}, failed ${result.failedRelays}")
+                    assertTrue(ms < 4000, "the publish waited for the quiet relay: $ms ms")
+                } finally {
+                    e.close()
+                }
+            }
+        }
+    }
+
+    @Test
     fun `a relay that is still connecting is waited for, not skipped`() = runTest {
         // back from the background one relay is often there already while the others are in their handshake:
         // a replaceable event (follow list, profile, payment info) must not end up on that one relay only

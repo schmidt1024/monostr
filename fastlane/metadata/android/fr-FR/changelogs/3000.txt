@@ -1,0 +1,7 @@
+• Signets et sourdines changent aussitôt, les appuis rapides partent ensemble
+• L'envoi prend ~1 s au lieu de 10 s quand un relais reste muet
+• Démarrage plus rapide : bien moins de données et de mémoire à l'ouverture
+• Moins de batterie en arrière-plan : une vérification toutes les 15 minutes au lieu de deux
+• Les images s'affichent plus hautes, presque tout l'écran
+• Plus de « Like envoyé » au-dessus du bouton d'écriture
+• Correction : les reposts à l'original illisible étaient vides

@@ -1,0 +1,7 @@
+• Segnalibri e silenziati cambiano subito, i tocchi rapidi partono insieme
+• L'invio richiede ~1 s invece di 10 s quando un relay tace
+• Avvio più rapido: molti meno dati e memoria all'apertura
+• Meno batteria in background: un controllo ogni 15 minuti invece di due
+• Le immagini si vedono più alte, quasi a tutto schermo
+• Niente più «Like inviato» sopra il pulsante di scrittura
+• Correzione: i repost con originale illeggibile apparivano vuoti
