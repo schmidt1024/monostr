@@ -30,6 +30,10 @@ object AppModule {
     @Provides @Singleton fun tipSettings(@ApplicationContext ctx: Context): TipSettingsStore = PrefsTipSettingsStore(ctx.monostrPrefs)
     @Provides @Singleton fun pendingTips(@ApplicationContext ctx: Context): PendingTipStore = PrefsPendingTipStore(ctx.monostrPrefs)
     @Provides @Singleton fun uiSettings(@ApplicationContext ctx: Context): UiSettingsStore = PrefsUiSettingsStore(ctx.monostrPrefs)
+    @Provides @Singleton fun translationSettings(@ApplicationContext ctx: Context): com.monostr.app.translate.TranslationSettingsStore =
+        com.monostr.app.translate.PrefsTranslationSettingsStore(ctx.monostrPrefs)
+    @Provides @Singleton fun translateClient(http: OkHttpClient): com.monostr.app.translate.TranslateClient = com.monostr.app.translate.TranslateClient(http)
+    @Provides @Singleton fun languageDetector(): com.monostr.app.translate.LanguageDetector = com.monostr.app.translate.LanguageDetector()
     @Provides @Singleton fun dmSettings(@ApplicationContext ctx: Context): DmSettingsStore = PrefsDmSettingsStore(ctx.monostrPrefs)
     @Provides @Singleton fun hints(@ApplicationContext ctx: Context): HintStore = PrefsHintStore(ctx.monostrPrefs)
     @Provides @Singleton fun drafts(@ApplicationContext ctx: Context): DraftStore = PrefsDraftStore(ctx.monostrPrefs)

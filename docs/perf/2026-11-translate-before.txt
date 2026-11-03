@@ -1,0 +1,85 @@
+# monostr translation feature, Pixel 7a (lynx, Android 16), 2026-11-03
+# BEFORE = commit 7c125260 (translation state, pre-UI)
+# Build: :app:assembleRelease -Pmonostr.perf=true (R8, release-signed, same key as the installed 0.30.0), versionCode 3000
+# Procedure per run: force-stop, logcat -c, am start -W -n com.monostr.app/.MainActivity, sleep 20, logcat -s System.out | grep MonostrPerf
+# Run 1 of "before" is the first launch after install (dexopt); comparisons use runs 2-4.
+# Scroll: dumpsys gfxinfo reset, 30 s of adb input swipe (3 up, 1 down, 250 ms each), dumpsys gfxinfo.
+# Lines "restore: ..." are session restore marks; System.out lines from MonostrPerf only.
+
+TotalTime: 1405
+WaitTime: 1407
+== before run 1
+11-03 13:30:39.093  7523  7523 I System.out: MonostrPerf @459ms restore: session read
+11-03 13:30:39.093  7523  7523 I System.out: MonostrPerf @459ms restore: signer AMBER
+11-03 13:30:39.148  7523  7523 I System.out: MonostrPerf @514ms restore: engine created
+11-03 13:30:39.149  7523  7523 I System.out: MonostrPerf @515ms restore: connect returned
+11-03 13:30:39.158  7523  7523 I System.out: MonostrPerf @524ms session ready
+11-03 13:30:39.245  7523  7523 I System.out: MonostrPerf @611ms feed first notes
+11-03 13:30:39.416  7523  7523 I System.out: MonostrPerf @782ms tab title shown
+11-03 13:30:39.696  7523  7523 I System.out: MonostrPerf @1062ms feed first counts
+11-03 13:30:39.730  7523  7633 I System.out: MonostrPerf @1096ms early exit NewestPerAuthor 327
+11-03 13:30:39.987  7523  7584 I System.out: MonostrPerf @1353ms early exit NewestPerAuthor 432
+11-03 13:30:42.155  7523  7635 I System.out: MonostrPerf @3520ms startup gate open (timeout)
+11-03 13:30:44.463  7523  7579 I System.out: MonostrPerf @5829ms own reactions local 5233ms, 1125 events
+11-03 13:30:44.573  7523  7523 I System.out: MonostrPerf @5939ms feed fresh page
+11-03 13:30:44.908  7523  7634 I System.out: MonostrPerf @6274ms early exit AllIds 277
+11-03 13:30:45.023  7523  7654 I System.out: MonostrPerf @6389ms early exit AllIds 47
+11-03 13:30:45.121  7523  7640 I System.out: MonostrPerf @6487ms early exit AllIds 87
+TotalTime: 895
+WaitTime: 897
+== before run 2
+11-03 13:31:02.787  7745  7745 I System.out: MonostrPerf @310ms restore: session read
+11-03 13:31:02.787  7745  7745 I System.out: MonostrPerf @311ms restore: signer AMBER
+11-03 13:31:02.839  7745  7745 I System.out: MonostrPerf @363ms restore: engine created
+11-03 13:31:02.840  7745  7745 I System.out: MonostrPerf @364ms restore: connect returned
+11-03 13:31:02.845  7745  7745 I System.out: MonostrPerf @369ms session ready
+11-03 13:31:02.899  7745  7745 I System.out: MonostrPerf @423ms feed first notes
+11-03 13:31:02.943  7745  7745 I System.out: MonostrPerf @467ms tab title shown
+11-03 13:31:03.196  7745  7835 I System.out: MonostrPerf @720ms own reactions local 298ms, 1125 events
+11-03 13:31:03.229  7745  7745 I System.out: MonostrPerf @753ms feed first counts
+11-03 13:31:04.142  7745  7745 I System.out: MonostrPerf @1666ms feed fresh page
+11-03 13:31:04.146  7745  7745 I System.out: MonostrPerf @1670ms startup gate open (feed fresh page)
+TotalTime: 522
+WaitTime: 524
+== before run 3
+11-03 13:31:26.107  7922  7922 I System.out: MonostrPerf @164ms restore: session read
+11-03 13:31:26.108  7922  7922 I System.out: MonostrPerf @165ms restore: signer AMBER
+11-03 13:31:26.165  7922  7922 I System.out: MonostrPerf @222ms restore: engine created
+11-03 13:31:26.166  7922  7922 I System.out: MonostrPerf @223ms restore: connect returned
+11-03 13:31:26.173  7922  7922 I System.out: MonostrPerf @230ms session ready
+11-03 13:31:26.228  7922  7922 I System.out: MonostrPerf @285ms feed first notes
+11-03 13:31:26.276  7922  7922 I System.out: MonostrPerf @333ms tab title shown
+11-03 13:31:26.528  7922  7962 I System.out: MonostrPerf @585ms own reactions local 305ms, 1125 events
+11-03 13:31:26.550  7922  7922 I System.out: MonostrPerf @607ms feed first counts
+11-03 13:31:27.273  7922  7922 I System.out: MonostrPerf @1330ms feed fresh page
+11-03 13:31:27.275  7922  7922 I System.out: MonostrPerf @1333ms startup gate open (feed fresh page)
+TotalTime: 484
+WaitTime: 485
+== before run 4
+11-03 13:31:59.139  8115  8115 I System.out: MonostrPerf @147ms restore: session read
+11-03 13:31:59.139  8115  8115 I System.out: MonostrPerf @148ms restore: signer AMBER
+11-03 13:31:59.194  8115  8115 I System.out: MonostrPerf @202ms restore: engine created
+11-03 13:31:59.195  8115  8115 I System.out: MonostrPerf @203ms restore: connect returned
+11-03 13:31:59.204  8115  8115 I System.out: MonostrPerf @213ms session ready
+11-03 13:31:59.258  8115  8115 I System.out: MonostrPerf @266ms feed first notes
+11-03 13:31:59.296  8115  8115 I System.out: MonostrPerf @304ms tab title shown
+11-03 13:31:59.579  8115  8153 I System.out: MonostrPerf @587ms own reactions local 333ms, 1125 events
+11-03 13:31:59.596  8115  8115 I System.out: MonostrPerf @604ms feed first counts
+11-03 13:32:00.400  8115  8115 I System.out: MonostrPerf @1408ms feed fresh page
+11-03 13:32:00.404  8115  8115 I System.out: MonostrPerf @1412ms startup gate open (feed fresh page)
+== scroll before swipes=66
+Stats since: 322879630923968ns
+Total frames rendered: 2580
+Janky frames: 22 (0.85%)
+Janky frames (legacy): 57 (2.21%)
+50th percentile: 5ms
+90th percentile: 7ms
+95th percentile: 8ms
+99th percentile: 16ms
+Number Missed Vsync: 5
+Number High input latency: 1276
+Number Slow UI thread: 21
+Number Slow bitmap uploads: 0
+Number Slow issue draw commands: 1
+Number Frame deadline missed: 22
+Number Frame deadline missed (legacy): 48

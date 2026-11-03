@@ -724,4 +724,24 @@
     <string name="invoice_copied">Fatura kopyalandı</string>
     <string name="invoice_inline">fatura</string>
     <string name="invoice_testnet">testnet</string>
+    <!-- note translation (spec 2026-11-03) -->
+    <string name="translate_action">Çevir</string>
+    <string name="translate_by">Çeviren: %1$s</string>
+    <string name="translate_original">Orijinali göster</string>
+    <string name="translate_show_translation">Çeviriyi göster</string>
+    <string name="translate_failed">Çeviri başarısız</string>
+    <string name="translate_retry">Tekrar dene</string>
+    <string name="translate_partial">Bazı bölümler çevrilemedi</string>
+    <string name="translate_consent_title">Notlar çevrilsin mi?</string>
+    <string name="translate_consent_body">Bu notun metni %1$s adresine gönderilir. Sunucu hangi notları çevirdiğini ve IP adresini görür. Mesajlar asla çevrilmez.</string>
+    <string name="translate_consent_body_article">Bu makalenin metni %1$s adresine gönderilir. Sunucu hangi makaleleri çevirdiğini ve IP adresini görür. Mesajlar asla çevrilmez.</string>
+    <string name="translate_consent_translate">Çevir</string>
+    <string name="translate_consent_settings">Ayarlar</string>
+    <string name="settings_translate">Çeviri</string>
+    <string name="settings_translate_monostr">monostr (translate.monostr.com)</string>
+    <string name="settings_translate_custom">Kendi LibreTranslate sunucun</string>
+    <string name="settings_translate_off">Kapalı</string>
+    <string name="settings_translate_url">Sunucu adresi</string>
+    <string name="settings_translate_url_invalid">Geçersiz adres</string>
+    <string name="settings_translate_hint">Çevirdiğin bir notun metni seçilen sunucuya gönderilir. Sunucu hangi notları çevirdiğini ve IP adresini görür. Mesajlar asla çevrilmez.</string>
 </resources>

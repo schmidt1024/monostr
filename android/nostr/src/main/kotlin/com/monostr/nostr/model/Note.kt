@@ -48,6 +48,8 @@ data class Note(
      * original not stored): the card offers to open it instead of showing nothing. Null for anything but a repost.
      */
     val repostedId: String? = null,
+    /** NIP-32 language label (ISO-639-1, lowercase) as a hint for language detection, null without one. */
+    val language: String? = null,
 ) {
     val isReply: Boolean get() = replyToId != null
     val isRepost: Boolean get() = kind == 6

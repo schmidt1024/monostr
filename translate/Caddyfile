@@ -1,0 +1,18 @@
+{
+	# No client IPs in logs: the access log (discarded below) and Caddy's request-bearing
+	# loggers (error log, reverse_proxy upstream errors) are excluded from the default
+	# logger. Startup, TLS and certificate messages still go to stderr.
+	log {
+		exclude http.log http.handlers
+	}
+}
+
+{$TRANSLATE_DOMAIN:translate.monostr.com} {
+	request_body {
+		max_size 64KB
+	}
+	reverse_proxy libretranslate:5000
+	log {
+		output discard
+	}
+}

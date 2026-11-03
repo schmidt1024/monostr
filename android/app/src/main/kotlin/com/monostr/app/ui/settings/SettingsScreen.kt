@@ -55,6 +55,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.positionInParent
+import com.monostr.app.translate.TranslateUrl
+import com.monostr.app.translate.TranslationMode
+import com.monostr.app.translate.TranslationSettingsStore
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -202,6 +207,7 @@ class SettingsViewModel @Inject constructor(
     private val uiSettings: UiSettingsStore,
     private val dmSettings: DmSettingsStore,
     private val hints: HintStore,
+    private val translation: TranslationSettingsStore,
 ) : ViewModel() {
     val controller = SettingsController(relayStore, { session.applyRelays(it) }, viewModelScope)
     private val relays: RelayStore = relayStore
@@ -286,6 +292,17 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun resetMediaServer() = viewModelScope.launch { uiSettings.setMediaServer(MediaServer.DEFAULT) }
+
+    val translateMode: StateFlow<TranslationMode> = translation.mode.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TranslationMode.MONOSTR)
+    val translateUrl: StateFlow<String> = translation.customUrl.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "")
+    fun setTranslateMode(mode: TranslationMode) = viewModelScope.launch { translation.setMode(mode) }
+
+    /** False (nothing stored) for an address [TranslateUrl] refuses; blank clears the address. */
+    fun setTranslateUrl(input: String): Boolean {
+        if (input.isNotBlank() && TranslateUrl.normalize(input) == null) return false
+        viewModelScope.launch { translation.setCustomUrl(input) }
+        return true
+    }
     fun resetSearchRelays() = viewModelScope.launch { runCatching { searchRelayStore.reset() } }
     private val _relayListBusy = MutableStateFlow(false)
     val relayListBusy: StateFlow<Boolean> = _relayListBusy.asStateFlow()
@@ -349,7 +366,7 @@ class SettingsViewModel @Inject constructor(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(onBack: () -> Unit, onMoneroSetup: () -> Unit, onMoneroUpgrade: () -> Unit = {}, onSupport: () -> Unit = {}, onAbout: () -> Unit = {}, onMuted: () -> Unit = {}, onShowKey: () -> Unit = {}, vm: SettingsViewModel = hiltViewModel()) {
+fun SettingsScreen(section: String? = null, onBack: () -> Unit, onMoneroSetup: () -> Unit, onMoneroUpgrade: () -> Unit = {}, onSupport: () -> Unit = {}, onAbout: () -> Unit = {}, onMuted: () -> Unit = {}, onShowKey: () -> Unit = {}, vm: SettingsViewModel = hiltViewModel()) {
     val state by vm.controller.state.collectAsStateWithLifecycle()
     val monero by vm.monero.state.collectAsStateWithLifecycle()
     val live by vm.relayStates.collectAsStateWithLifecycle(initialValue = emptyList<RelayInfo>())
@@ -367,7 +384,15 @@ fun SettingsScreen(onBack: () -> Unit, onMoneroSetup: () -> Unit, onMoneroUpgrad
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
-        Column(Modifier.padding(padding).padding(16.dp).fillMaxSize().verticalScroll(rememberScrollState())) {
+        val scroll = rememberScrollState()
+        // opened at a section (the translate consent's «Settings»): scroll there once it is placed
+        var sectionTop by remember { mutableStateOf<Int?>(null) }
+        var scrolledToSection by rememberSaveable { mutableStateOf(false) }
+        LaunchedEffect(sectionTop) {
+            val top = sectionTop ?: return@LaunchedEffect
+            if (!scrolledToSection) { scrolledToSection = true; scroll.scrollTo(top) }
+        }
+        Column(Modifier.padding(padding).padding(16.dp).fillMaxSize().verticalScroll(scroll)) {
             Text(stringResource(R.string.settings_logged_in_as), style = MaterialTheme.typography.labelLarge)
             Text(Profile.shortPubkey(vm.pubkey), style = MaterialTheme.typography.bodyMedium)
             if (vm.isAmber) {
@@ -394,6 +419,13 @@ fun SettingsScreen(onBack: () -> Unit, onMoneroSetup: () -> Unit, onMoneroUpgrad
             val mediaServer by vm.mediaServer.collectAsStateWithLifecycle()
             Spacer(Modifier.height(8.dp))
             MediaServerSetting(mediaServer, onSave = vm::setMediaServer, onReset = { vm.resetMediaServer() })
+            Spacer(Modifier.height(24.dp))
+            val translateMode by vm.translateMode.collectAsStateWithLifecycle()
+            val translateUrl by vm.translateUrl.collectAsStateWithLifecycle()
+            TranslationSection(
+                translateMode, translateUrl, onMode = { vm.setTranslateMode(it) }, onSaveUrl = vm::setTranslateUrl,
+                modifier = if (section == SettingsSection.TRANSLATION) Modifier.onPlaced { sectionTop = it.positionInParent().y.toInt() } else Modifier,
+            )
             Spacer(Modifier.height(24.dp))
             val relaySeen by vm.relaySeen.collectAsStateWithLifecycle()
             RelayListEditor(

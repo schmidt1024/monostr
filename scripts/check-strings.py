@@ -17,6 +17,7 @@ ALLOW_SAME = {  # legitimately identical in some languages (loan words, symbols)
     "settings_accent_purple", "compose_title_new", "notifications_title", "setup_watcher_url", "settings_monero_watcher",
     "tab_notifications", "settings_preset_n", "search_notes", "settings_media", "tab_messages", "messages_title",
     "chat_input_hint", "profile_message", "settings_messages", "notif_dm_channel", "note_ref_label", "profile_edit_name",
+    "settings_translate_monostr",  # brand and host name, the same in every language
 }
 # CLDR plural categories Android (ICU) selects for each app language; every <plurals> needs all of them.
 # fr/pt `one` also covers 0; es/fr/it/pt `many` is for large round numbers ("1 000 000 de ...").

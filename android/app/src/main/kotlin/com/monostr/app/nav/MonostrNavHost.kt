@@ -38,6 +38,11 @@ import com.monostr.nostr.model.AddressRef
 import com.monostr.app.ui.common.AddressLoader
 import com.monostr.app.ui.common.LocalAddressLoader
 import com.monostr.app.ui.common.LocalQuoteLoader
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.monostr.app.ui.common.LocalNoteTranslator
+import com.monostr.app.ui.common.NoteTranslationViewModel
+import com.monostr.app.ui.common.TranslateConsentSheet
+import com.monostr.app.ui.settings.SettingsSection
 import com.monostr.app.ui.common.QuoteLoader
 import com.monostr.app.ui.common.StartScreen
 import com.monostr.app.ui.compose.ComposeScreen
@@ -109,6 +114,8 @@ object Routes {
         text != null -> "compose?text=" + android.net.Uri.encode(text)
         else -> "compose"
     }
+    /** Settings scrolled to one section ([SettingsSection]). */
+    fun settings(section: String) = "settings?section=$section"
     fun moneroSetup(intro: Boolean, upgrade: Boolean = false) = "monero-setup?intro=$intro&upgrade=$upgrade"
     fun search(q: String? = null) = if (q == null) "search" else "search?q=" + android.net.Uri.encode(q)
     fun media(noteId: String, index: Int) = "media/$noteId/$index"
@@ -151,7 +158,12 @@ fun MonostrNavHost(session: NostrSession) {
 }
 
 @Composable
-private fun LoggedInNavHost(ready: Ready, gate: OnboardingGateViewModel = hiltViewModel(), media: MediaSettingsViewModel = hiltViewModel()) {
+private fun LoggedInNavHost(
+    ready: Ready,
+    gate: OnboardingGateViewModel = hiltViewModel(),
+    media: MediaSettingsViewModel = hiltViewModel(),
+    translation: NoteTranslationViewModel = hiltViewModel(),
+) {
     val nav = rememberNavController()
     // spec perf2 A2 (3): the first screen other than the home feed lets the session's background work go at once
     DisposableEffect(nav, ready) {
@@ -163,6 +175,8 @@ private fun LoggedInNavHost(ready: Ready, gate: OnboardingGateViewModel = hiltVi
     }
     val showIntro by gate.showIntro.collectAsState()
     val mediaSettings by media.settings.collectAsState()
+    // language detection for the note cards waits for this session's feed (final review I2)
+    remember(ready) { ready.startupGate.also { translation.useStartupGate(it) } }
     // one loader per logged-in account; a new login gets a new Ready and so a new loader
     val quoteLoader = remember(ready) { QuoteLoader(ready.quotes, ready.profiles, ready.muted) }
     val addressLoader = remember(ready) { AddressLoader(ready.addresses, ready.profiles, ready.muted) }
@@ -196,7 +210,17 @@ private fun LoggedInNavHost(ready: Ready, gate: OnboardingGateViewModel = hiltVi
     val onMessages: () -> Unit = { nav.navigate(Routes.MESSAGES) { popUpTo(Routes.FEED); launchSingleTop = true } }
     // spec 11.1: bookmarks are a tab, so they navigate like the other tabs
     val onBookmarks: () -> Unit = { nav.navigate(Routes.BOOKMARKS) { popUpTo(Routes.FEED); launchSingleTop = true } }
-    CompositionLocalProvider(LocalMediaSettings provides mediaSettings, LocalQuoteLoader provides quoteLoader, LocalAddressLoader provides addressLoader, LocalOpenArticle provides openArticle, LocalLinkPreviewLoader provides linkPreviewLoader, LocalPreviewImageLoader provides media.previewImages.loader) {
+    // spec 2026-11-03: one consent sheet for every card's first «Translate»
+    val consentFor by translation.consentFor.collectAsStateWithLifecycle()
+    if (consentFor != null) {
+        val host by translation.host.collectAsStateWithLifecycle()
+        TranslateConsentSheet(
+            host = host, onTranslate = translation::consent, onDismiss = translation::dismissConsent,
+            article = consentFor == NoteTranslationViewModel.ARTICLE,
+            onSettings = { translation.dismissConsent(); nav.navigate(Routes.settings(SettingsSection.TRANSLATION)) },
+        )
+    }
+    CompositionLocalProvider(LocalMediaSettings provides mediaSettings, LocalQuoteLoader provides quoteLoader, LocalAddressLoader provides addressLoader, LocalOpenArticle provides openArticle, LocalLinkPreviewLoader provides linkPreviewLoader, LocalPreviewImageLoader provides media.previewImages.loader, LocalNoteTranslator provides translation) {
         NavHost(navController = nav, startDestination = Routes.FEED) {
             composable(Routes.FEED) {
                 FeedScreen(
@@ -386,8 +410,12 @@ private fun LoggedInNavHost(ready: Ready, gate: OnboardingGateViewModel = hiltVi
                 VideoPlayerScreen(url = checkNotNull(entry.arguments?.getString("url")), onBack = { nav.popBackStack() })
             }
             composable(Routes.PROFILE_EDIT) { ProfileEditScreen(onDone = { nav.popBackStack() }) }
-            composable(Routes.SETTINGS) {
+            composable(
+                "${Routes.SETTINGS}?section={section}",
+                arguments = listOf(navArgument("section") { type = NavType.StringType; nullable = true; defaultValue = null }),
+            ) { entry ->
                 SettingsScreen(
+                    section = entry.arguments?.getString("section"),
                     onBack = { nav.popBackStack() },
                     onMoneroSetup = { nav.navigate(Routes.moneroSetup(intro = false)) },
                     onMoneroUpgrade = { nav.navigate(Routes.moneroSetup(intro = false, upgrade = true)) },

@@ -12,6 +12,14 @@ val releaseStoreFile = providers.gradleProperty("MONOSTR_STORE_FILE").orNull
 // public app values from gradle.properties (spec 4/5); an empty value hides the section that shows it
 fun appValue(name: String): String = providers.gradleProperty(name).orNull.orEmpty().replace("\"", "")
 
+// language-detector's profiles of the languages that are not app languages (spec 3.1), left out of the APK
+val detectorOtherLanguages = listOf(
+    "af", "an", "ar", "ast", "be", "bg", "bn", "br", "ca", "cs", "cy", "da", "el", "et", "eu", "fa", "fi", "ga", "gl", "gu",
+    "he", "hi", "hr", "ht", "hu", "id", "is", "ja", "km", "kn", "ko", "lt", "lv", "mk", "ml", "mr", "ms", "mt", "ne", "nl",
+    "no", "oc", "pa", "pl", "ro", "sk", "sl", "so", "sq", "sr", "sv", "sw", "ta", "te", "th", "tl", "uk", "ur", "vi", "wa",
+    "yi", "zh-CN", "zh-TW",
+)
+
 android {
     namespace = "com.monostr.app"; compileSdk = 37
     defaultConfig {
@@ -58,7 +66,9 @@ android {
             "META-INF/LICENSE.md", "META-INF/LICENSE-notice.md",
             // BouncyCastle is used for Keccak only (:monero): its post-quantum tables and X.509 texts were 1.3 MB of the APK
             "org/bouncycastle/pqc/**", "org/bouncycastle/x509/**",
-        )
+            // language detection (note translation) reads the full profiles of the eight app languages only
+            "languages.shorttext/**", "README.md",
+        ) + detectorOtherLanguages.map { "languages/$it" }
     }
     androidResources {
         // spec 3.1: the eight app languages; AGP also writes locales_config.xml for the per-app language picker (Android 13+)
@@ -99,7 +109,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core); implementation(libs.kotlinx.serialization.json)
     implementation(libs.okhttp)
     implementation(libs.commonmark); implementation(libs.commonmark.gfm.tables); implementation(libs.commonmark.gfm.strikethrough)
-    implementation(libs.work.runtime); implementation(libs.core.ktx); implementation(libs.zxing.core); implementation(libs.core.splashscreen)
+    implementation(libs.work.runtime); implementation(libs.core.ktx); implementation(libs.zxing.core); implementation(libs.language.detector) { exclude(group = "com.intellij", module = "annotations") }; implementation(libs.core.splashscreen)
     implementation(libs.media3.exoplayer); implementation(libs.media3.ui)
     // spec 2026-10-27 video §4: a picked video is encoded on the device
     implementation(libs.media3.transformer); implementation(libs.media3.effect)

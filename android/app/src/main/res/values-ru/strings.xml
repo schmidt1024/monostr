@@ -752,4 +752,24 @@
     <string name="invoice_copied">Счёт скопирован</string>
     <string name="invoice_inline">счёт</string>
     <string name="invoice_testnet">тестнет</string>
+    <!-- note translation (spec 2026-11-03) -->
+    <string name="translate_action">Перевести</string>
+    <string name="translate_by">Переведено: %1$s</string>
+    <string name="translate_original">Показать оригинал</string>
+    <string name="translate_show_translation">Показать перевод</string>
+    <string name="translate_failed">Не удалось перевести</string>
+    <string name="translate_retry">Повторить</string>
+    <string name="translate_partial">Некоторые части не удалось перевести</string>
+    <string name="translate_consent_title">Переводить заметки?</string>
+    <string name="translate_consent_body">Текст этой заметки отправляется на %1$s. Сервер видит, какие заметки вы переводите, и ваш IP-адрес. Сообщения никогда не переводятся.</string>
+    <string name="translate_consent_body_article">Текст этой статьи отправляется на %1$s. Сервер видит, какие статьи вы переводите, и ваш IP-адрес. Сообщения никогда не переводятся.</string>
+    <string name="translate_consent_translate">Перевести</string>
+    <string name="translate_consent_settings">Настройки</string>
+    <string name="settings_translate">Перевод</string>
+    <string name="settings_translate_monostr">monostr (translate.monostr.com)</string>
+    <string name="settings_translate_custom">Свой сервер LibreTranslate</string>
+    <string name="settings_translate_off">Выкл.</string>
+    <string name="settings_translate_url">Адрес сервера</string>
+    <string name="settings_translate_url_invalid">Неверный адрес</string>
+    <string name="settings_translate_hint">Текст заметки, которую вы переводите, отправляется на выбранный сервер. Сервер видит, какие заметки вы переводите, и ваш IP-адрес. Сообщения никогда не переводятся.</string>
 </resources>

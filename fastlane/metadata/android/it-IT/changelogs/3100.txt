@@ -1,0 +1,1 @@
+Traduci note e articoli: i post in un'altra lingua hanno un pulsante Traduci. La traduzione usa il server LibreTranslate di monostr (o il tuo, oppure disattivala); nulla lascia il telefono prima del tocco. Link, menzioni e hashtag restano invariati. Gli articoli lunghi vengono tradotti paragrafo per paragrafo.

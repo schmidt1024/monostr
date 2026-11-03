@@ -131,6 +131,8 @@ class ArticleController(
     /** Null (tests that do not mute): [mute] and [unmute] do nothing. */
     mute: MuteRepository? = null,
     muteScope: CoroutineScope? = null,
+    /** Spec 2026-11-03 «Articles»: detects the language once the text shows; null (tests): no translation. */
+    private val translator: com.monostr.app.translate.ArticleTranslator? = null,
 ) {
     private val _state = MutableStateFlow<ArticleUi>(ArticleUi.Loading)
     val state: StateFlow<ArticleUi> = _state.asStateFlow()
@@ -195,6 +197,7 @@ class ArticleController(
             .let { u -> bookmarks?.articleFlags(u, article.coordinate) ?: u.copy(bookmarkEnabled = false) }
         _state.value = ArticleUi.Shown(article, parsed.blocks, parsed.minutes, ui, picturesOf(article, parsed.blocks))
         PerfTrace.mark("article shown ${clockMs() - openedAt}ms")
+        translator?.prepare(article, parsed.blocks)
         follow(article, note)
     }
 

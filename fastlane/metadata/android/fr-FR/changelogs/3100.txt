@@ -1,0 +1,1 @@
+Traduire les notes et les articles : les publications dans une autre langue ont un bouton Traduire. La traduction passe par le serveur LibreTranslate de monostr (ou le vôtre, ou désactivée) ; rien ne quitte votre téléphone avant d'appuyer. Les liens, mentions et hashtags restent intacts. Les longs articles sont traduits paragraphe par paragraphe.

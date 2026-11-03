@@ -1,0 +1,1 @@
+Notları ve makaleleri çevir: başka dildeki gönderilerde Çevir düğmesi var. Çeviri monostr'un kendi LibreTranslate sunucusunda yapılır (ya da kendi sunucunda, ya da kapat); dokunmadan önce telefonundan hiçbir şey çıkmaz. Bağlantılar, bahsetmeler ve etiketler değişmez. Uzun makaleler paragraf paragraf çevrilir.

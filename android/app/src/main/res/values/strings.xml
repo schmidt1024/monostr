@@ -730,4 +730,24 @@
     <string name="invoice_copied">Invoice copied</string>
     <string name="invoice_inline">invoice</string>
     <string name="invoice_testnet">testnet</string>
+    <!-- note translation (spec 2026-11-03) -->
+    <string name="translate_action">Translate</string>
+    <string name="translate_by">Translated by %1$s</string>
+    <string name="translate_original">Show original</string>
+    <string name="translate_show_translation">Show translation</string>
+    <string name="translate_failed">Translation failed</string>
+    <string name="translate_retry">Retry</string>
+    <string name="translate_partial">Some parts could not be translated</string>
+    <string name="translate_consent_title">Translate notes?</string>
+    <string name="translate_consent_body">The text of this note goes to %1$s. The server sees which notes you translate and your IP address. Messages are never translated.</string>
+    <string name="translate_consent_body_article">The text of this article goes to %1$s. The server sees which articles you translate and your IP address. Messages are never translated.</string>
+    <string name="translate_consent_translate">Translate</string>
+    <string name="translate_consent_settings">Settings</string>
+    <string name="settings_translate">Translation</string>
+    <string name="settings_translate_monostr">monostr (translate.monostr.com)</string>
+    <string name="settings_translate_custom">Own LibreTranslate server</string>
+    <string name="settings_translate_off">Off</string>
+    <string name="settings_translate_url">Server address</string>
+    <string name="settings_translate_url_invalid">Invalid address</string>
+    <string name="settings_translate_hint">The text of a note you translate goes to the chosen server. The server sees which notes you translate and your IP address. Messages are never translated.</string>
 </resources>

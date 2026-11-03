@@ -253,6 +253,7 @@ interface NostrSessionEntryPoint {
     fun pendingSetup(): PendingSetupStore
     fun feedTabs(): FeedTabsCache
     fun sessions(): SessionStore
+    fun translationSettings(): com.monostr.app.translate.TranslationSettingsStore
 }
 
 /** Spec 6: outcome of re-requesting Amber's permissions. */

@@ -1,0 +1,1 @@
+Translate notes and articles: posts in another language get a Translate button. Translation runs on monostr's own LibreTranslate server (or your own, or turn it off); nothing leaves your phone before you tap. Links, mentions and hashtags stay untouched. Long articles translate paragraph by paragraph.

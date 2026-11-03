@@ -25,3 +25,6 @@
 # for null: the video encode closed the app there (OnePlus, Android 11, 0.26.0-0.28.1).
 # A kept field keeps its type, so no cast is added.
 -keepclassmembers class androidx.media3.** { android.media.metrics.** *; }
+
+# language-detector (note translation) logs through slf4j-api 1.7 without a binding: it falls back to a no-op logger
+-dontwarn org.slf4j.impl.StaticLoggerBinder

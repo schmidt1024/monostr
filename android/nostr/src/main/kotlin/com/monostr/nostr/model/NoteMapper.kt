@@ -40,6 +40,7 @@ object NoteMapper {
                     addressRef = parsed.address,
                     invoice = parsed.invoice,
                     articleParent = if (event.kind == Kinds.COMMENT) articleParent(tags) else null,
+                    language = LanguageLabel.of(tags),
                 )
             }
             6 -> {

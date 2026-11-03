@@ -8,6 +8,8 @@ data class Article(
     val image: String?,
     val publishedAt: Long,
     val contentWarning: String?,
+    /** NIP-32 language label (ISO-639-1), null without one. */
+    val language: String? = null,
 ) {
     val ref: AddressRef get() = AddressRef(KIND, event.pubkey, event.identifier)
     val coordinate: String get() = ref.coordinate
@@ -16,7 +18,7 @@ data class Article(
     fun asNote(): Note = Note(
         id = event.id, author = event.pubkey, content = event.content, createdAt = event.createdAt, kind = KIND,
         rootId = null, replyToId = null, repostOf = null, mentionedPubkeys = emptyList(),
-        contentWarning = contentWarning, displayContent = "", addressRef = ref,
+        contentWarning = contentWarning, displayContent = "", addressRef = ref, language = language,
     )
 
     companion object {
@@ -39,6 +41,7 @@ data class Article(
                 image = LiveStream.pictureUrl(event.tag("image")),
                 publishedAt = event.tag("published_at")?.toLongOrNull()?.takeIf { it > 0 } ?: event.createdAt,
                 contentWarning = event.tags.firstOrNull { it.isNotEmpty() && it[0] == "content-warning" }?.let { it.getOrNull(1) ?: "" },
+                language = LanguageLabel.of(event.tags),
             )
         }
     }

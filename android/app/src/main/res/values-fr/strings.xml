@@ -731,4 +731,24 @@
     <string name="invoice_copied">Facture copiée</string>
     <string name="invoice_inline">facture</string>
     <string name="invoice_testnet">testnet</string>
+    <!-- note translation (spec 2026-11-03) -->
+    <string name="translate_action">Traduire</string>
+    <string name="translate_by">Traduit par %1$s</string>
+    <string name="translate_original">Voir l’original</string>
+    <string name="translate_show_translation">Voir la traduction</string>
+    <string name="translate_failed">Échec de la traduction</string>
+    <string name="translate_retry">Réessayer</string>
+    <string name="translate_partial">Certaines parties n’ont pas pu être traduites</string>
+    <string name="translate_consent_title">Traduire les notes ?</string>
+    <string name="translate_consent_body">Le texte de cette note est envoyé à %1$s. Le serveur voit quelles notes tu traduis et ton adresse IP. Les messages ne sont jamais traduits.</string>
+    <string name="translate_consent_body_article">Le texte de cet article est envoyé à %1$s. Le serveur voit quels articles tu traduis et ton adresse IP. Les messages ne sont jamais traduits.</string>
+    <string name="translate_consent_translate">Traduire</string>
+    <string name="translate_consent_settings">Réglages</string>
+    <string name="settings_translate">Traduction</string>
+    <string name="settings_translate_monostr">monostr (translate.monostr.com)</string>
+    <string name="settings_translate_custom">Propre serveur LibreTranslate</string>
+    <string name="settings_translate_off">Désactivée</string>
+    <string name="settings_translate_url">Adresse du serveur</string>
+    <string name="settings_translate_url_invalid">Adresse non valide</string>
+    <string name="settings_translate_hint">Le texte d’une note que tu traduis est envoyé au serveur choisi. Le serveur voit quelles notes tu traduis et ton adresse IP. Les messages ne sont jamais traduits.</string>
 </resources>

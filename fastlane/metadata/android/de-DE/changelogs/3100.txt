@@ -1,0 +1,1 @@
+Notes und Artikel übersetzen: Beiträge in einer anderen Sprache bekommen einen Knopf «Übersetzen». Die Übersetzung läuft über den eigenen LibreTranslate-Server von monostr (oder deinen eigenen, oder aus); vor dem Tippen verlässt nichts dein Handy. Links, Erwähnungen und Hashtags bleiben unverändert. Lange Artikel werden Absatz für Absatz übersetzt.

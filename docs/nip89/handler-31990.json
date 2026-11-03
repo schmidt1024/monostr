@@ -11,6 +11,8 @@
     ["r", "https://monostr.com"],
     ["r", "https://github.com/schmidt1024/monostr", "source"],
     ["t", "monero"],
-    ["t", "android"]
+    ["t", "android"],
+    ["t", "social"],
+    ["t", "nostr"]
   ]
 }

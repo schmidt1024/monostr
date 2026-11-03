@@ -1,0 +1,1 @@
+Traduza notas e artigos: publicações em outro idioma ganham um botão Traduzir. A tradução usa o servidor LibreTranslate do monostr (ou o seu, ou desative); nada sai do seu celular antes do toque. Links, menções e hashtags permanecem intactos. Artigos longos são traduzidos parágrafo por parágrafo.

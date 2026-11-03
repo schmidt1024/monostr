@@ -1,0 +1,79 @@
+# Translation API translate.monostr.com on its own VPS (see README). LibreTranslate runs
+# on CPU only; Caddy terminates TLS. The API is open (no API key). Abuse protection:
+# LT_REQ_LIMIT=120 texts/min per client IP (a request costs max(1, number of texts in q); keyless requests are bucketed by the first
+# X-Forwarded-For entry, which Caddy sets), LT_CHAR_LIMIT=5000 per request, 64KB body cap in
+# the Caddyfile. gunicorn runs LT_THREADS worker processes, so the limit counters live in
+# redis (LT_REQ_LIMIT_STORAGE) to be shared; in-memory counters would be per worker.
+# The compose network has IPv6 (see `networks` below): without it Docker's userland proxy
+# forwards IPv6 clients with the bridge gateway as source (172.18.0.1), so every IPv6 user
+# shared one rate-limit bucket. With it Docker DNATs IPv6 like IPv4 and Caddy sees the
+# client's real address. Only caddy publishes ports; libretranslate and redis stay unpublished.
+
+name: translate
+
+services:
+  libretranslate:
+    # v1.9.6 multi-arch index digest (amd64 + arm64), checked 2026-11-03
+    image: libretranslate/libretranslate:v1.9.6@sha256:1de2d7056bb8ad607a412f4563d9abe324ff632b43b5be9428bcc8e213aebb32
+    restart: unless-stopped
+    mem_limit: 3g
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
+    # no `tty: true`: LibreTranslate then logs no request lines; bodies are never logged anyway
+    environment:
+      LT_LOAD_ONLY: en,de,es,fr,it,pt,ru,tr
+      LT_UPDATE_MODELS: "true" # downloads the models into the volume on first start, then skips
+      LT_REQ_LIMIT_STORAGE: redis://redis:6379/0
+      LT_CHAR_LIMIT: "5000"
+      LT_REQ_LIMIT: "120"
+      LT_DISABLE_WEB_UI: "true"
+      LT_DISABLE_FILES_TRANSLATION: "true"
+      LT_SUGGESTIONS: "false"
+      LT_THREADS: "2"
+    depends_on:
+      - redis
+    healthcheck:
+      # scripts/healthcheck.py passes while the boot flag exists, before the port listens;
+      # ask /languages on the real port instead (fails until the models are loaded)
+      test: ["CMD-SHELL", "./venv/bin/python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/languages', timeout=8)\""]
+      interval: 30s
+      timeout: 10s
+      retries: 4
+      start_period: 600s # model download on first start
+    volumes:
+      - lt-models:/home/libretranslate/.local
+
+  redis:
+    image: redis:7-alpine@sha256:8da19c7399dca900c6822a1cf30f9d2285585e2c4b457ff4095b0f4500054d3f # multi-arch index incl. arm64, 2026-11-03
+    restart: unless-stopped
+    mem_limit: 64m
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "48mb", "--maxmemory-policy", "volatile-lru"]
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
+    # no published ports: only reachable from libretranslate on the compose network
+
+  caddy:
+    image: caddy@sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc24061f9b52 # caddy:2 as of 2026-09-25
+    restart: unless-stopped
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      TRANSLATE_DOMAIN: ${TRANSLATE_DOMAIN:-translate.monostr.com}
+    depends_on:
+      - libretranslate
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+networks:
+  default:
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: fd00:7a:7b::/64 # ULA, only inside this host; Docker picks the IPv4 subnet as before
+
+volumes:
+  lt-models:
+  caddy-data:
+  caddy-config:

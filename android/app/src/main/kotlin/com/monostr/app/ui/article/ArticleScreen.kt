@@ -43,6 +43,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,6 +53,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
@@ -107,10 +109,27 @@ import com.monostr.nostr.model.Article
 import com.monostr.nostr.model.NoteAddress
 import com.monostr.nostr.model.Note
 import dagger.hilt.android.lifecycle.HiltViewModel
+import androidx.compose.ui.semantics.Role
+import com.monostr.app.translate.ArticleTranslationUi
+import com.monostr.app.translate.ArticleTranslator
+import com.monostr.app.translate.LanguageDetector
+import com.monostr.app.translate.TranslateClient
+import com.monostr.app.translate.TranslationSettingsStore
+import com.monostr.app.translate.TranslationState
+import com.monostr.app.ui.common.LocalNoteTranslator
+import com.monostr.app.ui.common.TranslateRow
+import okhttp3.OkHttpClient
 import javax.inject.Inject
 
 @HiltViewModel
-class ArticleViewModel @Inject constructor(session: NostrSession, handle: SavedStateHandle, factory: TipSheetFactory) : androidx.lifecycle.ViewModel() {
+class ArticleViewModel @Inject constructor(
+    session: NostrSession,
+    handle: SavedStateHandle,
+    factory: TipSheetFactory,
+    translationSettings: TranslationSettingsStore,
+    detector: LanguageDetector,
+    http: OkHttpClient,
+) : androidx.lifecycle.ViewModel() {
     /** Taken first: the ViewModel is made at the route's first composition, the "article shown" mark counts from here. */
     private val openedAt = System.nanoTime() / 1_000_000
     private val ready = session.requireReady()
@@ -120,13 +139,15 @@ class ArticleViewModel @Inject constructor(session: NostrSession, handle: SavedS
     val ref: AddressRef = NoteAddress.decode(naddr) ?: AddressRef(0, "", "")
     val decorations = factory.decorations(viewModelScope)
     val tipSheet = factory.tipSheet(viewModelScope)
+    /** Spec 2026-11-03 «Articles»: in this screen's scope, so leaving the reader cancels the requests; each call's timeout follows its length. */
+    val translator = ArticleTranslator(translationSettings, detector, TranslateClient(http), viewModelScope)
     val controller = ArticleController(
         ref, ready.addresses, ready.profiles, ready.publish, decorations, ready.counts, viewModelScope,
         mentions = com.monostr.app.ui.common.MentionResolver(ready.profiles, viewModelScope, kotlinx.coroutines.Dispatchers.Default),
         own = ready.ownReactions, muted = ready.muted, allowForeign = allowForeign,
         replies = ready.articleReplies, deletions = ready.deletions, visibility = ready.visibility, afterDelete = ready.afterNoteDelete,
         bookmarks = BookmarkActions(ready.bookmarks, viewModelScope, background = ready.engine.backgroundScope),
-        mute = ready.mute, muteScope = ready.engine.backgroundScope,
+        mute = ready.mute, muteScope = ready.engine.backgroundScope, translator = translator,
     )
     val menu = ready.noteMenu(delete = controller::delete, mute = controller::mute)
 
@@ -176,6 +197,10 @@ fun ArticleScreen(
     val names by vm.controller.names.collectAsStateWithLifecycle()
     val message by vm.controller.message.collectAsStateWithLifecycle()
     val replies by vm.controller.repliesState.collectAsStateWithLifecycle()
+    val translation by vm.translator.state.collectAsStateWithLifecycle()
+    // a switched app language: the translation follows the new target (the ViewModel outlives the recreated activity)
+    val locales = LocalConfiguration.current.locales.toLanguageTags()
+    LaunchedEffect(locales) { vm.translator.checkTarget() }
     val snackbar = remember { SnackbarHostState() }
     var tippersFor by remember { mutableStateOf<Note?>(null) }
     val uriHandler = LocalUriHandler.current
@@ -210,7 +235,7 @@ fun ArticleScreen(
                     Text(stringResource(R.string.article_deleted), style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("article-deleted"))
                 }
                 is ArticleUi.Shown -> Reader(
-                    s, names, replies, vm.controller, vm.menu, onOpenProfile, onOpenThread, onOpenArticle, vm.allowForeign, onHashtag, onOpenMedia,
+                    s, translation, vm.translator, names, replies, vm.controller, vm.menu, onOpenProfile, onOpenThread, onOpenArticle, vm.allowForeign, onHashtag, onOpenMedia,
                     onLike = { vm.controller.like(s.note.note) },
                     onReact = { e -> vm.controller.react(s.note.note, e) },
                     onRepost = { vm.controller.repost(s.note.note) },
@@ -235,6 +260,8 @@ fun ArticleScreen(
 @Composable
 private fun Reader(
     s: ArticleUi.Shown,
+    translation: ArticleTranslationUi,
+    translator: ArticleTranslator,
     names: Map<String, String>,
     replies: ArticleReplies,
     controller: ArticleController,
@@ -302,9 +329,11 @@ private fun Reader(
     // backlog 28: muted strand heads the user tapped open, for this screen only (the account stays muted)
     var shownMuted by rememberSaveable { mutableStateOf(emptySet<String>()) }
     LazyColumn(state = listState, modifier = Modifier.fillMaxSize().testTag("article-body")) {
-        item(key = "header") { Header(s, ctx, onOpenProfile) }
-        items(s.blocks.size, key = { "b$it" }) { i ->
-            ReaderColumn(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) { BlockView(s.blocks[i], ctx) }
+        // the translation keeps the block structure: same count, each block shows its translation once it arrived
+        val blocks = translation.blocks?.takeIf { it.size == s.blocks.size && translation.row !is TranslationState.Original } ?: s.blocks
+        item(key = "header") { Header(s, ctx, onOpenProfile, translation, translator) }
+        items(blocks.size, key = { "b$it" }) { i ->
+            ReaderColumn(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) { BlockView(blocks[i], ctx) }
         }
         item(key = "actions") {
             Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
@@ -369,14 +398,15 @@ private fun Reader(
 }
 
 @Composable
-private fun Header(s: ArticleUi.Shown, ctx: RenderContext, onOpenProfile: (String) -> Unit) {
+private fun Header(s: ArticleUi.Shown, ctx: RenderContext, onOpenProfile: (String) -> Unit, translation: ArticleTranslationUi, translator: ArticleTranslator) {
     val article = s.article
     val author = s.note.author
+    val title = translation.title?.takeIf { translation.row !is TranslationState.Original } ?: article.title
     Column {
         article.image?.let { ArticlePicture(it, ctx, 0, Modifier.fillMaxWidth().testTag("article-cover"), cover = true) }
         ReaderColumn(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
           Column {
-            Text(article.title, style = ReaderType.title(), modifier = Modifier.testTag("article-title"))
+            Text(title, style = ReaderType.title(), modifier = Modifier.testTag("article-title"))
             Row(Modifier.padding(top = 12.dp).clickable { onOpenProfile(article.event.pubkey) }.testTag("article-author"), verticalAlignment = Alignment.CenterVertically) {
                 Avatar(author.picture, size = 40.dp)
                 Spacer(Modifier.width(12.dp))
@@ -390,6 +420,7 @@ private fun Header(s: ArticleUi.Shown, ctx: RenderContext, onOpenProfile: (Strin
                     )
                 }
             }
+            ArticleTranslateRows(translation, translator, article.event.id.take(8))
           }
         }
     }
@@ -521,6 +552,36 @@ private fun ArticlePicture(url: String, ctx: RenderContext, index: Int, modifier
                     onSuccess = { r -> MediaRatios.put(url, r.result.image.width, r.result.image.height); learned = MediaRatios[url] },
                     onError = { failed = true },
                 )
+            }
+        }
+    }
+}
+
+/**
+ * Spec 2026-11-03 «Articles»: under the author row, so it shows without scrolling: the notes' «Translate» / progress /
+ * «Translation failed · Retry», then «Translated by host · Show original», and once «Some parts could not be translated»
+ * (with «Retry» when a request failed mid-way). The tap goes through the notes' consent sheet; nothing without
+ * [LocalNoteTranslator] (isolated UI tests).
+ */
+@Composable
+private fun ArticleTranslateRows(translation: ArticleTranslationUi, translator: ArticleTranslator, id8: String) {
+    val consent = LocalNoteTranslator.current ?: return
+    if (translation.row == TranslationState.None) return
+    val onTranslate = { consent.withConsent(translator::translate) }
+    Column(Modifier.padding(top = 8.dp)) {
+        TranslateRow(translation.row, id8, onTranslate = onTranslate, onOriginal = translator::showOriginal, onTranslation = translator::showTranslation)
+        TranslateRow(translation.row, id8, onTranslate = onTranslate, onOriginal = translator::showOriginal, onTranslation = translator::showTranslation, belowText = true)
+        if (translation.partial && translation.row is TranslationState.Shown) {
+            Row(Modifier.padding(top = 4.dp).testTag("translate-partial-$id8"), verticalAlignment = Alignment.CenterVertically) {
+                val style = MaterialTheme.typography.labelMedium
+                Text(stringResource(R.string.translate_partial), style = style, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f, fill = false))
+                if (translation.canRetry) {
+                    Text(" · ", style = style, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        stringResource(R.string.translate_retry), style = style, color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.clickable(role = Role.Button, onClick = onTranslate).testTag("translate-partial-retry-$id8"),
+                    )
+                }
             }
         }
     }

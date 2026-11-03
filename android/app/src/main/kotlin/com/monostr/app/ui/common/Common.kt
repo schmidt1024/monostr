@@ -66,6 +66,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.monostr.app.R
+import com.monostr.app.translate.TranslationState
 import com.monostr.app.ui.feed.NoteUi
 import com.monostr.app.ui.media.NoteMediaRow
 import com.monostr.app.ui.theme.StatusColors
@@ -269,6 +270,9 @@ private fun ListNoteCard(
             Spacer(Modifier.width(LIST_GAP))
             Column(Modifier.weight(1f)) {
                 NoteHeaderLine(note, onOpen = onOpen, onOpenProfile = onOpenProfile, menu = menu.takeIf { showActions })
+                // spec 2026-11-03: «Translate» right under the header line, like X; nothing (no height) for a note that needs none
+                val translation = if (missingOriginal) TranslationState.None else rememberTranslation(shown.id, shown.displayContent, shown.language)
+                NoteTranslateRow(translation, shown.id)
                 if (replyContext) ReplyContextLine(shown, names, onOpenProfile)
                 if (missingOriginal) {
                     val missingLabel = stringResource(R.string.repost_original_unavailable)
@@ -281,11 +285,12 @@ private fun ListNoteCard(
                 } else {
                     val foreign = LocalAllowForeign.current
                     val link = rememberNoteLink(shown)
-                    val text = link?.let { LinkPreviewRules.textWithCard(shown.displayContent, it.url) } ?: shown.displayContent
+                    val text = shownText(shown.displayContent, translation, link?.url)
                     if (text.isNotBlank()) {
                         Spacer(Modifier.height(2.dp))
                         NoteText(text, onOpen = onOpen, onHashtag = onHashtag, onOpenProfile = onOpenProfile, onOpenNote = onOpenNote, names = names, collapsible = collapsed, stateKey = shown.id, modifier = Modifier.fillMaxWidth().testTag("note-text-$id8"))
                     }
+                    NoteTranslateRow(translation, shown.id, belowText = true)
                     shown.quotedId?.let { qid ->
                         QuoteCard(qid, ForeignRule.quoteHints(shown.quoteRelays, foreign), names, onOpenNote = onOpenNote, onOpenProfile = onOpenProfile, onHashtag = onHashtag, modifier = Modifier.padding(top = 8.dp), author = ForeignRule.quoteAuthor(shown.quoteAuthor, foreign))
                     }
@@ -302,6 +307,16 @@ private fun ListNoteCard(
             }
         }
     }
+}
+
+/**
+ * The text a card shows: the translation while it is shown, else the note's own; then without the link a preview card
+ * stands for. The translation is of the whole displayed content (links byte-identical), so the card's link comes off it
+ * the same way, whenever the preview arrives.
+ */
+private fun shownText(content: String, translation: TranslationState, cardUrl: String?): String {
+    val body = (translation as? TranslationState.Shown)?.text ?: content
+    return cardUrl?.let { LinkPreviewRules.textWithCard(body, it) } ?: body
 }
 
 /** Where the card and its avatar sit, so the thread line meets the avatar whatever stands above it (a repost line). */
@@ -357,8 +372,12 @@ private fun DetailNoteCard(
             .padding(horizontal = 16.dp, vertical = 12.dp),
     ) {
         NoteDetailHeader(note, onOpenProfile = onOpenProfile, menu = menu.takeIf { showActions }, avatarModifier = if (lineAbove) Modifier.onPlaced { placed.avatar = it } else Modifier)
+        val missingOriginal = note.note.isRepost && note.note.repostOf == null
+        // spec 2026-11-03: «Translate» right under the header, like X
+        val translation = if (missingOriginal) TranslationState.None else rememberTranslation(shown.id, shown.displayContent, shown.language)
+        NoteTranslateRow(translation, shown.id, Modifier.padding(top = 8.dp))
         Spacer(Modifier.height(12.dp))
-        if (note.note.isRepost && note.note.repostOf == null) {
+        if (missingOriginal) {
             // backlog 60: the thread looked for the original and found none (yet)
             Text(
                 stringResource(R.string.repost_original_unavailable), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -369,11 +388,12 @@ private fun DetailNoteCard(
         }
         val foreign = LocalAllowForeign.current
         val link = rememberNoteLink(shown)
-        val text = link?.let { LinkPreviewRules.textWithCard(shown.displayContent, it.url) } ?: shown.displayContent
+        val text = shownText(shown.displayContent, translation, link?.url)
         if (text.isNotBlank()) {
             // spec 2026-10-16 §4: the focused note is already open; its text selects instead of opening anything
             NoteText(text, onOpen = onOpen, onHashtag = onHashtag, onOpenProfile = onOpenProfile, onOpenNote = onOpenNote, names = names, style = MaterialTheme.typography.bodyLarge, selectable = true, modifier = Modifier.fillMaxWidth().testTag("note-text-$id8"))
         }
+        NoteTranslateRow(translation, shown.id, belowText = true)
         shown.quotedId?.let { qid ->
             QuoteCard(qid, ForeignRule.quoteHints(shown.quoteRelays, foreign), names, onOpenNote = onOpenNote, onOpenProfile = onOpenProfile, onHashtag = onHashtag, modifier = Modifier.padding(top = 8.dp), author = ForeignRule.quoteAuthor(shown.quoteAuthor, foreign))
         }
