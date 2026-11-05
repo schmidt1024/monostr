@@ -228,6 +228,22 @@ class ProfileEditControllerTest {
     }
 
     @Test
+    fun `a silent write-only relay keeps the form, publishes nothing and reports it`() = runTest {
+        val profiles = FakeProfiles().apply { raw = mapOf(me to """{"name":"alice"}""") }
+        val publish = FakePublish()
+        val c = ProfileEditController(me, profiles, publish, eager())
+        c.start()
+        advanceUntilIdle()
+        profiles.freshFailure = com.monostr.nostr.repo.OwnDataNotAnswered()
+        c.update { it.copy(name = "Alice 2") }
+        c.save()
+        advanceUntilIdle()
+        assertTrue(publish.profileJson.isEmpty())
+        assertEquals(uiText(R.string.profile_save_failed), c.state.value.message)
+        assertTrue(c.state.value.canSave)
+    }
+
+    @Test
     fun `saving merges onto the kind 0 fetched right before, not the one loaded`() = runTest {
         val profiles = FakeProfiles().apply { raw = mapOf(me to """{"name":"alice"}""") }
         val publish = FakePublish()

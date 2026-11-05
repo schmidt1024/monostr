@@ -157,9 +157,11 @@ class NostrAddressableRepository(
             if (local != null) return resolve(ref, local)
         }
         loadCount.incrementAndGet()
+        // `own` tells foreign relays apart (all of the user's relays); only the ones that read are asked
         val own = engine.relayUrls()
+        val reading = engine.readRelayUrls()
         val hinted = if (allowForeign) ref.relays.filter(relayFilter).take(MAX_HINTS) else emptyList()
-        ask(ref, hinted, own, short)
+        ask(ref, hinted, reading, short)
         val first = resolve(ref, newest(ref))
         if (first != AddressResult.Missing || !allowForeign) return first
         // spec 2026-10-29 naddr (final review I4): the author's outbox, read from a stored kind 10002 only
@@ -176,7 +178,8 @@ class NostrAddressableRepository(
      */
     private suspend fun ask(ref: AddressRef, extra: List<String>, own: List<String>, short: () -> Unit) {
         val held = if (foreign != null) foreign.lease(extra) else engine.attachTemporary(extra)
-        if (foreign != null && held.size < extra.size) short()
+        // a hint the user only writes to is no slot the lease came short of
+        if (foreign != null && held.size < engine.withoutWriteOnly(extra).size) short()
         var handedOff = false
         try {
             if (held.isNotEmpty()) {

@@ -59,6 +59,8 @@ class SilentWsRelay(
     /** Every AUTH frame the client sent, as received. */
     val auths = java.util.concurrent.CopyOnWriteArrayList<String>()
     val requests = java.util.concurrent.CopyOnWriteArrayList<String>()
+    /** While true a REQ is recorded and gets no answer of any kind: the relay went silent, and answers again once set back. */
+    @Volatile var muted: Boolean = false
     /** Every EVENT frame the client sent, as received. */
     val events = java.util.concurrent.CopyOnWriteArrayList<String>()
     /** The subscription id of every CLOSE frame the client sent. */
@@ -130,6 +132,7 @@ class SilentWsRelay(
             val event = Regex("^\\[\\s*\"EVENT\"\\s*,\\s*\\{.*?\"id\"\\s*:\\s*\"([0-9a-f]{64})\"").find(text)?.groupValues?.get(1)
             val req = Regex("^\\[\\s*\"REQ\"\\s*,\\s*\"([^\"]*)\"").find(text)?.groupValues?.get(1)
             if (req != null) requests += text
+            if (req != null && muted) continue
             val count = Regex("^\\[\\s*\"COUNT\"\\s*,\\s*\"([^\"]*)\"").find(text)?.groupValues?.get(1)
             if (count != null) {
                 counts += text

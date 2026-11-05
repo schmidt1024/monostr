@@ -43,19 +43,21 @@ class NostrDmRelaysRepository(
 
     override suspend fun ownDmRelays(): OwnDmRelays {
         val pk = engine.pubkey ?: return OwnDmRelays.Unknown
-        val lookup = lookup10050(pk, fetch = true)
+        val lookup = lookup10050(pk, fetch = true, own = true)
         lookup.urls?.let { return OwnDmRelays.Found(it) }
         // Absence is only proven by a fetch that finished (every source answered) before the
         // timeout without throwing, with a normal relay connected (the rule of
         // NostrBookmarksRepository.loadLocked). Anything else is silence, and publishing on
         // silence could replace a list made elsewhere.
         if (!lookup.fetchCompleted) return OwnDmRelays.Unknown
-        return if (engine.connectedNormalRelayUrls().isEmpty()) OwnDmRelays.Unknown else OwnDmRelays.None
+        // the fetch ends on the answers of the relays it reached: a write-only relay that is down may hold the only list
+        val connected = engine.connectedNormalRelayUrls()
+        return if (connected.isEmpty() || !connected.containsAll(engine.writeOnlyRelayUrls)) OwnDmRelays.Unknown else OwnDmRelays.None
     }
 
     override suspend fun dmRelays(pubkey: String): List<String> {
         mutex.withLock { cache[pubkey]?.let { (at, list) -> if (at + maxAgeSeconds > now()) return list } }
-        val fromList = lookup10050(pubkey, fetch = true).urls ?: emptyList()
+        val fromList = lookup10050(pubkey, fetch = true, own = false).urls ?: emptyList()
         val relays = if (fromList.isNotEmpty()) fromList else authorRelays.writeRelaysExact(pubkey)
         val result = (relays.take(DmRelaysRepository.MAX - 1) + DmRelaysRepository.FALLBACK).distinct().take(DmRelaysRepository.MAX)
         mutex.withLock { cache[pubkey] = now() to result }
@@ -69,13 +71,13 @@ class NostrDmRelaysRepository(
      */
     private class Lookup(val urls: List<String>?, val fetchCompleted: Boolean)
 
-    /** DB first, one indexer/normal-relay fetch when [fetch]. */
-    private suspend fun lookup10050(pubkey: String, fetch: Boolean): Lookup {
+    /** DB first, one indexer/normal-relay fetch when [fetch]. [own]: the user's own list may live on any of their relays, other people's are read from the read relays. */
+    private suspend fun lookup10050(pubkey: String, fetch: Boolean, own: Boolean): Lookup {
         val filter = Filter().kind(Kind(10050u)).author(PublicKey.parse(pubkey)).limit(1u)
         var event = engine.query(filter).firstOrNull()
         var completed = false
         if (event == null && fetch) {
-            val sources = (indexers + engine.relayUrls()).distinct()
+            val sources = (if (own) indexers + engine.relayUrls() else engine.withoutWriteOnly(indexers) + engine.readRelayUrls()).distinct()
             if (sources.isNotEmpty()) {
                 val started = System.nanoTime()
                 val held = engine.attachTemporary(sources)

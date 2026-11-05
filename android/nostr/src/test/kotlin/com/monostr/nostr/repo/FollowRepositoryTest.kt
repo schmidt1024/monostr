@@ -31,6 +31,7 @@ class FollowRepositoryTest {
     private val pk = me.publicKey().toHex()
     private val bob = Keys.generate().publicKey().toHex()
     private val carol = Keys.generate().publicKey().toHex()
+    private val alice = Keys.generate().publicKey().toHex()
     private val relayJson = """{"wss://old.example":{"read":true,"write":true}}"""
     private var sends = 0
 
@@ -214,6 +215,25 @@ class FollowRepositoryTest {
             assertTrue(failure { repo.follow(carol) } is FollowError.NoList)
             assertEquals(0, sends)
             e.close()
+        }
+    }
+
+    @Test
+    fun `the newest kind 3 only on a write-only relay is found before a follow writes`() = runTest {
+        val stale = kind3(listOf(listOf("p", carol)), at = 500u)
+        val newest = kind3(listOf(listOf("p", bob)), at = 1_000u)
+        // a stale copy on the read relay and in the database, the newest list only where the user writes
+        SilentWsRelay(serve = listOf(newest.asJson()), acceptEvents = true).use { writeOnly ->
+            SilentWsRelay(serve = listOf(stale.asJson()), acceptEvents = true).use { read ->
+                val e = com.monostr.nostr.connectedEngine(dir, listOf(writeOnly, read))
+                e.setRelayModes(mapOf(writeOnly.url to com.monostr.nostr.model.RelayMode.WRITE, read.url to com.monostr.nostr.model.RelayMode.READ))
+                e.save(stale)
+                val repo = NostrFollowRepository(e, feed(e, 2_000, ago = 3_600), now = { 2_000 }, send = okSend(e))
+                repo.follow(alice)
+                assertEquals(listOf(listOf("p", bob), listOf("p", alice)), newest(e)!!.tagList())
+                assertEquals(1, sends)
+                e.close()
+            }
         }
     }
 

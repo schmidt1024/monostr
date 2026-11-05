@@ -23,6 +23,7 @@ import javax.inject.Singleton
 object AppModule {
     @Provides @Singleton fun sessionStore(@ApplicationContext ctx: Context): SessionStore = PrefsSessionStore(ctx.monostrPrefs)
     @Provides @Singleton fun relayStore(@ApplicationContext ctx: Context): RelayStore = PrefsRelayStore(ctx.monostrPrefs)
+    @Provides @Singleton fun relayModeStore(@ApplicationContext ctx: Context): RelayModeStore = PrefsRelayStore(ctx.monostrPrefs)
     @Provides @Singleton fun searchRelayStore(@ApplicationContext ctx: Context): SearchRelayStore = PrefsSearchRelayStore(ctx.monostrPrefs)
     @Provides @Singleton fun recentSearchesStore(@ApplicationContext ctx: Context): RecentSearchesStore = PrefsRecentSearchesStore(ctx.monostrPrefs)
     @Provides @Singleton fun secretStore(@ApplicationContext ctx: Context): SecretStore = KeystoreSecretStore(ctx)

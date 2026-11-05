@@ -308,6 +308,11 @@
     <string name="settings_relays">Relays</string>
     <string name="settings_relay_invalid">URL de relay inválida (esperado ws:// ou wss://)</string>
     <string name="settings_relay_keep_one">Pelo menos um relay deve ficar</string>
+    <string name="relay_mode_both">Ler e escrever</string>
+    <string name="relay_mode_read">Só ler</string>
+    <string name="relay_mode_write">Só escrever</string>
+    <string name="settings_relay_keep_read_write">Pelo menos um relay deve ler e um escrever</string>
+    <string name="relay_mode_description">%1$s, %2$s. Toque para alterar</string>
     <string name="settings_relay_save_failed">Não foi possível salvar os relays</string>
     <string name="settings_messages">Mensagens</string>
     <string name="settings_dm_relays">Relays de mensagens (NIP-17)</string>
@@ -326,6 +331,13 @@
     <string name="settings_media_blur_hint">Notas marcadas como sensíveis (content warning ou #nsfw) mostram as imagens desfocadas até você tocar.</string>
     <string name="settings_media_on_tap">Carregar imagens só ao tocar</string>
     <string name="settings_media_on_tap_hint">Economiza dados; vídeos nunca carregam sozinhos.</string>
+    <string name="settings_gif">GIFs</string>
+    <string name="settings_gif_hint">Quando visíveis, tocam por alguns segundos e param; o selo toca de novo. Desligado mostra o primeiro quadro.</string>
+    <string name="settings_gif_auto">Auto</string>
+    <string name="settings_gif_tap">Ao tocar</string>
+    <string name="settings_gif_off">Não</string>
+    <string name="media_gif_play">Reproduzir GIF</string>
+    <string name="media_gif_pause">Pausar GIF</string>
     <string name="settings_link_previews">Pré-visualização de links</string>
     <string name="settings_link_previews_hint">Mostra o título e a imagem das páginas vinculadas. Esses sites e os servidores das imagens verão seu endereço IP.</string>
     <string name="link_preview_cd">Pré-visualização do link: %1$s, %2$s</string>
@@ -382,6 +394,7 @@
     <string name="settings_publish_relays">Publicar estes relays como minha lista de relays (NIP-65)</string>
     <string name="settings_publish_relays_hint">Outros apps e o watcher de gorjetas procuram você nos relays desta lista. Publicar substitui a lista de outro app.</string>
     <string name="settings_adopt_relays_hint">Os relays deste app são substituídos pela lista de relays publicada para a sua conta. Uma lista de outro app pode conter relays que não existem mais.</string>
+    <string name="relay_adopt_markers_ignored">Relays adotados do perfil. Essa lista não tem nenhum relay para ler ou nenhum para escrever, por isso todos os relays agora leem e escrevem</string>
     <string name="settings_reset_relays">Restaurar os relays padrão</string>
     <string name="settings_reset_relays_hint">Os relays deste app são substituídos pelos relays padrão do monostr.</string>
     <string name="settings_msg_relay_list_published">Lista de relays publicada</string>

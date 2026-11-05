@@ -1,0 +1,4 @@
+- GIFs laufen in Notes rund 5 Sekunden und stoppen dann; das Badge spielt sie erneut ab, die Einstellung bietet Auto, Auf Tap oder Aus
+- Lesen, Schreiben oder beides pro Relay wählen; Marker bleiben beim Übernehmen und Publizieren erhalten
+- Relay-Adressen bleiben einzeilig
+- Korrekturen

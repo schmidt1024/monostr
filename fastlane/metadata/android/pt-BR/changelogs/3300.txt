@@ -1,0 +1,4 @@
+- GIFs tocam cerca de 5 segundos nas notas e param; o selo toca de novo, e um ajuste oferece Auto, Ao tocar ou Não
+- Escolha leitura, escrita ou ambas por relay; os marcadores ficam ao adotar ou publicar sua lista
+- Endereços de relay ficam em uma linha
+- Correções

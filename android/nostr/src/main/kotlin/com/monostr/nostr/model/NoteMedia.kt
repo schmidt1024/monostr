@@ -12,6 +12,8 @@ data class NoteMedia(
     val alt: String? = null,
     /** width x height from `imeta dim`, when given. */
     val dim: Pair<Int, Int>? = null,
+    /** The `imeta` `m` type, when given. */
+    val mime: String? = null,
 ) {
     enum class Kind { IMAGE, VIDEO }
 
@@ -109,7 +111,7 @@ data class NoteMedia(
             }
             // `image` (NIP-92/94), else `thumb`, which some clients write instead (spec 2026-10-27 video §5)
             val poster = attrs?.get("image")?.takeIf { HTTP.containsMatchIn(it) } ?: attrs?.get("thumb")?.takeIf { HTTP.containsMatchIn(it) }
-            return NoteMedia(url, kind, poster = poster, blurhash = attrs?.get("blurhash"), alt = attrs?.get("alt"), dim = dim)
+            return NoteMedia(url, kind, poster = poster, blurhash = attrs?.get("blurhash"), alt = attrs?.get("alt"), dim = dim, mime = attrs?.get("m"))
         }
 
         /** `imeta` tags as url → attributes (`m`, `image`, `blurhash`, `alt`, `dim`); entries without an http(s) `url` are skipped. */

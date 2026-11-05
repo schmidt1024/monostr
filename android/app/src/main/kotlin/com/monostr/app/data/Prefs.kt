@@ -3,12 +3,14 @@ package com.monostr.app.data
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
+import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.monostr.nostr.model.RelayMode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -33,6 +35,18 @@ interface SessionStore {
 interface RelayStore {
     val relays: Flow<List<String>>
     suspend fun set(relays: List<String>)
+}
+
+/**
+ * The main relay list's read and write modes, beside its relays (spec 2026-11-05): a relay not named here has no
+ * stored mode and reads and writes, as does every relay of an older install. An explicit [RelayMode.BOTH] stays.
+ */
+interface RelayModeStore {
+    val modes: Flow<Map<String, RelayMode>>
+    suspend fun setModes(modes: Map<String, RelayMode>)
+
+    /** The main relay list and the modes in one write: a crash can never leave one without the other. */
+    suspend fun setListAndModes(relays: List<String>, modes: Map<String, RelayMode>)
 }
 
 /** Accepts ws/wss URLs with a host and no whitespace; the same rule the engine can parse. */
@@ -68,18 +82,46 @@ class PrefsSessionStore(private val store: DataStore<Preferences>) : SessionStor
     }
 }
 
-class PrefsRelayStore(private val store: DataStore<Preferences>) : RelayStore {
+class PrefsRelayStore(private val store: DataStore<Preferences>) : RelayStore, RelayModeStore {
     override val relays: Flow<List<String>> = store.data.map { p -> p[RELAYS]?.sorted() ?: DEFAULT_RELAYS }
 
     override suspend fun set(relays: List<String>) {
-        store.edit { p -> p[RELAYS] = relays.map { it.trim().trimEnd('/') }.filter { isValidRelayUrl(it) }.toSet() }
+        store.edit { p -> putRelays(p, relays) }
+    }
+
+    override suspend fun setListAndModes(relays: List<String>, modes: Map<String, RelayMode>) {
+        store.edit { p -> putRelays(p, relays); putModes(p, modes) }
+    }
+
+    private fun putRelays(p: MutablePreferences, relays: List<String>) {
+        p[RELAYS] = relays.map { it.trim().trimEnd('/') }.filter { isValidRelayUrl(it) }.toSet()
+    }
+
+    private fun putModes(p: MutablePreferences, modes: Map<String, RelayMode>) {
+        val entries = modes.entries.mapNotNullTo(HashSet()) { (url, mode) ->
+            url.trim().trimEnd('/').takeIf { isValidRelayUrl(it) }?.let { "${mode.name} $it" }
+        }
+        if (entries.isEmpty()) p.remove(RELAY_MODES) else p[RELAY_MODES] = entries
     }
 
     suspend fun current(): List<String> = relays.first()
 
+    override val modes: Flow<Map<String, RelayMode>> = store.data.map { p ->
+        p[RELAY_MODES].orEmpty().mapNotNull { entry ->
+            val mode = runCatching { RelayMode.valueOf(entry.substringBefore(' ')) }.getOrNull()
+            val url = entry.substringAfter(' ', "")
+            if (mode == null || url.isEmpty()) null else url to mode
+        }.toMap()
+    }
+
+    override suspend fun setModes(modes: Map<String, RelayMode>) {
+        store.edit { p -> putModes(p, modes) }
+    }
+
     companion object {
         val DEFAULT_RELAYS = listOf("wss://relay.monostr.com", "wss://relay.damus.io", "wss://nos.lol", "wss://relay.primal.net")
         private val RELAYS = stringSetPreferencesKey("relays")
+        private val RELAY_MODES = stringSetPreferencesKey("relay_modes")
     }
 }
 

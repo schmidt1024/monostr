@@ -1,5 +1,6 @@
 package com.monostr.app.ui.settings
 
+import com.monostr.app.session.AdoptResult
 import kotlinx.coroutines.flow.first
 import com.monostr.app.ui.tips.watcher
 import com.monostr.app.data.AmountUnit
@@ -82,7 +83,7 @@ class MoneroSettingsController(
     private val secrets: SecretStore,
     private val tips: TipsRepository,
     private val gateway: WatcherGateway,
-    private val adoptRelays: suspend () -> Boolean,
+    private val adoptRelays: suspend () -> AdoptResult,
     private val scope: CoroutineScope,
     /** The logged-in account; null in tests that do not look at announced payment info. */
     private val selfPubkey: String? = null,
@@ -318,14 +319,19 @@ class MoneroSettingsController(
     fun adoptRelayList() {
         scope.launch {
             _state.update { it.copy(busy = true) }
-            val ok = try {
+            val result = try {
                 adoptRelays()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                false
+                AdoptResult.NONE
             }
-            _state.update { it.copy(busy = false, message = if (ok) uiText(R.string.settings_msg_relays_adopted) else uiText(R.string.settings_msg_no_relay_list)) }
+            val message = when (result) {
+                AdoptResult.ADOPTED -> uiText(R.string.settings_msg_relays_adopted)
+                AdoptResult.MARKERS_IGNORED -> uiText(R.string.relay_adopt_markers_ignored)
+                AdoptResult.NONE -> uiText(R.string.settings_msg_no_relay_list)
+            }
+            _state.update { it.copy(busy = false, message = message) }
         }
     }
 

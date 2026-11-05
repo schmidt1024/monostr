@@ -1,5 +1,11 @@
 package com.monostr.app.ui.settings
 
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import com.monostr.app.data.GifMode
 import com.monostr.app.data.POW_CHOICES
 import com.monostr.app.data.POW_DEFAULT
 import androidx.compose.ui.platform.LocalUriHandler
@@ -29,6 +35,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -80,7 +91,9 @@ import com.monostr.app.data.HintStore
 import com.monostr.app.data.MediaServer
 import com.monostr.app.data.PrefsRelayStore
 import com.monostr.app.data.Presets
+import com.monostr.app.data.RelayModeStore
 import com.monostr.app.data.RelayStore
+import com.monostr.nostr.model.RelayMode
 import com.monostr.app.data.RelaySuggestion
 import com.monostr.app.data.RelaySuggestions
 import com.monostr.app.data.SearchRelayStore
@@ -120,6 +133,9 @@ import javax.inject.Inject
 
 data class SettingsUiState(val relays: List<String> = emptyList(), val error: UiText? = null)
 
+/** Thrown by a [SettingsController]'s apply step for a list it will not take: the main list when no relay would read or none write. */
+class RelayListRefused : Exception()
+
 /** Relay list editing; the session applies changes to the running engine. */
 class SettingsController(
     private val relayStore: RelayStore,
@@ -130,6 +146,10 @@ class SettingsController(
 ) {
     private val _state = MutableStateFlow(SettingsUiState())
     val state: StateFlow<SettingsUiState> = _state.asStateFlow()
+
+    /** Shows the refusal of a mode change: no relay would be left to read or none to write. */
+    fun saveFailed() { _state.update { it.copy(error = uiText(R.string.settings_relay_save_failed)) } }
+    fun refuseModes() { _state.update { it.copy(error = uiText(R.string.settings_relay_keep_read_write)) } }
 
     fun start() { scope.launch { relayStore.relays.collect { r -> _state.update { it.copy(relays = r) } } } }
 
@@ -165,18 +185,18 @@ class SettingsController(
         save(current.map { if (it == old) u else it })
     }
 
-    /** Puts [relays] in place of the whole list (back to the default relays); a list below the minimum only shows the error. */
-    fun replaceAll(relays: List<String>) {
+    /** Puts [relays] in place of the whole list (back to the default relays), through [apply] when that step differs; a list below the minimum only shows the error. */
+    fun replaceAll(relays: List<String>, apply: suspend (List<String>) -> Unit = this.apply) {
         val list = relays.map { it.trim().trimEnd('/') }.filter { isValidRelayUrl(it) }.distinct()
         if (list.size < minimum) {
             _state.update { it.copy(error = uiText(R.string.settings_relay_keep_one)) }
             return
         }
-        save(list)
+        save(list, apply)
     }
 
     /** Applies [relays]; on failure the previous list stays in state and an error is shown. */
-    private fun save(relays: List<String>) {
+    private fun save(relays: List<String>, apply: suspend (List<String>) -> Unit = this.apply) {
         val previous = _state.value.relays
         scope.launch {
             _state.update { it.copy(error = null) }
@@ -184,6 +204,8 @@ class SettingsController(
                 apply(relays)
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: RelayListRefused) {
+                _state.update { it.copy(relays = previous, error = uiText(R.string.settings_relay_keep_read_write)) }
             } catch (e: Exception) {
                 _state.update { it.copy(relays = previous, error = uiText(R.string.settings_relay_save_failed)) }
             }
@@ -201,6 +223,7 @@ class DmRelayStoreAdapter(private val settings: DmSettingsStore) : RelayStore {
 class SettingsViewModel @Inject constructor(
     private val session: NostrSession,
     relayStore: RelayStore,
+    private val modeStore: RelayModeStore,
     private val searchRelayStore: SearchRelayStore,
     settings: TipSettingsStore,
     secrets: SecretStore,
@@ -209,7 +232,7 @@ class SettingsViewModel @Inject constructor(
     private val hints: HintStore,
     private val translation: TranslationSettingsStore,
 ) : ViewModel() {
-    val controller = SettingsController(relayStore, { session.applyRelays(it) }, viewModelScope)
+    val controller = SettingsController(relayStore, { if (!session.applyRelays(it)) throw RelayListRefused() }, viewModelScope)
     private val relays: RelayStore = relayStore
     val search = SettingsController(searchRelayStore, { searchRelayStore.set(it) }, viewModelScope, minimum = 0)
     val dm = SettingsController(
@@ -250,8 +273,24 @@ class SettingsViewModel @Inject constructor(
     private val publishedRead = MutableStateFlow(false)
 
     /** How the app's relays differ from the published list; null while it is being read or when they agree. */
-    val relayListDiff: StateFlow<RelayListDiff?> = combine(relays.relays, published, publishedRead) { local, list, read -> if (read) relayListDiff(local, list) else null }
+    val relayListDiff: StateFlow<RelayListDiff?> = combine(relays.relays, published, publishedRead, modeStore.modes) { local, list, read, modes -> if (read) relayListDiff(local, list, modes) else null }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** The main list's stored read and write modes; a relay not in it reads and writes. */
+    val relayModes: StateFlow<Map<String, RelayMode>> = modeStore.modes.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+
+    /** Sets one relay's mode; the session refuses a change that leaves no reader or no writer, and the row says so. */
+    fun setRelayMode(url: String, mode: RelayMode) = viewModelScope.launch {
+        val accepted = try {
+            session.setRelayMode(url, mode)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            controller.saveFailed()
+            return@launch
+        }
+        if (!accepted) controller.refuseModes()
+    }
 
     /** "No list found" only counts when a relay was connected to ask: offline the screen says nothing rather than invite a publish over a list it could not read. */
     private fun readPublished() = viewModelScope.launch {
@@ -266,6 +305,8 @@ class SettingsViewModel @Inject constructor(
     val customHue: StateFlow<Float> = uiSettings.customHue.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AccentSeed.DEFAULT_HUE)
     val blurSensitive: StateFlow<Boolean> = uiSettings.blurSensitive.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
     val mediaOnTap: StateFlow<Boolean> = uiSettings.mediaOnTap.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+    val gifMode: StateFlow<GifMode> = uiSettings.gifMode.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), GifMode.AUTO)
+    fun setGifMode(mode: GifMode) = viewModelScope.launch { uiSettings.setGifMode(mode) }
     val linkPreviews: StateFlow<Boolean> = uiSettings.linkPreviews.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
     fun setLinkPreviews(on: Boolean) = viewModelScope.launch { uiSettings.setLinkPreviews(on) }
     val authorRelays: StateFlow<Boolean> = uiSettings.authorRelays.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
@@ -309,15 +350,15 @@ class SettingsViewModel @Inject constructor(
     private val _relayListBusy = MutableStateFlow(false)
     val relayListBusy: StateFlow<Boolean> = _relayListBusy.asStateFlow()
 
-    /** Back to the app's default relays, e.g. after a published list full of dead relays was adopted. */
-    fun resetRelays() = controller.replaceAll(PrefsRelayStore.DEFAULT_RELAYS)
+    /** Back to the app's default relays, every one reading and writing, e.g. after a published list full of dead relays was adopted. */
+    fun resetRelays() = controller.replaceAll(PrefsRelayStore.DEFAULT_RELAYS) { if (!session.resetRelays(it)) throw RelayListRefused() }
 
     /** Replaces the user's NIP-65 list by the relays of this app (see [publishRelayList]). */
     fun publishRelays() = viewModelScope.launch {
         if (_relayListBusy.value) return@launch
         _relayListBusy.value = true
         try {
-            _notice.value = publishRelayList({ relays.relays.first() }, { session.requireReady().publish.publishRelayList(it) })
+            _notice.value = publishRelayList({ session.relayEntriesForPublish() }, { session.requireReady().publish.publishRelayList(it) })
         } finally {
             _relayListBusy.value = false
             readPublished()
@@ -416,6 +457,21 @@ fun SettingsScreen(section: String? = null, onBack: () -> Unit, onMoneroSetup: (
             val onTap by vm.mediaOnTap.collectAsStateWithLifecycle()
             SettingSwitch(stringResource(R.string.settings_media_blur), stringResource(R.string.settings_media_blur_hint), blur, vm::setBlurSensitive, "settings-media-blur")
             SettingSwitch(stringResource(R.string.settings_media_on_tap), stringResource(R.string.settings_media_on_tap_hint), onTap, vm::setMediaOnTap, "settings-media-on-tap")
+            val gifMode by vm.gifMode.collectAsStateWithLifecycle()
+            Spacer(Modifier.height(8.dp))
+            Text(stringResource(R.string.settings_gif), style = MaterialTheme.typography.bodyLarge)
+            Text(stringResource(R.string.settings_gif_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().testTag("settings-gif")) {
+                GifMode.entries.forEachIndexed { i, mode ->
+                    SegmentedButton(
+                        selected = gifMode == mode, onClick = { vm.setGifMode(mode) },
+                        shape = SegmentedButtonDefaults.itemShape(i, GifMode.entries.size), modifier = Modifier.testTag("settings-gif-$mode"),
+                    ) {
+                        Text(stringResource(when (mode) { GifMode.AUTO -> R.string.settings_gif_auto; GifMode.ON_TAP -> R.string.settings_gif_tap; GifMode.OFF -> R.string.settings_gif_off }))
+                    }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
             val previews by vm.linkPreviews.collectAsStateWithLifecycle()
             SettingSwitch(stringResource(R.string.settings_link_previews), stringResource(R.string.settings_link_previews_hint), previews, vm::setLinkPreviews, "settings-link-previews")
             val mediaServer by vm.mediaServer.collectAsStateWithLifecycle()
@@ -430,16 +486,18 @@ fun SettingsScreen(section: String? = null, onBack: () -> Unit, onMoneroSetup: (
             )
             Spacer(Modifier.height(24.dp))
             val relaySeen by vm.relaySeen.collectAsStateWithLifecycle()
+            val relayModes by vm.relayModes.collectAsStateWithLifecycle()
             RelayListEditor(
                 title = stringResource(R.string.settings_relays), relays = state.relays, live = live, error = state.error,
                 onAdd = vm.controller::add, onRemove = vm.controller::remove, tagPrefix = "settings-relay", seen = relaySeen,
+                modes = relayModes, onMode = vm::setRelayMode,
             )
             SuggestedRelays(suggestions = RelaySuggestions.PAID_MONERO.filter { it.url !in state.relays }, onAdd = { vm.controller.add(it) })
             val relayListBusy by vm.relayListBusy.collectAsStateWithLifecycle()
             val relayDiff by vm.relayListDiff.collectAsStateWithLifecycle()
             relayDiff?.let { RelayListDiffHint(it) }
             RelayListActions(
-                isDefault = isDefaultRelayList(state.relays), busy = relayListBusy || monero.busy,
+                isDefault = isDefaultRelayList(state.relays, modes = relayModes), busy = relayListBusy || monero.busy,
                 onPublish = { vm.publishRelays() }, onAdopt = vm.monero::adoptRelayList, onReset = { vm.resetRelays() },
             )
             val authorRelays by vm.authorRelays.collectAsStateWithLifecycle()
@@ -620,6 +678,56 @@ fun RelayListDiffHint(diff: RelayListDiff) {
     Spacer(Modifier.height(4.dp))
 }
 
+/** The name of a relay's mode. */
+@Composable
+private fun relayModeLabel(mode: RelayMode): String = stringResource(
+    when (mode) { RelayMode.BOTH -> R.string.relay_mode_both; RelayMode.READ -> R.string.relay_mode_read; RelayMode.WRITE -> R.string.relay_mode_write },
+)
+
+/** A compact menu on the relay row: a 48 dp button naming the relay and its mode, the three modes to choose from. */
+@Composable
+private fun RelayModeMenu(url: String, mode: RelayMode, onMode: (String, RelayMode) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    val description = stringResource(R.string.relay_mode_description, relayShownUrl(url), relayModeLabel(mode))
+    Box {
+        IconButton(onClick = { open = true }, modifier = Modifier.testTag("relay-mode-$url")) {
+            Icon(Icons.Filled.MoreVert, contentDescription = description)
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            // the row may shorten the address: here it reads in full
+            Text(
+                url, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp).testTag("relay-mode-$url-address"),
+            )
+            RelayMode.entries.forEach { m ->
+                DropdownMenuItem(
+                    text = { Text(relayModeLabel(m), fontWeight = if (m == mode) FontWeight.Bold else null) },
+                    onClick = { open = false; if (m != mode) onMode(url, m) },
+                    modifier = Modifier.testTag("relay-mode-$url-$m"),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * One line with the middle left out: the end of a host says whose it is (`relay.damus.io.evil.example`), so it is not cut
+ * off there. A long press shows the whole address, a screen reader always reads it in full.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun RelayAddress(url: String, tagPrefix: String) {
+    var full by remember(url) { mutableStateOf(false) }
+    Text(
+        if (full) url else relayShownUrl(url), style = MaterialTheme.typography.bodyMedium,
+        maxLines = if (full) Int.MAX_VALUE else 1, overflow = if (full) TextOverflow.Clip else TextOverflow.MiddleEllipsis,
+        modifier = Modifier
+            .combinedClickable(onClick = {}, onLongClick = { full = !full })
+            .clearAndSetSemantics { contentDescription = url }
+            .testTag("$tagPrefix-address-${url.hashCode().toUInt()}"),
+    )
+}
+
 /** One relay list with status lines (optional), an add field and a remove icon per row. */
 @Composable
 private fun RelayListEditor(
@@ -633,6 +741,9 @@ private fun RelayListEditor(
     hint: String? = null,
     /** 0.24.3: epoch seconds each relay was last seen connected (the feed relays only). */
     seen: Map<String, Long> = emptyMap(),
+    /** The main list only: each relay's stored mode (a relay not in it reads and writes) and the change of it; null hides the control. */
+    modes: Map<String, RelayMode>? = null,
+    onMode: ((String, RelayMode) -> Unit)? = null,
     footer: @Composable () -> Unit = {},
 ) {
     var newRelay by rememberSaveable(tagPrefix) { mutableStateOf("") }
@@ -641,7 +752,10 @@ private fun RelayListEditor(
     relays.forEach { url ->
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(url, style = MaterialTheme.typography.bodyMedium)
+                RelayAddress(url, tagPrefix)
+                // a relay that reads and writes needs no note; a one-way relay says what it does
+                val mode = modes?.get(url)
+                if (mode != null && mode != RelayMode.BOTH) Text(relayModeLabel(mode), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (live != null) {
                     val info = live.firstOrNull { it.url.trimEnd('/') == url }
                     val line = relayStatusLine(info, seen[url.trimEnd('/')], System.currentTimeMillis() / 1000)
@@ -657,6 +771,7 @@ private fun RelayListEditor(
                 }
             }
             RelaySignupButton(url)
+            if (modes != null && onMode != null) RelayModeMenu(url, modes[url] ?: RelayMode.BOTH, onMode)
             IconButton(onClick = { onRemove(url) }, modifier = Modifier.testTag("$tagPrefix-remove-${url.hashCode().toUInt()}")) { Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.action_remove)) }
         }
         HorizontalDivider()

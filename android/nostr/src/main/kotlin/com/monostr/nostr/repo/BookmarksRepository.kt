@@ -102,6 +102,9 @@ class NostrBookmarksRepository(
     private val missedAt = ConcurrentHashMap<String, Long>()
     override val state: StateFlow<BookmarksState> get() = list.state
 
+    /** The ids marked "asked, not found" now, for tests. */
+    internal fun missMarked(): Set<String> = missedAt.keys.toSet()
+
     override suspend fun ensureLoaded(interactive: Boolean) = list.ensureLoaded(interactive)
 
     override suspend fun toggle(noteId: String): BookmarkOutcome = list.toggle(noteId).toBookmarkOutcome()
@@ -143,7 +146,7 @@ class NostrBookmarksRepository(
                             lookups.awaitStamped(key, force = true) {
                                 quietly { engine.fetch(Filter().ids(chunk.map { it.second }), entriesTimeout, Exit.AllIds(chunk.map { it.first }.toSet())) }
                                 val have = engine.query(Filter().ids(chunk.map { it.second })).map { it.id().toHex().lowercase() }.toSet()
-                                val online = engine.connectedNormalRelayUrls().isNotEmpty()
+                                val online = engine.connectedReadRelayUrls().isNotEmpty()
                                 val stamp = clock()
                                 chunk.forEach { (id, _) -> if (id in have) missedAt.remove(id) else if (online) missedAt[id] = stamp }
                                 online

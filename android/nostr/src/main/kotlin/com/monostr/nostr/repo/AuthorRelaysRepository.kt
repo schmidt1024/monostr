@@ -121,14 +121,15 @@ class NostrAuthorRelaysRepository(
         if (foreign != null) {
             val leased = foreign.lease(indexers, wait = wait)
             try {
-                val sources = (leased + engine.relayUrls()).distinct()
+                val sources = (leased + engine.readRelayUrls()).distinct()
                 if (sources.isNotEmpty()) quietly { engine.fetchFrom(sources, filter, fetchTimeout, attach = false, exit = exit) }
             } finally {
                 foreign.release(leased)
             }
-            return leased.size >= indexers.distinct().size
+            // an indexer the user only writes to is no slot the lease came short of
+            return leased.size >= engine.withoutWriteOnly(indexers).distinct().size
         }
-        val sources = (indexers + engine.relayUrls()).distinct()
+        val sources = (engine.withoutWriteOnly(indexers) + engine.readRelayUrls()).distinct()
         if (sources.isEmpty()) return true
         val held = engine.attachTemporary(sources)
         try {

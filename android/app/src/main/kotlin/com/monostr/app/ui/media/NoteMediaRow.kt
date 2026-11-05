@@ -226,6 +226,11 @@ private fun MediaCell(
         when {
             placeholder != null && (placeholderOnly || source == null) -> Image(placeholder, contentDescription = m.alt, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             placeholderOnly || source == null -> Unit
+            m.kind == NoteMedia.Kind.IMAGE && GifPlayback.isGif(m.url, m.mime) -> GifImage(
+                m.url, key = "$tag-$index", contentDescription = m.alt, contentScale = contentScale, alignment = alignment,
+                placeholder = remember(placeholder) { placeholder?.let { androidx.compose.ui.graphics.painter.BitmapPainter(it) } },
+                onSize = onSize, onError = { failed = true },
+            )
             // AsyncImage, not SubcomposeAsyncImage: no subcomposition per loading state in a scrolling list (Coil's advice)
             else -> AsyncImage(
                 model = source, contentDescription = m.alt, contentScale = contentScale, alignment = alignment, modifier = Modifier.fillMaxSize(),

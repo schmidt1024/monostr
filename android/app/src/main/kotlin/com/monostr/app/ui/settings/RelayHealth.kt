@@ -7,6 +7,8 @@ import com.monostr.app.ui.common.relativeTime
 import com.monostr.app.ui.common.uiText
 import com.monostr.nostr.RelayList
 import com.monostr.nostr.model.RelayInfo
+import com.monostr.nostr.model.RelayMode
+import com.monostr.nostr.model.RelayModes
 import com.monostr.nostr.model.RelayState
 
 /**
@@ -36,11 +38,24 @@ fun relayStatusLine(info: RelayInfo?, lastSeen: Long?, now: Long): RelayStatusLi
 data class RelayListDiff(val unpublished: Int, val missing: Int, val noneFound: Boolean = false)
 
 /** Null when both lists name the same relays (trailing slashes and order aside). */
-fun relayListDiff(local: List<String>, published: RelayList?): RelayListDiff? {
+fun relayListDiff(local: List<String>, published: RelayList?, chosen: Map<String, RelayMode> = emptyMap()): RelayListDiff? {
     if (published == null) return RelayListDiff(0, 0, noneFound = true)
     fun norm(urls: List<String>) = urls.map { it.trim().trimEnd('/') }.toSet()
     val mine = norm(local)
     val theirs = norm(published.read + published.write)
-    val diff = RelayListDiff(unpublished = (mine - theirs).size, missing = (theirs - mine).size)
+    val read = published.read.map { it.trim().trimEnd('/') }.toSet()
+    val write = published.write.map { it.trim().trimEnd('/') }.toSet()
+    // a relay in both lists whose chosen mode is not its published marker (no chosen mode: the marker stays) is not published yet either
+    val changed = chosen.entries.count { (url, mode) ->
+        val u = url.trim().trimEnd('/')
+        u in mine && u in theirs && mode != RelayModes.modeOf(u in read, u in write)
+    }
+    val diff = RelayListDiff(unpublished = (mine - theirs).size + changed, missing = (theirs - mine).size)
     return diff.takeIf { it.unpublished > 0 || it.missing > 0 }
+}
+
+/** How a relay reads in a list: `wss://` is on nearly every relay and takes the room, an unencrypted `ws://` stays visible. */
+fun relayShownUrl(url: String): String {
+    val u = url.trim().trimEnd('/')
+    return if (u.startsWith("wss://", ignoreCase = true)) u.substring(6) else u
 }

@@ -1,0 +1,4 @@
+- Le GIF si riproducono circa 5 secondi nelle note e poi si fermano; il badge le riavvia, un'impostazione offre Auto, Al tocco o No
+- Scegli lettura, scrittura o entrambe per relay; i marcatori restano quando adotti o pubblichi la lista
+- Gli indirizzi dei relay restano su una riga
+- Correzioni

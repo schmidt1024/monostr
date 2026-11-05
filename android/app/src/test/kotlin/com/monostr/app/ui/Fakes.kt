@@ -1,5 +1,7 @@
 package com.monostr.app.ui
 
+import com.monostr.nostr.model.RelayEntry
+import com.monostr.nostr.model.RelayMode
 import com.monostr.app.data.Accent
 import com.monostr.app.data.DmSettingsStore
 import com.monostr.app.data.Draft
@@ -11,6 +13,7 @@ import com.monostr.app.data.PendingTip
 import com.monostr.app.data.PendingTipStore
 import com.monostr.app.data.PendingTips
 import com.monostr.app.data.Presets
+import com.monostr.app.data.RelayModeStore
 import com.monostr.app.data.RelayStore
 import com.monostr.app.data.SecretStore
 import com.monostr.app.data.ThemeMode
@@ -249,8 +252,11 @@ class FakeProfiles(known: Map<String, Profile> = emptyMap()) : ProfileRepository
     /** What a relay fetch right before a save returns; null falls back to [raw] (the database). */
     var fresh: Map<String, String>? = null
     val freshCalls = ArrayList<String>()
+    /** Thrown by the relay fetch right before a save. */
+    var freshFailure: Exception? = null
     override suspend fun freshMetadata(pubkey: String, timeout: Duration): String? {
         freshCalls += pubkey
+        freshFailure?.let { throw it }
         return (fresh ?: raw)[pubkey]
     }
     override suspend fun invalidate(pubkey: String): Profile { invalidated += pubkey; return current.value[pubkey] ?: Profile.empty(pubkey) }
@@ -306,8 +312,8 @@ class FakePublish(var relaysOk: Boolean = true, private val fail: Boolean = fals
     /** When set, a resend throws. */
     var failResend = false
     override suspend fun resend(eventId: String) = result(1, eventId).also { if (failResend) throw IllegalStateException("resend boom") }.also { calls += "resend:${eventId.takeLast(4)}" }
-    override suspend fun relayList(relays: List<String>) = result(10002).also { calls += "relays:${relays.size}" }
-    override suspend fun publishRelayList(relays: List<String>) = result(10002).also { calls += "relaylist:${relays.size}" }
+    override suspend fun relayList(entries: List<RelayEntry>) = result(10002).also { calls += "relays:${entries.size}" }
+    override suspend fun publishRelayList(entries: List<RelayEntry>) = result(10002).also { calls += "relaylist:${entries.size}" }
     override suspend fun dmRelayList(relays: List<String>) = result(10050).also { calls += "dmrelays:${relays.size}" }
     override suspend fun initialRelayList(relays: List<String>) = result(10002).also { calls += "initialrelays:${relays.size}" }
 }
@@ -325,7 +331,29 @@ class FakeThreads(
 class FakeRelayStore(initial: List<String>) : RelayStore {
     val state = MutableStateFlow(initial)
     override val relays: Flow<List<String>> = state
-    override suspend fun set(relays: List<String>) { state.value = relays }
+    /** Writes through [set] (the list alone), as opposed to [FakeRelayModeStore.setListAndModes]. */
+    var separateSets = 0
+    override suspend fun set(relays: List<String>) { separateSets++; state.value = relays }
+}
+
+class FakeRelayModeStore(initial: Map<String, RelayMode> = emptyMap(), private val relayStore: FakeRelayStore? = null) : RelayModeStore {
+    var atomicWrites = 0
+    var modeOnlyWrites = 0
+    val state = MutableStateFlow(initial)
+    /** When set, storing throws. */
+    var failSet = false
+    override val modes: Flow<Map<String, RelayMode>> = state
+    override suspend fun setModes(modes: Map<String, RelayMode>) {
+        if (failSet) error("storage failed")
+        modeOnlyWrites++
+        state.value = modes
+    }
+    override suspend fun setListAndModes(relays: List<String>, modes: Map<String, RelayMode>) {
+        if (failSet) error("storage failed")
+        atomicWrites++
+        relayStore?.state?.value = relays
+        state.value = modes
+    }
 }
 
 class FakeTips(
@@ -698,6 +726,9 @@ class FakeUiSettings : UiSettingsStore {
     val powBitsState = MutableStateFlow(0)
     override val powBits: Flow<Int> = powBitsState
     override suspend fun setPowBits(bits: Int) { powBitsState.value = bits }
+    val gifModeState = MutableStateFlow(com.monostr.app.data.GifMode.AUTO)
+    override val gifMode: Flow<com.monostr.app.data.GifMode> = gifModeState
+    override suspend fun setGifMode(mode: com.monostr.app.data.GifMode) { gifModeState.value = mode }
     val powFilterState = MutableStateFlow(0)
     override val powFilterBits: Flow<Int> = powFilterState
     override suspend fun setPowFilterBits(bits: Int) { powFilterState.value = bits }

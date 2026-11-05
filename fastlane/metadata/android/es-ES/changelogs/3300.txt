@@ -1,0 +1,4 @@
+- Los GIF se reproducen unos 5 segundos en las notas y paran; la insignia los repite, y un ajuste ofrece Auto, Al tocar o No
+- Elige lectura, escritura o ambas por relé; las marcas se conservan al adoptar o publicar tu lista
+- Las direcciones de relé quedan en una línea
+- Correcciones

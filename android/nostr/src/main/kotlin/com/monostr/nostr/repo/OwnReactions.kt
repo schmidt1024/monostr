@@ -3,6 +3,8 @@ package com.monostr.nostr.repo
 import rust.nostr.sdk.EventId
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import com.monostr.nostr.NostrEngine
 import com.monostr.nostr.StartupGate
 import com.monostr.nostr.SyncMarks
@@ -107,7 +109,8 @@ class NostrOwnReactions(
             val filters = fresh.chunked(CHUNK).map { chunk -> ownFilter().events(chunk.map { EventId.parse(it) }) }
             for (f in filters) merge(read(f))
             gate.await()
-            for (f in filters) {
+            for (f in filters) coroutineScope {
+                if (engine.hasWriteOnly) launch { quietly { if (engine.fetchWriteOnly(f).isNotEmpty()) merge(read(f)) } }
                 quietly { engine.fetch(f) }
                 merge(read(f))
             }
@@ -128,12 +131,28 @@ class NostrOwnReactions(
         val since = key?.takeIf { local.stored > 0 }?.let { marks?.get(it) }?.let { (minOf(it, now()) - SKEW_SECONDS).coerceAtLeast(0) }
         val asked = if (since != null) filter.since(Timestamp.fromSecs(since.toULong())) else filter
         val startedAt = now()
-        var up = false
-        val replied = legReplied(fetchTimeout, { up }) {
-            engine.fetch(asked, fetchTimeout).also { up = engine.connectedNormalRelayUrls().isNotEmpty() }
+        val writeOnly = relays - engine.readRelayUrls().toSet()
+        coroutineScope {
+            val other = async { writeOnlyReplied(asked, writeOnly) }
+            var up = false
+            val replied = legReplied(fetchTimeout, { up }) {
+                engine.fetch(asked, fetchTimeout).also { up = engine.connectedReadRelayUrls().isNotEmpty() }
+            }
+            // a slow write-only relay does not hold back what the read relays gave
+            if (writeOnly.isNotEmpty()) merge(read(asked))
+            // the key covers the write-only relays too: without their reply the time since stays unasked of them
+            if (other.await() && replied && key != null) marks?.put(key, startedAt)
         }
-        if (replied && key != null) marks?.put(key, startedAt)
         merge(read(asked))
+    }
+
+    /** Asks [writeOnly], the user's write-only relays; true when there are none or one of them replied. */
+    private suspend fun writeOnlyReplied(filter: Filter, writeOnly: List<String>): Boolean {
+        if (writeOnly.isEmpty()) return true
+        var up = false
+        return legReplied(fetchTimeout, { up }) {
+            engine.fetchWriteOnly(filter, fetchTimeout).also { up = engine.connectedNormalRelayUrls().any { it in writeOnly } }
+        }
     }
 
     /** What one database read found; [stored] counts the events before the NIP-09 filter. */

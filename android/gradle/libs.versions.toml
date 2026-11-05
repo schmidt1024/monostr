@@ -16,6 +16,7 @@ media3 = "1.11.1"
 [libraries]
 datastore-preferences = { module = "androidx.datastore:datastore-preferences", version = "1.2.0" }
 coil-compose = { module = "io.coil-kt.coil3:coil-compose", version = "3.4.0" }
+coil-gif = { module = "io.coil-kt.coil3:coil-gif", version = "3.4.0" }
 coil-network-okhttp = { module = "io.coil-kt.coil3:coil-network-okhttp", version = "3.4.0" }
 lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version = "2.10.0" }
 lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version = "2.10.0" }

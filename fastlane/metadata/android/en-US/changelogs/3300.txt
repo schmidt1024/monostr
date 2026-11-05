@@ -1,0 +1,4 @@
+- GIFs play in notes for about 5 seconds, then stop; the badge plays them again, and a setting offers Auto, On tap or Off
+- Choose read, write or both per relay; markers stay when you adopt or publish your list
+- Relay addresses stay on one line
+- Fixes

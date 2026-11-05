@@ -308,6 +308,11 @@
     <string name="settings_relays">Relais</string>
     <string name="settings_relay_invalid">URL de relais invalide (ws:// ou wss:// attendu)</string>
     <string name="settings_relay_keep_one">Au moins un relais doit rester</string>
+    <string name="relay_mode_both">Lecture et écriture</string>
+    <string name="relay_mode_read">Lecture seule</string>
+    <string name="relay_mode_write">Écriture seule</string>
+    <string name="settings_relay_keep_read_write">Au moins un relais doit lire et un écrire</string>
+    <string name="relay_mode_description">%1$s, %2$s. Touchez pour changer</string>
     <string name="settings_relay_save_failed">Impossible d\'enregistrer les relais</string>
     <string name="settings_messages">Messages</string>
     <string name="settings_dm_relays">Relais de messages (NIP-17)</string>
@@ -326,6 +331,13 @@
     <string name="settings_media_blur_hint">Les notes marquées sensibles (content warning ou #nsfw) affichent les images floutées jusqu\'à ce que vous touchiez.</string>
     <string name="settings_media_on_tap">Charger les images seulement au toucher</string>
     <string name="settings_media_on_tap_hint">Économise des données ; les vidéos ne se chargent jamais seules.</string>
+    <string name="settings_gif">GIF</string>
+    <string name="settings_gif_hint">Visibles, ils jouent quelques secondes puis s\'arrêtent ; le badge les relance. Désactivé affiche la première image.</string>
+    <string name="settings_gif_auto">Auto</string>
+    <string name="settings_gif_tap">Au toucher</string>
+    <string name="settings_gif_off">Non</string>
+    <string name="media_gif_play">Lire le GIF</string>
+    <string name="media_gif_pause">Mettre le GIF en pause</string>
     <string name="settings_link_previews">Aperçus des liens</string>
     <string name="settings_link_previews_hint">Affiche le titre et l’image des pages liées. Ces sites et les serveurs de leurs images voient alors votre adresse IP.</string>
     <string name="link_preview_cd">Aperçu du lien : %1$s, %2$s</string>
@@ -382,6 +394,7 @@
     <string name="settings_publish_relays">Publier ces relais comme ma liste de relais (NIP-65)</string>
     <string name="settings_publish_relays_hint">Les autres applications et le watcher des pourboires vous cherchent sur les relais de cette liste. La publication remplace la liste d\'une autre application.</string>
     <string name="settings_adopt_relays_hint">Les relais de cette application sont remplacés par la liste de relais publiée pour votre compte. Une liste venant d\'une autre application peut contenir des relais qui n\'existent plus.</string>
+    <string name="relay_adopt_markers_ignored">Relais repris du profil. Cette liste n\'a aucun relais pour lire ou aucun pour écrire, donc tous les relais lisent et écrivent maintenant</string>
     <string name="settings_reset_relays">Rétablir les relais par défaut</string>
     <string name="settings_reset_relays_hint">Les relais de cette application sont remplacés par les relais par défaut de monostr.</string>
     <string name="settings_msg_relay_list_published">Liste de relais publiée</string>

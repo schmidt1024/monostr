@@ -1,5 +1,6 @@
 package com.monostr.app.data.linkpreview
 
+import coil3.serviceLoaderEnabled
 import android.content.Context
 import coil3.ImageLoader
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
@@ -37,7 +38,7 @@ class PreviewImages(val loader: ImageLoader) {
                 http.newBuilder().cookieJar(CookieJar.NO_COOKIES).addNetworkInterceptor(AddressCheckInterceptor()).build()
             }
             return PreviewImages(
-                ImageLoader.Builder(context).components { add(OkHttpNetworkFetcherFactory(callFactory = { client })) }.build(),
+                ImageLoader.Builder(context).serviceLoaderEnabled(false).components { add(OkHttpNetworkFetcherFactory(callFactory = { client })) }.build(),
             )
         }
     }

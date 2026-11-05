@@ -2,12 +2,14 @@ package com.monostr.app.ui
 
 import com.monostr.app.R
 import com.monostr.app.ui.common.uiText
+import com.monostr.app.ui.settings.relayShownUrl
 import com.monostr.app.ui.settings.RelayListDiff
 import com.monostr.app.ui.settings.RelayStatusLine
 import com.monostr.app.ui.settings.relayListDiff
 import com.monostr.app.ui.settings.relayStatusLine
 import com.monostr.nostr.RelayList
 import com.monostr.nostr.model.RelayInfo
+import com.monostr.nostr.model.RelayMode
 import com.monostr.nostr.model.RelayState
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
@@ -59,5 +61,31 @@ class RelayHealthTest {
     @Test
     fun `no published list found`() {
         assertEquals(RelayListDiff(unpublished = 0, missing = 0, noneFound = true), relayListDiff(listOf("wss://a"), null))
+    }
+
+    private val published = RelayList(read = listOf("wss://a", "wss://b"), write = listOf("wss://a"))
+
+    @Test
+    fun `a chosen mode that differs from the marker counts as unpublished`() {
+        // b is marked read only in the published list, the user made it read and write
+        assertEquals(RelayListDiff(unpublished = 1, missing = 0), relayListDiff(listOf("wss://a", "wss://b"), published, mapOf("wss://b" to RelayMode.BOTH)))
+    }
+
+    @Test
+    fun `a marker with no chosen mode does not count`() {
+        assertNull(relayListDiff(listOf("wss://a", "wss://b"), published, emptyMap()))
+    }
+
+    @Test
+    fun `a chosen mode equal to the marker does not count`() {
+        assertNull(relayListDiff(listOf("wss://a", "wss://b/"), published, mapOf("wss://b" to RelayMode.READ, "wss://a/" to RelayMode.BOTH)))
+    }
+
+    @Test
+    fun `a relay address reads without wss, an unencrypted one keeps its scheme`() {
+        assertEquals("relay.example.com", relayShownUrl("wss://relay.example.com"))
+        assertEquals("relay.example.com/inbox", relayShownUrl("wss://relay.example.com/inbox/"))
+        assertEquals("relay.example.com", relayShownUrl("WSS://relay.example.com"))
+        assertEquals("ws://10.0.0.2:7777", relayShownUrl("ws://10.0.0.2:7777"))
     }
 }

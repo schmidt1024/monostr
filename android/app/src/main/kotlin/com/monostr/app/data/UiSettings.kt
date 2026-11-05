@@ -45,6 +45,8 @@ interface UiSettingsStore {
     val blurSensitive: Flow<Boolean>
     /** Spec 3.2: never load pictures until tapped; on by default (0.18), a stored choice is kept. */
     val mediaOnTap: Flow<Boolean>
+    val gifMode: Flow<GifMode>
+    suspend fun setGifMode(mode: GifMode)
     /** Spec link previews 3.5: cards for web links in notes; off by default, the linked site sees the IP. */
     val linkPreviews: Flow<Boolean>
     /** Spec 5.2: attach an author's write relays while their profile is open. */
@@ -83,6 +85,8 @@ class PrefsUiSettingsStore(private val store: DataStore<Preferences>) : UiSettin
     override val accent: Flow<Accent> = data.map { p -> p[ACCENT]?.let { v -> Accent.entries.firstOrNull { it.name == v } ?: if (v in Accent.LEGACY_HUES) Accent.CUSTOM else null } ?: Accent.DEFAULT }
     override val blurSensitive: Flow<Boolean> = data.map { it[BLUR_SENSITIVE] ?: true }
     override val mediaOnTap: Flow<Boolean> = data.map { it[MEDIA_ON_TAP] ?: true }
+    override val gifMode: Flow<GifMode> = data.map { p -> GifMode.entries.firstOrNull { it.name == p[GIF_MODE] } ?: GifMode.AUTO }
+    override suspend fun setGifMode(mode: GifMode) { store.edit { it[GIF_MODE] = mode.name } }
     override val linkPreviews: Flow<Boolean> = data.map { it[LINK_PREVIEWS] ?: false }
     override val authorRelays: Flow<Boolean> = data.map { it[AUTHOR_RELAYS] ?: true }
     override val mediaServer: Flow<String> = data.map { it[MEDIA_SERVER]?.takeIf { v -> v.isNotBlank() } ?: MediaServer.DEFAULT }
@@ -117,11 +121,15 @@ class PrefsUiSettingsStore(private val store: DataStore<Preferences>) : UiSettin
         val POW_FILTER_BITS = intPreferencesKey("ui.pow_filter_bits")
         val BLUR_SENSITIVE = booleanPreferencesKey("ui.blur_sensitive")
         val MEDIA_ON_TAP = booleanPreferencesKey("ui.media_on_tap")
+        val GIF_MODE = stringPreferencesKey("ui.gif_mode")
         val LINK_PREVIEWS = booleanPreferencesKey("ui.link_previews")
         val AUTHOR_RELAYS = booleanPreferencesKey("ui.author_relays")
         val MEDIA_SERVER = stringPreferencesKey("ui.media_server")
     }
 }
+
+/** How GIFs in notes play (backlog 66): [AUTO] a few seconds when in view, [ON_TAP] on the badge, [OFF] the first frame only. */
+enum class GifMode { AUTO, ON_TAP, OFF }
 
 /** The proof-of-work choices of the settings: off and three difficulties (NIP-13). */
 val POW_CHOICES = listOf(0, 8, 16, 20)

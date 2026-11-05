@@ -1,5 +1,6 @@
 package com.monostr.app.ui.media
 
+import com.monostr.app.data.GifMode
 import android.Manifest
 import android.content.Context
 import android.graphics.BitmapFactory
@@ -280,8 +281,10 @@ private fun ZoomableImage(m: NoteMedia, onDismiss: () -> Unit, onLongPress: () -
     var offset by remember(m.url) { mutableStateOf(Offset.Zero) }
     val dismissPx = with(LocalDensity.current) { 120.dp.toPx() }
     var dragY by remember { mutableFloatStateOf(0f) }
+    // opened on purpose: a GIF loops here, unless GIFs are off
+    val animate = GifPlayback.isGif(m.url, m.mime) && LocalMediaSettings.current.gifMode != GifMode.OFF
     AsyncImage(
-        model = m.url, contentDescription = m.alt, contentScale = ContentScale.Fit,
+        model = if (animate) rememberGifRequest(m.url) else m.url, contentDescription = m.alt, contentScale = ContentScale.Fit,
         modifier = Modifier
             .fillMaxSize()
             .pointerInput(m.url) {

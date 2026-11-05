@@ -164,7 +164,8 @@ class NostrEventLocator(
      * budget; lease wait and fetches share one deadline of [timeout]. Every lease is given back in `finally`.
      */
     private suspend fun lookup(open: Map<String, Wanted>, asked: Asked) {
-        val hints = open.mapValues { (_, w) -> w.relays.mapNotNull(::normalise).filter(relayFilter).distinct().take(perId) }
+        // a relay the user only writes to is not in the plan: the lease would leave it out, and an id could then never count as searched
+        val hints = open.mapValues { (_, w) -> engine.withoutWriteOnly(w.relays.mapNotNull(::normalise)).filter(relayFilter).distinct().take(perId) }
         // authors only for ids whose hints leave room (at most [perId] relays per id), at most three per id
         val authors = open.mapValues { (id, w) ->
             if (hints.getValue(id).size >= perId) emptyList() else w.authors.map { it.lowercase() }.filter { HEX.matches(it) }.distinct().take(MAX_AUTHORS)

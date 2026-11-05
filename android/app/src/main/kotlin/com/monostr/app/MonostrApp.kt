@@ -1,5 +1,10 @@
 package com.monostr.app
 
+import coil3.serviceLoaderEnabled
+import coil3.network.okhttp.OkHttpNetworkFetcherFactory
+import coil3.SingletonImageLoader
+import coil3.PlatformContext
+import coil3.ImageLoader
 import android.app.Application
 import android.os.Process
 import android.os.SystemClock
@@ -8,7 +13,14 @@ import com.monostr.nostr.PerfTrace
 import dagger.hilt.android.HiltAndroidApp
 
 @HiltAndroidApp
-class MonostrApp : Application() {
+class MonostrApp : Application(), SingletonImageLoader.Factory {
+    /**
+     * No service loader: coil-gif would register itself and every avatar, banner and thumbnail would animate without end.
+     * Only a note's GIF cell and the viewer ask for animation, per request (see GifImage).
+     */
+    override fun newImageLoader(context: PlatformContext): ImageLoader =
+        ImageLoader.Builder(context).serviceLoaderEnabled(false).components { add(OkHttpNetworkFetcherFactory()) }.build()
+
     override fun onCreate() {
         super.onCreate()
         if (BuildConfig.PERF) {

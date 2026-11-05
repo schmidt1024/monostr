@@ -177,7 +177,11 @@ class NostrFeedTabsRepository(
 
     /** Reads the relay event; a newer one in a known format replaces the local copy (spec §3.3). Silent: never asks the signer. */
     suspend fun reconcile() {
-        fetchWide(engine, filter(), defaultRelays, fetchTimeout)
+        fetchWideOwn(engine, filter(), defaultRelays, fetchTimeout)
+        adoptStored()
+    }
+
+    private suspend fun adoptStored() {
         val event = newest(engine.query(filter())) ?: return
         val createdAt = event.createdAt().asSecs().toLong()
         val decrypted = privateTags.decryptText(event.content(), interactive = false)
@@ -243,7 +247,24 @@ class NostrFeedTabsRepository(
         // the change waits for the start reconcile; it must not wait for the feed's first page on top of it
         if (pending != null && !pending.isCompleted) gate.open("write")
         pending?.join()
+        if (!mayWrite()) return SaveResult.Failed
         return changeLocked(f)
+    }
+
+    /**
+     * The tabs event has one fixed address, so a write replaces whatever is there. With a write-only relay that relay is
+     * asked before every write and must have answered: a newer version may sit there and nowhere else. With no version
+     * known at all it takes a complete answer ([fetchOwn]).
+     */
+    private suspend fun mayWrite(): Boolean {
+        if (!engine.hasWriteOnly) return true
+        val answer = engine.fetchOwn(filter(), fetchTimeout)
+        if (!answer.writeOnlyAnswered) return false
+        if (engine.query(filter()).isNotEmpty()) {
+            adoptStored()
+            return true
+        }
+        return mutex.withLock { loadLocalLocked().createdAt } > 0 || answer.completed
     }
 
     private suspend fun changeLocked(f: (CachedTabs) -> Pair<List<String>, List<String>>?): SaveResult = mutex.withLock {

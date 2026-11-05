@@ -63,7 +63,7 @@ class NostrFollowListsRepository(
         val before = engine.query(named).mapTo(HashSet()) { it.id().toHex() }
         var filter = named.limit(pageSize.toULong())
         if (until != null) filter = filter.until(Timestamp.fromSecs(until.toULong()))
-        val relays = (countRelays + engine.relayUrls()).map { it.trim().trimEnd('/') }.distinct()
+        val relays = (engine.withoutWriteOnly(countRelays) + engine.readRelayUrls()).map { it.trim().trimEnd('/') }.distinct()
         val events = try {
             // a page is there once [pageSize] lists arrived (spec perf: < 3 s); waiting for the slowest relay took 9 s on the Pixel
             engine.fetchFrom(relays, filter, timeout, exit = Exit.AtLeast(pageSize))

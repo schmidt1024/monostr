@@ -1,5 +1,7 @@
 package com.monostr.nostr.repo
 
+import com.monostr.nostr.model.RelayEntry
+import com.monostr.nostr.model.RelayMode
 import com.monostr.nostr.LocalSigner
 import com.monostr.nostr.NostrEngine
 import com.monostr.nostr.awaitTrue
@@ -229,7 +231,7 @@ class RepositoriesTest {
     @Test
     fun `relay list publishes kind 10002 with one r tag per relay`() = runTest {
         val e = engine()
-        val result = NostrPublishRepository(e).relayList(listOf("wss://a.example", "wss://b.example/"))
+        val result = NostrPublishRepository(e).relayList(listOf(RelayEntry("wss://a.example", RelayMode.BOTH), RelayEntry("wss://b.example/", RelayMode.BOTH)))
         assertEquals(10002, result.kind)
         val tags = e.eventById(result.eventId)!!.tags().toVec().map { it.asVec() }
         assertEquals(listOf(listOf("r", "wss://a.example"), listOf("r", "wss://b.example")), tags)

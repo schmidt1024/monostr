@@ -132,12 +132,13 @@ class NostrQuoteRepository(
         val hinted = hints.filter(relayFilter).take(MAX_HINTS)
         // a full budget leaves the hints out: the own relays and the locator still look (final review M2)
         val held = if (foreign != null) foreign.lease(hinted) else engine.attachTemporary(hinted)
-        if (foreign != null && held.size < hinted.size) short()
+        // a hint the user only writes to is no slot the lease came short of
+        if (foreign != null && held.size < engine.withoutWriteOnly(hinted).size) short()
         try {
             if (held.isNotEmpty()) {
                 withTimeoutOrNull(CONNECT_WAIT_MS) { while (!engine.connectedRelayUrls().containsAll(held)) delay(50) }
             }
-            val relays = (held + engine.relayUrls()).distinct()
+            val relays = (held + engine.readRelayUrls()).distinct()
             if (relays.isNotEmpty()) {
                 quietly { engine.fetchFrom(relays, Filter().kind(Kind(1u)).id(EventId.parse(id)).limit(1u), timeout, attach = false, exit = Exit.AllIds(setOf(id))) }
             }

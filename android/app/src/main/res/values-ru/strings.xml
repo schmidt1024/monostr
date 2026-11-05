@@ -315,6 +315,11 @@
     <string name="settings_relays">Релеи</string>
     <string name="settings_relay_invalid">Неверный URL релея (ожидается ws:// или wss://)</string>
     <string name="settings_relay_keep_one">Должен остаться хотя бы один релей</string>
+    <string name="relay_mode_both">Чтение и запись</string>
+    <string name="relay_mode_read">Только чтение</string>
+    <string name="relay_mode_write">Только запись</string>
+    <string name="settings_relay_keep_read_write">Хотя бы один релей должен читать и один писать</string>
+    <string name="relay_mode_description">%1$s, %2$s. Нажмите, чтобы изменить</string>
     <string name="settings_relay_save_failed">Не удалось сохранить релеи</string>
     <string name="settings_messages">Сообщения</string>
     <string name="settings_dm_relays">Релеи сообщений (NIP-17)</string>
@@ -333,6 +338,13 @@
     <string name="settings_media_blur_hint">Заметки с пометкой (content warning или #nsfw) показывают размытые изображения до нажатия.</string>
     <string name="settings_media_on_tap">Загружать изображения только по нажатию</string>
     <string name="settings_media_on_tap_hint">Экономит трафик; видео никогда не загружается само.</string>
+    <string name="settings_gif">GIF</string>
+    <string name="settings_gif_hint">В поле зрения они играют несколько секунд и останавливаются; значок запускает их снова. «Выкл» показывает первый кадр.</string>
+    <string name="settings_gif_auto">Авто</string>
+    <string name="settings_gif_tap">По нажатию</string>
+    <string name="settings_gif_off">Выкл</string>
+    <string name="media_gif_play">Воспроизвести GIF</string>
+    <string name="media_gif_pause">Приостановить GIF</string>
     <string name="settings_link_previews">Превью ссылок</string>
     <string name="settings_link_previews_hint">Показывает заголовок и картинку страниц по ссылкам. Эти сайты и серверы их картинок увидят ваш IP-адрес.</string>
     <string name="link_preview_cd">Превью ссылки: %1$s, %2$s</string>
@@ -389,6 +401,7 @@
     <string name="settings_publish_relays">Опубликовать эти релеи как мой список релеев (NIP-65)</string>
     <string name="settings_publish_relays_hint">Другие приложения и watcher чаевых ищут вас на релеях из этого списка. Публикация заменяет список из другого приложения.</string>
     <string name="settings_adopt_relays_hint">Релеи этого приложения будут заменены списком релеев, опубликованным для вашего аккаунта. Список из другого приложения может содержать релеи, которых больше нет.</string>
+    <string name="relay_adopt_markers_ignored">Релеи взяты из профиля. В этом списке нет релея для чтения или для записи, поэтому теперь все релеи читают и пишут</string>
     <string name="settings_reset_relays">Восстановить релеи по умолчанию</string>
     <string name="settings_reset_relays_hint">Релеи этого приложения будут заменены релеями monostr по умолчанию.</string>
     <string name="settings_msg_relay_list_published">Список релеев опубликован</string>

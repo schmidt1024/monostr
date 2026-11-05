@@ -105,7 +105,7 @@ dependencies {
     implementation(libs.activity.compose); implementation(libs.navigation.compose); implementation(libs.lifecycle.runtime.compose); implementation(libs.lifecycle.viewmodel.compose)
     implementation(libs.hilt.android); ksp(libs.hilt.compiler); implementation(libs.hilt.navigation.compose)
     implementation(libs.datastore.preferences)
-    implementation(libs.coil.compose); implementation(libs.coil.network.okhttp)
+    implementation(libs.coil.compose); implementation(libs.coil.network.okhttp); implementation(libs.coil.gif)
     implementation(libs.kotlinx.coroutines.core); implementation(libs.kotlinx.serialization.json)
     implementation(libs.okhttp)
     implementation(libs.commonmark); implementation(libs.commonmark.gfm.tables); implementation(libs.commonmark.gfm.strikethrough)

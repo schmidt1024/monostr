@@ -9,6 +9,9 @@ import com.monostr.nostr.model.HashtagTags
 import com.monostr.nostr.model.MentionTags
 import com.monostr.nostr.model.Note
 import com.monostr.nostr.model.NoteAttachment
+import com.monostr.nostr.model.RelayEntry
+import com.monostr.nostr.model.RelayMode
+import com.monostr.nostr.model.RelayModes
 import rust.nostr.sdk.EventBuilder
 import rust.nostr.sdk.EventId
 import rust.nostr.sdk.Kind
@@ -49,14 +52,14 @@ interface PublishRepository {
     suspend fun profile(json: String): PublishResult
     /** Sends the stored event [eventId] again; never signs a new event. */
     suspend fun resend(eventId: String): PublishResult
-    /** Publishes the user's NIP-65 relay list (kind 10002), each relay as read+write. */
-    suspend fun relayList(relays: List<String>): PublishResult
+    /** Publishes the user's NIP-65 relay list (kind 10002); a one-way relay carries a read or write marker. */
+    suspend fun relayList(entries: List<RelayEntry>): PublishResult
     /**
      * Replaces the user's NIP-65 relay list (kind 10002) by [relays] on the user's own request. Unlike
      * [relayList] it is kept locally only when a relay accepted it: a list nobody received must not
      * pass for the published one.
      */
-    suspend fun publishRelayList(relays: List<String>): PublishResult
+    suspend fun publishRelayList(entries: List<RelayEntry>): PublishResult
     /** Publishes the user's NIP-17 DM inbox relay list (kind 10050). */
     suspend fun dmRelayList(relays: List<String>): PublishResult
     /**
@@ -173,10 +176,10 @@ class NostrPublishRepository(
     override suspend fun resend(eventId: String): PublishResult = engine.resend(eventId)
 
     // signAndSend (store first) on purpose: the onboarding / offline-resend flow of Plan 5 relies on it
-    override suspend fun relayList(relays: List<String>): PublishResult = engine.signAndSend(relayListBuilder(relays))
+    override suspend fun relayList(entries: List<RelayEntry>): PublishResult = engine.signAndSend(relayListBuilder(entries))
 
-    override suspend fun publishRelayList(relays: List<String>): PublishResult {
-        val own = engine.signAndPublish(relayListBuilder(relays))
+    override suspend fun publishRelayList(entries: List<RelayEntry>): PublishResult {
+        val own = engine.signAndPublish(relayListBuilder(entries))
         val index = indexRelays.map { it.trim().trimEnd('/') } - engine.relayUrls().toSet()
         if (!own.sentToAny || index.isEmpty()) return own
         // best effort: the list counts as published once one of the user's relays has it
@@ -184,11 +187,10 @@ class NostrPublishRepository(
         return PublishResult(own.eventId, own.kind, (own.successRelays + more.successRelays).distinct(), own.failedRelays + more.failedRelays)
     }
 
-    override suspend fun initialRelayList(relays: List<String>): PublishResult = engine.signAndPublish(relayListBuilder(relays))
+    override suspend fun initialRelayList(relays: List<String>): PublishResult = engine.signAndPublish(relayListBuilder(relays.map { RelayEntry(it, RelayMode.BOTH) }))
 
-    /** `r` tags without a marker: every relay is for reading and writing. */
-    private fun relayListBuilder(relays: List<String>): EventBuilder =
-        EventBuilder(Kind(10002u), "").tags(relays.map { Tag.parse(listOf("r", it.trim().trimEnd('/'))) })
+    private fun relayListBuilder(entries: List<RelayEntry>): EventBuilder =
+        EventBuilder(Kind(10002u), "").tags(entries.map { Tag.parse(RelayModes.tag(it)) })
 
     // signAndPublish: stored only after a relay OK, so a refused list never gets adopted by DmSync (spec 11)
     override suspend fun dmRelayList(relays: List<String>): PublishResult =

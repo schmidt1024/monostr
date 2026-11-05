@@ -51,13 +51,13 @@ class ForeignRelays(
     @Volatile private var view: Set<String> = emptySet()
 
     /**
-     * Takes a reference on those of [urls] that fit the budget (relays already held or lingering first, then new ones in order); waits up to [wait] for a free slot when none fits. Normal-set relays pass through uncounted. Returns the URLs the caller now holds (normalised).
+     * Takes a reference on those of [urls] that fit the budget (relays already held or lingering first, then new ones in order); waits up to [wait] for a free slot when none fits. Normal-set relays pass through uncounted, except the ones the user only writes to: they hear nothing about other people (spec 2026-11-05). A lease serves lookups by hint, indexer or author outbox, and no read-before-write goes through one: the user's own events reach those relays through [NostrEngine.fetchWriteOnly]. Returns the URLs the caller now holds (normalised).
      *
      * "None fits" means the result would be empty (spec §4.4: wait, or take only the attached ones that fit). A lease
      * cancelled at any point keeps nothing: whatever it already took is released before the cancellation propagates.
      */
     suspend fun lease(urls: List<String>, wait: Duration = Duration.ZERO): List<String> {
-        val wanted = urls.mapNotNull(::normalise).distinct()
+        val wanted = engine.withoutWriteOnly(urls.mapNotNull(::normalise)).distinct()
         if (wanted.isEmpty()) return emptyList()
         val normal = engine.relayUrls().toSet()
         val through = wanted.filter { it in normal }.toMutableList()

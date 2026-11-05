@@ -65,9 +65,9 @@ interface CountsRepository {
 class NostrCountsRepository(
     private val engine: NostrEngine,
     private val scope: CoroutineScope,
-    private val relays: suspend () -> List<String> = { engine.connectedNormalRelayUrls().toList() },
+    private val relays: suspend () -> List<String> = { engine.connectedReadRelayUrls().toList() },
     /**
-     * The session's normal relay set, connected or not (the app passes `engine.relayUrls()`): a batch asked without one
+     * The session's relays that read, connected or not (the app passes `engine.readRelayUrls()`): a batch asked without one
      * of them is stamped short and filled in when it connects. The default (= [relays]) never misses one.
      */
     private val sessionRelays: suspend () -> List<String> = relays,

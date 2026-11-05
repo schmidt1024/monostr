@@ -12,7 +12,6 @@ import com.monostr.app.data.FileOwnListsCache
 import com.monostr.app.data.ListSnapshots
 import com.monostr.app.data.SessionOwnListsCache
 import com.monostr.app.data.accountDir
-import com.monostr.tips.RelayHosts
 import com.monostr.app.data.linkpreview.LinkPreviews
 import com.monostr.nostr.repo.NostrOwnReactions
 import com.monostr.nostr.repo.OwnReactions
@@ -32,6 +31,7 @@ import com.monostr.app.dm.DmSync
 import com.monostr.app.data.KeystoreSecretStore
 import com.monostr.app.data.MediaServer
 import com.monostr.app.data.PendingTipStore
+import com.monostr.app.data.RelayModeStore
 import com.monostr.app.data.RelayStore
 import com.monostr.app.data.SearchRelayStore
 import com.monostr.app.data.SecretStore
@@ -42,7 +42,6 @@ import com.monostr.app.data.TipSettingsStore
 import com.monostr.app.data.UiSettingsStore
 import com.monostr.app.data.WatcherClients
 import com.monostr.app.data.WatcherGateway
-import com.monostr.app.data.isValidRelayUrl
 import com.monostr.app.media.BlossomClient
 import com.monostr.app.media.BlossomMediaUploader
 import com.monostr.app.media.ImagePreparer
@@ -74,6 +73,8 @@ import com.monostr.nostr.model.ProfileJson
 import com.monostr.nostr.nip55.AmberSigner
 import com.monostr.nostr.nip55.Nip55
 import com.monostr.nostr.nip55.SignerBridge
+import com.monostr.nostr.model.RelayEntry
+import com.monostr.nostr.model.RelayMode
 import com.monostr.nostr.repo.AuthorRelaysRepository
 import com.monostr.nostr.repo.BookmarksRepository
 import com.monostr.nostr.repo.CountLimiter
@@ -286,6 +287,7 @@ class NostrSession @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val sessions: SessionStore,
     private val relayStore: RelayStore,
+    relayModeStore: RelayModeStore,
     private val secrets: SecretStore,
     val bridge: SignerBridge,
     private val http: OkHttpClient,
@@ -302,6 +304,9 @@ class NostrSession @Inject constructor(
     private val _state = MutableStateFlow<SessionState>(SessionState.Loading)
     val state: StateFlow<SessionState> = _state.asStateFlow()
     private val mutex = Mutex()
+    private val sessionRelays = SessionRelays(relayStore, relayModeStore, mutex) {
+        (_state.value as? SessionState.Active)?.ready?.let { ReadyRelays(it) }
+    }
 
     /**
      * Spec perf 3.7: the own lists' summary per account (private members decrypted). Below `noBackupFilesDir`
@@ -525,18 +530,17 @@ class NostrSession @Inject constructor(
         ready.locator?.forget()
     }
 
-    /** Applies a new relay list to the running engine: removes dropped relays, adds new ones, reconnects. */
-    suspend fun applyRelays(relays: List<String>) = mutex.withLock {
-        relayStore.set(relays)
-        val ready = (_state.value as? SessionState.Active)?.ready ?: return@withLock
-        val current = ready.engine.relayUrls()
-        ready.engine.removeRelays(current - relays.toSet())
-        ready.engine.addRelays(relays - current.toSet())
-        ready.engine.connect()
-        // An inbox relay that just left the normal set left the pool with it (the DM run held it as a
-        // normal relay, not a temporary one); one that joined was promoted. Take the inbox list again.
-        ready.dms.restart()
-    }
+    /** Applies a new relay list to the running engine; false when it would leave no relay to read from or none to write to. See [SessionRelays.apply]. */
+    suspend fun applyRelays(relays: List<String>): Boolean = sessionRelays.apply(relays)
+
+    /** False when [RelayModes][com.monostr.nostr.model.RelayModes] refuses: at least one relay reads and one writes. See [SessionRelays.setRelayMode]. */
+    suspend fun setRelayMode(url: String, mode: RelayMode): Boolean = sessionRelays.setRelayMode(url, mode)
+
+    /** What "publish the relay list" sends. See [SessionRelays.entriesForPublish]. */
+    suspend fun relayEntriesForPublish(): List<RelayEntry> = sessionRelays.entriesForPublish()
+
+    /** Back to [relays] with every relay reading and writing, as one step. See [SessionRelays.resetTo]. */
+    suspend fun resetRelays(relays: List<String>): Boolean = sessionRelays.resetTo(relays)
 
     /**
      * Drops the persisted session and secret and moves to [SessionState.LoggedOut]. The Monero
@@ -606,7 +610,9 @@ class NostrSession @Inject constructor(
 
     private suspend fun start(signer: Signer): Ready {
         val dir = accountDir(context.filesDir, signer.pubkey).apply { mkdirs() }
+        val modes = sessionRelays.startupModes()
         val engine = NostrEngine.create(dir.absolutePath, signer, relayStore.relays.first())
+        engine.setRelayModes(modes)
         PerfTrace.mark("restore: engine created")
         try {
             engine.connect()
@@ -724,7 +730,7 @@ class NostrSession @Inject constructor(
                 tips = tips, notifications = notifications, notificationsStore = notificationsStore, search = NostrSearchRepository(engine, profileUpdates = profiles.updates, scope = engine.backgroundScope),
                 bookmarks = NostrBookmarksRepository(engine, signer, watch = engine.backgroundScope, gate = startupGate),
                 watchers = WatcherClients(http, signer),
-                counts = NostrCountsRepository(engine, engine.backgroundScope, sessionRelays = { engine.relayUrls() }, limiter = countLimiter),
+                counts = NostrCountsRepository(engine, engine.backgroundScope, sessionRelays = { engine.readRelayUrls() }, limiter = countLimiter),
                 authorRelays = authorRelays,
                 dms = dms, dmStore = dmStore, dmRelays = dmRelays,
                 quotes = NostrQuoteRepository(engine, locator = locator, foreign = foreign),
@@ -775,25 +781,12 @@ class NostrSession @Inject constructor(
      * Makes sure receipts can reach the app (spec 3.3): adds [extra] relays (the watcher's) to the
      * app's relay list. Nothing is published: the watcher always sends receipts to its own relays,
      * and a kind 10002 made up here once hid a user's notes that lived only on relays we did not
-     * know (bug 54). Publishing a list stays the user's step in Settings.
+     * know (bug 54). Publishing a list stays the user's step in Settings. See [SessionRelays.ensure].
      */
-    suspend fun ensureRelays(extra: List<String>) {
-        val current = relayStore.relays.first()
-        // the watcher names these relays, not the user: only public wss ones join the user's list
-        val wanted = (current + extra.map { it.trim().trimEnd('/') }.filter { isValidRelayUrl(it) && RelayHosts.isPublicWss(it) }).distinct()
-        if (wanted != current) applyRelays(wanted)
-    }
+    suspend fun ensureRelays(extra: List<String>) = sessionRelays.ensure(extra)
 
-    /** Replaces the relay list with the user's NIP-65 list; false when the user has none. */
-    suspend fun adoptRelayList(): Boolean {
-        val ready = (_state.value as? SessionState.Active)?.ready ?: return false
-        // backlog 36: the list as the relays have it now, not one stored before an edit in another app
-        val list = ready.engine.ownRelayList(fresh = true, extra = NostrProfileRepository.OWN_LIST_RELAYS) ?: return false
-        val relays = (list.read + list.write).distinct().filter { isValidRelayUrl(it) }
-        if (relays.isEmpty()) return false
-        applyRelays(relays)
-        return true
-    }
+    /** Replaces the relay list and its modes with the user's NIP-65 list. See [SessionRelays.adopt]. */
+    suspend fun adoptRelayList(): AdoptResult = sessionRelays.adopt()
 
     /** Re-runs get_public_key with the full permission set so Amber grants everything in one dialog (spec 6). Nothing in the session changes. */
     suspend fun renewAmberPermissions(): RenewResult {
@@ -802,4 +795,16 @@ class NostrSession @Inject constructor(
         val (ok, response) = bridge.request(Nip55.getPublicKey())
         return renewOutcome(ready.pubkey, ok, response)
     }
+}
+
+/** The running session as [SessionRelays] needs it. */
+private class ReadyRelays(private val ready: Ready) : RunningRelays {
+    override suspend fun relayUrls() = ready.engine.relayUrls()
+    override suspend fun removeRelays(urls: List<String>) = ready.engine.removeRelays(urls)
+    override suspend fun addRelays(urls: List<String>) = ready.engine.addRelays(urls)
+    override suspend fun applyRelayModes(modes: Map<String, RelayMode>) = ready.engine.applyRelayModes(modes)
+    override suspend fun connect() = ready.engine.connect()
+    override suspend fun restartDms() = ready.dms.restart()
+    override suspend fun ownRelayList(fresh: Boolean) =
+        if (fresh) ready.engine.ownRelayList(fresh = true, extra = NostrProfileRepository.OWN_LIST_RELAYS) else ready.engine.ownRelayList()
 }

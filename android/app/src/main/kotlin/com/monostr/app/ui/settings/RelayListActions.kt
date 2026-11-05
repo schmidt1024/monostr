@@ -16,10 +16,15 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import com.monostr.app.R
 import com.monostr.app.data.PrefsRelayStore
+import com.monostr.nostr.model.RelayMode
 
 /** True when [relays] are the app's default relays, and for the empty list the screen holds before the store answered. */
-fun isDefaultRelayList(relays: List<String>, defaults: List<String> = PrefsRelayStore.DEFAULT_RELAYS): Boolean =
-    relays.isEmpty() || relays.toSet() == defaults.toSet()
+fun isDefaultRelayList(
+    relays: List<String>,
+    defaults: List<String> = PrefsRelayStore.DEFAULT_RELAYS,
+    /** Stored read and write modes: the reset also clears them, so the default list with modes can still be reset. */
+    modes: Map<String, RelayMode> = emptyMap(),
+): Boolean = relays.isEmpty() || (relays.toSet() == defaults.toSet() && modes.isEmpty())
 
 /** What [RelayListActions] is asking the user to confirm. */
 private enum class RelayListAction { PUBLISH, ADOPT, RESET }

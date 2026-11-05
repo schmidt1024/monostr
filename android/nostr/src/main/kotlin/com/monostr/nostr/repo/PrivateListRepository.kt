@@ -143,9 +143,12 @@ class NostrPrivateList(
             // NostrEngine.fetch), must not be mistaken for "the user has no list": that would
             // make the very next toggle overwrite whatever is actually on the relays. Only a
             // fetch that some normal relay actually answered, even with nothing, proves there
-            // really is no list yet - a connected search relay never received the fetch.
+            // really is no list yet - a connected search relay never received the fetch. With a
+            // write-only relay the proof is a complete answer ([fetchOwn]): that relay holds the
+            // user's events, and its silence next to an empty read relay proves nothing.
+            var proven = true
             try {
-                engine.fetch(filter(), fetchTimeout)
+                if (engine.hasWriteOnly) proven = engine.fetchOwn(filter(), fetchTimeout).completed else engine.fetch(filter(), fetchTimeout)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -154,7 +157,7 @@ class NostrPrivateList(
             }
             fetched = true
             event = engine.query(filter()).firstOrNull()
-            if (event == null && engine.connectedNormalRelayUrls().isEmpty()) {
+            if (event == null && (!proven || engine.connectedNormalRelayUrls().isEmpty())) {
                 emit(ListState(ids = emptyList(), writable = false, loaded = false))
                 return Load.NOT_LOADED
             }
@@ -186,7 +189,7 @@ class NostrPrivateList(
         (watch ?: engine.backgroundScope).launch {
             gate.await()
             if (engine.relayUrls().isEmpty()) return@launch
-            quietly { engine.fetch(filter(), fetchTimeout) }
+            quietly { engine.fetchOwnEvents(filter(), fetchTimeout) }
             askedAt = System.nanoTime()
             val newest = try {
                 engine.query(filter()).firstOrNull()
@@ -376,14 +379,20 @@ class NostrPrivateList(
         val started = System.nanoTime()
         // A load that just fetched has the relays' copy already; a local-only load or an older snapshot needs the refresh.
         val recent = watching && askedAt != 0L && started - askedAt < ASK_AGAIN_NANOS
+        // A write-only relay is asked before every write, a just finished load and the live subscription say nothing about
+        // it; while it stays silent the write is refused (spec 2026-11-05 goal 5).
+        val oneWay = engine.hasWriteOnly
+        var answered = true
         if ((load == Load.ALREADY || load == Load.LOCAL) && !recent) {
-            quietly { engine.fetch(filter(), refreshTimeout) }
+            answered = engine.askOwnEvents(filter(), if (oneWay) fetchTimeout else refreshTimeout).writeOnlyAnswered
             askedAt = System.nanoTime()
+        } else if (oneWay) {
+            answered = engine.askWriteOnly(filter(), fetchTimeout).answered
         }
         class Out(val batch: List<Op>, val pub: List<List<String>>, val other: List<List<String>>, val priv: List<List<String>>, val ts: Long, val generation: Int)
         val out = mutex.withLock {
             if (op.result.isCompleted) return@withLock null
-            val failed = refreshLocked()
+            val failed = if (answered) refreshLocked() else ListOutcome.NotLoaded
             if (failed != null) {
                 pending.forEach { it.result.complete(failed) }
                 pending = emptyList()

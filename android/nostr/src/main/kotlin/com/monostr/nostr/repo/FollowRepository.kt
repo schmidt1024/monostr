@@ -151,7 +151,7 @@ class NostrFollowRepository(
      */
     private suspend fun fetchList(): OwnFetch {
         val own = engine.fetchOwn(filter(), fetchTimeout)
-        val fetch = if (own.found) own else OwnFetch(found = fromIndex(), completed = own.completed)
+        val fetch = if (own.found) own else OwnFetch(found = fromIndex(), completed = own.completed, writeOnlyAnswered = own.writeOnlyAnswered)
         if (fetch.found) feed.markContactsFetched(now())
         return fetch
     }
@@ -198,6 +198,8 @@ class NostrFollowRepository(
         if (targets.isEmpty()) return emptyList()
         val changed = mutex.withLock {
             val fetch = fetchList()
+            // the newest list may live only on a write-only relay: while it is silent nothing read here is a base
+            if (!fetch.writeOnlyAnswered) throw FollowError.NoList()
             val base = engine.query(filter()).firstOrNull()
             val fresh = fetch.found || feed.contactsFetchedAt?.let { now() - it < localMaxAgeSeconds } == true
             // a list we cannot prove current would replace the real one; no list at all is only safe after a completed fetch

@@ -66,7 +66,7 @@ interface ProfileRepository {
     /** Raw content of the newest stored kind 0 of [pubkey]; without one, one relay fetch bounded by [timeout]; null when none exists. */
     suspend fun rawMetadata(pubkey: String, timeout: Duration = Duration.ofSeconds(3)): String?
 
-    /** Spec 8 (10c backlog): the newest kind 0 right before a save; always one relay fetch bounded by [timeout], then the database (fallback). */
+    /** Spec 8 (10c backlog): the newest kind 0 right before a save; always one relay fetch bounded by [timeout], then the database (fallback). Throws [OwnDataNotAnswered] for the own [pubkey] while a write-only relay stays silent: no base for a save. */
     suspend fun freshMetadata(pubkey: String, timeout: Duration = Duration.ofSeconds(3)): String?
 
     /** Re-reads [pubkey] from the database into the cache, so [observe], [updates] and [get] show an own new kind 0 at once. */
@@ -155,8 +155,11 @@ class NostrProfileRepository(
         engine.query(filter).firstOrNull()?.let { return it.content() }
         // never for the own key: the session deletes pictures from the media server by what this returns, and an older
         // version from a fast relay would let the current one go
-        val exit = if (pubkey.equals(engine.pubkey, ignoreCase = true)) null else Exit.NewestPerAuthor(setOf(pubkey))
-        quietly { engine.fetch(filter, timeout, exit) }
+        if (pubkey.equals(engine.pubkey, ignoreCase = true)) {
+            quietly { engine.fetchOwnEvents(filter, timeout) }
+        } else {
+            quietly { engine.fetch(filter, timeout, Exit.NewestPerAuthor(setOf(pubkey))) }
+        }
         engine.query(filter).firstOrNull()?.let { return it.content() }
         fetchFromIndex(listOf(pubkey), timeout)
         return engine.query(filter).firstOrNull()?.content()
@@ -164,7 +167,11 @@ class NostrProfileRepository(
 
     override suspend fun freshMetadata(pubkey: String, timeout: Duration): String? {
         val filter = Filter().kind(Kind(0u)).author(PublicKey.parse(pubkey)).limit(1u)
-        quietly { engine.fetch(filter, timeout) }
+        if (pubkey.equals(engine.pubkey, ignoreCase = true)) {
+            if (!engine.askOwnEvents(filter, timeout).writeOnlyAnswered) throw OwnDataNotAnswered()
+        } else {
+            quietly { engine.fetch(filter, timeout) }
+        }
         engine.query(filter).firstOrNull()?.let { return it.content() }
         // nothing anywhere the user reads: the editor must not start empty when the profile exists elsewhere
         fetchFromIndex(listOf(pubkey), timeout)
@@ -234,6 +241,11 @@ class NostrProfileRepository(
      */
     private suspend fun refresh(batch: List<String>) {
         val before = cache.value.let { m -> batch.mapNotNull { pk -> m[pk]?.let { pk to it } }.toMap() }
+        // the user's own profile from the write-only relays: a filter of its own, and the batch does not wait for it
+        val me = engine.pubkey?.takeIf { engine.hasWriteOnly && it in batch }
+        if (me != null) engine.backgroundScope.launch {
+            quietly { if (engine.fetchWriteOnly(metadataFilter(listOf(me))).isNotEmpty()) publish(readLocal(listOf(me))) }
+        }
         coroutineScope {
             batch.chunked(AUTHOR_CHUNK).map { chunk -> async { quietly { engine.fetch(metadataFilter(chunk), exit = Exit.NewestPerAuthor(chunk.toSet())) } } }.awaitAll()
         }
@@ -287,11 +299,11 @@ class NostrProfileRepository(
     /**
      * Asks the index relays for the kind 0 of [pubkeys] (the ones the user's relays did not have);
      * what they send lands in the database. The relays are attached for the lookup only. An index
-     * relay that is one of the user's relays was asked already and is left out.
+     * relay that is one of the relays that read was asked already and is left out, one the user only writes to hears nothing.
      */
     private suspend fun fetchFromIndex(pubkeys: List<String>, timeout: Duration = indexTimeout) {
         if (pubkeys.isEmpty() || indexRelays.isEmpty()) return
-        val sources = indexRelays.map { it.trim().trimEnd('/') } - engine.relayUrls().toSet()
+        val sources = engine.withoutWriteOnly(indexRelays).map { it.trim().trimEnd('/') } - engine.readRelayUrls().toSet()
         if (sources.isEmpty()) return
         // exactly what this call took is released: the relay may be held by another lookup (relay lists, DM relays)
         val held = engine.attachTemporary(sources)

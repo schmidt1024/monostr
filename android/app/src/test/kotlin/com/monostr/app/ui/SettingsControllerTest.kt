@@ -4,6 +4,7 @@ import com.monostr.app.R
 import com.monostr.app.ui.common.uiText
 import com.monostr.app.ui.settings.DmInboxHints
 import com.monostr.app.ui.settings.DmRelayStoreAdapter
+import com.monostr.app.ui.settings.RelayListRefused
 import com.monostr.app.ui.settings.SettingsController
 import com.monostr.app.ui.settings.applyDmRelays
 import com.monostr.app.ui.settings.isDefaultRelayList
@@ -16,6 +17,8 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
+import com.monostr.nostr.model.RelayEntry
+import com.monostr.nostr.model.RelayMode
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
@@ -91,6 +94,8 @@ class SettingsControllerTest {
         assertTrue(isDefaultRelayList(emptyList(), defaults), "before the store answered there is nothing to reset")
         assertFalse(isDefaultRelayList(defaults + "wss://dead.example", defaults))
         assertFalse(isDefaultRelayList(listOf("wss://nos.lol"), defaults))
+        assertFalse(isDefaultRelayList(defaults, defaults, mapOf("wss://nos.lol" to RelayMode.READ)), "stored modes can be cleared")
+        assertTrue(isDefaultRelayList(defaults, defaults, emptyMap()))
     }
 
     @Test
@@ -132,8 +137,36 @@ class SettingsControllerTest {
     }
 
     @Test
+    fun `a list the session refuses stays as it was and says so`() = runTest {
+        val store = FakeRelayStore(listOf("wss://a.example", "wss://b.example"))
+        val c = SettingsController(store, { throw RelayListRefused() }, eager())
+        c.start(); advanceUntilIdle()
+        c.remove("wss://a.example"); advanceUntilIdle()
+        assertEquals(listOf("wss://a.example", "wss://b.example"), c.state.value.relays)
+        assertEquals(uiText(R.string.settings_relay_keep_read_write), c.state.value.error)
+    }
+
+    @Test
+    fun `replacing the whole list can go through a step of its own, with the same error handling`() = runTest {
+        val store = FakeRelayStore(listOf("wss://a.example"))
+        val plain = ArrayList<List<String>>()
+        val own = ArrayList<List<String>>()
+        val c = SettingsController(store, { plain += it }, eager())
+        c.start(); advanceUntilIdle()
+        c.replaceAll(listOf("wss://b.example/")) { own += it }; advanceUntilIdle()
+        assertEquals(listOf(listOf("wss://b.example")), own)
+        assertEquals(emptyList<List<String>>(), plain)
+
+        c.replaceAll(listOf("wss://b.example")) { error("storage failed") }; advanceUntilIdle()
+        assertEquals(uiText(R.string.settings_relay_save_failed), c.state.value.error)
+        assertEquals(listOf("wss://a.example"), c.state.value.relays)
+        c.replaceAll(listOf("wss://b.example")) { throw RelayListRefused() }; advanceUntilIdle()
+        assertEquals(uiText(R.string.settings_relay_keep_read_write), c.state.value.error)
+    }
+
+    @Test
     fun `publishing the relay list sends the app's relays and says what happened`() = runTest {
-        val relays = listOf("wss://relay.monostr.com", "wss://nos.lol")
+        val relays = listOf(RelayEntry("wss://relay.monostr.com", RelayMode.WRITE), RelayEntry("wss://nos.lol", RelayMode.BOTH))
         val publish = FakePublish()
         assertEquals(uiText(R.string.settings_msg_relay_list_published), publishRelayList({ relays }, { publish.publishRelayList(it) }))
         assertEquals(listOf("relaylist:2"), publish.calls)

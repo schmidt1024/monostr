@@ -5,6 +5,7 @@ import com.monostr.app.ui.common.UiText
 import com.monostr.app.ui.common.uiText
 import com.monostr.app.ui.common.userMessage
 import com.monostr.nostr.PublishResult
+import com.monostr.nostr.model.RelayEntry
 import kotlinx.coroutines.CancellationException
 
 /**
@@ -13,9 +14,9 @@ import kotlinx.coroutines.CancellationException
  * itself only creates one when none exists, so a list left behind by another client stays until
  * the user replaces it here.
  */
-suspend fun publishRelayList(relays: suspend () -> List<String>, publish: suspend (List<String>) -> PublishResult): UiText =
+suspend fun publishRelayList(entries: suspend () -> List<RelayEntry>, publish: suspend (List<RelayEntry>) -> PublishResult): UiText =
     try {
-        if (publish(relays()).sentToAny) uiText(R.string.settings_msg_relay_list_published) else uiText(R.string.settings_msg_relay_list_not_published)
+        if (publish(entries()).sentToAny) uiText(R.string.settings_msg_relay_list_published) else uiText(R.string.settings_msg_relay_list_not_published)
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {

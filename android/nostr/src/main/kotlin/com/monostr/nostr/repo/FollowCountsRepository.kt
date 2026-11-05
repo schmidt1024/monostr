@@ -71,7 +71,7 @@ class NostrFollowCountsRepository(
         }
         ensureCountRelays()
         val author = PublicKey.parse(pubkey)
-        val relays = (countRelays + engine.relayUrls()).map { it.trim().trimEnd('/') }.distinct()
+        val relays = (engine.withoutWriteOnly(countRelays) + engine.readRelayUrls()).map { it.trim().trimEnd('/') }.distinct()
         val updates = channelFlow {
             val state = Mutex()
             // a partial memo is the floor: the numbers never go back while the run catches up

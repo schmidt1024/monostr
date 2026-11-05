@@ -311,6 +311,11 @@
     <string name="settings_relay_placeholder" translatable="false">wss://…</string>
     <string name="settings_relay_invalid">Invalid relay URL (ws:// or wss:// expected)</string>
     <string name="settings_relay_keep_one">At least one relay stays</string>
+    <string name="relay_mode_both">Read and write</string>
+    <string name="relay_mode_read">Read only</string>
+    <string name="relay_mode_write">Write only</string>
+    <string name="settings_relay_keep_read_write">At least one relay must read and one must write</string>
+    <string name="relay_mode_description">%1$s, %2$s. Tap to change</string>
     <string name="settings_relay_save_failed">Relays could not be saved</string>
     <string name="settings_messages">Messages</string>
     <string name="settings_dm_relays">Inbox relays (NIP-17)</string>
@@ -329,6 +334,13 @@
     <string name="settings_media_blur_hint">Notes marked as sensitive (content warning or #nsfw) show blurred pictures until tapped.</string>
     <string name="settings_media_on_tap">Load pictures only on tap</string>
     <string name="settings_media_on_tap_hint">Saves data; videos never load automatically.</string>
+    <string name="settings_gif">GIFs</string>
+    <string name="settings_gif_hint">In view they play a few seconds, then stop; the badge plays them again. Off shows the first frame.</string>
+    <string name="settings_gif_auto">Auto</string>
+    <string name="settings_gif_tap">On tap</string>
+    <string name="settings_gif_off">Off</string>
+    <string name="media_gif_play">Play GIF</string>
+    <string name="media_gif_pause">Pause GIF</string>
     <string name="settings_link_previews">Link previews</string>
     <string name="settings_link_previews_hint">Shows title and picture of linked pages. Those sites, and the servers of their pictures, then see your IP address.</string>
     <string name="link_preview_cd">Link preview: %1$s, %2$s</string>
@@ -381,6 +393,7 @@
     <string name="settings_msg_disabled">Monero tips disabled</string>
     <string name="settings_msg_view_key_deleted">View key deleted locally</string>
     <string name="settings_msg_relays_adopted">Relays adopted from the profile</string>
+    <string name="relay_adopt_markers_ignored">Relays adopted from the profile. That list has no relay to read from or none to write to, so every relay now reads and writes</string>
     <string name="settings_msg_no_relay_list">No relay list (NIP-65) found in the profile</string>
     <string name="settings_publish_relays">Publish these relays as my relay list (NIP-65)</string>
     <string name="settings_publish_relays_hint">Other apps and the tip watcher look for you on the relays of this list. Publishing replaces a list from another app.</string>

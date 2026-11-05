@@ -169,8 +169,18 @@ class NostrFeedRepository(
     override suspend fun follows(): List<String> {
         var contacts = storedContacts()
         if (contacts == null) {
-            quietly { engine.fetch(Filter().kind(Kind(3u)).author(PublicKey.parse(pubkey)).limit(1u)) }
+            val filter = Filter().kind(Kind(3u)).author(PublicKey.parse(pubkey)).limit(1u)
+            quietly { engine.fetch(filter) }
             contacts = storedContacts()
+            // on the page's path: a write-only relay is waited for only when without it there is no list at all
+            if (engine.hasWriteOnly) {
+                if (contacts == null) {
+                    quietly { engine.fetchWriteOnly(filter) }
+                    contacts = storedContacts()
+                } else {
+                    engine.backgroundScope.launch { quietly { engine.fetchWriteOnly(filter) } }
+                }
+            }
             if (contacts != null) markContactsFetched(now())
         }
         return followed(contacts)
@@ -231,12 +241,18 @@ class NostrFeedRepository(
      * Fetches a page of notes and, apart from it, the same authors' deletion requests. Two requests and
      * not one filter: under one limit an account that withdrew many notes would fill the page with
      * requests, and paging would stop there for good. More than [AUTHOR_CHUNK] authors go out as
-     * several filters, side by side.
+     * several filters, side by side. The user's own part is also asked of the write-only relays, with a filter of its own
+     * and beside the page: such a relay never hears another author, and a dead one must not hold the page. What it finds
+     * is stored and shows through the live list or the next read. With [awaitOwn] (a read of the user's own notes, where
+     * the caller reads the database right after and takes nothing for the end) the own part is waited for.
      */
-    private suspend fun fetchPage(authors: List<String>, limit: Int, until: Long? = null, kinds: List<Int> = FEED_KINDS) {
+    private suspend fun fetchPage(authors: List<String>, limit: Int, until: Long? = null, kinds: List<Int> = FEED_KINDS, awaitOwn: Boolean = false) {
         if (authors.isEmpty()) return
         val untilTs = until?.let { Timestamp.fromSecs(it.toULong()) }
+        val ownLeg = engine.hasWriteOnly && authors.any { it.equals(pubkey, ignoreCase = true) }
+        if (ownLeg && !awaitOwn) engine.backgroundScope.launch { askWriteOnly(limit, untilTs, kinds) }
         coroutineScope {
+            if (ownLeg && awaitOwn) launch { askWriteOnly(limit, untilTs, kinds) }
             authors.chunked(AUTHOR_CHUNK).map { chunk ->
                 async {
                     var notes = feedFilter(chunk, kinds).limit(limit.toULong())
@@ -251,9 +267,30 @@ class NostrFeedRepository(
                         // an older page: only the requests naming its notes, not up to 200 per relay of every author
                         val page = quietlyOr(emptyList()) { engine.fetchSettled(notes) }
                         fetchDeletionsNaming(page.map { it.id() })
+                        if (ownLeg) (if (awaitOwn) this@coroutineScope else engine.backgroundScope).launch {
+                            fetchOwnDeletionsNaming(page.filter { it.author().toHex().equals(pubkey, ignoreCase = true) }.map { it.id() })
+                        }
                     }
                 }
             }.awaitAll()
+        }
+    }
+
+    /** The user's notes of a page and their deletion requests from the write-only relays. */
+    private suspend fun askWriteOnly(limit: Int, untilTs: Timestamp?, kinds: List<Int>) = coroutineScope {
+        if (untilTs == null) launch { quietly { engine.fetchWriteOnly(ownDeletionsFilter()) } }
+        var notes = feedFilter(listOf(pubkey), kinds).limit(limit.toULong())
+        if (untilTs != null) notes = notes.until(untilTs)
+        val found = quietlyOr(emptyList()) { engine.fetchWriteOnly(notes) }
+        if (untilTs != null) fetchOwnDeletionsNaming(found.map { it.id() })
+    }
+
+    private fun ownDeletionsFilter() = authorsFilter(listOf(pubkey), listOf(5)).limit(DELETION_LIMIT)
+
+    /** The user's deletion requests naming [ids] (the user's own notes) from the write-only relays. */
+    private suspend fun fetchOwnDeletionsNaming(ids: List<EventId>) {
+        for (chunk in ids.chunked(DELETION_IDS_CHUNK)) {
+            quietly { engine.fetchWriteOnly(Filter().kind(Kind(5u)).author(PublicKey.parse(pubkey)).events(chunk)) }
         }
     }
 
@@ -270,7 +307,7 @@ class NostrFeedRepository(
         quietly {
             engine.fetchSettled(requests)
             // a fetch that reached no relay returns quietly: remembered, it would hide the requests of the time between
-            if (key != null && engine.connectedNormalRelayUrls().isNotEmpty()) {
+            if (key != null && engine.connectedReadRelayUrls().isNotEmpty()) {
                 deletionsAnswered[key] = askedAt
                 marks?.put(key, askedAt)
             }
@@ -358,12 +395,13 @@ class NostrFeedRepository(
         limit: Int,
         kinds: List<Int> = FEED_KINDS,
         cover: List<String> = authors,
+        awaitOwn: Boolean = false,
     ): List<Note> {
         if (authors.isEmpty()) return emptyList()
         val fetchLimit = coverLimit(limit, authors, cover)
         var until = before
         repeat(RELAY_ROUNDS) {
-            fetchPage(cover, fetchLimit, until = until, kinds = kinds)
+            fetchPage(cover, fetchLimit, until = until, kinds = kinds, awaitOwn = awaitOwn)
             val page = localPage(authors, keep, limit, until, kinds)
             if (page.isNotEmpty()) return page
             val raw = withContext(Dispatchers.IO) { engine.query(pageFilter(cover, fetchLimit, until, kinds)) }
@@ -411,7 +449,7 @@ class NostrFeedRepository(
     }.buffer(Channel.RENDEZVOUS).flowOn(Dispatchers.IO) // rendezvous: each list is handed over before the producer moves on
 
     override suspend fun notesBy(author: String, limit: Int, fetch: Boolean): List<Note> {
-        if (fetch) fetchPage(listOf(author), limit)
+        if (fetch) fetchPage(listOf(author), limit, awaitOwn = true)
         return NoteLoader.notes(engine, engine.query(feedFilter(listOf(author)).limit(limit.toULong()))).sortedByDescending { it.createdAt }
     }
 
@@ -424,16 +462,22 @@ class NostrFeedRepository(
 
     /**
      * Kind 1 and kind 6 under their own limits (many notes cannot crowd the reposts out) and the author's kind 5
-     * (incremental like [fetchPage]), side by side.
+     * (incremental like [fetchPage]), side by side. The user's own profile asks the write-only relays too, and waits for
+     * them: the stored notes are on screen by then, and nothing else reloads this page when they land.
      */
     private suspend fun fetchProfilePage(author: String, limit: Int) {
         val authors = listOf(author)
         coroutineScope {
-            listOf(
+            val own = if (!engine.hasWriteOnly || !author.equals(pubkey, ignoreCase = true)) emptyList() else listOf(
+                async { quietly { engine.fetchWriteOnly(authorsFilter(listOf(pubkey), listOf(1)).limit(limit.toULong())) } },
+                async { quietly { engine.fetchWriteOnly(authorsFilter(listOf(pubkey), listOf(6)).limit(limit.toULong())) } },
+                async { quietly { engine.fetchWriteOnly(ownDeletionsFilter()) } },
+            )
+            (listOf(
                 async { quietly { engine.fetch(authorsFilter(authors, listOf(1)).limit(limit.toULong())) } },
                 async { quietly { engine.fetch(authorsFilter(authors, listOf(6)).limit(limit.toULong())) } },
                 async { fetchDeletions(authors, null) },
-            ).awaitAll()
+            ) + own).awaitAll()
         }
     }
 
@@ -462,7 +506,8 @@ class NostrFeedRepository(
     }
 
     override suspend fun moreProfileNotes(author: String, section: ProfileSection, before: Long, limit: Int): List<Note> =
-        relayPage(listOf(author), section::keeps, before, limit, section.kinds)
+        // the own leg is waited for: an empty page here ends the profile's paging for good
+        relayPage(listOf(author), section::keeps, before, limit, section.kinds, awaitOwn = true)
 
     private val articleProbes = java.util.concurrent.ConcurrentHashMap<String, CompletableDeferred<Boolean>>()
 

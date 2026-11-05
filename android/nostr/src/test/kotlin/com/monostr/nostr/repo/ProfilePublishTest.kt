@@ -4,6 +4,8 @@ import com.monostr.nostr.LocalSigner
 import com.monostr.nostr.NostrEngine
 import com.monostr.nostr.SilentWsRelay
 import com.monostr.nostr.awaitTrue
+import com.monostr.nostr.model.RelayEntry
+import com.monostr.nostr.model.RelayMode
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -60,7 +62,7 @@ class ProfilePublishTest {
                 val e = engine(listOf(relay.url))
                 e.connect()
                 assertTrue(awaitTrue { e.connectedNormalRelayUrls().isNotEmpty() }, "loopback relay never connected")
-                val r = NostrPublishRepository(e, indexRelays = listOf(index.url, relay.url)).publishRelayList(listOf(relay.url))
+                val r = NostrPublishRepository(e, indexRelays = listOf(index.url, relay.url)).publishRelayList(listOf(RelayEntry(relay.url, RelayMode.BOTH)))
                 assertTrue(r.successRelays.any { it.contains(":${index.port}") }, "sent to ${r.successRelays}, failed ${r.failedRelays}")
                 assertEquals(1, index.events.size)
                 assertTrue(index.events[0].contains("\"kind\":10002"), index.events[0])
@@ -78,7 +80,7 @@ class ProfilePublishTest {
                 val e = engine(listOf(relay.url))
                 e.connect()
                 assertTrue(awaitTrue { e.connectedNormalRelayUrls().isNotEmpty() }, "loopback relay never connected")
-                val r = NostrPublishRepository(e, indexRelays = listOf(index.url)).publishRelayList(listOf(relay.url))
+                val r = NostrPublishRepository(e, indexRelays = listOf(index.url)).publishRelayList(listOf(RelayEntry(relay.url, RelayMode.BOTH)))
                 assertFalse(r.sentToAny)
                 assertTrue(index.events.isEmpty())
                 assertTrue(e.query(Filter().kind(Kind(10002u)).author(me.publicKey())).isEmpty(), "a refused kind 10002 stayed in the database")

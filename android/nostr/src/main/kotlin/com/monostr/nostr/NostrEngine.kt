@@ -1,6 +1,7 @@
 package com.monostr.nostr
 
 import com.monostr.nostr.model.RelayInfo
+import com.monostr.nostr.model.RelayMode
 import com.monostr.nostr.model.RelayState
 import com.monostr.tips.event.EventJson
 import com.monostr.tips.event.Event as JsonEvent
@@ -14,6 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.BufferOverflow
@@ -279,12 +281,13 @@ class NostrEngine private constructor(
      * Best-effort: a relay that cannot take the subscription now simply misses it, like any failed
      * REQ. rust-nostr refuses a relay subscription before the relay has been told to connect, so
      * the relay is connected first (the session's reconnect after a relay list change would do
-     * the same a moment later).
+     * the same a moment later). A write-only relay connects like any other and gets no subscription.
      */
     private suspend fun replaySubscriptions(url: RelayUrl) {
         if (active.isEmpty()) return
         ffi {
             ignoringErrors { client.connectRelay(url) }
+            if (isWriteOnly(url)) return@ffi
             active.forEach { (id, filter) -> ignoringErrors { client.subscribeWithIdTo(listOf(url), id, filter, null) } }
         }
     }
@@ -386,6 +389,192 @@ class NostrEngine private constructor(
     /** Currently configured relay URLs without the temporary search relays, trailing slash normalised: the cached set, no FFI (spec wave 2 B1). */
     suspend fun relayUrls(): List<String> = snapshot().normal
 
+    /** Normalised URLs the user only writes to: nothing here reads from them, except [fetchWriteOnly] (spec 2026-11-05). Empty by default. */
+    @Volatile private var writeOnly: Set<String> = emptySet()
+
+    /** Normalised URLs the user only reads from: no event of a publish goes there. Empty by default. */
+    @Volatile private var readOnly: Set<String> = emptySet()
+
+    /**
+     * What the user uses each relay for; a relay not named here reads and writes. Only routing changes: no network, no
+     * pool change, a repeated call does nothing. A one-way relay stays in the normal set: it connects, shows its status,
+     * is woken and rested like any other, and [fetchFrom], [subscribeTo] and [sendTo] still reach it. The subscriptions
+     * a relay already carries stay as they are: for a running pool use [applyRelayModes], this one is for an engine
+     * that has not connected yet.
+     */
+    fun setRelayModes(modes: Map<String, RelayMode>) {
+        fun urls(mode: RelayMode) = modes.filterValues { it == mode }.keys.mapTo(HashSet(), ::relayKey)
+        writeOnly = urls(RelayMode.WRITE)
+        readOnly = urls(RelayMode.READ)
+    }
+
+    /**
+     * [setRelayModes] for a running pool, on the connections there are (spec 2026-11-05: a mode change drops none). A
+     * relay of the normal set that stops reading loses the live subscriptions ([active]) and keeps the ones that name it
+     * ([subscribeTo], a DM inbox relay that is also in the main list); one that starts reading gets the live ones. A
+     * relay whose reading did not change sees nothing. Runs to its end once started, so subscriptions match the modes.
+     */
+    suspend fun applyRelayModes(modes: Map<String, RelayMode>) {
+        val before = writeOnly
+        setRelayModes(modes)
+        val after = writeOnly
+        if (before == after) return
+        withContext(NonCancellable + ffiDispatcher) {
+            // wakeMutex: a renewal in progress may have read the old modes, so what it hands over is looked at after it
+            val started = wakeMutex.withLock {
+                val set = snapshot()
+                for (key in set.normal) {
+                    if (key !in after || key in before) continue
+                    val relay = set.pool[key] ?: continue
+                    var stored: Set<String> = emptySet()
+                    ignoringErrors { stored = relay.subscriptions().keys }
+                    stored.filter { active.containsKey(it) }.forEach { id -> ignoringErrors { relay.unsubscribe(id) } }
+                }
+                set.parsed.filterIndexed { i, _ -> set.normal[i] in before && set.normal[i] !in after }
+            }
+            started.forEach { replaySubscriptions(it) }
+        }
+    }
+
+    /** The spelling of the normal set, so a URL the pool writes differently still matches. */
+    private fun relayKey(url: String): String =
+        (runCatching { RelayUrl.parse(url.trim()).toString() }.getOrDefault(url)).trim().trimEnd('/')
+
+    /**
+     * [urls] (a fixed relay list, an indexer, a hint from someone's note) without the user's write-only relays: for a
+     * request that is not about the user's own events. [urls] itself, untouched, without such a relay.
+     */
+    fun withoutWriteOnly(urls: List<String>): List<String> {
+        val left = writeOnly
+        return if (left.isEmpty()) urls else urls.filter { relayKey(it) !in left }
+    }
+
+    /** The relays of [set] without [left], in pool order; [RelaySet.parsed] itself when nothing is left out (the default). */
+    private fun targetsWithout(set: RelaySet, left: Set<String>): List<RelayUrl> =
+        if (left.isEmpty()) set.parsed else set.parsed.filterIndexed { i, _ -> set.normal[i] !in left }
+
+    /** The normal set's relays that read. */
+    private suspend fun readParsed(): List<RelayUrl> = targetsWithout(snapshot(), writeOnly)
+
+    private fun isWriteOnly(url: RelayUrl): Boolean {
+        val left = writeOnly
+        return left.isNotEmpty() && url.toString().trimEnd('/') in left
+    }
+
+    /** [relayUrls] without the write-only relays: where requests that are not about the user's own events go. No FFI. */
+    suspend fun readRelayUrls(): List<String> {
+        val left = writeOnly
+        val normal = snapshot().normal
+        return if (left.isEmpty()) normal else normal.filter { it !in left }
+    }
+
+    /**
+     * Asks only the write-only relays of the normal set, for the user's own events (spec 2026-11-05: that is where they
+     * live, and [fetch] does not ask there). Stored by the client like every fetch. Empty at once, no request, without
+     * such a relay.
+     */
+    suspend fun fetchWriteOnly(filter: Filter, timeout: Duration = Duration.ofSeconds(8)): List<Event> {
+        val only = writeOnly
+        if (only.isEmpty()) return emptyList()
+        val set = snapshot()
+        val asked = set.parsed.filterIndexed { i, _ -> set.normal[i] in only }
+        if (asked.isEmpty()) return emptyList()
+        val targets = reachable(asked)
+        return ffi { client.fetchEventsFrom(targets, filter, timeout).toVec() }
+    }
+
+    /** [answered]: every write-only relay gave its answer, so [events] is what they hold (see [askWriteOnly]). */
+    internal class WriteOnlyAnswer(val events: List<Event>, val answered: Boolean)
+
+    /**
+     * [fetchWriteOnly] for a read-before-write, where its silence must be known (spec 2026-11-05 goal 5): such a relay
+     * may hold the only copy of the newest version. Answered means: each of them was connected before and after, the fetch
+     * ended before its timeout, so on their EOSE, and none sent a CLOSED; a relay that asked for AUTH first gets the
+     * request once more after it. Never throws except on cancellation. Without such a relay: answered, no request.
+     */
+    internal suspend fun askWriteOnly(filter: Filter, timeout: Duration): WriteOnlyAnswer {
+        val only = writeOnly
+        if (only.isEmpty()) return WriteOnlyAnswer(emptyList(), answered = true)
+        val set = snapshot()
+        val asked = set.parsed.filterIndexed { i, _ -> set.normal[i] in only }
+        if (asked.isEmpty()) return WriteOnlyAnswer(emptyList(), answered = true)
+        val keys = set.normal.filter { it in only }
+        val mark = closedMark()
+        val first = askWriteOnlyOnce(asked, keys, filter, timeout, mark)
+        if (first.answered || !awaitAuthAfterRefusal(mark, keys, WRITE_ONLY_AUTH_WAIT)) return first
+        return askWriteOnlyOnce(asked, keys, filter, timeout, closedMark())
+    }
+
+    private suspend fun askWriteOnlyOnce(asked: List<RelayUrl>, keys: List<String>, filter: Filter, timeout: Duration, mark: Long): WriteOnlyAnswer {
+        val connected = HashSet<String>()
+        val targets = reachable(asked, connected)
+        val started = System.nanoTime()
+        val events = try {
+            ffi { client.fetchEventsFrom(targets, filter, timeout).toVec() }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return WriteOnlyAnswer(emptyList(), answered = false)
+        }
+        val inTime = System.nanoTime() - started < timeout.toNanos() - WRITE_ONLY_MARGIN_NANOS
+        if (!inTime || !connected.containsAll(keys) || closedSince(mark, keys)) return WriteOnlyAnswer(events, answered = false)
+        // a refusal comes back with the fetch: the notification loop gets a moment to record its CLOSED
+        withContext(Dispatchers.Default) { delay(WRITE_ONLY_CLOSED_SETTLE_MS) }
+        return WriteOnlyAnswer(events, answered = !closedSince(mark, keys) && connectedNormalRelayUrls().containsAll(keys))
+    }
+
+    /** [failure]: the read relays' leg failed; [events] holds what the other leg brought. */
+    internal class OwnEvents(val events: List<Event>, val writeOnlyAnswered: Boolean, val failure: Exception?)
+
+    /**
+     * [fetchOwnEvents] for a read-before-write: says whether the write-only relays answered ([askWriteOnly]). Never
+     * throws except on cancellation. Without such a relay it is one [fetch] and counts as answered.
+     */
+    internal suspend fun askOwnEvents(filter: Filter, timeout: Duration): OwnEvents {
+        suspend fun read(): Result<List<Event>> = try {
+            Result.success(fetch(filter, timeout))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+        if (writeOnly.isEmpty()) return read().let { OwnEvents(it.getOrDefault(emptyList()), true, it.exceptionOrNull() as Exception?) }
+        return coroutineScope {
+            val only = async { askWriteOnly(filter, timeout) }
+            val fromRead = read()
+            val other = only.await()
+            OwnEvents(fromRead.getOrDefault(emptyList()) + other.events, other.answered, fromRead.exceptionOrNull() as Exception?)
+        }
+    }
+
+    /** The write-only relays as of now, normalised. No FFI. */
+    internal val writeOnlyRelayUrls: Set<String> get() = writeOnly
+
+    /** True while the user has a write-only relay: the extra leg for the user's own events is worth starting. No FFI. */
+    internal val hasWriteOnly: Boolean get() = writeOnly.isNotEmpty()
+
+    /**
+     * [fetch] and [fetchWriteOnly] side by side, both awaited: a read of the user's own events where finding the newest
+     * matters more than speed (read-before-write). Only for filters with the user as the only author. Without a
+     * write-only relay it is [fetch]. A failed leg does not cut the other one short; its failure is thrown when both ended.
+     */
+    internal suspend fun fetchOwnEvents(filter: Filter, timeout: Duration = Duration.ofSeconds(8)): List<Event> {
+        if (writeOnly.isEmpty()) return fetch(filter, timeout)
+        suspend fun leg(block: suspend () -> List<Event>): Result<List<Event>> = try {
+            Result.success(block())
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+        return coroutineScope {
+            val only = async { leg { fetchWriteOnly(filter, timeout) } }
+            val read = leg { fetch(filter, timeout) }
+            val other = only.await()
+            read.getOrThrow() + other.getOrThrow()
+        }
+    }
+
     fun temporaryRelayUrls(): List<String> = temporary.toList()
 
     /** Normalised URLs (trailing slash trimmed) of all pool relays, temporary included, whose status is CONNECTED; one `status()` per cached relay. */
@@ -400,6 +589,13 @@ class NostrEngine private constructor(
         return ffi { set.pool.filter { (url, relay) -> url in set.normalSet && relay.status().name == RelayStatus.CONNECTED.name }.keys.toSet() }
     }
 
+    /** [connectedNormalRelayUrls] without the write-only relays: where other people's data is asked (spec 2026-11-05). */
+    suspend fun connectedReadRelayUrls(): Set<String> {
+        val connected = connectedNormalRelayUrls()
+        val left = writeOnly
+        return if (left.isEmpty()) connected else connected.filter { it !in left }.toSet()
+    }
+
     /**
      * Adds [urls] as relays that never receive the normal feed's subscriptions and connects them.
      * URLs already in the pool are left alone and never counted as temporary. Malformed URLs are
@@ -412,11 +608,11 @@ class NostrEngine private constructor(
      * even for a live relay (network probe, see below). We therefore add temporary relays with
      * `read(true).write(false)` so they are visible and fetchable, and instead keep the "never
      * receive the feed's subscriptions" guarantee by having [subscribe] target only
-     * [relayUrls] (which excludes temporary relays) rather than the whole pool.
+     * [readRelayUrls] (which excludes temporary relays) rather than the whole pool.
      *
      * Invariant: a temporary relay is reachable only through calls that name it ([fetchFrom],
-     * [subscribeTo], [sendTo]). [subscribe], [fetch] and the engine's own sends always target
-     * [relayUrls] explicitly and therefore never reach it, even though the underlying rust-nostr
+     * [subscribeTo], [sendTo]). [subscribe] and [fetch] always target
+     * [readRelayUrls] and the engine's own sends the writing relays of [relayUrls], explicitly, and therefore never reach it, even though the underlying rust-nostr
      * pool marks it `read`-enabled. If a temporary relay is later added to the normal set (see
      * [addRelays]), it is promoted and never removed by [detachTemporary].
      *
@@ -641,11 +837,11 @@ class NostrEngine private constructor(
     }
 
     /**
-     * Subscribes on [relayUrls] only, never on a temporary search relay (see [attachTemporary]'s
+     * Subscribes on [readRelayUrls] only, never on a temporary search relay (see [attachTemporary]'s
      * doc comment for why the exclusion happens here rather than via a read/write flag).
      */
     suspend fun subscribe(filter: Filter): String {
-        val targets = snapshot().parsed
+        val targets = readParsed()
         val id = ffi { client.subscribeTo(targets, filter, null) }.id
         active[id] = filter
         return id
@@ -775,13 +971,13 @@ class NostrEngine private constructor(
     }
 
     /**
-     * Fetches from [relayUrls] (never a temporary search relay, see [attachTemporary]) with a
+     * Fetches from [readRelayUrls] (never a temporary search relay, see [attachTemporary]) with a
      * timeout; results are stored in the database. An empty relay list yields an empty result
      * without throwing.
      */
     suspend fun fetch(filter: Filter, timeout: Duration = Duration.ofSeconds(8), exit: Exit? = null): List<Event> {
         if (exit != null) return fetchExit(null, filter, timeout, exit).events
-        val targets = reachable(snapshot().parsed)
+        val targets = reachable(readParsed())
         if (targets.isEmpty()) return emptyList()
         // stored by the client on receipt, see fetchFrom
         return ffi { client.fetchEventsFrom(targets, filter, timeout).toVec() }
@@ -791,14 +987,14 @@ class NostrEngine private constructor(
      * [fetch] for a page that should not wait for a relay whose connection failed. rust-nostr 0.44 keeps a relay that
      * refuses every connection in a fetch for the first 60 s after the start, and the fetch then waits for it until
      * [timeout] (Pixel 2026-10-21: the first fresh page after 8.5 s instead of 2 s in half the cold starts). Within
-     * [startWindow] after [connect] this asks the relays of the normal set that are connected once none of them is
+     * [startWindow] after [connect] this asks the reading relays of the normal set that are connected once none of them is
      * setting its connection up any more (at most [CONNECT_GRACE]); a relay still connecting then is asked in the
      * background once it is connected, within [LATE_WAIT] (stored like every fetch's events, nothing returned). None
      * connected after the grace: every relay that has not failed is asked. After the window it is [fetch]: rust-nostr
      * leaves a relay that keeps failing out itself, and a page never waits for the grace.
      */
     suspend fun fetchSettled(filter: Filter, timeout: Duration = Duration.ofSeconds(8)): List<Event> {
-        val targets = snapshot().parsed
+        val targets = readParsed()
         val since = connectedAt
         if (targets.isEmpty() || since == 0L || System.nanoTime() - since > startWindow.toNanos()) return fetch(filter, timeout)
         val states = settledStates(targets)
@@ -814,7 +1010,7 @@ class NostrEngine private constructor(
         return ffi { client.fetchEventsFrom(ready, filter, timeout).toVec() }
     }
 
-    /** [fetchSettled]'s second part: each of [urls] is asked once it is connected, while it is still in the normal set and not a temporary relay; gives up after [LATE_WAIT]. */
+    /** [fetchSettled]'s second part: each of [urls] is asked once it is connected, while it is still in the normal set, reads and is not a temporary relay; gives up after [LATE_WAIT]. */
     private suspend fun askWhenConnected(urls: List<String>, filter: Filter, timeout: Duration) {
         val waiting = urls.toMutableSet()
         val deadline = System.nanoTime() + LATE_WAIT.toNanos()
@@ -822,11 +1018,12 @@ class NostrEngine private constructor(
             val set = snapshot()
             waiting.retainAll(set.normalSet)
             waiting.removeAll(temporary)
+            waiting.removeAll(writeOnly)
             val now = ffi { waiting.filter { set.pool[it]?.status()?.name == RelayStatus.CONNECTED.name } }
             if (now.isNotEmpty()) {
                 waiting.removeAll(now.toSet())
-                // checked again right before the send: a relay re-attached as a search relay meanwhile gets nothing
-                val asked = now.filter { it !in temporary }
+                // checked again right before the send: a relay re-attached as a search relay or set to write only meanwhile gets nothing
+                val asked = now.filter { it !in temporary && it !in writeOnly }
                 if (asked.isNotEmpty()) ignoringErrors { ffi { client.fetchEventsFrom(asked.toRelayUrls(), filter, timeout) } }
             } else {
                 delay(LATE_POLL_MS)
@@ -841,13 +1038,13 @@ class NostrEngine private constructor(
     internal val openExitFetches = java.util.concurrent.atomic.AtomicInteger(0)
 
     /**
-     * Spec wave 2 B4: a fetch that may end before every relay answered, see [Exit]. [relays] null = the normal set
+     * Spec wave 2 B4: a fetch that may end before every relay answered, see [Exit]. [relays] null = the reading relays of the normal set
      * (as [fetch]); otherwise exactly [relays], already attached by the caller. The client stores what arrives, as with
      * every fetch. [ExitFetch.met]: the condition held (fetchWide ends its other leg on it). The work runs on the
      * engine's scope, so [close] (logout) ends it; the caller's cancellation ends it too and is rethrown.
      */
     internal suspend fun fetchExit(relays: List<String>?, filter: Filter, timeout: Duration, exit: Exit, reached: MutableSet<String>? = null): ExitFetch {
-        val targets = reachable(relays?.toRelayUrls() ?: snapshot().parsed, reached)
+        val targets = reachable(relays?.toRelayUrls() ?: readParsed(), reached)
         if (targets.isEmpty()) return ExitFetch(emptyList(), met = false)
         val progress = ExitProgress(exit)
         if (progress.empty) return ExitFetch(ffi { client.fetchEventsFrom(targets, filter, timeout).toVec() }, met = false)
@@ -980,7 +1177,7 @@ class NostrEngine private constructor(
      * and is never stored by the pool; it is saved only when at least one relay answered `OK true`.
      * For an event whose mere storing has an irreversible effect in the local database, like a NIP-09
      * deletion request: the database would drop the named notes (and refuse them later) even if every
-     * relay refused the request. Goes over the same pool connections to the connected normal relays only;
+     * relay refused the request. Goes over the same pool connections to the connected writing relays of the normal set only;
      * the others are reported as [NOT_CONNECTED]. A relay that refuses with `auth-required` gets the frame
      * once more after it accepted our AUTH (the pool's own send would do that); that second answer is final.
      * Waits until every target answered or [timeout] passed, but at most [OK_GRACE] after the first
@@ -993,8 +1190,9 @@ class NostrEngine private constructor(
         val event = sign(builder)
         val id = event.id().toHex()
         val kind = event.kind().asU16().toInt()
-        val all = snapshot().parsed
-        wake(all)
+        val set = snapshot()
+        val all = targetsWithout(set, readOnly)
+        wake(set.parsed, needed = all)
         val connected = connectedOnceSettled(all)
         val (ready, skipped) = all.partition { it.toString().trimEnd('/') in connected }
         val notSent = skipped.associate { it.toString() to NOT_CONNECTED }
@@ -1164,10 +1362,10 @@ class NostrEngine private constructor(
     suspend fun ownRelayList(fresh: Boolean = false, extra: List<String> = emptyList()): RelayList? {
         val pk = pubkey ?: return null
         val filter = Filter().kind(Kind(10002u)).author(PublicKey.parse(pk)).limit(1u)
-        if (fresh) ignoringErrors { fetch(filter, OWN_LIST_TIMEOUT) }
+        if (fresh) ignoringErrors { fetchOwnEvents(filter, OWN_LIST_TIMEOUT) }
         var event = query(filter).firstOrNull()
         if (event == null && !fresh) {
-            ignoringErrors { fetch(filter) }
+            ignoringErrors { fetchOwnEvents(filter) }
             event = query(filter).firstOrNull()
         }
         val others = extra.map { it.trim().trimEnd('/') }.distinct() - relayUrls().toSet()
@@ -1195,12 +1393,14 @@ class NostrEngine private constructor(
     }
 
     /**
-     * Sends to the normal set ([relayUrls]) only: never pool-wide, where a temporary relay that
-     * [sendTo] gave the WRITE flag would receive the user's posts too.
+     * Sends to the writing relays of the normal set ([relayUrls]) only: never pool-wide, where a temporary
+     * relay that [sendTo] gave the WRITE flag would receive the user's posts too, and never to a read-only relay,
+     * also when it is the only one connected.
      */
     private suspend fun send(event: Event): PublishResult = try {
-        val all = snapshot().parsed
-        wake(all)
+        val set = snapshot()
+        val all = targetsWithout(set, readOnly)
+        wake(set.parsed, needed = all)
         // A relay that is not connected only makes the publish wait for its timeout (about 10 s) and
         // fails anyway: leave it out while another relay is there. With none connected the event goes
         // to all of them as before, and the caller gets rust-nostr's own failure per relay.
@@ -1330,20 +1530,24 @@ class NostrEngine private constructor(
     private val wakeMutex = Mutex()
 
     /**
-     * See [reconnectIfLost]. Nothing happens while any relay of [targets] is connected: a working
-     * connection is never torn down for the sake of a dead relay. With [force] ([reconnectAll]) every relay of
-     * [targets] is reconnected: a lost one as without [force], any other one is replaced by a fresh one ([renew]).
+     * See [reconnectIfLost]. Nothing happens while any relay of [needed] is connected: a working
+     * connection is never torn down for the sake of a dead relay. A publish needs a writing relay, so a connected
+     * read-only relay does not keep the write relays waiting for their retry; that one is left alone, only lost relays
+     * are woken. With [force] ([reconnectAll]) every relay of [targets] is reconnected: a lost one as without [force],
+     * any other one is replaced by a fresh one ([renew]).
      */
-    private suspend fun wake(targets: List<RelayUrl>, force: Boolean = false) {
+    private suspend fun wake(targets: List<RelayUrl>, force: Boolean = false, needed: List<RelayUrl> = targets) {
         val wanted = targets.map { it.toString().trimEnd('/') }.toSet()
+        val neededKeys = if (needed === targets) wanted else needed.map { it.toString().trimEnd('/') }.toSet()
         // a network change racing logout: no relay is renewed or connected while (or after) close() shuts the client down
-        if (wanted.isEmpty() || closing) return
+        if (wanted.isEmpty() || neededKeys.isEmpty() || closing) return
         wakeMutex.withLock {
             if (closing) return
             ffi {
                 val pool = snapshot().pool
                 val mine = pool.filterKeys { it in wanted }.values
-                if (mine.isEmpty() || (!force && mine.any { it.isConnected() })) return@ffi
+                val deciding = if (neededKeys === wanted) mine else pool.filterKeys { it in neededKeys }.values
+                if (mine.isEmpty() || (!force && deciding.any { it.isConnected() })) return@ffi
                 // forced only: one subscriptions() per temporary relay, those without one (searches, lookups) stay as they are
                 val held = if (!force) emptyList() else pool.filterKeys { it in temporary }.values.filter { relay ->
                     runCatching { relay.subscriptions().isNotEmpty() }.getOrDefault(false)
@@ -1365,6 +1569,8 @@ class NostrEngine private constructor(
                             if (!relay.isConnected()) continue
                             var stored: Map<String, List<Filter>> = emptyMap()
                             ignoringErrors { stored = relay.subscriptions() }
+                            // a write-only relay gets no live subscription; one that names it ([subscribeTo], DM inbox) stays
+                            if (isWriteOnly(relay.url())) stored = stored.filterKeys { !active.containsKey(it) }
                             for ((id, filters) in stored) {
                                 // one filter per subscription in this engine; a second REQ under the same id would replace the first
                                 val filter = filters.singleOrNull() ?: continue
@@ -1387,7 +1593,9 @@ class NostrEngine private constructor(
      * reading CONNECTED (EngineReconnectTest under load), the very state a network switch leaves behind. A relay that
      * connected before goes to [connectedOnce] (its new stats start at zero). [held]: temporary relays with a
      * subscription, renewed the same way but added back as temporary ones (read only, as [attachTemporary] adds them),
-     * their [temporary] membership and [temporaryRefs] untouched; one released meanwhile is skipped. Not cancellable by the caller.
+     * their [temporary] membership and [temporaryRefs] untouched; one released meanwhile is skipped. A write-only relay of
+     * the normal set comes back without the live subscriptions ([active]), so rust-nostr does not ask them there again; those
+     * that name it ([subscribeTo], a DM inbox relay that is also in the main list) stay. Not cancellable by the caller.
      */
     private suspend fun renew(relays: List<rust.nostr.sdk.Relay>, held: List<rust.nostr.sdk.Relay> = emptyList()) {
         if (relays.isEmpty() && held.isEmpty()) return
@@ -1407,6 +1615,7 @@ class NostrEngine private constructor(
                         if (temp && norm !in temporary) continue
                         var stored: Map<String, List<Filter>> = emptyMap()
                         ignoringErrors { stored = relay.subscriptions() }
+                        if (!temp && norm in writeOnly) stored = stored.filterKeys { !active.containsKey(it) }
                         if (!temp && runCatching { relay.stats().success() > 0uL }.getOrDefault(false)) connectedOnce += norm
                         ignoringErrors { client.forceRemoveRelay(url) }
                         suspend fun add() = runCatching {
@@ -1482,6 +1691,12 @@ class NostrEngine private constructor(
         const val LOG_TAG = "Monostr"
         /** Backlog 36: how long a fresh read of the own relay list waits for the relays (the caller shows busy meanwhile). */
         private val OWN_LIST_TIMEOUT: Duration = Duration.ofSeconds(5)
+        /** A write-only relay's fetch that ended this close to its timeout was ended by the timeout, not by an EOSE. */
+        private const val WRITE_ONLY_MARGIN_NANOS = 250_000_000L
+        /** The notification loop that records CLOSED gets this long to land a frame that came in just before the fetch returned. */
+        private const val WRITE_ONLY_CLOSED_SETTLE_MS = 100L
+        /** How long a read-before-write waits for a write-only relay that asked for AUTH to accept it. */
+        private val WRITE_ONLY_AUTH_WAIT: Duration = Duration.ofSeconds(5)
 
         /** A CLOSED/OK message prefix that means "authenticate first" (NIP-42) or "not for you". */
         fun isAuthRefusal(message: String): Boolean =

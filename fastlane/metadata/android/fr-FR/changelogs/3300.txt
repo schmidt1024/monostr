@@ -1,0 +1,4 @@
+- Les GIF jouent environ 5 secondes dans les notes, puis s'arrêtent ; le badge les relance, un réglage propose Auto, Au toucher ou Non
+- Choisissez lecture, écriture ou les deux par relais ; les marqueurs restent quand vous adoptez ou publiez votre liste
+- Les adresses de relais restent sur une ligne
+- Corrections

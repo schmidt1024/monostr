@@ -307,6 +307,11 @@
     <string name="settings_relays">Relay\'ler</string>
     <string name="settings_relay_invalid">Geçersiz relay URL\'si (ws:// veya wss:// bekleniyor)</string>
     <string name="settings_relay_keep_one">En az bir relay kalmalı</string>
+    <string name="relay_mode_both">Okuma ve yazma</string>
+    <string name="relay_mode_read">Yalnızca okuma</string>
+    <string name="relay_mode_write">Yalnızca yazma</string>
+    <string name="settings_relay_keep_read_write">En az bir relay okumalı ve biri yazmalı</string>
+    <string name="relay_mode_description">%1$s, %2$s. Değiştirmek için dokunun</string>
     <string name="settings_relay_save_failed">Relay\'ler kaydedilemedi</string>
     <string name="settings_messages">Mesajlar</string>
     <string name="settings_dm_relays">Mesaj röleleri (NIP-17)</string>
@@ -325,6 +330,13 @@
     <string name="settings_media_blur_hint">Hassas işaretli notlar (content warning veya #nsfw) dokunana kadar bulanık görsel gösterir.</string>
     <string name="settings_media_on_tap">Görselleri yalnızca dokununca yükle</string>
     <string name="settings_media_on_tap_hint">Veri tasarrufu sağlar; videolar hiçbir zaman kendiliğinden yüklenmez.</string>
+    <string name="settings_gif">GIF\'ler</string>
+    <string name="settings_gif_hint">Göründüklerinde birkaç saniye oynar ve durur; rozet yeniden oynatır. Kapalı ilk kareyi gösterir.</string>
+    <string name="settings_gif_auto">Oto</string>
+    <string name="settings_gif_tap">Dokununca</string>
+    <string name="settings_gif_off">Kapalı</string>
+    <string name="media_gif_play">GIF\'i oynat</string>
+    <string name="media_gif_pause">GIF\'i duraklat</string>
     <string name="settings_link_previews">Bağlantı önizlemeleri</string>
     <string name="settings_link_previews_hint">Bağlantı verilen sayfaların başlığını ve görselini gösterir. Bu siteler ve görsellerinin sunucuları IP adresinizi görür.</string>
     <string name="link_preview_cd">Bağlantı önizlemesi: %1$s, %2$s</string>
@@ -381,6 +393,7 @@
     <string name="settings_publish_relays">Bu relay\'leri relay listem olarak yayınla (NIP-65)</string>
     <string name="settings_publish_relays_hint">Diğer uygulamalar ve bahşiş watcher\'ı seni bu listedeki relay\'lerde arar. Yayınlamak, başka bir uygulamadan kalan listenin yerini alır.</string>
     <string name="settings_adopt_relays_hint">Bu uygulamanın relay\'leri, hesabın için yayınlanmış relay listesiyle değiştirilir. Başka bir uygulamadan kalan liste artık var olmayan relay\'ler içerebilir.</string>
+    <string name="relay_adopt_markers_ignored">Relay\'ler profilden alındı. Bu listede okunacak ya da yazılacak relay yok, bu yüzden artık tüm relay\'ler okuyor ve yazıyor</string>
     <string name="settings_reset_relays">Varsayılan relay\'leri geri yükle</string>
     <string name="settings_reset_relays_hint">Bu uygulamanın relay\'leri monostr\'un varsayılan relay\'leriyle değiştirilir.</string>
     <string name="settings_msg_relay_list_published">Relay listesi yayınlandı</string>

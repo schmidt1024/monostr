@@ -1,5 +1,6 @@
 package com.monostr.app.ui.media
 
+import com.monostr.app.data.GifMode
 import androidx.annotation.VisibleForTesting
 import androidx.compose.runtime.compositionLocalOf
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -8,7 +9,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
 /** Spec 3.2/3.4: how the note cards treat media; provided once by the nav host from UiSettingsStore. */
-data class MediaSettings(val blurSensitive: Boolean = true, val mediaOnTap: Boolean = true, val linkPreviews: Boolean = false)
+data class MediaSettings(val blurSensitive: Boolean = true, val mediaOnTap: Boolean = true, val linkPreviews: Boolean = false, val gifMode: GifMode = GifMode.AUTO)
 
 val LocalMediaSettings = compositionLocalOf { MediaSettings() }
 

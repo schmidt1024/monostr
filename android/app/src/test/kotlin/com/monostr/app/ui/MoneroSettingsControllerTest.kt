@@ -1,4 +1,5 @@
 package com.monostr.app.ui
+import com.monostr.app.session.AdoptResult
 import com.monostr.app.ui.common.uiText
 import com.monostr.app.R
 
@@ -39,7 +40,7 @@ class MoneroSettingsControllerTest {
         val secrets = FakeSecrets().apply { put(KeystoreSecretStore.SECRET_VIEW_KEY, "ab".repeat(32)) }
         val tips = FakeTips()
         val gateway = FakeWatcherGateway()
-        var adoptResult = true
+        var adoptResult = AdoptResult.ADOPTED
         val c = MoneroSettingsController(settings, secrets, tips, gateway, { adoptResult }, eager())
         c.start()
         advanceUntilIdle()
@@ -58,7 +59,11 @@ class MoneroSettingsControllerTest {
         c.adoptRelayList()
         advanceUntilIdle()
         assertEquals(uiText(R.string.settings_msg_relays_adopted), c.state.value.message)
-        adoptResult = false
+        adoptResult = AdoptResult.MARKERS_IGNORED
+        c.adoptRelayList()
+        advanceUntilIdle()
+        assertEquals(uiText(R.string.relay_adopt_markers_ignored), c.state.value.message)
+        adoptResult = AdoptResult.NONE
         c.adoptRelayList()
         advanceUntilIdle()
         assertEquals(uiText(R.string.settings_msg_no_relay_list), c.state.value.message)
@@ -80,7 +85,7 @@ class MoneroSettingsControllerTest {
         val setup = MoneroSetup("4addr", "https://w.example", "c".repeat(64), "mainnet", 1)
         val settings = FakeTipSettings(setup = setup)
         val tips = FakeTips(relaysOk = false)
-        val c = MoneroSettingsController(settings, FakeSecrets(), tips, FakeWatcherGateway(), { true }, eager())
+        val c = MoneroSettingsController(settings, FakeSecrets(), tips, FakeWatcherGateway(), { AdoptResult.ADOPTED }, eager())
         c.start()
         advanceUntilIdle()
         c.disable()
@@ -98,7 +103,7 @@ class MoneroSettingsControllerTest {
         val self = "5".repeat(64)
         val announced = MoneroKeys.generate().address(Network.MAINNET)
         val tips = FakeTips(infos = mapOf(self to PaymentInfo.Enabled(announced, Watcher.Http("https://w.example", "c".repeat(64)))))
-        val c = MoneroSettingsController(FakeTipSettings(), FakeSecrets(), tips, FakeWatcherGateway(), { true }, eager(), selfPubkey = self)
+        val c = MoneroSettingsController(FakeTipSettings(), FakeSecrets(), tips, FakeWatcherGateway(), { AdoptResult.ADOPTED }, eager(), selfPubkey = self)
         c.start()
         advanceUntilIdle()
         assertNull(c.state.value.setup)
@@ -111,7 +116,7 @@ class MoneroSettingsControllerTest {
         val own = MoneroKeys.generate().address(Network.MAINNET)
         val setup = MoneroSetup(own.encode(), "https://w.example", "c".repeat(64), "mainnet", 1)
         val tips = FakeTips(infos = mapOf(self to PaymentInfo.Enabled(own, Watcher.Http("https://w.example", "c".repeat(64)))))
-        val c = MoneroSettingsController(FakeTipSettings(setup = setup), FakeSecrets(), tips, FakeWatcherGateway(), { true }, eager(), selfPubkey = self)
+        val c = MoneroSettingsController(FakeTipSettings(setup = setup), FakeSecrets(), tips, FakeWatcherGateway(), { AdoptResult.ADOPTED }, eager(), selfPubkey = self)
         c.start()
         advanceUntilIdle()
         assertEquals(setup, c.state.value.setup)
@@ -120,7 +125,7 @@ class MoneroSettingsControllerTest {
 
     @Test
     fun `presets grow to six fields, then adding is disabled`() = runTest {
-        val c = MoneroSettingsController(FakeTipSettings(), FakeSecrets(), FakeTips(), FakeWatcherGateway(), { true }, eager())
+        val c = MoneroSettingsController(FakeTipSettings(), FakeSecrets(), FakeTips(), FakeWatcherGateway(), { AdoptResult.ADOPTED }, eager())
         c.start()
         advanceUntilIdle()
         assertEquals(3, c.state.value.presets.size)
@@ -139,7 +144,7 @@ class MoneroSettingsControllerTest {
 
     @Test
     fun `removing presets leaves at least one field`() = runTest {
-        val c = MoneroSettingsController(FakeTipSettings(), FakeSecrets(), FakeTips(), FakeWatcherGateway(), { true }, eager())
+        val c = MoneroSettingsController(FakeTipSettings(), FakeSecrets(), FakeTips(), FakeWatcherGateway(), { AdoptResult.ADOPTED }, eager())
         c.start()
         advanceUntilIdle()
         c.removePreset(0)
@@ -153,7 +158,7 @@ class MoneroSettingsControllerTest {
     @Test
     fun `in mXMR the preset fields read and save in mXMR`() = runTest {
         val settings = FakeTipSettings()
-        val c = MoneroSettingsController(settings, FakeSecrets(), FakeTips(), FakeWatcherGateway(), { true }, eager())
+        val c = MoneroSettingsController(settings, FakeSecrets(), FakeTips(), FakeWatcherGateway(), { AdoptResult.ADOPTED }, eager())
         c.start()
         advanceUntilIdle()
         c.setUnit(com.monostr.app.data.AmountUnit.MXMR)
@@ -172,7 +177,7 @@ class MoneroSettingsControllerTest {
     @Test
     fun `personal setup loads the watcher status`() = runTest {
         val tips = FakeTips().apply { statuses[watcherHex] = status }
-        val c = MoneroSettingsController(FakeTipSettings(setup = personal), FakeSecrets(), tips, FakeWatcherGateway(), { true }, eager(), now = { 1_100 })
+        val c = MoneroSettingsController(FakeTipSettings(setup = personal), FakeSecrets(), tips, FakeWatcherGateway(), { AdoptResult.ADOPTED }, eager(), now = { 1_100 })
         c.start()
         advanceUntilIdle()
         assertEquals(watcherHex to relays, tips.statusRequests.last())
@@ -184,7 +189,7 @@ class MoneroSettingsControllerTest {
     fun `http setup loads no status`() = runTest {
         val setup = MoneroSetup("4addr", "https://w.example", "c".repeat(64), "mainnet", 1)
         val tips = FakeTips()
-        val c = MoneroSettingsController(FakeTipSettings(setup = setup), FakeSecrets(), tips, FakeWatcherGateway(), { true }, eager())
+        val c = MoneroSettingsController(FakeTipSettings(setup = setup), FakeSecrets(), tips, FakeWatcherGateway(), { AdoptResult.ADOPTED }, eager())
         c.start()
         advanceUntilIdle()
         assertTrue(tips.statusRequests.isEmpty())
@@ -196,7 +201,7 @@ class MoneroSettingsControllerTest {
         val settings = FakeTipSettings(setup = personal)
         val tips = FakeTips()
         val gateway = FakeWatcherGateway()
-        val c = MoneroSettingsController(settings, FakeSecrets(), tips, gateway, { true }, eager())
+        val c = MoneroSettingsController(settings, FakeSecrets(), tips, gateway, { AdoptResult.ADOPTED }, eager())
         c.start()
         advanceUntilIdle()
         c.disable()
@@ -208,7 +213,7 @@ class MoneroSettingsControllerTest {
 
     @Test
     fun `missing status is checked but null`() = runTest {
-        val c = MoneroSettingsController(FakeTipSettings(setup = personal), FakeSecrets(), FakeTips(), FakeWatcherGateway(), { true }, eager())
+        val c = MoneroSettingsController(FakeTipSettings(setup = personal), FakeSecrets(), FakeTips(), FakeWatcherGateway(), { AdoptResult.ADOPTED }, eager())
         c.start()
         advanceUntilIdle()
         assertTrue(c.state.value.statusChecked)
@@ -223,7 +228,7 @@ class MoneroSettingsControllerTest {
 
     private fun TestScope.lineAt(now: Long, st: WatcherStatus?): PersonalWatcherLine {
         val tips = FakeTips().apply { if (st != null) statuses[watcherHex] = st }
-        val c = MoneroSettingsController(FakeTipSettings(setup = ownSetup), FakeSecrets(), tips, FakeWatcherGateway(), { true }, eager(), selfPubkey = self, now = { now })
+        val c = MoneroSettingsController(FakeTipSettings(setup = ownSetup), FakeSecrets(), tips, FakeWatcherGateway(), { AdoptResult.ADOPTED }, eager(), selfPubkey = self, now = { now })
         c.start()
         advanceUntilIdle()
         return c.state.value.personalLine
@@ -232,7 +237,7 @@ class MoneroSettingsControllerTest {
     @Test
     fun `line is unknown before the lookup finishes`() = runTest {
         val tips = FakeTips().apply { statusGate = kotlinx.coroutines.CompletableDeferred() }
-        val c = MoneroSettingsController(FakeTipSettings(setup = ownSetup), FakeSecrets(), tips, FakeWatcherGateway(), { true }, eager(), selfPubkey = self, now = { 1_000 })
+        val c = MoneroSettingsController(FakeTipSettings(setup = ownSetup), FakeSecrets(), tips, FakeWatcherGateway(), { AdoptResult.ADOPTED }, eager(), selfPubkey = self, now = { 1_000 })
         c.start()
         advanceUntilIdle()
         assertEquals(PersonalWatcherLine.Unknown, c.state.value.personalLine)
@@ -267,7 +272,7 @@ class MoneroSettingsControllerTest {
         val local = httpSetup.copy(amountsHidden = true)
         val settings = FakeTipSettings(setup = local)
         val tips = FakeTips().apply { liveInfos = mapOf(self to announced(local, hidden = false)) }
-        val c = MoneroSettingsController(settings, FakeSecrets(), tips, FakeWatcherGateway(info = v05), { true }, eager(), selfPubkey = self)
+        val c = MoneroSettingsController(settings, FakeSecrets(), tips, FakeWatcherGateway(info = v05), { AdoptResult.ADOPTED }, eager(), selfPubkey = self)
         c.start()
         advanceUntilIdle()
         assertFalse(settings.setupState.value!!.amountsHidden)
@@ -282,7 +287,7 @@ class MoneroSettingsControllerTest {
         val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
         // a relay that still has the old announcement: hidden
         val tips = FakeTips().apply { liveInfos = mapOf(self to announced(local, hidden = true)); liveGate = gate }
-        val c = MoneroSettingsController(settings, FakeSecrets(), tips, FakeWatcherGateway(info = v05), { true }, eager(), selfPubkey = self)
+        val c = MoneroSettingsController(settings, FakeSecrets(), tips, FakeWatcherGateway(info = v05), { AdoptResult.ADOPTED }, eager(), selfPubkey = self)
         c.start()
         advanceUntilIdle()
         c.setAmountsPublic(true)
@@ -300,7 +305,7 @@ class MoneroSettingsControllerTest {
         for (live in listOf(mapOf(self to announced(local, hidden = false, address = other)), emptyMap())) {
             val settings = FakeTipSettings(setup = local)
             val tips = FakeTips().apply { liveInfos = live }
-            val c = MoneroSettingsController(settings, FakeSecrets(), tips, FakeWatcherGateway(info = v05), { true }, eager(), selfPubkey = self)
+            val c = MoneroSettingsController(settings, FakeSecrets(), tips, FakeWatcherGateway(info = v05), { AdoptResult.ADOPTED }, eager(), selfPubkey = self)
             c.start()
             advanceUntilIdle()
             assertTrue(settings.setupState.value!!.amountsHidden, "live $live")
@@ -311,7 +316,7 @@ class MoneroSettingsControllerTest {
     fun `switch republishes and stores`() = runTest {
         val settings = FakeTipSettings(setup = httpSetup)
         val tips = FakeTips()
-        val c = MoneroSettingsController(settings, FakeSecrets(), tips, FakeWatcherGateway(info = v05), { true }, eager())
+        val c = MoneroSettingsController(settings, FakeSecrets(), tips, FakeWatcherGateway(info = v05), { AdoptResult.ADOPTED }, eager())
         c.start()
         advanceUntilIdle()
         assertEquals(true, c.state.value.amountsSupported)
@@ -332,7 +337,7 @@ class MoneroSettingsControllerTest {
     fun `failed republish keeps the old state`() = runTest {
         val settings = FakeTipSettings(setup = httpSetup)
         val tips = FakeTips(relaysOk = false)
-        val c = MoneroSettingsController(settings, FakeSecrets(), tips, FakeWatcherGateway(info = v05), { true }, eager())
+        val c = MoneroSettingsController(settings, FakeSecrets(), tips, FakeWatcherGateway(info = v05), { AdoptResult.ADOPTED }, eager())
         c.start()
         advanceUntilIdle()
         c.setAmountsPublic(false)
@@ -347,7 +352,7 @@ class MoneroSettingsControllerTest {
         val settings = FakeTipSettings(setup = httpSetup)
         val tips = FakeTips()
         val old = v05.copy(protocol = null)
-        val c = MoneroSettingsController(settings, FakeSecrets(), tips, FakeWatcherGateway(info = old), { true }, eager())
+        val c = MoneroSettingsController(settings, FakeSecrets(), tips, FakeWatcherGateway(info = old), { AdoptResult.ADOPTED }, eager())
         c.start()
         advanceUntilIdle()
         assertEquals(false, c.state.value.amountsSupported)
@@ -372,7 +377,7 @@ class MoneroSettingsControllerTest {
         val settings = FakeTipSettings(setup = httpSetup)
         val hints = MemHints()
         val self = "a".repeat(64)
-        val c = MoneroSettingsController(settings, FakeSecrets(), FakeTips(), FakeWatcherGateway(info = v05), { true }, eager(), selfPubkey = self, hints = hints)
+        val c = MoneroSettingsController(settings, FakeSecrets(), FakeTips(), FakeWatcherGateway(info = v05), { AdoptResult.ADOPTED }, eager(), selfPubkey = self, hints = hints)
         c.start()
         advanceUntilIdle()
         c.setAmountsPublic(false)
@@ -384,7 +389,7 @@ class MoneroSettingsControllerTest {
     fun `a failed switch leaves the one-time question open`() = runTest {
         val hints = MemHints()
         val self = "a".repeat(64)
-        val c = MoneroSettingsController(FakeTipSettings(setup = httpSetup), FakeSecrets(), FakeTips(relaysOk = false), FakeWatcherGateway(info = v05), { true }, eager(), selfPubkey = self, hints = hints)
+        val c = MoneroSettingsController(FakeTipSettings(setup = httpSetup), FakeSecrets(), FakeTips(relaysOk = false), FakeWatcherGateway(info = v05), { AdoptResult.ADOPTED }, eager(), selfPubkey = self, hints = hints)
         c.start()
         advanceUntilIdle()
         c.setAmountsPublic(false)
@@ -397,7 +402,7 @@ class MoneroSettingsControllerTest {
         val hiddenSetup = httpSetup.copy(amountsHidden = true)
         val settings = FakeTipSettings(setup = hiddenSetup)
         val tips = FakeTips()
-        val c = MoneroSettingsController(settings, FakeSecrets(), tips, FakeWatcherGateway(info = v05.copy(protocol = null)), { true }, eager())
+        val c = MoneroSettingsController(settings, FakeSecrets(), tips, FakeWatcherGateway(info = v05.copy(protocol = null)), { AdoptResult.ADOPTED }, eager())
         c.start()
         advanceUntilIdle()
         assertEquals(false, c.state.value.amountsSupported)
@@ -410,7 +415,7 @@ class MoneroSettingsControllerTest {
     @Test
     fun `public setup on an unsupported watcher cannot be hidden`() = runTest {
         val tips = FakeTips()
-        val c = MoneroSettingsController(FakeTipSettings(setup = httpSetup), FakeSecrets(), tips, FakeWatcherGateway(info = v05.copy(protocol = null)), { true }, eager())
+        val c = MoneroSettingsController(FakeTipSettings(setup = httpSetup), FakeSecrets(), tips, FakeWatcherGateway(info = v05.copy(protocol = null)), { AdoptResult.ADOPTED }, eager())
         c.start()
         advanceUntilIdle()
         c.setAmountsPublic(false)
@@ -421,7 +426,7 @@ class MoneroSettingsControllerTest {
     @Test
     fun `support is checked when the screen opens`() = runTest {
         val gateway = FakeWatcherGateway(info = v05)
-        val c = MoneroSettingsController(FakeTipSettings(setup = httpSetup), FakeSecrets(), FakeTips(), gateway, { true }, eager())
+        val c = MoneroSettingsController(FakeTipSettings(setup = httpSetup), FakeSecrets(), FakeTips(), gateway, { AdoptResult.ADOPTED }, eager())
         assertNull(c.state.value.amountsSupported)
         c.start()
         advanceUntilIdle()
@@ -429,12 +434,12 @@ class MoneroSettingsControllerTest {
         assertEquals(true, c.state.value.amountsSupported)
 
         val tips = FakeTips().apply { statuses[watcherHex] = status.copy(protocol = "0.5") }
-        val p = MoneroSettingsController(FakeTipSettings(setup = personal), FakeSecrets(), tips, FakeWatcherGateway(), { true }, eager())
+        val p = MoneroSettingsController(FakeTipSettings(setup = personal), FakeSecrets(), tips, FakeWatcherGateway(), { AdoptResult.ADOPTED }, eager())
         p.start()
         advanceUntilIdle()
         assertEquals(true, p.state.value.amountsSupported)
 
-        val unreachable = MoneroSettingsController(FakeTipSettings(setup = httpSetup), FakeSecrets(), FakeTips(), FakeWatcherGateway(infoError = java.io.IOException("x")), { true }, eager())
+        val unreachable = MoneroSettingsController(FakeTipSettings(setup = httpSetup), FakeSecrets(), FakeTips(), FakeWatcherGateway(infoError = java.io.IOException("x")), { AdoptResult.ADOPTED }, eager())
         unreachable.start()
         advanceUntilIdle()
         assertNull(unreachable.state.value.amountsSupported)
@@ -443,7 +448,7 @@ class MoneroSettingsControllerTest {
     private val addr = "4" + "A".repeat(94)
 
     private fun TestScope.paytoController(tips: FakeTips, setup: MoneroSetup? = null, settings: FakeTipSettings = FakeTipSettings(setup = setup)) =
-        MoneroSettingsController(settings, FakeSecrets(), tips, FakeWatcherGateway(), { true }, eager())
+        MoneroSettingsController(settings, FakeSecrets(), tips, FakeWatcherGateway(), { AdoptResult.ADOPTED }, eager())
 
     @Test
     fun `showsPaytoWithoutSetup`() = runTest {
@@ -602,7 +607,7 @@ class MoneroSettingsControllerTest {
         val announced = address.encode()
         val tips = FakeTips(infos = mapOf(self to PaymentInfo.Enabled(address, Watcher.Http("https://w.example", "c".repeat(64)))))
             .apply { own = OwnPayto.Known(announced) }
-        val c = MoneroSettingsController(FakeTipSettings(), FakeSecrets(), tips, FakeWatcherGateway(), { true }, eager(), selfPubkey = self)
+        val c = MoneroSettingsController(FakeTipSettings(), FakeSecrets(), tips, FakeWatcherGateway(), { AdoptResult.ADOPTED }, eager(), selfPubkey = self)
         c.start()
         advanceUntilIdle()
         assertEquals(announced, c.state.value.announced)

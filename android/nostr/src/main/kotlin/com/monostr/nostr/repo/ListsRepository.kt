@@ -216,28 +216,44 @@ class NostrListsRepository(
      * replied (the versions taken over are then the relays' word).
      */
     internal suspend fun reconcileOwn(): Boolean {
-        val replied = fetchWide(engine, ownFilter(), defaultRelays, fetchTimeout)
+        val replied = fetchWideOwn(engine, ownFilter(), defaultRelays, fetchTimeout)
         val ds = newestPerD(engine.queryDecoded(ownFilter())).mapNotNull { it.firstTagValue("d") }
         var changed = false
-        for (d in ds) {
-            lockFor(d).withLock {
-                // read again under the lock: a write that held it has stored its version meanwhile
-                val latest = engine.queryDecoded(ownFilter().identifier(d)).maxByOrNull { it.createdAt } ?: return@withLock
-                lastCreatedAt = maxOf(lastCreatedAt, latest.createdAt)
-                val current = _own.value?.firstOrNull { it.address.d == d }
-                if (current != null && latest.createdAt <= current.createdAt) return@withLock
-                val set = decodeOwn(latest, interactive = false)
-                if (set != null) {
-                    putOwn(set)
-                    changed = true
-                } else if (current != null) {
-                    _own.update { cur -> cur.orEmpty().filterNot { it.address.d == d } }
-                    changed = true
-                }
-            }
-        }
+        for (d in ds) if (adoptNewest(d)) changed = true
         if (changed) persist()
         return replied
+    }
+
+    /** Takes over the stored version of list [d] when it is newer than the shown one, under the list's lock; true when something changed. */
+    private suspend fun adoptNewest(d: String): Boolean = lockFor(d).withLock {
+        // read again under the lock: a write that held it has stored its version meanwhile
+        val latest = engine.queryDecoded(ownFilter().identifier(d)).maxByOrNull { it.createdAt } ?: return@withLock false
+        lastCreatedAt = maxOf(lastCreatedAt, latest.createdAt)
+        val current = _own.value?.firstOrNull { it.address.d == d }
+        if (current != null && latest.createdAt <= current.createdAt) return@withLock false
+        val set = decodeOwn(latest, interactive = false)
+        if (set != null) {
+            putOwn(set)
+            true
+        } else if (current != null) {
+            _own.update { cur -> cur.orEmpty().filterNot { it.address.d == d } }
+            true
+        } else {
+            false
+        }
+    }
+
+    /**
+     * Before a write of list [d] (spec 2026-11-05 goal 5): a write-only relay is asked, its version taken over, and false
+     * when it stayed silent: a newer version may sit there and nowhere else. True at once, no request, without such a
+     * relay. Called before the list's lock: taking the version over takes it.
+     */
+    private suspend fun writeOnlyAnswered(d: String): Boolean {
+        if (!engine.hasWriteOnly) return true
+        ensureOwn()
+        if (!engine.askWriteOnly(ownFilter().identifier(d), fetchTimeout).answered) return false
+        if (adoptNewest(d)) persist()
+        return true
     }
 
     private fun putOwn(set: FollowSet) {
@@ -275,7 +291,7 @@ class NostrListsRepository(
             return lockFor(address.d).withLock {
                 _own.value?.firstOrNull { it.address == address }?.let { return@withLock it }
                 val filter = ownFilter().identifier(address.d)
-                fetchWide(engine, filter, defaultRelays, fetchTimeout)
+                fetchWideOwn(engine, filter, defaultRelays, fetchTimeout)
                 val set = engine.queryDecoded(filter).maxByOrNull { it.createdAt }?.let { decodeOwn(it, interactive = false) } ?: return@withLock null
                 putOwn(set)
                 persist()
@@ -290,11 +306,13 @@ class NostrListsRepository(
 
     override suspend fun save(set: FollowSet): SaveResult {
         awaitFirstReconcile()
+        if (!writeOnlyAnswered(set.address.d)) return SaveResult.Failed
         return lockFor(set.address.d).withLock { write(set) }
     }
 
     override suspend fun edit(address: ListAddress, title: String, description: String?, private: Boolean): SaveResult {
         awaitFirstReconcile()
+        if (!writeOnlyAnswered(address.d)) return SaveResult.Failed
         return lockFor(address.d).withLock { editLocked(address, title, description, private) }
     }
 
@@ -306,6 +324,7 @@ class NostrListsRepository(
 
     override suspend fun setMember(address: ListAddress, pubkey: String, present: Boolean): SaveResult {
         awaitFirstReconcile()
+        if (!writeOnlyAnswered(address.d)) return SaveResult.Failed
         return lockFor(address.d).withLock { setMemberLocked(address, pubkey, present) }
     }
 
@@ -350,6 +369,7 @@ class NostrListsRepository(
 
     override suspend fun delete(set: FollowSet): SaveResult {
         awaitFirstReconcile()
+        if (!writeOnlyAnswered(set.address.d)) return SaveResult.Failed
         return lockFor(set.address.d).withLock { deleteLocked(set) }
     }
 
@@ -441,7 +461,7 @@ internal suspend fun fetchWide(
             } else {
                 engine.fetchExit(null, filter, timeout, exit).also { if (it.met) { metAny.set(true); others.cancel() } }.events
             }
-            up = engine.connectedNormalRelayUrls().isNotEmpty()
+            up = engine.connectedReadRelayUrls().isNotEmpty()
             events
         }
     }
@@ -492,6 +512,15 @@ internal suspend fun legReplied(timeout: Duration, connected: () -> Boolean, blo
         replied = events.isNotEmpty() || (connected() && tookMs < timeout.toMillis() - 250)
     }
     return replied
+}
+
+/**
+ * [fetchWide] for the user's own events ([filter] names the user as the only author): the write-only relays are asked
+ * too and awaited, a version that lives only there must be seen before the next write. The answer stays [fetchWide]'s.
+ */
+internal suspend fun fetchWideOwn(engine: NostrEngine, filter: Filter, extra: List<String>, timeout: Duration): Boolean = coroutineScope {
+    val writeOnly = async { quietly { engine.fetchWriteOnly(filter, timeout) } }
+    fetchWide(engine, filter, extra, timeout).also { writeOnly.await() }
 }
 
 /** [fetchWide] with a fixed relay list (the tabs event, the own lists). */

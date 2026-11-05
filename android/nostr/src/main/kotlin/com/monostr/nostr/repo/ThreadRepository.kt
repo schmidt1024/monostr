@@ -175,7 +175,7 @@ class NostrThreadRepository(
      * connected relay was asked.
      */
     private suspend fun fetchReplies(tagIds: List<String>): Boolean = coroutineScope {
-        val asked = engine.connectedNormalRelayUrls().isNotEmpty()
+        val asked = engine.connectedReadRelayUrls().isNotEmpty()
         launch { quietly { engine.fetch(rootCommentsFilter(tagIds), fetchTimeout) } }
         quietly { engine.fetch(taggedFilter(REPLY_KINDS + 5, tagIds), fetchTimeout) }
         asked
@@ -187,7 +187,7 @@ class NostrThreadRepository(
 
     /** Job D (spec perf2 C3): deletion requests for root, focused and every stored reply, 100 ids per request, the requests in parallel; true when a connected relay was asked. */
     private suspend fun fetchDeletions(rootId: String, focusedId: String, tagIds: List<String>): Boolean = coroutineScope {
-        val asked = engine.connectedNormalRelayUrls().isNotEmpty()
+        val asked = engine.connectedReadRelayUrls().isNotEmpty()
         val replyIds = try {
             storedReplies(tagIds).map { it.second.id }
         } catch (e: CancellationException) {

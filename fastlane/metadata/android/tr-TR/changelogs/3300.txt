@@ -1,0 +1,4 @@
+- GIF'ler notlarda yaklaşık 5 saniye oynar ve durur; rozet yeniden oynatır, ayar Oto, Dokununca veya Kapalı sunar
+- Her röle için okuma, yazma veya ikisini seçin; işaretler listenizi benimserken veya yayınlarken korunur
+- Röle adresleri tek satırda kalır
+- Düzeltmeler

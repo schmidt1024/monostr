@@ -128,7 +128,7 @@ object Routes {
 /** Spec 3.2/3.4: how the note cards treat media, from UiSettingsStore, provided once for the whole nav host. */
 @HiltViewModel
 class MediaSettingsViewModel @Inject constructor(ui: UiSettingsStore, val linkPreviews: LinkPreviews, val previewImages: PreviewImages) : ViewModel() {
-    val settings: StateFlow<MediaSettings> = combine(ui.blurSensitive, ui.mediaOnTap, ui.linkPreviews) { b, t, l -> MediaSettings(b, t, l) }
+    val settings: StateFlow<MediaSettings> = combine(ui.blurSensitive, ui.mediaOnTap, ui.linkPreviews, ui.gifMode) { b, t, l, g -> MediaSettings(b, t, l, g) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, MediaSettings())
 }
 

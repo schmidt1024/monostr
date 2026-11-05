@@ -181,7 +181,7 @@ class NostrTipsRepository(
     }
 
     /** The own kind 10133 after one relay fetch: [event] the newest stored one, [state] what it says. */
-    private class OwnPaytoRead(val event: Event?, val state: OwnPayto)
+    private class OwnPaytoRead(val event: Event?, val state: OwnPayto, val writeOnlyAnswered: Boolean)
 
     private suspend fun readOwnPayto(): OwnPaytoRead {
         val self = requireNotNull(engine.pubkey) { "payto needs a logged-in user" }
@@ -194,13 +194,15 @@ class NostrTipsRepository(
             fetch.completed -> OwnPayto.Known(null)
             else -> OwnPayto.Unknown
         }
-        return OwnPaytoRead(event, state)
+        return OwnPaytoRead(event, state, fetch.writeOnlyAnswered)
     }
 
     override suspend fun ownPayto(): OwnPayto = readOwnPayto().state
 
     override suspend fun setOwnPayto(address: String?): PaytoWrite {
         val read = readOwnPayto()
+        // the newest version may live only on a write-only relay (spec 2026-11-05 goal 5)
+        if (!read.writeOnlyAnswered) return PaytoWrite.Unknown
         val state = read.state as? OwnPayto.Known ?: return PaytoWrite.Unknown
         if (state.address == address) return PaytoWrite.Published
         val base = read.event
