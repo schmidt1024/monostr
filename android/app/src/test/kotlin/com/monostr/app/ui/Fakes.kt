@@ -698,6 +698,9 @@ class FakeUiSettings : UiSettingsStore {
     val powBitsState = MutableStateFlow(0)
     override val powBits: Flow<Int> = powBitsState
     override suspend fun setPowBits(bits: Int) { powBitsState.value = bits }
+    val powFilterState = MutableStateFlow(0)
+    override val powFilterBits: Flow<Int> = powFilterState
+    override suspend fun setPowFilterBits(bits: Int) { powFilterState.value = bits }
     override suspend fun setQuickReactions(list: List<String>) { quickReactionsState.value = list.ifEmpty { com.monostr.app.ui.common.Reactions.QUICK } }
 }
 
@@ -894,15 +897,22 @@ class FakeFollows(initial: Map<String, FollowState> = emptyMap()) : FollowReposi
     /** When false, [followed] answers null (no contact list known yet). */
     var known = true
     override fun followed(): Flow<Set<String>?> = states.map { m -> if (known) m.filterValues { it == FollowState.Following }.keys else null }
-    override suspend fun followAll(pubkeys: Collection<String>): Int {
+    override suspend fun unfollowAll(pubkeys: Collection<String>): List<String> {
+        val todo = pubkeys.distinct().filter { states.value[it] == FollowState.Following }
+        calls += "unfollowAll:${todo.size}"
+        error?.let { throw it }
+        states.update { it + todo.associateWith { FollowState.NotFollowing } }
+        return todo
+    }
+    override suspend fun followAll(pubkeys: Collection<String>): List<String> {
         val todo = pubkeys.distinct().filter { states.value[it] != FollowState.Following }
         calls += "followAll:${todo.size}"
         gate?.await()
         error?.let { throw it }
-        if (todo.isEmpty()) return 0
+        if (todo.isEmpty()) return emptyList()
         states.update { it + todo.associateWith { FollowState.Following } }
         _changes.tryEmit(Unit)
-        return todo.size
+        return todo
     }
     override suspend fun setInitial(pubkeys: List<String>) {
         calls += "initial:${pubkeys.size}"
@@ -1059,10 +1069,13 @@ class FakeLists(initial: List<FollowSet> = emptyList()) : ListsRepository {
     }
     /** When set, a lookup that fetches from relays throws (offline). */
     var fetchFails = false
+    /** When set, a lookup that fetches from relays suspends here (a slow relay). */
+    var fetchGate: CompletableDeferred<Unit>? = null
     /** (address, fetch) of every byAddress call, in order. */
     val byAddressCalls = ArrayList<Pair<ListAddress, Boolean>>()
     override suspend fun byAddress(address: ListAddress, fetch: Boolean): FollowSet? {
         byAddressCalls += address to fetch
+        if (fetch) fetchGate?.await()
         if (fetch && fetchFails) throw IllegalStateException("offline")
         return ownState.value.firstOrNull { it.address == address } ?: foreign[address]
     }

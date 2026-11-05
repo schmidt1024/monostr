@@ -1,0 +1,5 @@
+- Follow packs show as a card and open in the app
+- References without the nostr: prefix now work
+- Follow all asks first above 10 accounts and can be undone
+- Optional minimum proof of work to show notes, off by default
+- A pending tip now says it waits for the payment

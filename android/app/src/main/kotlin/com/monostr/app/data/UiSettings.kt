@@ -60,6 +60,9 @@ interface UiSettingsStore {
     /** NIP-13 proof of work for own notes, in bits: 0 (off, the default), 16, 20 or 24. */
     val powBits: Flow<Int>
     suspend fun setPowBits(bits: Int)
+    /** Notes below this NIP-13 difficulty are hidden, except from follows; 0 = off (GitHub #4). */
+    val powFilterBits: Flow<Int>
+    suspend fun setPowFilterBits(bits: Int)
     suspend fun setThemeMode(mode: ThemeMode)
     suspend fun setAccent(accent: Accent)
     suspend fun setBlurSensitive(on: Boolean)
@@ -87,6 +90,8 @@ class PrefsUiSettingsStore(private val store: DataStore<Preferences>) : UiSettin
     override val quickReactions: Flow<List<String>> = data.map { Reactions.decode(it[QUICK_REACTIONS]) }
     override val powBits: Flow<Int> = data.map { p -> p[POW_BITS]?.let { powChoice(it) } ?: POW_DEFAULT }
     override suspend fun setPowBits(bits: Int) { store.edit { it[POW_BITS] = powChoice(bits) } }
+    override val powFilterBits: Flow<Int> = data.map { p -> powChoice(p[POW_FILTER_BITS] ?: 0) }
+    override suspend fun setPowFilterBits(bits: Int) { store.edit { it[POW_FILTER_BITS] = powChoice(bits) } }
     override val customHue: Flow<Float> = data.map { p -> p[CUSTOM_HUE]?.takeIf { h -> h >= 0f && h < 360f } ?: Accent.LEGACY_HUES[p[ACCENT]] ?: AccentSeed.DEFAULT_HUE }
 
     override suspend fun setThemeMode(mode: ThemeMode) { store.edit { it[THEME_MODE] = mode.name } }
@@ -109,6 +114,7 @@ class PrefsUiSettingsStore(private val store: DataStore<Preferences>) : UiSettin
         val CLIENT_TAG = booleanPreferencesKey("ui.client_tag")
         val QUICK_REACTIONS = stringPreferencesKey("ui.quick_reactions")
         val POW_BITS = intPreferencesKey("ui.pow_bits")
+        val POW_FILTER_BITS = intPreferencesKey("ui.pow_filter_bits")
         val BLUR_SENSITIVE = booleanPreferencesKey("ui.blur_sensitive")
         val MEDIA_ON_TAP = booleanPreferencesKey("ui.media_on_tap")
         val LINK_PREVIEWS = booleanPreferencesKey("ui.link_previews")

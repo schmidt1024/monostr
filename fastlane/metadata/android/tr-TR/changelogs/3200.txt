@@ -1,0 +1,5 @@
+- Takip paketleri kart olarak görünür ve uygulamada açılır
+- nostr: öneki olmayan bağlantılar artık çalışıyor
+- Tümünü takip et, 10 hesabın üzerinde sorar ve geri alınabilir
+- Notları göstermek için isteğe bağlı en az iş kanıtı, varsayılan olarak kapalı
+- Bekleyen bahşiş artık ödemeyi beklediğini söylüyor

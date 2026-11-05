@@ -131,7 +131,7 @@ class FollowRepositoryTest {
         val repo = NostrFollowRepository(e, feed(e, 2_000, ago = 10), now = { 2_000 }, send = okSend(e))
         val dave = Keys.generate().publicKey().toHex()
         val emitted = async(start = CoroutineStart.UNDISPATCHED) { repo.changes.first() }
-        assertEquals(2, repo.followAll(listOf(bob, carol, dave, pk)))
+        assertEquals(listOf(carol, dave), repo.followAll(listOf(bob, carol, dave, pk)))
         assertEquals(1, sends)
         assertEquals(listOf(listOf("p", bob), listOf("p", carol), listOf("p", dave)), newest(e)!!.tagList())
         emitted.await()
@@ -157,7 +157,7 @@ class FollowRepositoryTest {
         val e = engine()
         e.save(kind3(listOf(listOf("p", bob))))
         val repo = NostrFollowRepository(e, feed(e, 2_000, ago = 10), now = { 2_000 }, send = okSend(e))
-        assertEquals(0, repo.followAll(listOf(bob, pk)))
+        assertEquals(emptyList<String>(), repo.followAll(listOf(bob, pk)))
         assertEquals(0, sends)
         e.close()
     }
@@ -324,6 +324,18 @@ class FollowRepositoryTest {
         val repo = NostrFollowRepository(e, feed(e, 2_000, ago = 10), now = { 2_000 }, send = { throw SigningRejectedException() })
         assertTrue(failure { repo.follow(carol) } is SigningRejectedException)
         assertEquals(listOf(listOf("p", bob)), newest(e)!!.tagList())
+        e.close()
+    }
+
+    @Test
+    fun `unfollowAll removes exactly the given pubkeys in one event and keeps the rest`() = runTest {
+        val e = engine()
+        val dave = Keys.generate().publicKey().toHex()
+        e.save(kind3(listOf(listOf("p", bob), listOf("p", carol), listOf("p", dave), listOf("t", "keep"))))
+        val repo = NostrFollowRepository(e, feed(e, 2_000, ago = 10), now = { 2_000 }, send = okSend(e))
+        assertEquals(listOf(carol, dave), repo.unfollowAll(listOf(carol, dave, Keys.generate().publicKey().toHex())))
+        assertEquals(1, sends)
+        assertEquals(listOf(listOf("p", bob), listOf("t", "keep")), newest(e)!!.tagList())
         e.close()
     }
 }

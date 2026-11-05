@@ -160,4 +160,46 @@ class AddressCardTest {
         rule.waitUntil(15_000) { nodes("article-screen").isNotEmpty() }
         intended(allOf(hasAction(Intent.ACTION_VIEW), hasDataString(startsWith("https://njump.me/naddr1"))), androidx.test.espresso.intent.VerificationModes.times(1))
     }
+
+    /** Nostur posts the naddr without `nostr:`: it still is a card, and a follow pack opens read-only in the list screen. */
+    @Test
+    fun bareFollowPackNaddrIsACardThatOpensTheReadOnlyListScreen() {
+        runBlocking { runCatching { entry.session().logout() } }
+        reachFeed()
+        val ready = entry.session().requireReady()
+        val alice = Keys.generate()
+        val bob = Keys.generate()
+        val ts = System.currentTimeMillis()
+        val d = "pack-$ts"
+        val pack = EventBuilder(Kind(39089u), "")
+            .tags(listOf(Tag.parse(listOf("d", d)), Tag.parse(listOf("title", "Pack title $ts"))) + (0 until 12).map { Tag.parse(listOf("p", Keys.generate().publicKey().toHex())) })
+            .signWithKeys(bob)
+        val bare = AddressRef(39089, bob.publicKey().toHex(), d).toBech32()
+        val note = EventBuilder.textNote("my pack $ts\n$bare").signWithKeys(alice)
+        runBlocking {
+            entry.session().applyRelays(listOf("ws://127.0.0.1:9"))
+            ready.engine.save(EventBuilder.contactList(listOf(Contact(alice.publicKey(), null, null))).signWithKeys(me))
+            ready.engine.save(EventBuilder.metadata(Metadata.fromJson("""{"name":"alice-pack-$ts"}""")).signWithKeys(alice))
+            ready.engine.save(pack)
+            ready.engine.save(note)
+        }
+
+        showInFeed("my pack $ts")
+        assertTrue("the naddr no longer shows as text", rule.onAllNodesWithText(bare, substring = true).fetchSemanticsNodes().isEmpty())
+        val card = "address-card-${d.take(8)}"
+        rule.onNodeWithTag("feed-list").performScrollToNode(hasTestTag(card))
+        rule.waitUntil(15_000) { rule.onAllNodesWithText("Pack title $ts").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithTag(card).performTouchInput { click(Offset(centerX, height - 4.dp.toPx())) }
+
+        rule.waitUntil(15_000) { nodes("list-tab-members").isNotEmpty() }
+        assertTrue("no pin on a pack", nodes("list-pin").isEmpty())
+        rule.onNodeWithTag("list-tab-members").performClick()
+        rule.waitUntil(15_000) { nodes("list-members").isNotEmpty() }
+        // twelve new accounts: a question first, Cancel writes nothing
+        rule.onNodeWithTag("list-follow-all").performClick()
+        rule.waitUntil(5_000) { nodes("follow-all-confirm").isNotEmpty() }
+        rule.onNodeWithTag("follow-all-no").performClick()
+        rule.waitUntil(5_000) { nodes("follow-all-confirm").isEmpty() }
+        assertTrue("no edit on a pack", nodes("list-edit").isEmpty())
+    }
 }

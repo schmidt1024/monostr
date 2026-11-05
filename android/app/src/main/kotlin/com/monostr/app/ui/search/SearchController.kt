@@ -237,12 +237,19 @@ class SearchController(
         try {
             val out = search.hashtag(tag, until)
             val decorated = decorate(out.items)
+            if (until == null) { fillLeft = FILL_PAGES; oldestLoaded = null }
+            decorated.minOfOrNull { it.note.createdAt }?.let { o -> oldestLoaded = minOf(oldestLoaded ?: o, o) }
             _state.update { s ->
                 val decorated = decorated.map(::flagged)
                 val notes = visibility.visible(if (until == null) decorated else (s.notes + decorated).distinctBy { it.note.id })
                 s.copy(notes = notes, loading = false, loadingMore = false, error = out.error?.userMessage(), searched = true)
             }
             decorations.track(_state.value.notes.map { it.note })
+            // what the proof of work filter leaves can be nothing, and an empty list never asks for more
+            if (visibility.pow.value.on && out.items.isNotEmpty() && _state.value.notes.size < FILL_TARGET && fillLeft > 0) {
+                fillLeft--
+                loadPage()
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -251,12 +258,22 @@ class SearchController(
     }
 
     fun loadMore() {
+        fillLeft = FILL_PAGES
+        loadPage()
+    }
+
+    private var fillLeft = FILL_PAGES
+    private var oldestLoaded: Long? = null
+
+    private fun loadPage() {
         val s = _state.value
         val tag = s.hashtag ?: return
         // loading: the first page is still on its way (stored notes may show already); a paged fetch would race it
-        if (s.mode != SearchMode.HASHTAG || s.loading || s.loadingMore || s.notes.isEmpty()) return
+        if (s.mode != SearchMode.HASHTAG || s.loading || s.loadingMore) return
+        val lastShown = s.notes.lastOrNull()?.note?.createdAt
+        val until = (if (visibility.pow.value.on) listOfNotNull(oldestLoaded, lastShown).minOrNull() else lastShown) ?: return
         _state.update { it.copy(loadingMore = true) }
-        running = scope.launch { hashtag(tag, until = s.notes.last().note.createdAt) }
+        running = scope.launch { hashtag(tag, until = until) }
     }
 
     fun like(note: Note) = actions.like(note, ::onActionResult)
@@ -265,6 +282,11 @@ class SearchController(
     fun repost(note: Note) = actions.repost(note, ::onActionResult)
     fun bookmark(note: Note) = bookmarks.toggle(note) { m -> _state.update { s -> s.copy(notes = s.notes.mapKeep(bookmarks::flags), message = m?.asMessage() ?: s.message) } }
     fun clearMessage() = _state.update { it.copy(message = null) }
+
+    private companion object {
+        const val FILL_PAGES = 3
+        const val FILL_TARGET = 10
+    }
 
     /**
      * Spec 9.4: mutes the note's author at once; the publish runs behind it, a failure brings the account back

@@ -171,4 +171,92 @@ class ListControllerTest {
         assertEquals(setOf(self, dave), c.state.value.notFollowable)
         assertTrue(c.state.value.allFollowed)
     }
+
+    @Test
+    fun `a follow pack is shown read-only, also when it is the user's own`() = runTest {
+        val foreign = followSet("pack", listOf(bob), author = carol).let { it.copy(address = ListAddress(39089, carol, "pack")) }
+        val own = followSet("mine", listOf(bob), author = self).let { it.copy(address = ListAddress(39089, self, "mine")) }
+        val lists = FakeLists(listOf(own)).apply { this.foreign = mapOf(foreign.address to foreign) }
+        val a = controller(foreign.address, lists); a.start(); runCurrent()
+        assertEquals(foreign, a.state.value.set)
+        assertTrue(a.state.value.pack); assertFalse(a.state.value.isOwn)
+        val b = controller(own.address, lists); b.start(); runCurrent()
+        assertEquals(own, b.state.value.set)
+        assertTrue(b.state.value.pack); assertFalse(b.state.value.isOwn)
+    }
+
+    @Test
+    fun `a follow set is no pack`() = runTest {
+        val friends = followSet("friends", listOf(bob), author = self)
+        val c = controller(friends.address, FakeLists(listOf(friends))); c.start(); runCurrent()
+        assertFalse(c.state.value.pack)
+    }
+
+    private fun TestScope.followController(set: com.monostr.nostr.model.FollowSet, follows: com.monostr.app.ui.FakeFollows) =
+        ListController(set.address, self, FakeLists().also { it.foreign = mapOf(set.address to set) }, FakeFeedTabs(), FakeProfiles(), eager(), follows = follows, mute = com.monostr.app.ui.FakeMute(emptySet())) { source, child ->
+            FeedController(FakeFeed(), FakeProfiles(), FakePublish(), decorations(), BookmarkActions(FakeBookmarks(), child), FakeCounts(), child, source = source)
+        }
+    private fun pk(i: Int) = "%064x".format(i + 100)
+
+    @Test
+    fun `ten new accounts follow at once, and Undo takes back only those`() = runTest {
+        val old = pk(50)
+        val set = followSet("art", (1..10).map(::pk) + old, author = carol)
+        val follows = com.monostr.app.ui.FakeFollows(mapOf(old to com.monostr.nostr.repo.FollowState.Following))
+        val c = followController(set, follows); c.start(); runCurrent()
+        c.followAll(); runCurrent()
+        assertNull(c.state.value.followAllConfirm)
+        assertEquals(listOf("followAll:10"), follows.calls)
+        c.state.value.message!!.undo!!.invoke(); runCurrent()
+        assertEquals(listOf("followAll:10", "unfollowAll:10"), follows.calls)
+        assertEquals(setOf(old), c.state.value.followed)
+    }
+
+    @Test
+    fun `eleven new accounts ask first, Cancel writes nothing and a yes follows them`() = runTest {
+        val set = followSet("art", (1..11).map(::pk) + pk(50), author = carol)
+        val follows = com.monostr.app.ui.FakeFollows(mapOf(pk(50) to com.monostr.nostr.repo.FollowState.Following))
+        val c = followController(set, follows); c.start(); runCurrent()
+        c.followAll(); runCurrent()
+        assertEquals(11, c.state.value.followAllConfirm?.size)
+        assertTrue(follows.calls.isEmpty())
+        c.dismissFollowAll()
+        assertNull(c.state.value.followAllConfirm)
+        c.followAll(); runCurrent()
+        c.confirmFollowAll(); runCurrent()
+        assertNull(c.state.value.followAllConfirm)
+        assertEquals(listOf("followAll:11"), follows.calls)
+    }
+
+    @Test
+    fun `a follow pack can be followed too, a failed Undo says so`() = runTest {
+        val set = followSet("pack", listOf(bob), author = carol).let { it.copy(address = ListAddress(39089, carol, "pack")) }
+        val follows = com.monostr.app.ui.FakeFollows()
+        val c = followController(set, follows); c.start(); runCurrent()
+        c.followAll(); runCurrent()
+        assertEquals(listOf("followAll:1"), follows.calls)
+        follows.error = IllegalStateException("no relay")
+        c.state.value.message!!.undo!!.invoke(); runCurrent()
+        assertNotNull(c.state.value.message)
+        assertNull(c.state.value.message?.undo)
+    }
+
+    @Test
+    fun `a yes follows the accounts it was asked about, not a larger version that arrived meanwhile`() = runTest {
+        val small = followSet("art", (1..11).map(::pk), author = carol)
+        val big = small.copy(members = (1..40).map(::pk))
+        val lists = FakeLists().also { it.foreign = mapOf(small.address to small); it.fetchGate = kotlinx.coroutines.CompletableDeferred() }
+        val follows = com.monostr.app.ui.FakeFollows()
+        val c = ListController(small.address, self, lists, FakeFeedTabs(), FakeProfiles(), eager(), follows = follows, mute = com.monostr.app.ui.FakeMute(emptySet())) { source, child ->
+            FeedController(FakeFeed(), FakeProfiles(), FakePublish(), decorations(), BookmarkActions(FakeBookmarks(), child), FakeCounts(), child, source = source)
+        }
+        c.start(); runCurrent()
+        c.followAll(); runCurrent()
+        assertEquals(11, c.state.value.followAllConfirm?.size)
+        lists.foreign = mapOf(small.address to big)
+        lists.fetchGate!!.complete(Unit); runCurrent()
+        assertEquals(40, c.state.value.set!!.members.size)
+        c.confirmFollowAll(); runCurrent()
+        assertEquals(listOf("followAll:11"), follows.calls)
+    }
 }

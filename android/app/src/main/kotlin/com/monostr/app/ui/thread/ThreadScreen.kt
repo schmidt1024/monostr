@@ -244,7 +244,9 @@ class ThreadController(
                     }
                     val byKey = profiles.getAll(withFocused.map { it.author })
                     all = withFocused.map { n -> NoteUi(n, byKey.getValue(n.author), byKey.getValue(n.author)) }
-                    val items = visibility.visible(all.map(::fresh), keep = view.focused.id)
+                    // the proof of work filter takes replies only: what stands above the focused note is its context
+                    powKeep = shownAncestors.mapTo(HashSet()) { it.id }
+                    val items = visibility.visible(all.map(::fresh), keep = view.focused.id, powKeep = powKeep)
                     val muted = visibility.mutedOnly(all.map(::fresh), keep = view.focused.id).associateBy { it.note.id }
                     val articles = ancestors.filterIsInstance<Slot.Article>().associate { it.id to it.ref }
                     _state.update { it.copy(items = items, rows = rows, focusedId = view.focused.id, loading = false, muted = muted, articles = articles) }
@@ -288,11 +290,14 @@ class ThreadController(
      */
     private var all: List<NoteUi> = emptyList()
 
+    /** The notes above the focused one, which the proof of work filter leaves alone. */
+    private var powKeep: Set<String> = emptySet()
+
     /** Applies [visibility] to [all] again; shown items keep their current flags and counts. */
     private fun refilter() = _state.update { s ->
         val shown = s.items.associateBy { it.note.id }
         val current = all.map { shown[it.note.id] ?: s.muted[it.note.id] ?: fresh(it) }
-        s.copy(items = visibility.visible(current, keep = s.focusedId ?: noteId), muted = visibility.mutedOnly(current, keep = s.focusedId ?: noteId).associateBy { it.note.id })
+        s.copy(items = visibility.visible(current, keep = s.focusedId ?: noteId, powKeep = powKeep), muted = visibility.mutedOnly(current, keep = s.focusedId ?: noteId).associateBy { it.note.id })
     }
 
     /** [ui] with the current bookmark, action, tip and count state. */

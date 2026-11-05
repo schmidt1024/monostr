@@ -1,5 +1,9 @@
 package com.monostr.app.session
 
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flatMapLatest
+import com.monostr.app.ui.common.PowFilter
 import com.monostr.app.ui.discover.DiscoverDecision
 import com.monostr.nostr.repo.DiscoverRepository
 import com.monostr.nostr.repo.NostrDiscoverRepository
@@ -227,12 +231,14 @@ class Ready(
     val locator: EventLocator? = null,
     /** Spec 2026-10-23 §3: the app-wide budget of foreign relays; logout and release give them back. */
     val foreign: ForeignRelays? = null,
+    /** GitHub #4: the proof of work minimum for notes of people the user does not follow. */
+    val powFilter: StateFlow<PowFilter> = MutableStateFlow(PowFilter.OFF),
 ) {
     /** Pubkeys of the muted accounts; every note list filters against them (spec 9.3). */
     val muted: StateFlow<Set<String>> get() = mute.muted
 
     /** The one filter of every note list: deleted notes and muted accounts. */
-    val visibility: NoteVisibility = NoteVisibility(deletions, mute.muted)
+    val visibility: NoteVisibility = NoteVisibility(deletions, mute.muted, powFilter)
 }
 
 /**
@@ -655,10 +661,15 @@ class NostrSession @Inject constructor(
             val feed = NostrFeedRepository(engine, excluded = { mute.muted.value }, marks = syncMarks)
             val profiles = NostrProfileRepository(engine, indexRelays = NostrProfileRepository.INDEX_RELAYS)
             val notifications = NostrNotificationsRepository(engine, tips)
-            // one pipeline for the badge, the screen and the tip check; started by the first of them (spec perf 3.6)
-            val notificationsStore = NotificationsStore(notifications, profiles, tipSettings, engine.backgroundScope, muted = mute.muted, me = signer.pubkey, startupGate = startupGate)
             // issue 5: a list kept only elsewhere still counts as current when an index relay delivers it
             val follows = NostrFollowRepository(engine, feed, indexRelays = NostrProfileRepository.OWN_LIST_RELAYS)
+            // off (the default) reads no follow list; while the follows are unknown nothing is hidden, or their notes would blink away
+            @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+            val powFilter = uiSettings.powFilterBits.distinctUntilChanged().flatMapLatest { bits ->
+                if (bits <= 0) flowOf(PowFilter.OFF) else follows.followed().map { f -> if (f == null) PowFilter.OFF else PowFilter(bits, f + signer.pubkey) }
+            }.stateIn(engine.backgroundScope, SharingStarted.Eagerly, PowFilter.OFF)
+            // one pipeline for the badge, the screen and the tip check; started by the first of them (spec perf 3.6)
+            val notificationsStore = NotificationsStore(notifications, profiles, tipSettings, engine.backgroundScope, muted = mute.muted, pow = powFilter, me = signer.pubkey, startupGate = startupGate)
             val relaySeen = SyncMarks(File(dir, RELAY_SEEN_FILE))
             val ownReactions = NostrOwnReactions(engine, scope = engine.backgroundScope, gate = startupGate, marks = syncMarks)
             // followers = the largest NIP-45 COUNT of the relays (0.22.4: no proprietary index any more)
@@ -735,6 +746,7 @@ class NostrSession @Inject constructor(
                 feedTabs = feedTabs,
                 locator = locator,
                 foreign = foreign,
+                powFilter = powFilter,
             )
         } catch (e: Exception) {
             SessionCleanup.closeAll({ dmStore.close() }, { engine.close() })

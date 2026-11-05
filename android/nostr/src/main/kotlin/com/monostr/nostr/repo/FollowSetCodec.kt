@@ -4,7 +4,7 @@ import com.monostr.nostr.model.FollowSet
 import com.monostr.nostr.model.ListAddress
 import com.monostr.tips.event.Event as JsonEvent
 
-/** Kind 30000 events ↔ [FollowSet] (spec 2026-10-18 §3.1). */
+/** Kind 30000 events ↔ [FollowSet] (spec 2026-10-18 §3.1); a follow pack (39089) is only ever decoded, like a foreign list. */
 internal object FollowSetCodec {
     const val KIND = ListAddress.FOLLOW_SET
 
@@ -53,7 +53,7 @@ internal object FollowSetCodec {
         val members = all.filter { it[0] == "p" && it.size >= 2 }.map { it[1].lowercase() }.filter { it.matches(HEX64) }.distinct()
         if (privateTags == null && title.isEmpty() && members.isEmpty()) return null
         return FollowSet(
-            address = ListAddress(KIND, author, d),
+            address = ListAddress(event.kind, author, d),
             title = title,
             description = description,
             members = members,

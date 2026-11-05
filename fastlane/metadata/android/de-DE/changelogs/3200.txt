@@ -1,0 +1,5 @@
+- Follow-Packs erscheinen als Karte und öffnen sich in der App
+- Verweise ohne nostr:-Präfix funktionieren jetzt
+- «Allen folgen» fragt ab 11 Accounts nach und lässt sich rückgängig machen
+- Optionales Mindest-Proof-of-Work für Notes, standardmässig aus
+- Ein offener Tip sagt jetzt, dass er auf die Zahlung wartet

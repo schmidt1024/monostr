@@ -1,6 +1,9 @@
 package com.monostr.app.ui.discover
 
+import com.monostr.app.R
+import com.monostr.app.ui.common.FollowAll
 import com.monostr.app.ui.common.UiText
+import com.monostr.app.ui.common.pluralText
 import com.monostr.app.ui.common.userMessage
 import com.monostr.nostr.model.FollowSet
 import com.monostr.nostr.model.ListAddress
@@ -29,7 +32,17 @@ sealed interface DiscoverStatus {
     data object Failed : DiscoverStatus
 }
 
-data class DiscoverUi(val status: DiscoverStatus = DiscoverStatus.Loading, val sections: List<DiscoverSection> = emptyList(), val message: UiText? = null)
+data class FollowAllQuestion(val address: ListAddress, val targets: List<String>)
+
+data class DiscoverUi(
+    val status: DiscoverStatus = DiscoverStatus.Loading,
+    val sections: List<DiscoverSection> = emptyList(),
+    val message: UiText? = null,
+    /** The message's «Undo»: takes back the follows of the last «Follow all». */
+    val undo: (() -> Unit)? = null,
+    /** «Follow all» waits for a yes (more than [com.monostr.app.ui.common.FollowAll.CONFIRM_ABOVE] accounts). */
+    val followAllConfirm: FollowAllQuestion? = null,
+)
 
 /**
  * Spec 2026-10-27 §5, §8: the curated sections of the feed block and of «Entdecken». Shows the stored lists at once,
@@ -58,6 +71,8 @@ class DiscoverController(
     /** Lists whose «follow all» is in flight: a second tap does nothing. */
     private val followingAll = ConcurrentHashMap.newKeySet<ListAddress>()
     private var started = false
+    /** The follows as last seen, for the count of «Follow all». */
+    @Volatile private var followedNow: Set<String> = emptySet()
     /** The rows each section showed last; only [build] (one collector) touches it. */
     private val shownRows = HashMap<ListAddress, List<String>>()
 
@@ -66,7 +81,7 @@ class DiscoverController(
         started = true
         scope.launch {
             combine(lists, follows.followed(), mute.muted, known, failed) { l, f, m, p, fail -> build(l, f ?: emptySet(), m, p, fail) }
-                .collect { ui -> _state.update { ui.copy(message = it.message) } }
+                .collect { ui -> _state.update { ui.copy(message = it.message, undo = it.undo, followAllConfirm = it.followAllConfirm) } }
         }
         scope.launch { profiles.updates.collect { u -> known.update { it + u } } }
         load()
@@ -89,24 +104,54 @@ class DiscoverController(
         }
     }
 
+    /** Above [FollowAll.CONFIRM_ABOVE] new accounts it asks first. */
     fun followAll(address: ListAddress) {
         val set = lists.value?.firstOrNull { it.address == address } ?: return
+        val targets = FollowAll.newMembers(set.members, followedNow, mute.muted.value, self)
+        if (targets.size > FollowAll.CONFIRM_ABOVE) _state.update { it.copy(followAllConfirm = FollowAllQuestion(address, targets)) } else writeFollowAll(address, targets)
+    }
+
+    fun confirmFollowAll() {
+        // exactly the accounts the question named: a newer version of the list may have arrived behind the dialog
+        val question = _state.value.followAllConfirm ?: return
+        dismissFollowAll()
+        writeFollowAll(question.address, question.targets)
+    }
+
+    fun dismissFollowAll() = _state.update { it.copy(followAllConfirm = null) }
+
+    private fun writeFollowAll(address: ListAddress, targets: List<String>) {
         if (!followingAll.add(address)) return
         val muted = mute.muted.value
         writeScope.launch {
             try {
-                follows.followAll(set.members.filter { it != self && it !in muted })
+                val added = follows.followAll(targets.filter { it !in muted })
+                if (added.isNotEmpty()) {
+                    _state.update { it.copy(message = pluralText(R.plurals.follow_all_done, added.size, added.size), undo = { undoFollowAll(added) }) }
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _state.update { it.copy(message = e.userMessage()) }
+                _state.update { it.copy(message = e.userMessage(), undo = null) }
             } finally {
                 followingAll.remove(address)
             }
         }
     }
 
-    fun clearMessage() = _state.update { it.copy(message = null) }
+    private fun undoFollowAll(added: List<String>) {
+        writeScope.launch {
+            try {
+                follows.unfollowAll(added)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(message = e.userMessage(), undo = null) }
+            }
+        }
+    }
+
+    fun clearMessage() = _state.update { it.copy(message = null, undo = null) }
 
     private fun load() {
         scope.launch {
@@ -118,6 +163,7 @@ class DiscoverController(
     }
 
     private fun build(sets: List<FollowSet>?, followed: Set<String>, muted: Set<String>, known: Map<String, Profile>, fail: Boolean): DiscoverUi {
+        followedNow = followed
         if (sets == null) return DiscoverUi(if (fail) DiscoverStatus.Failed else DiscoverStatus.Loading)
         val sections = sets.map { set ->
             val candidates = set.members.filter { it != self && it !in muted }.distinct()

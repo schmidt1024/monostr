@@ -76,7 +76,7 @@
     <string name="note_tips_open">Tipper anzeigen</string>
     <string name="note_reposted_by">%1$s hat repostet</string>
     <string name="repost_original_unavailable">Repostete Note nicht verfügbar. Tippen, um sie zu suchen.</string>
-    <string name="note_tip_pending">Tip gesendet, wartet auf Bestätigung</string>
+    <string name="note_tip_pending">Wartet auf Zahlung</string>
     <string name="note_tips_chip">%1$s · %2$d</string>
     <string name="media_sensitive">Sensibler Inhalt</string>
     <string name="media_tap_to_show">Tippen zum Anzeigen</string>
@@ -335,6 +335,8 @@
     <string name="settings_pow_hint">Manche Relays nehmen nur Notes mit Proof of Work an (NIP-13). Mehr Bits werden eher angenommen, das Senden dauert aber länger.</string>
     <string name="settings_pow_off">Aus</string>
     <string name="settings_pow_bits">%1$d Bit</string>
+    <string name="settings_pow_filter">Mindest-Proof-of-Work für Notes</string>
+    <string name="settings_pow_filter_hint">Blendet Notes unter diesem Wert von Leuten aus, denen du nicht folgst. Wenige Apps senden Proof of Work, darum verschwinden die meisten ihrer Notes. Notes, die du öffnest, und Tips bleiben.</string>
     <string name="settings_client_tag">„via monostr“ anzeigen</string>
     <string name="settings_client_tag_hint">Notes, Likes und Reposts tragen einen Client-Tag, den andere Apps als „via monostr“ zeigen.</string>
     <string name="note_via">via %1$s</string>
@@ -685,6 +687,15 @@
     <string name="discover_following">Folge ich</string>
     <string name="discover_follow_all">Allen folgen</string>
     <string name="discover_all_followed">Folge allen</string>
+    <plurals name="follow_all_confirm_title">
+        <item quantity="one">%1$d Account folgen?</item>
+        <item quantity="other">%1$d Accounts folgen?</item>
+    </plurals>
+    <string name="follow_all_confirm_text">Alle kommen auf einmal in deine Follow-Liste. Du kannst es gleich danach rückgängig machen.</string>
+    <plurals name="follow_all_done">
+        <item quantity="one">Du folgst %1$d weiterem Account</item>
+        <item quantity="other">Du folgst %1$d weiteren Accounts</item>
+    </plurals>
     <string name="discover_show_all">Alle anzeigen</string>
     <string name="discover_failed">Konnte nicht laden</string>
     <string name="discover_retry">Nochmals</string>

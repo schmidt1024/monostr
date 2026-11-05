@@ -1,5 +1,6 @@
 package com.monostr.nostr.repo
 
+import com.monostr.nostr.model.Nip13
 import com.monostr.nostr.Exit
 import com.monostr.nostr.NostrEngine
 import com.monostr.nostr.model.Nip10
@@ -48,6 +49,8 @@ data class NotificationItem(
     val aboutId: String?,
     val text: String,
     val amount: Long?,
+    /** NIP-13 difficulty of a reply, mention or quote; 0 otherwise. */
+    val powBits: Int = 0,
 )
 
 /** The note a notification is about (spec 11-C §2.4). */
@@ -235,9 +238,9 @@ class NostrNotificationsRepository(
                 val refs = Nip10.parse(tags)
                 val quoted = tags.firstOrNull { it.size >= 2 && it[0] == "q" && HEX64.matches(it[1]) }?.get(1)
                 when {
-                    refs.replyToId != null -> NotificationItem(id, NotificationKind.REPLY, author, at, id, refs.replyToId, event.content, null)
-                    quoted != null -> NotificationItem(id, NotificationKind.QUOTE, author, at, id, quoted, event.content, null)
-                    else -> NotificationItem(id, NotificationKind.MENTION, author, at, id, null, event.content, null)
+                    refs.replyToId != null -> NotificationItem(id, NotificationKind.REPLY, author, at, id, refs.replyToId, event.content, null, Nip13.effectiveBits(id, event.tags))
+                    quoted != null -> NotificationItem(id, NotificationKind.QUOTE, author, at, id, quoted, event.content, null, Nip13.effectiveBits(id, event.tags))
+                    else -> NotificationItem(id, NotificationKind.MENTION, author, at, id, null, event.content, null, Nip13.effectiveBits(id, event.tags))
                 }
             }
             6 -> {

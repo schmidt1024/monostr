@@ -1,5 +1,6 @@
 package com.monostr.app.ui.feed
 
+import com.monostr.app.ui.discover.DiscoverFollowAllHost
 import com.monostr.app.ui.common.asString
 import com.monostr.app.ui.discover.discoverItems
 import com.monostr.nostr.PerfTrace
@@ -114,7 +115,7 @@ fun FeedScreen(
     if (discoverShown && discoverUi.sections.any { it.rows.isNotEmpty() }) LaunchedEffect(Unit) { PerfTrace.mark("discover block shown") }
     val amountsPrompt by vm.amountsPrompt.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
-    discoverUi.message?.let { m -> val text = m.asString(); LaunchedEffect(m) { snackbar.showSnackbar(text); vm.discover.clearMessage() } }
+    DiscoverFollowAllHost(discoverUi, snackbar, vm.discover)
     val scope = rememberCoroutineScope()
     val hide = rememberHideOnScroll()
     val current = tabs.current

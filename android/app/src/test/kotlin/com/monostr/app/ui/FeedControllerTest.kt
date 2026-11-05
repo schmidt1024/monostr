@@ -685,4 +685,38 @@ class FeedControllerTest {
         advanceUntilIdle()
         assertEquals(lives + 1, feed.liveCalls) // already live: nothing restarts
     }
+
+    private fun TestScope.powFeed(feed: FakeFeed, filter: com.monostr.app.ui.common.PowFilter) = MutableStateFlow(filter).let { pow ->
+        pow to FeedController(
+            feed, profiles, FakePublish(), decorations(), BookmarkActions(FakeBookmarks(), eager()), FakeCounts(), eager(),
+            visibility = NoteVisibility(NoteDeletions(), MutableStateFlow(emptySet()), pow),
+        )
+    }
+
+    @Test
+    fun `a page the proof of work filter empties loads older pages, a bounded number of them`() = runTest {
+        val feed = FakeFeed().apply { current = listOf(note('1', alice, 1000)); older = listOf(note('2', alice, 500).copy(powBits = 8)) }
+        val (_, c) = powFeed(feed, com.monostr.app.ui.common.PowFilter(8, emptySet()))
+        c.start(); advanceUntilIdle()
+        assertEquals(listOf(500L), c.state.value.notes.map { it.note.createdAt })
+        assertEquals(3, feed.loadMoreCalls, "stops after the budget even when too little is shown")
+    }
+
+    @Test
+    fun `without the filter no page is loaded on its own`() = runTest {
+        val feed = FakeFeed().apply { current = listOf(note('1', alice, 1000)); older = listOf(note('2', alice, 500)) }
+        val (_, c) = powFeed(feed, com.monostr.app.ui.common.PowFilter.OFF)
+        c.start(); advanceUntilIdle()
+        assertEquals(0, feed.loadMoreCalls)
+    }
+
+    @Test
+    fun `a lower minimum restarts the list, so hidden notes come back`() = runTest {
+        val feed = FakeFeed().apply { current = listOf(note('1', alice, 1000)) }
+        val (pow, c) = powFeed(feed, com.monostr.app.ui.common.PowFilter(8, emptySet()))
+        c.start(); advanceUntilIdle()
+        assertEquals(emptyList<Long>(), c.state.value.notes.map { it.note.createdAt })
+        pow.value = com.monostr.app.ui.common.PowFilter.OFF; advanceUntilIdle()
+        assertEquals(listOf(1000L), c.state.value.notes.map { it.note.createdAt })
+    }
 }

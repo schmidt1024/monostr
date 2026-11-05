@@ -1,5 +1,6 @@
 package com.monostr.app.ui.notifications
 
+import com.monostr.app.ui.common.PowFilter
 import com.monostr.nostr.StartupGate
 import com.monostr.app.R
 import com.monostr.app.data.TipSettingsStore
@@ -52,6 +53,7 @@ class NotificationsStore(
     /** `engine.backgroundScope` in the app: leaving a screen stops nothing; logout closes it. */
     private val scope: CoroutineScope,
     private val muted: StateFlow<Set<String>> = MutableStateFlow(emptySet()),
+    private val pow: StateFlow<PowFilter> = MutableStateFlow(PowFilter.OFF),
     /** The user's pubkey: a like or repost of anybody else's note is no notification; null (tests) keeps everything. */
     private val me: String? = null,
     private val now: () -> Long = { System.currentTimeMillis() / 1000 },
@@ -108,7 +110,7 @@ class NotificationsStore(
         }
         scope.launch { settings.notificationsReadAt.collect { at -> _state.update { it.copy(readAt = at) } } }
         // the only writer of the rows: inputs change atomically, each snapshot renders the whole list
-        scope.launch { combine(inputs, muted) { i, m -> i to m }.collect { (i, m) -> publish(i, m) } }
+        scope.launch { combine(inputs, muted, pow) { i, m, p -> Triple(i, m, p) }.collect { (i, m, p) -> publish(i, m, p) } }
         scope.launch { lookUpParents() }
         scope.launch { _state.map(::texts).distinctUntilChanged().collect { mentions.track(MentionNames.collectTexts(it)) } }
         scope.launch { for (request in reloads) reload() }
@@ -275,9 +277,9 @@ class NotificationsStore(
         }
     }
 
-    private fun publish(i: Inputs, mutedNow: Set<String>) {
+    private fun publish(i: Inputs, mutedNow: Set<String>, powNow: PowFilter) {
         val items = i.items ?: return
-        val visible = NotificationFilter.visible(items, mutedNow)
+        val visible = NotificationFilter.visible(items, mutedNow, powNow)
         // a like or repost says "your note": only for a note known to be the user's own (a forged tag could otherwise
         // put any excerpt under that sentence — security review); own notes are stored, so this is local
         fun verified(id: String?) = me == null || (id != null && id in i.own) || (i.about[id] as? AboutNote.Found)?.note?.author == me

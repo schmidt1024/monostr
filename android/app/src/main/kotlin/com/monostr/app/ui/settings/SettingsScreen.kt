@@ -279,6 +279,8 @@ class SettingsViewModel @Inject constructor(
     fun setClientTag(on: Boolean) = viewModelScope.launch { uiSettings.setClientTag(on) }
     val powBits: StateFlow<Int> = uiSettings.powBits.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), POW_DEFAULT)
     fun setPowBits(bits: Int) = viewModelScope.launch { uiSettings.setPowBits(bits) }
+    val powFilterBits: StateFlow<Int> = uiSettings.powFilterBits.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+    fun setPowFilterBits(bits: Int) = viewModelScope.launch { uiSettings.setPowFilterBits(bits) }
     val quickReactions: StateFlow<List<String>> = uiSettings.quickReactions.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), Reactions.QUICK)
     fun setQuickReactions(list: List<String>) = viewModelScope.launch { uiSettings.setQuickReactions(list) }
 
@@ -453,6 +455,18 @@ fun SettingsScreen(section: String? = null, onBack: () -> Unit, onMoneroSetup: (
                     SegmentedButton(
                         selected = pow == bits, onClick = { vm.setPowBits(bits) },
                         shape = SegmentedButtonDefaults.itemShape(i, POW_CHOICES.size), modifier = Modifier.testTag("settings-pow-$bits"),
+                    ) { Text(if (bits == 0) stringResource(R.string.settings_pow_off) else stringResource(R.string.settings_pow_bits, bits)) }
+                }
+            }
+            val powFilter by vm.powFilterBits.collectAsStateWithLifecycle()
+            Spacer(Modifier.height(16.dp))
+            Text(stringResource(R.string.settings_pow_filter), style = MaterialTheme.typography.bodyLarge)
+            Text(stringResource(R.string.settings_pow_filter_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().testTag("settings-pow-filter")) {
+                POW_CHOICES.forEachIndexed { i, bits ->
+                    SegmentedButton(
+                        selected = powFilter == bits, onClick = { vm.setPowFilterBits(bits) },
+                        shape = SegmentedButtonDefaults.itemShape(i, POW_CHOICES.size), modifier = Modifier.testTag("settings-pow-filter-$bits"),
                     ) { Text(if (bits == 0) stringResource(R.string.settings_pow_off) else stringResource(R.string.settings_pow_bits, bits)) }
                 }
             }

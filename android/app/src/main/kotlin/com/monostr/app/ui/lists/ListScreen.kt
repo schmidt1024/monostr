@@ -56,6 +56,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.monostr.app.R
 import com.monostr.app.session.NostrSession
+import com.monostr.app.ui.common.FollowAllConfirmDialog
 import com.monostr.app.ui.common.Avatar
 import com.monostr.app.ui.common.DeletionMessages
 import com.monostr.app.ui.common.HideOnScrollHeader
@@ -80,7 +81,7 @@ import javax.inject.Inject
 @HiltViewModel
 class ListViewModel @Inject constructor(session: NostrSession, handle: SavedStateHandle, factory: TipSheetFactory) : ViewModel() {
     private val ready = session.requireReady()
-    val address: ListAddress = checkNotNull(ListAddress.parse(checkNotNull(handle.get<String>("address"))))
+    val address: ListAddress = checkNotNull(ListAddress.parseViewable(checkNotNull(handle.get<String>("address"))))
     val controller = ListController(address, ready.pubkey, ready.lists, ready.feedTabs, ready.profiles, viewModelScope, writeScope = ready.engine.backgroundScope, follows = ready.follows, mute = ready.mute) { source, scope ->
         ready.listFeed(factory, source, scope)
     }
@@ -127,7 +128,7 @@ fun ListScreen(
                 title = { Text(set?.title?.ifBlank { null } ?: stringResource(R.string.list_untitled), maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back)) } },
                 actions = {
-                    if (set != null) PinButton(state.pinned, vm.controller::togglePin)
+                    if (set != null && !state.pack) PinButton(state.pinned, vm.controller::togglePin)
                     if (state.isOwn && set != null && !set.locked) {
                         TextButton(onClick = { vm.address.let(onEdit) }, modifier = Modifier.testTag("list-edit")) { Text(stringResource(R.string.list_edit)) }
                     }
@@ -166,6 +167,7 @@ fun ListScreen(
             }
         }
     }
+    state.followAllConfirm?.let { FollowAllConfirmDialog(it.size, vm.controller::confirmFollowAll, vm.controller::dismissFollowAll) }
     TipSheetHost(vm.tipSheet)
     tippersFor?.let { TippersDialog(it, load = vm.decorations::tippers, onDismiss = { tippersFor = null }) }
 }

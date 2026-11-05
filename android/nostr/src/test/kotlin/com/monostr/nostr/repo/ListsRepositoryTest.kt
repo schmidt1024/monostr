@@ -360,4 +360,46 @@ class ListsRepositoryTest {
         repeat(20) { assertTrue(r.newId().matches(Regex("[a-z0-9]{12}"))) }
         e.close()
     }
+
+    private fun pack(signer: Keys, d: String, members: List<String>) =
+        EventBuilder(Kind(39089u), "")
+            .tags(listOf(listOf("d", d), listOf("title", "Pack")).plus(members.map { listOf("p", it) }).map { Tag.parse(it) })
+            .customCreatedAt(Timestamp.fromSecs(1000u)).signWithKeys(signer)
+
+    @Test
+    fun `a follow pack reads under its own kind, not as a follow set`() = runTest {
+        val e = engine()
+        val r = repo(e)
+        e.save(pack(alice, "p1", listOf(a, b)))
+        val address = ListAddress(39089, alice.publicKey().toHex(), "p1")
+        val set = r.byAddress(address)!!
+        assertEquals(address, set.address)
+        assertEquals("Pack", set.title)
+        assertEquals(listOf(a, b), set.members)
+        assertFalse(set.private)
+        assertNull(r.byAddress(ListAddress(30000, alice.publicKey().toHex(), "p1")))
+        e.close()
+    }
+
+    @Test
+    fun `an own follow pack is read like a foreign one and stays out of the own lists`() = runTest {
+        val e = engine()
+        val r = repo(e)
+        e.save(pack(me, "p2", listOf(a)))
+        val address = ListAddress(39089, myPk, "p2")
+        assertEquals(listOf(a), r.byAddress(address)?.members)
+        assertTrue(r.own().first().none { it.address == address })
+        e.close()
+    }
+
+    @Test
+    fun `only a follow set parses for pins, the list screen also takes a follow pack`() {
+        val s = "39089:$myPk:p1"
+        assertNull(ListAddress.parse(s))
+        assertEquals(ListAddress(39089, myPk, "p1"), ListAddress.parseViewable(s))
+        assertEquals(ListAddress(30000, myPk, "x"), ListAddress.parseViewable("30000:$myPk:x"))
+        assertNull(ListAddress.parseViewable("30023:$myPk:x"))
+        assertEquals(ListAddress(39089, myPk, "p1"), ListAddress.of(com.monostr.nostr.model.AddressRef(39089, myPk, "p1", listOf("wss://a.example"))))
+        assertNull(ListAddress.of(com.monostr.nostr.model.AddressRef(30023, myPk, "p1")))
+    }
 }

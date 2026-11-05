@@ -8,12 +8,12 @@ data class QuoteRef(val id: String, val relays: List<String> = emptyList(), val 
 
 /**
  * Spec 3: which note a note quotes and how its link leaves the text. A NIP-18 `q` tag wins over
- * the text; otherwise the first `nostr:note1…`/`nostr:nevent1…` that decodes. Only that one link
+ * the text; otherwise the first `note1…`/`nevent1…` (with or without `nostr:`) that decodes. Only that one link
  * is removed from the display text, and only when it stands alone: on a line of its own, or as the
  * last token of the text after whitespace. Everything else stays a text link.
  */
 object NoteQuote {
-    private val REF = Regex("(?i:nostr:(?:note1|nevent1))[0-9a-zA-Z]+") // regex
+    private val REF = Regex(NostrRefs.pattern("note1|nevent1")) // regex
     private val HEX64 = Regex("^[0-9a-f]{64}$") // regex
 
     fun find(content: String, tags: List<List<String>>): QuoteRef? {

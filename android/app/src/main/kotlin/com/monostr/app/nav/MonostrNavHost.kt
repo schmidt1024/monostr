@@ -34,6 +34,7 @@ import com.monostr.app.session.SessionState
 import com.monostr.app.ui.article.ArticleScreen
 import com.monostr.app.ui.bookmarks.BookmarksScreen
 import com.monostr.app.ui.common.LocalOpenArticle
+import com.monostr.app.ui.common.LocalOpenList
 import com.monostr.nostr.model.AddressRef
 import com.monostr.app.ui.common.AddressLoader
 import com.monostr.app.ui.common.LocalAddressLoader
@@ -206,6 +207,7 @@ private fun LoggedInNavHost(
     }
     val onOpenMedia: (String, Int) -> Unit = { id, i -> nav.navigate(Routes.media(id, i)) }
     val openArticle: (AddressRef, Boolean) -> Unit = { ref, foreign -> nav.navigate(Routes.article(ref.toBech32(), foreign)) }
+    val openList: (ListAddress) -> Unit = { nav.navigate(Routes.list(it)) }
     val onOpenVideo: (String) -> Unit = { nav.navigate(Routes.video(it)) }
     val onMessages: () -> Unit = { nav.navigate(Routes.MESSAGES) { popUpTo(Routes.FEED); launchSingleTop = true } }
     // spec 11.1: bookmarks are a tab, so they navigate like the other tabs
@@ -220,7 +222,7 @@ private fun LoggedInNavHost(
             onSettings = { translation.dismissConsent(); nav.navigate(Routes.settings(SettingsSection.TRANSLATION)) },
         )
     }
-    CompositionLocalProvider(LocalMediaSettings provides mediaSettings, LocalQuoteLoader provides quoteLoader, LocalAddressLoader provides addressLoader, LocalOpenArticle provides openArticle, LocalLinkPreviewLoader provides linkPreviewLoader, LocalPreviewImageLoader provides media.previewImages.loader, LocalNoteTranslator provides translation) {
+    CompositionLocalProvider(LocalMediaSettings provides mediaSettings, LocalQuoteLoader provides quoteLoader, LocalAddressLoader provides addressLoader, LocalOpenArticle provides openArticle, LocalOpenList provides openList, LocalLinkPreviewLoader provides linkPreviewLoader, LocalPreviewImageLoader provides media.previewImages.loader, LocalNoteTranslator provides translation) {
         NavHost(navController = nav, startDestination = Routes.FEED) {
             composable(Routes.FEED) {
                 FeedScreen(

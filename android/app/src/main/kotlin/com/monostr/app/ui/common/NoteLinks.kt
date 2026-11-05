@@ -4,6 +4,7 @@ import com.monostr.nostr.model.Bolt11
 import com.monostr.nostr.model.HashtagTags
 import com.monostr.nostr.model.LightningInvoice
 import com.monostr.nostr.model.NoteAddress
+import com.monostr.nostr.model.NostrRefs
 import com.monostr.nostr.search.SearchQuery
 
 /** One run of note text: plain, or a link the UI renders in primary colour with underline (spec 3.3). */
@@ -15,7 +16,7 @@ sealed class NoteSpan {
     data class Cashtag(override val text: String, val symbol: String) : NoteSpan()
     data class Mention(override val text: String, val pubkey: String) : NoteSpan()
     data class NoteRef(override val text: String, val noteId: String) : NoteSpan()
-    /** `nostr:naddr1…` (spec 2026-10-29 naddr): reads as «event» and opens the web link. */
+    /** `nostr:naddr1…` or a bare `naddr1…` (spec 2026-10-29 naddr): reads as «event» and opens the web link. */
     data class AddressRef(override val text: String, val ref: com.monostr.nostr.model.AddressRef) : NoteSpan()
     data class Url(override val text: String, val url: String) : NoteSpan()
     /** A BOLT11 invoice that stayed in the text (spec 2026-11-01): reads «invoice», opens the wallet. */
@@ -24,11 +25,11 @@ sealed class NoteSpan {
 
 /** Pure text scanner; URLs win over hashtags so `#` in a URL is never a tag. */
 object NoteLinks {
-    // group 1: url, group 2: nostr link (scheme and prefix case-insensitive, bech32 may be all caps), group 3: hashtag (needs a letter somewhere),
+    // group 1: url, group 2: nostr link (scheme optional, scheme and prefix case-insensitive, bech32 may be all caps), group 3: hashtag (needs a letter somewhere),
     // group 4: cashtag, 2-6 capitals after a `$` that neither follows nor precedes a letter or digit ($5, $100k, US$, $path stay text)
     private val TOKEN = Regex(
         "(${HashtagTags.URL})" +
-            "|((?i:nostr:(?:npub1|nprofile1|note1|nevent1|naddr1))[0-9a-zA-Z]+)" + // regex
+            "|(" + NostrRefs.pattern("npub1|nprofile1|note1|nevent1|naddr1") + ")" +
             "|${HashtagTags.HASHTAG}" + // the hashtags a published note tags (`t`) are exactly the ones shown as links
             "|(?<![\\p{L}\\p{N}_$])\\$([A-Z]{2,6})(?![\\p{L}\\p{N}_])", // regex
     )
@@ -112,7 +113,7 @@ object NoteLinks {
                     end = m.range.first + url.length
                     NoteSpan.Url(shownUrl(url), url)
                 }
-                m.groups[2] != null && m.value.startsWith("nostr:naddr1", ignoreCase = true) ->
+                m.groups[2] != null && m.value.substringAfter(':').startsWith("naddr1", ignoreCase = true) ->
                     NoteAddress.decode(m.value)?.let { NoteSpan.AddressRef(m.value, it) }
                 m.groups[2] != null -> when (val q = SearchQuery.parse(m.value)) {
                     is SearchQuery.Profile -> NoteSpan.Mention(m.value, q.pubkey)

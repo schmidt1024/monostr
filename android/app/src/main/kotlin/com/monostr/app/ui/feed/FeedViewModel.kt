@@ -223,7 +223,9 @@ class FeedController(
         // hidden (visibility); an unmute, also one reverted after a failed publish, restarts the list like a follow
         // change does, so the account's notes are asked for again. Restarting on every mute threw away the first
         // page on a cold start, when the mute list arrives from the relays seconds after the feed (2026-10-19).
-        scope.launch { merge(followChanges, unmutes()).collect { if (liveOn) { startLive(); refresh() } } }
+        scope.launch { merge(followChanges, unmutes(), visibility.relaxed).collect { if (liveOn) { startLive(); refresh() } } }
+        // a raised minimum may leave too little to read: older pages fill up
+        scope.launch { visibility.pow.drop(1).collect { if (it.on) { fillLeft = FILL_PAGES; fillUp() } } }
         // a newly muted account would keep its places in the live window until a restart: the live list alone
         // is read again, once the first fresh page is in (the snapshot does not count), so the cold start's
         // first database read is never thrown away
@@ -310,6 +312,8 @@ class FeedController(
     fun refresh() {
         // what waits behind the pill shows at once, the relays bring the rest
         showNew()
+        fillLeft = FILL_PAGES
+        lastPageEmpty = false
         scope.launch {
             _state.update { it.copy(refreshing = true) }
             try {
@@ -340,16 +344,48 @@ class FeedController(
 
     /** Fetches the page before the oldest note; ignored while a previous call is still in flight or there is nothing to page from. */
     fun loadMore() {
+        fillLeft = FILL_PAGES
+        loadPage()
+    }
+
+    /**
+     * What the proof of work filter leaves of a page can be little or nothing, and an empty list never asks for more:
+     * while it hides notes and too few show, older pages follow on their own, [FILL_PAGES] from the start, per refresh and per scroll to the end.
+     */
+    private var fillLeft = FILL_PAGES
+    private val loadedIds = HashSet<String>()
+    private var oldestLoaded: Long? = null
+    private var lastPageEmpty = false
+
+    private fun noteLoaded(notes: List<NoteUi>) {
+        if (!visibility.pow.value.on) return
+        notes.forEach { loadedIds += it.note.id }
+        notes.minOfOrNull { it.note.createdAt }?.let { o -> oldestLoaded = minOf(oldestLoaded ?: o, o) }
+    }
+
+    private fun fillUp() {
+        val shown = _state.value.notes.size
+        if (!visibility.pow.value.on || fillLeft <= 0 || lastPageEmpty || shown >= FILL_TARGET || loadedIds.size <= shown) return
+        fillLeft--
+        loadPage()
+    }
+
+    private fun loadPage() {
         val current = _state.value
-        if (current.loadingMore || current.notes.isEmpty()) return
-        val oldest = current.notes.last().note.createdAt
+        if (current.loadingMore) return
+        val lastShown = current.notes.lastOrNull()?.note?.createdAt
+        val oldest = (if (visibility.pow.value.on) listOfNotNull(oldestLoaded, lastShown).minOrNull() else lastShown) ?: return
         _state.update { it.copy(loadingMore = true) }
         scope.launch {
+            var filled = false
             try {
                 val older = feed.loadMore(source, before = oldest)
                 val decorated = decorate(older)
+                noteLoaded(decorated)
+                lastPageEmpty = older.isEmpty()
                 setNotes { s -> (s.notes + decorated).distinctBy { it.note.id } }
                 chainsFor(decorated)
+                filled = true
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -357,6 +393,7 @@ class FeedController(
             } finally {
                 _state.update { it.copy(loadingMore = false) }
             }
+            if (filled) fillUp()
         }
     }
 
@@ -452,7 +489,7 @@ class FeedController(
 
     /** The stored ancestors with the current flags, counts and tips, minus what [visibility] hides. */
     private fun visibleAncestors(): Map<String, NoteUi> =
-        visibility.visible(allAncestors.values.map(::flagged)).associateBy { it.note.id }
+        visibility.visibleAnyPow(allAncestors.values.map(::flagged)).associateBy { it.note.id }
 
     /** Applies [f] to every shown note: the entries and the ancestors (flags, counts, tips). */
     /** The stored ancestors a mute hides, with the current flags. */
@@ -481,6 +518,7 @@ class FeedController(
 
     /** A page read from the database or the relays: notes only the snapshot had go, and the new first page is kept for the next start. */
     private fun setFresh(decorated: List<NoteUi>, refreshing: Boolean? = null, live: Boolean = false) {
+        noteLoaded(decorated)
         val stale = snapshotIds
         snapshotIds = emptySet()
         freshSeen.value = true
@@ -496,6 +534,7 @@ class FeedController(
         val taken = if (held.isEmpty()) decorated else decorated.filterNot { it.note.id in heldIds }
         _state.update { s -> s.copy(newAbove = if (held.isEmpty() && !live) emptyList() else visibility.visible((held + s.newAbove).distinctBy { it.note.id }.map(::flagged))) }
         setNotes(loading = false, refreshing = refreshing) { s -> merge(taken, if (stale.isEmpty()) s.notes else s.notes.filterNot { it.note.id in stale }) }
+        fillUp()
         val snap = snapshot ?: return
         snapshotJob?.cancel()
         snapshotJob = scope.launch {
@@ -593,6 +632,9 @@ class FeedController(
         const val SNAPSHOT_DELAY_MS = 2_000L
         /** Spec 2026-10-23 §5.1: at most this many foreign-search hops per chain job. */
         const val PENDING_ROUNDS = 3
+        /** Older pages that follow on their own while the proof of work filter leaves fewer than [FILL_TARGET] notes. */
+        const val FILL_PAGES = 3
+        const val FILL_TARGET = 10
     }
 }
 

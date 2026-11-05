@@ -1,5 +1,6 @@
 package com.monostr.app.ui.common
 
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Composable
@@ -14,7 +15,7 @@ import com.monostr.app.R
  * confirmation sets it (spec 9.4), so any later message replaces the "Undo" with it. [retry] repeats a list
  * or pin change that no relay accepted (spec 2026-10-18 §3.3, §3.4): the snackbar offers "Retry".
  */
-data class Message(val text: UiText, val undoMute: String? = null, val retry: (() -> Unit)? = null)
+data class Message(val text: UiText, val undoMute: String? = null, val retry: (() -> Unit)? = null, val undo: (() -> Unit)? = null)
 
 /** A plain message without an action. */
 fun UiText.asMessage(): Message = Message(this)
@@ -30,16 +31,22 @@ fun MessageSnackbar(message: Message?, snackbar: SnackbarHostState, onUnmute: (S
     val text = message?.text?.asString()
     val undoMute = message?.undoMute
     val retry = message?.retry
-    LaunchedEffect(text, undoMute, retry) {
+    val undo = message?.undo
+    LaunchedEffect(text, undoMute, retry, undo) {
         text ?: return@LaunchedEffect
         val label = when {
-            undoMute != null -> undoLabel
+            undoMute != null || undo != null -> undoLabel
             retry != null -> retryLabel
             else -> null
         }
-        val result = snackbar.showSnackbar(text, actionLabel = label)
+        // [Message.undo] only for a while: it must not stay over the screen until someone taps it
+        val result = if (undo != null) snackbar.showSnackbar(text, actionLabel = label, duration = SnackbarDuration.Long) else snackbar.showSnackbar(text, actionLabel = label)
         if (result == SnackbarResult.ActionPerformed) {
-            if (undoMute != null) onUnmute(undoMute) else retry?.invoke()
+            when {
+                undoMute != null -> onUnmute(undoMute)
+                undo != null -> undo()
+                else -> retry?.invoke()
+            }
         }
         onShown()
     }

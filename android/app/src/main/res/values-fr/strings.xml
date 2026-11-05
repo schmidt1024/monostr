@@ -76,7 +76,7 @@
     <string name="note_tips_open">Voir qui a donné un pourboire</string>
     <string name="note_reposted_by">%1$s a reposté</string>
     <string name="repost_original_unavailable">Note repostée indisponible. Touchez pour la chercher.</string>
-    <string name="note_tip_pending">Pourboire envoyé, en attente de confirmation</string>
+    <string name="note_tip_pending">En attente du paiement</string>
     <string name="note_tips_chip">%1$s · %2$d</string>
     <string name="media_sensitive">Contenu sensible</string>
     <string name="media_tap_to_show">Toucher pour afficher</string>
@@ -336,6 +336,8 @@
     <string name="settings_pow_hint">Certains relais n’acceptent que des notes avec preuve de travail (NIP-13). Plus de bits sont mieux acceptés mais l’envoi est plus long.</string>
     <string name="settings_pow_off">Non</string>
     <string name="settings_pow_bits">%1$d bits</string>
+    <string name="settings_pow_filter">Preuve de travail minimale pour afficher les notes</string>
+    <string name="settings_pow_filter_hint">Masque les notes sous cette valeur des personnes que tu ne suis pas. Peu d\'applis envoient une preuve de travail, donc la plupart de leurs notes disparaissent. Les notes que tu ouvres et les pourboires restent.</string>
     <string name="settings_client_tag">Afficher « via monostr »</string>
     <string name="settings_client_tag_hint">Les notes, j’aime et reposts portent une étiquette client que les autres applis affichent comme « via monostr ».</string>
     <string name="note_via">via %1$s</string>
@@ -692,6 +694,15 @@
     <string name="discover_following">Abonné</string>
     <string name="discover_follow_all">Tout suivre</string>
     <string name="discover_all_followed">Tous suivis</string>
+    <plurals name="follow_all_confirm_title">
+        <item quantity="one">Suivre %1$d compte ?</item>
+        <item quantity="other">Suivre %1$d comptes ?</item>
+    </plurals>
+    <string name="follow_all_confirm_text">Ils sont tous ajoutés d\'un coup à ta liste de suivi. Tu peux annuler juste après.</string>
+    <plurals name="follow_all_done">
+        <item quantity="one">%1$d compte de plus suivi</item>
+        <item quantity="other">%1$d comptes de plus suivis</item>
+    </plurals>
     <string name="discover_show_all">Tout afficher</string>
     <string name="discover_failed">Chargement impossible</string>
     <string name="discover_retry">Réessayer</string>

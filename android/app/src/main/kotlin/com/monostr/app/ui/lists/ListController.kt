@@ -6,8 +6,10 @@ import com.monostr.app.ui.common.userMessage
 import kotlinx.coroutines.CancellationException
 import java.util.concurrent.atomic.AtomicBoolean
 import com.monostr.app.R
+import com.monostr.app.ui.common.FollowAll
 import com.monostr.app.ui.common.Message
 import com.monostr.app.ui.common.attempt
+import com.monostr.app.ui.common.pluralText
 import com.monostr.app.ui.common.uiText
 import com.monostr.app.ui.feed.FeedController
 import com.monostr.nostr.model.FollowSet
@@ -49,6 +51,10 @@ data class ListUiState(
     val followed: Set<String> = emptySet(),
     /** The user and the muted accounts: no follow button, not part of «Follow all». */
     val notFollowable: Set<String> = emptySet(),
+    /** A follow pack: read-only and not pinnable. */
+    val pack: Boolean = false,
+    /** «Follow all» waits for a yes: exactly the accounts it would add (more than [FollowAll.CONFIRM_ABOVE]). */
+    val followAllConfirm: List<String>? = null,
 ) {
     /** Every member that can be followed is followed already. */
     val allFollowed: Boolean
@@ -68,7 +74,11 @@ class ListController(
     private val mute: MuteRepository? = null,
     private val newFeed: (FeedSource.Authors, CoroutineScope) -> FeedController,
 ) {
-    private val _state = MutableStateFlow(ListUiState(isOwn = address.pubkey == self, canFollow = follows != null && address.pubkey != self))
+    private val _state = MutableStateFlow(
+        (address.kind == ListAddress.FOLLOW_PACK).let { pack ->
+            ListUiState(isOwn = address.pubkey == self && !pack, canFollow = follows != null && address.pubkey != self, pack = pack)
+        },
+    )
     /** A «follow all» in flight: a second tap does nothing. */
     private val followingAll = AtomicBoolean(false)
     val state: StateFlow<ListUiState> = _state.asStateFlow()
@@ -89,7 +99,7 @@ class ListController(
             scope.launch { muted.collect { m -> _state.update { it.copy(notFollowable = m + self) } } }
         }
         scope.launch { attempt { profiles.get(address.pubkey) }?.let { a -> _state.update { it.copy(author = a) } } }
-        if (address.pubkey == self) {
+        if (_state.value.isOwn) {
             // the own lists are live: an edit or a removed member shows at once
             scope.launch { lists.own().collect { own -> show(own.firstOrNull { it.address == address } ?: attempt { lists.byAddress(address) }) } }
         } else {
@@ -171,21 +181,54 @@ class ListController(
         }
     }
 
-    /** Spec 2026-10-27 §5: every member not followed yet, not muted and not the user, in one contact list write. */
+    /** Spec 2026-10-27 §5: every member not followed yet, not muted and not the user, in one contact list write; above [FollowAll.CONFIRM_ABOVE] it asks first. */
     fun followAll() {
+        val s = _state.value
+        val set = s.set ?: return
+        if (follows == null) return
+        val muted = mute?.muted?.value ?: emptySet()
+        val targets = FollowAll.newMembers(set.members, s.followed, muted, self)
+        if (targets.size > FollowAll.CONFIRM_ABOVE) _state.update { it.copy(followAllConfirm = targets) } else writeFollowAll(targets)
+    }
+
+    fun confirmFollowAll() {
+        // exactly the accounts the question named: a newer version of the list may have arrived behind the dialog
+        val targets = _state.value.followAllConfirm ?: return
+        dismissFollowAll()
+        writeFollowAll(targets)
+    }
+
+    fun dismissFollowAll() = _state.update { it.copy(followAllConfirm = null) }
+
+    private fun writeFollowAll(targets: List<String>) {
         val repo = follows ?: return
-        val set = _state.value.set ?: return
         if (!followingAll.compareAndSet(false, true)) return
         val muted = mute?.muted?.value ?: emptySet()
         writeScope.launch {
             try {
-                repo.followAll(set.members.filter { it != self && it !in muted })
+                val added = repo.followAll(targets.filter { it !in muted })
+                if (added.isNotEmpty()) {
+                    _state.update { it.copy(message = Message(pluralText(R.plurals.follow_all_done, added.size, added.size), undo = { undoFollowAll(added) })) }
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 _state.update { it.copy(message = Message(e.userMessage())) }
             } finally {
                 followingAll.set(false)
+            }
+        }
+    }
+
+    private fun undoFollowAll(added: List<String>) {
+        val repo = follows ?: return
+        writeScope.launch {
+            try {
+                repo.unfollowAll(added)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(message = Message(e.userMessage())) }
             }
         }
     }

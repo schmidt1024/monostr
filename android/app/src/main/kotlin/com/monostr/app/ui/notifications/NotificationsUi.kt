@@ -1,5 +1,6 @@
 package com.monostr.app.ui.notifications
 
+import com.monostr.app.ui.common.PowFilter
 import com.monostr.app.ui.common.UiText
 import com.monostr.nostr.repo.AboutNote
 import com.monostr.nostr.repo.NotificationItem
@@ -53,10 +54,15 @@ data class NotificationsUiState(
     val unread: Int get() = Unread.count(items, readAt)
 }
 
-/** Spec 9.3: replies, mentions and reactions of muted accounts are gone from the list and the badge; money is not noise, their tips stay. */
+/** Spec 9.3: replies, mentions and reactions of muted accounts are gone from the list and the badge; money is not noise, their tips stay. Replies, mentions and quotes below the proof of work minimum go too. */
 object NotificationFilter {
-    fun visible(items: List<NotificationItem>, muted: Set<String>): List<NotificationItem> =
-        if (muted.isEmpty()) items else items.filter { it.kind == NotificationKind.TIP || it.from !in muted }
+    fun visible(items: List<NotificationItem>, muted: Set<String>, pow: PowFilter = PowFilter.OFF): List<NotificationItem> =
+        if (muted.isEmpty() && !pow.on) items else items.filter { i ->
+            i.kind == NotificationKind.TIP || (i.from !in muted && !(i.kind in POW_KINDS && pow.hides(i.from, i.powBits)))
+        }
+
+    /** What is a note of someone; a like or repost carries no proof of work of its own. */
+    private val POW_KINDS = setOf(NotificationKind.REPLY, NotificationKind.MENTION, NotificationKind.QUOTE)
 }
 
 object Unread {

@@ -142,4 +142,6 @@ class TokenShieldTest {
 
     @Test fun `restore with plain token list never pads`() =
         assertNull(TokenShield.restore("${span("⟦0⟧")}und", one))
+
+    @Test fun `bare naddr stays intact`() = roundTrip("Le pack\nnaddr1qvzqqqyckypzpfgdthdw5rjkcrxgscnpfwplkkjrel9g7l5fthyzjskd22a5myygqqjrsvfk8y65ysfj94p52sej956rq33k95u523zx94zrqs3s8yurqdj9gcm5yrym3qn")
 }

@@ -52,9 +52,11 @@ interface FollowRepository {
     fun followed(): Flow<Set<String>?>
     /**
      * Spec 2026-10-27 §5: one kind 3 adding every pubkey of [pubkeys] not yet followed (the own key is skipped);
-     * returns how many were added, 0 = nothing written. Same errors as [follow].
+     * returns the ones added, empty = nothing written. Same errors as [follow].
      */
-    suspend fun followAll(pubkeys: Collection<String>): Int
+    suspend fun followAll(pubkeys: Collection<String>): List<String>
+    /** One kind 3 without [pubkeys] (the undo of [followAll]), everything else as it was; returns the ones removed. Same errors as [follow]. */
+    suspend fun unfollowAll(pubkeys: Collection<String>): List<String>
     /**
      * Spec 2026-10-17 §4: the first kind 3 of a new account, one `p` per entry of [pubkeys] in order,
      * empty content; never empty. Throws [FollowError.NotAccepted] when no relay took it.
@@ -126,7 +128,9 @@ class NostrFollowRepository(
         write(listOf(pubkey), add = false)
     }
 
-    override suspend fun followAll(pubkeys: Collection<String>): Int = write(pubkeys.filter { it != self }.distinct(), add = true)
+    override suspend fun followAll(pubkeys: Collection<String>): List<String> = write(pubkeys.filter { it != self }.distinct(), add = true)
+
+    override suspend fun unfollowAll(pubkeys: Collection<String>): List<String> = write(pubkeys.filter { it != self }.distinct(), add = false)
 
     // no fetch: a brand-new account has no list to build on (spec 2026-10-17 §7 checks for one before)
     override suspend fun setInitial(pubkeys: List<String>) {
@@ -190,8 +194,8 @@ class NostrFollowRepository(
     private fun pTags(tags: List<List<String>>): Set<String> = tags.filter { it.size >= 2 && it[0] == "p" }.map { it[1] }.toSet()
 
     /** Adds or removes [targets] in one kind 3; returns how many `p` tags changed (0 = nothing published). */
-    private suspend fun write(targets: List<String>, add: Boolean): Int {
-        if (targets.isEmpty()) return 0
+    private suspend fun write(targets: List<String>, add: Boolean): List<String> {
+        if (targets.isEmpty()) return emptyList()
         val changed = mutex.withLock {
             val fetch = fetchList()
             val base = engine.query(filter()).firstOrNull()
@@ -204,7 +208,7 @@ class NostrFollowRepository(
             val todo = targets.filter { (it in present) != add }
             if (todo.isEmpty()) {
                 snapshot.value = if (base != null) snapshotOf(base) else Snapshot(emptySet(), known = true)
-                return@withLock 0
+                return@withLock emptyList()
             }
             val drop = todo.toSet()
             val next = if (add) tags + todo.map { listOf("p", it) } else tags.filterNot { it.size >= 2 && it[0] == "p" && it[1] in drop }
@@ -215,9 +219,9 @@ class NostrFollowRepository(
                 .customCreatedAt(Timestamp.fromSecs(createdAt.toULong()))
             if (!send(builder).sentToAny) throw FollowError.NotAccepted()
             engine.query(filter()).firstOrNull()?.let { snapshot.value = snapshotOf(it) }
-            todo.size
+            todo
         }
-        if (changed > 0) _changes.tryEmit(Unit)
+        if (changed.isNotEmpty()) _changes.tryEmit(Unit)
         return changed
     }
 }

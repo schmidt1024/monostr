@@ -1,5 +1,11 @@
 package com.monostr.app.ui.discover
 
+import com.monostr.app.ui.common.asString
+import com.monostr.app.ui.common.FollowAllConfirmDialog
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -109,4 +115,20 @@ fun FollowPill(following: Boolean, onClick: () -> Unit, tag: String) {
     } else {
         Button(onClick = onClick, modifier = Modifier.testTag(tag)) { Text(stringResource(R.string.discover_follow)) }
     }
+}
+
+/** The discover block's messages (with «Undo» after a «Follow all») and its question before a large «Follow all». */
+@Composable
+fun DiscoverFollowAllHost(ui: DiscoverUi, snackbar: SnackbarHostState, controller: DiscoverController) {
+    val undoLabel = stringResource(R.string.mute_undo)
+    ui.message?.let { m ->
+        val text = m.asString()
+        val undo = ui.undo
+        LaunchedEffect(m, undo) {
+            val result = if (undo != null) snackbar.showSnackbar(text, actionLabel = undoLabel, duration = SnackbarDuration.Long) else snackbar.showSnackbar(text)
+            controller.clearMessage()
+            if (result == SnackbarResult.ActionPerformed) undo?.invoke()
+        }
+    }
+    ui.followAllConfirm?.let { q -> FollowAllConfirmDialog(q.targets.size, controller::confirmFollowAll, controller::dismissFollowAll) }
 }

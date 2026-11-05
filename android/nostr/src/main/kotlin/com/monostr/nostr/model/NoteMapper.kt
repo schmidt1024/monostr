@@ -25,7 +25,7 @@ object NoteMapper {
                 val parsed = NoteMedia.parse(event.content, tags, withQuote)
                 Note(
                     id = event.id, author = event.pubkey, content = event.content,
-                    createdAt = event.createdAt, kind = event.kind,
+                    createdAt = event.createdAt, kind = event.kind, powBits = Nip13.effectiveBits(event.id, tags),
                     rootId = refs.rootId, replyToId = refs.replyToId, repostOf = null,
                     mentionedPubkeys = tags.filter { it.size >= 2 && it[0] == "p" }.map { it[1] },
                     media = parsed.media,
@@ -47,7 +47,7 @@ object NoteMapper {
                 val referencedId = tags.firstOrNull { it.size >= 2 && it[0] == "e" }?.get(1)
                 val original = verifiedEmbedded(event.content, referencedId) ?: referencedId?.let(resolveRepost)
                 Note(
-                    id = event.id, author = event.pubkey, content = "",
+                    id = event.id, author = event.pubkey, content = "", powBits = Nip13.effectiveBits(event.id, tags),
                     createdAt = event.createdAt, kind = 6,
                     rootId = null, replyToId = null,
                     repostOf = original?.let { note(it) },

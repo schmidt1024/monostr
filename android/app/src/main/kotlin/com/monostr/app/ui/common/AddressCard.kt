@@ -53,6 +53,7 @@ import com.monostr.app.ui.media.MediaCoverBadge
 import com.monostr.app.ui.media.MediaReveals
 import com.monostr.nostr.PerfTrace
 import com.monostr.nostr.model.AddressLinks
+import com.monostr.nostr.model.ListAddress
 import com.monostr.nostr.model.AddressRef
 import com.monostr.nostr.model.AddressableEvent
 import com.monostr.nostr.model.Article
@@ -152,6 +153,9 @@ val LocalAddressLoader = staticCompositionLocalOf<AddressLoader?> { null }
  */
 val LocalOpenArticle = staticCompositionLocalOf<((AddressRef, Boolean) -> Unit)?> { null }
 
+/** Opens a follow set or pack in the list screen; null (a direct message and what opens from it, spec 8) leaves it to the web link. */
+val LocalOpenList = staticCompositionLocalOf<((ListAddress) -> Unit)?> { null }
+
 /**
  * Spec 2026-10-29 naddr: an `naddr` as a card in the `outlineVariant` frame of the quote card: type
  * label and status badge, optional 16:9 picture (same cover rules as note pictures), title, summary and
@@ -187,6 +191,7 @@ fun AddressCard(
     }
     val uriHandler = LocalUriHandler.current
     val openArticle = LocalOpenArticle.current
+    val openList = LocalOpenList.current
     val shape = RoundedCornerShape(12.dp)
     Column(
         modifier
@@ -194,8 +199,10 @@ fun AddressCard(
             .clip(shape)
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
             .clickable {
-                // an article opens in the reader; a card that did not resolve (or any other kind) goes to the web
+                // an article opens in the reader, a list in the list screen; a card that did not resolve (or any other kind) goes to the web
+                val list = ListAddress.of(ref)
                 if (ref.kind == Article.KIND && openArticle != null && resolved !is AddressUi.Missing) openArticle(ref, allowForeign)
+                else if (list != null && openList != null && resolved !is AddressUi.Missing) openList(list)
                 else runCatching { uriHandler.openUri(AddressLinks.web(ref)) }
             }
             .testTag("address-card-${ref.identifier.take(8)}"),

@@ -77,7 +77,7 @@
     <string name="note_tips_open">Show who tipped</string>
     <string name="note_reposted_by">%1$s reposted</string>
     <string name="repost_original_unavailable">Reposted note not available. Tap to look for it.</string>
-    <string name="note_tip_pending">Tip sent, waiting for confirmation</string>
+    <string name="note_tip_pending">Waiting for payment</string>
     <string name="note_tips_chip">%1$s · %2$d</string>
     <string name="media_sensitive">Sensitive content</string>
     <string name="media_tap_to_show">Tap to show</string>
@@ -339,6 +339,8 @@
     <string name="settings_pow_hint">Some relays only take notes with proof of work (NIP-13). More bits are accepted more widely but take longer to send.</string>
     <string name="settings_pow_off">Off</string>
     <string name="settings_pow_bits">%1$d bits</string>
+    <string name="settings_pow_filter">Minimum proof of work to show notes</string>
+    <string name="settings_pow_filter_hint">Hides notes below this value from people you don\'t follow. Few apps send proof of work, so most of their notes disappear. Notes you open and tips stay.</string>
     <string name="settings_client_tag">Say “via monostr”</string>
     <string name="settings_client_tag_hint">Notes, likes and reposts carry a client tag that other apps show as “via monostr”.</string>
     <string name="note_via">via %1$s</string>
@@ -691,6 +693,15 @@
     <string name="discover_following">Following</string>
     <string name="discover_follow_all">Follow all</string>
     <string name="discover_all_followed">Following all</string>
+    <plurals name="follow_all_confirm_title">
+        <item quantity="one">Follow %1$d account?</item>
+        <item quantity="other">Follow %1$d accounts?</item>
+    </plurals>
+    <string name="follow_all_confirm_text">They are all added to your follow list at once. You can undo it right after.</string>
+    <plurals name="follow_all_done">
+        <item quantity="one">Following %1$d more account</item>
+        <item quantity="other">Following %1$d more accounts</item>
+    </plurals>
     <string name="discover_show_all">Show all</string>
     <string name="discover_failed">Could not load</string>
     <string name="discover_retry">Retry</string>

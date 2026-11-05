@@ -15,6 +15,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -136,5 +137,44 @@ class DiscoverControllerTest {
         ui.coroutineContext[kotlinx.coroutines.Job]!!.cancel()
         follows.gate!!.complete(Unit); runCurrent()
         assertEquals(FollowState.Following, follows.states.value[pk(2)])
+    }
+
+    @Test
+    fun `followAll offers Undo, and more than ten new accounts ask first`() = runTest {
+        val small = list("small", pk(1), pk(2))
+        val big = list("big", *(10..20).map(::pk).toTypedArray())
+        val follows = FakeFollows()
+        val c = controller(FakeDiscover(listOf(small, big)), follows)
+        c.start(); runCurrent()
+        c.followAll(small.address); runCurrent()
+        assertEquals(listOf("followAll:2"), follows.calls)
+        c.state.value.undo!!.invoke(); runCurrent()
+        assertEquals(listOf("followAll:2", "unfollowAll:2"), follows.calls)
+        c.clearMessage()
+        c.followAll(big.address); runCurrent()
+        assertEquals(big.address, c.state.value.followAllConfirm?.address)
+        assertEquals(11, c.state.value.followAllConfirm?.targets?.size)
+        assertEquals(2, follows.calls.size)
+        c.dismissFollowAll()
+        assertNull(c.state.value.followAllConfirm)
+        c.followAll(big.address); runCurrent()
+        c.confirmFollowAll(); runCurrent()
+        assertNull(c.state.value.followAllConfirm)
+        assertEquals("followAll:11", follows.calls.last())
+    }
+
+    @Test
+    fun `a yes follows the accounts it was asked about, not a larger list that arrived meanwhile`() = runTest {
+        val small = list("big", *(10..20).map(::pk).toTypedArray())
+        val large = list("big", *(10..60).map(::pk).toTypedArray())
+        val discover = FakeDiscover(listOf(small), remote = listOf(large)).also { it.gate = kotlinx.coroutines.CompletableDeferred() }
+        val follows = FakeFollows()
+        val c = controller(discover, follows)
+        c.start(); runCurrent()
+        c.followAll(small.address); runCurrent()
+        assertEquals(11, c.state.value.followAllConfirm?.targets?.size)
+        discover.gate!!.complete(Unit); runCurrent()
+        c.confirmFollowAll(); runCurrent()
+        assertEquals(listOf("followAll:11"), follows.calls)
     }
 }

@@ -1,0 +1,5 @@
+- Follow packs aparecem como cartão e abrem no app
+- Referências sem o prefixo nostr: agora funcionam
+- Seguir todos pergunta acima de 10 contas e pode ser desfeito
+- Prova de trabalho mínima opcional para mostrar notas, desligada por padrão
+- Uma gorjeta pendente agora indica que aguarda o pagamento

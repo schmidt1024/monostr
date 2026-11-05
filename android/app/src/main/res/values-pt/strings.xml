@@ -76,7 +76,7 @@
     <string name="note_tips_open">Ver quem deu gorjeta</string>
     <string name="note_reposted_by">%1$s repostou</string>
     <string name="repost_original_unavailable">Nota repostada indisponível. Toque para procurá-la.</string>
-    <string name="note_tip_pending">Gorjeta enviada, aguardando confirmação</string>
+    <string name="note_tip_pending">Aguardando pagamento</string>
     <string name="note_tips_chip">%1$s · %2$d</string>
     <string name="media_sensitive">Conteúdo sensível</string>
     <string name="media_tap_to_show">Toque para mostrar</string>
@@ -336,6 +336,8 @@
     <string name="settings_pow_hint">Alguns relays só aceitam notas com prova de trabalho (NIP-13). Mais bits são mais aceitos, mas o envio demora mais.</string>
     <string name="settings_pow_off">Não</string>
     <string name="settings_pow_bits">%1$d bits</string>
+    <string name="settings_pow_filter">Prova de trabalho mínima para mostrar notas</string>
+    <string name="settings_pow_filter_hint">Oculta notas abaixo deste valor de pessoas que você não segue. Poucos apps enviam prova de trabalho, então a maioria das notas delas desaparece. As notas que você abre e as gorjetas permanecem.</string>
     <string name="settings_client_tag">Mostrar “via monostr”</string>
     <string name="settings_client_tag_hint">Notas, curtidas e reposts levam uma tag de cliente que outros apps mostram como “via monostr”.</string>
     <string name="note_via">via %1$s</string>
@@ -692,6 +694,15 @@
     <string name="discover_following">Seguindo</string>
     <string name="discover_follow_all">Seguir todos</string>
     <string name="discover_all_followed">Seguindo todos</string>
+    <plurals name="follow_all_confirm_title">
+        <item quantity="one">Seguir %1$d conta?</item>
+        <item quantity="other">Seguir %1$d contas?</item>
+    </plurals>
+    <string name="follow_all_confirm_text">Todas são adicionadas de uma vez à sua lista de seguidos. Você pode desfazer logo depois.</string>
+    <plurals name="follow_all_done">
+        <item quantity="one">Seguindo mais %1$d conta</item>
+        <item quantity="other">Seguindo mais %1$d contas</item>
+    </plurals>
     <string name="discover_show_all">Ver todos</string>
     <string name="discover_failed">Não foi possível carregar</string>
     <string name="discover_retry">Tentar de novo</string>

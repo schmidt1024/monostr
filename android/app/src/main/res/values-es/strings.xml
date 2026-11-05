@@ -76,7 +76,7 @@
     <string name="note_tips_open">Ver quién dio propina</string>
     <string name="note_reposted_by">%1$s reposteó</string>
     <string name="repost_original_unavailable">Nota reposteada no disponible. Toca para buscarla.</string>
-    <string name="note_tip_pending">Propina enviada, esperando confirmación</string>
+    <string name="note_tip_pending">Esperando el pago</string>
     <string name="note_tips_chip">%1$s · %2$d</string>
     <string name="media_sensitive">Contenido sensible</string>
     <string name="media_tap_to_show">Toca para mostrar</string>
@@ -336,6 +336,8 @@
     <string name="settings_pow_hint">Algunos relays solo aceptan notas con prueba de trabajo (NIP-13). Más bits se aceptan más, pero el envío tarda más.</string>
     <string name="settings_pow_off">No</string>
     <string name="settings_pow_bits">%1$d bits</string>
+    <string name="settings_pow_filter">Prueba de trabajo mínima para mostrar notas</string>
+    <string name="settings_pow_filter_hint">Oculta las notas por debajo de este valor de personas a las que no sigues. Pocas apps envían prueba de trabajo, así que desaparecen la mayoría de sus notas. Las notas que abres y las propinas se mantienen.</string>
     <string name="settings_client_tag">Mostrar «vía monostr»</string>
     <string name="settings_client_tag_hint">Las notas, me gusta y reposts llevan una etiqueta de cliente que otras apps muestran como «vía monostr».</string>
     <string name="note_via">vía %1$s</string>
@@ -692,6 +694,15 @@
     <string name="discover_following">Siguiendo</string>
     <string name="discover_follow_all">Seguir a todos</string>
     <string name="discover_all_followed">Siguiendo a todos</string>
+    <plurals name="follow_all_confirm_title">
+        <item quantity="one">¿Seguir %1$d cuenta?</item>
+        <item quantity="other">¿Seguir %1$d cuentas?</item>
+    </plurals>
+    <string name="follow_all_confirm_text">Se añaden todas a la vez a tu lista de seguidos. Puedes deshacerlo justo después.</string>
+    <plurals name="follow_all_done">
+        <item quantity="one">Sigues %1$d cuenta más</item>
+        <item quantity="other">Sigues %1$d cuentas más</item>
+    </plurals>
     <string name="discover_show_all">Ver todos</string>
     <string name="discover_failed">No se pudo cargar</string>
     <string name="discover_retry">Reintentar</string>

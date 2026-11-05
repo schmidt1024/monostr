@@ -1,0 +1,5 @@
+- Les follow packs s'affichent en carte et s'ouvrent dans l'appli
+- Les références sans préfixe nostr: fonctionnent
+- Tout suivre demande confirmation au-delà de 10 comptes et peut être annulé
+- Preuve de travail minimale en option pour afficher les notes, désactivée par défaut
+- Un pourboire en cours indique qu'il attend le paiement

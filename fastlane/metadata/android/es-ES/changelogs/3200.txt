@@ -1,0 +1,5 @@
+- Los follow packs se muestran como tarjeta y se abren en la app
+- Las referencias sin el prefijo nostr: ya funcionan
+- Seguir a todos pregunta a partir de 11 cuentas y se puede deshacer
+- Prueba de trabajo mínima opcional para mostrar notas, desactivada por defecto
+- Una propina pendiente indica que espera el pago

@@ -1,0 +1,5 @@
+- I follow pack appaiono come scheda e si aprono nell'app
+- I riferimenti senza prefisso nostr: ora funzionano
+- Segui tutti chiede conferma oltre 10 account e si può annullare
+- Proof of work minima opzionale per mostrare le note, disattivata di default
+- Una mancia in sospeso indica che attende il pagamento

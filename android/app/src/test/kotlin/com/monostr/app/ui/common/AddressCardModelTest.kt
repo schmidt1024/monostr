@@ -97,4 +97,10 @@ class AddressCardModelTest {
         assertTrue(dmAddressRef(ref).relays.isEmpty())
         assertEquals(ref.coordinate, dmAddressRef(ref).coordinate)
     }
+
+    @Test fun followPackReadsAsAList() {
+        val m = AddressCardModel.from(event(39089, listOf(listOf("title", "#nostrfr"), listOf("p", host))), now)
+        assertEquals(R.string.address_type_list, m.typeLabel)
+        assertEquals("#nostrfr", m.title)
+    }
 }

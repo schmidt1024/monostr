@@ -76,7 +76,7 @@
     <string name="note_tips_open">Bahşiş verenleri göster</string>
     <string name="note_reposted_by">%1$s yeniden paylaştı</string>
     <string name="repost_original_unavailable">Yeniden paylaşılan not kullanılamıyor. Aramak için dokunun.</string>
-    <string name="note_tip_pending">Bahşiş gönderildi, onay bekleniyor</string>
+    <string name="note_tip_pending">Ödeme bekleniyor</string>
     <string name="note_tips_chip">%1$s · %2$d</string>
     <string name="media_sensitive">Hassas içerik</string>
     <string name="media_tap_to_show">Göstermek için dokun</string>
@@ -335,6 +335,8 @@
     <string name="settings_pow_hint">Bazı relay’ler yalnızca iş ispatlı notları kabul eder (NIP-13). Daha çok bit daha yaygın kabul edilir ama gönderim daha uzun sürer.</string>
     <string name="settings_pow_off">Kapalı</string>
     <string name="settings_pow_bits">%1$d bit</string>
+    <string name="settings_pow_filter">Notları göstermek için en az iş kanıtı</string>
+    <string name="settings_pow_filter_hint">Takip etmediğin kişilerin bu değerin altındaki notlarını gizler. Az sayıda uygulama iş kanıtı gönderir, bu yüzden notlarının çoğu kaybolur. Açtığın notlar ve bahşişler kalır.</string>
     <string name="settings_client_tag">“via monostr” göster</string>
     <string name="settings_client_tag_hint">Notlar, beğeniler ve yeniden paylaşımlar, diğer uygulamaların “via monostr” olarak gösterdiği bir istemci etiketi taşır.</string>
     <string name="note_via">%1$s ile</string>
@@ -685,6 +687,15 @@
     <string name="discover_following">Takip ediliyor</string>
     <string name="discover_follow_all">Hepsini takip et</string>
     <string name="discover_all_followed">Hepsi takip ediliyor</string>
+    <plurals name="follow_all_confirm_title">
+        <item quantity="one">%1$d hesap takip edilsin mi?</item>
+        <item quantity="other">%1$d hesap takip edilsin mi?</item>
+    </plurals>
+    <string name="follow_all_confirm_text">Hepsi takip listene aynı anda eklenir. Hemen sonra geri alabilirsin.</string>
+    <plurals name="follow_all_done">
+        <item quantity="one">%1$d hesap daha takip ediliyor</item>
+        <item quantity="other">%1$d hesap daha takip ediliyor</item>
+    </plurals>
     <string name="discover_show_all">Tümünü göster</string>
     <string name="discover_failed">Yüklenemedi</string>
     <string name="discover_retry">Tekrar dene</string>

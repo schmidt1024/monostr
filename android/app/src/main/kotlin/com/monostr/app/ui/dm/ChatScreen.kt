@@ -65,6 +65,7 @@ import com.monostr.app.ui.common.Avatar
 import com.monostr.app.ui.common.NoteText
 import com.monostr.app.ui.common.AddressCard
 import com.monostr.app.ui.common.LocalOpenArticle
+import com.monostr.app.ui.common.LocalOpenList
 import com.monostr.app.ui.common.LocalAllowForeign
 import androidx.compose.runtime.CompositionLocalProvider
 import com.monostr.nostr.model.AddressRef
@@ -112,7 +113,7 @@ fun ChatScreen(
 ) {
     val parent = LocalOpenArticle.current
     val open = remember(parent) { parent?.let { p -> { ref: AddressRef, _: Boolean -> p(dmAddressRef(ref), false) } } }
-    CompositionLocalProvider(LocalOpenArticle provides open, LocalAllowForeign provides false) {
+    CompositionLocalProvider(LocalOpenArticle provides open, LocalOpenList provides null, LocalAllowForeign provides false) {
         ChatScreenContent(onBack, onOpenProfile, onOpenThread, onHashtag, onOpenMedia, onOpenVideo, vm)
     }
 }

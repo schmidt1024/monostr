@@ -50,6 +50,8 @@ data class Note(
     val repostedId: String? = null,
     /** NIP-32 language label (ISO-639-1, lowercase) as a hint for language detection, null without one. */
     val language: String? = null,
+    /** NIP-13 difficulty the note can claim, see [Nip13.effectiveBits]; 0 in snapshots written before it existed. */
+    val powBits: Int = 0,
 ) {
     val isReply: Boolean get() = replyToId != null
     val isRepost: Boolean get() = kind == 6

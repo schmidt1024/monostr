@@ -3,6 +3,7 @@ package com.monostr.app.ui
 import com.monostr.app.ui.common.NoteLinks
 import com.monostr.app.ui.common.NoteSpan
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import rust.nostr.sdk.Coordinate
 import rust.nostr.sdk.Keys
@@ -157,5 +158,33 @@ class NoteLinksTest {
         assertEquals(21_000L, (spans[1] as NoteSpan.Invoice).invoice.amountSat)
         assertEquals(NoteSpan.Hashtag("#coffee", "coffee"), spans[3])
         assertEquals(5, spans.size)
+    }
+
+    private val bareNpub = "npub1p47we20qqrn3rcnrhs22ygt2kayk320fq046y998zscq4hk7tgsqjn2qfl"
+
+    @Test
+    fun `a bare naddr becomes an address link like a prefixed one`() {
+        val n = naddr(39089, "pack")
+        val spans = NoteLinks.annotate("Hello\n$n")
+        assertEquals(NoteSpan.Plain("Hello\n"), spans[0])
+        val link = spans[1] as NoteSpan.AddressRef
+        assertEquals(39089, link.ref.kind)
+        assertEquals(n, link.text)
+    }
+
+    @Test
+    fun `a bare npub is a mention, a bare note link a note reference`() {
+        assertTrue(NoteLinks.annotate("hi $bareNpub!")[1] is NoteSpan.Mention)
+        val note = rust.nostr.sdk.EventId.parse("ab".repeat(32)).toBech32()
+        assertEquals(NoteSpan.NoteRef(note, "ab".repeat(32)), NoteLinks.annotate("see $note")[1])
+    }
+
+    @Test
+    fun `bare references stay plain inside words and paths, broken ones and short words too`() {
+        val n = naddr(39089, "pack")
+        for (t in listOf("njump.me/$n", "x$n", "${n}_x", "npub1short", "note1 and note12", "npub1" + "q".repeat(58))) {
+            assertEquals(listOf(NoteSpan.Plain(t)), NoteLinks.annotate(t), t)
+        }
+        assertEquals(listOf(NoteSpan.Url("njump.me/" + n.take(22) + "…", "https://njump.me/$n")), NoteLinks.annotate("https://njump.me/$n"))
     }
 }

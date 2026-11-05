@@ -235,7 +235,7 @@ class BookmarksController(
 
     /** [row] without its note when [visibility] hides that note; the bookmark itself stays. */
     private fun filtered(row: BookmarkUi): BookmarkUi =
-        if (row.note != null && visibility.visible(listOf(row.note)).isEmpty()) row.copy(note = null) else row
+        if (row.note != null && visibility.visibleAnyPow(listOf(row.note)).isEmpty()) row.copy(note = null) else row
 
     /** Visible bookmark ids from the list; counts are requested for their notes' targets (spec 4.2). */
     fun visible(noteIds: List<String>) {

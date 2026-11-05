@@ -2,6 +2,7 @@ package com.monostr.app.ui.common
 
 import androidx.annotation.StringRes
 import com.monostr.app.R
+import com.monostr.nostr.model.ListAddress
 import com.monostr.nostr.model.AddressableEvent
 import com.monostr.nostr.model.LiveStatus
 import com.monostr.nostr.model.LiveStream
@@ -40,7 +41,7 @@ data class AddressCardModel(
                 30023 -> R.string.address_type_article
                 LiveStream.KIND -> R.string.address_type_live
                 30402 -> R.string.address_type_listing
-                30000, 30001, 30003, 30030 -> R.string.address_type_list
+                30000, 30001, 30003, 30030, ListAddress.FOLLOW_PACK -> R.string.address_type_list
                 31922, 31923 -> R.string.address_type_calendar
                 else -> R.string.address_type_event
             }

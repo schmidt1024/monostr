@@ -85,4 +85,13 @@ class NoteQuoteTest {
         assertEquals(id, both.quote?.id)
         assertNull(parse("no links here").quote)
     }
+
+    @Test
+    fun `a bare note link on its own line is a quote, inside a url it is none`() {
+        val bare = note1(id).removePrefix("nostr:")
+        val parsed = parse("look\n$bare")
+        assertEquals(id, parsed.quote?.id)
+        assertEquals("look", parsed.displayContent)
+        assertNull(parse("https://njump.me/$bare").quote)
+    }
 }

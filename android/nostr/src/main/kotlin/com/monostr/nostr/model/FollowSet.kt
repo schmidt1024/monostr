@@ -9,16 +9,27 @@ data class ListAddress(val kind: Int, val pubkey: String, val d: String) {
 
     companion object {
         const val FOLLOW_SET = 30000
+        /** NIP-51 follow pack: someone's public recommendation of accounts, tagged like a follow set; shown read-only. */
+        const val FOLLOW_PACK = 39089
+        private val VIEWABLE = setOf(FOLLOW_SET, FOLLOW_PACK)
         private val HEX64 = Regex("[0-9a-f]{64}")
 
         /** Null unless [s] is `30000:<64 lower-case hex>:<d>`; the d is everything after the second ':' (it may hold more). */
-        fun parse(s: String): ListAddress? {
+        fun parse(s: String): ListAddress? = from(s, setOf(FOLLOW_SET))
+
+        private fun from(s: String, kinds: Set<Int>): ListAddress? {
             val parts = s.split(':', limit = 3)
             if (parts.size != 3) return null
-            if (parts[0].toIntOrNull() != FOLLOW_SET) return null
+            val kind = parts[0].toIntOrNull()?.takeIf { it in kinds } ?: return null
             if (!parts[1].matches(HEX64)) return null
-            return ListAddress(FOLLOW_SET, parts[1], parts[2])
+            return ListAddress(kind, parts[1], parts[2])
         }
+
+        /** [parse], or a follow pack: what the read-only list screen opens. Pins and edits stay with [parse]. */
+        fun parseViewable(s: String): ListAddress? = from(s, VIEWABLE)
+
+        /** The list [ref] points at, null for any other kind. */
+        fun of(ref: AddressRef): ListAddress? = if (ref.kind in VIEWABLE) ListAddress(ref.kind, ref.pubkey, ref.identifier) else null
     }
 }
 

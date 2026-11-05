@@ -48,4 +48,24 @@ class NoteAddressTest {
         val ref = AddressRef(30023, author.toHex(), "post", listOf("wss://a.example"))
         assertEquals(ref, NoteAddress.decode("nostr:" + ref.toBech32()))
     }
+
+    @Test
+    fun `a bare naddr on its own line is found and stripped like a prefixed one`() {
+        val n = naddr(39089, "pack")
+        val text = "My follow pack 👇\n$n"
+        val ref = NoteAddress.find(text)!!
+        assertEquals(39089, ref.kind)
+        assertEquals("pack", ref.identifier)
+        assertEquals("My follow pack 👇", NoteAddress.strip(text, ref))
+    }
+
+    @Test
+    fun `a naddr inside a url or a longer word is no reference`() {
+        val n = naddr(39089, "pack")
+        assertNull(NoteAddress.find("https://njump.me/$n"))
+        assertNull(NoteAddress.find("njump.me/$n"))
+        assertNull(NoteAddress.find("https://a.example/?a=$n"))
+        assertNull(NoteAddress.find("x$n"))
+        assertNull(NoteAddress.find("${n}_x"))
+    }
 }

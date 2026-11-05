@@ -29,6 +29,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withLink
 import com.monostr.app.R
 import com.monostr.nostr.model.AddressLinks
+import com.monostr.nostr.model.ListAddress
 import com.monostr.nostr.model.Article
 
 /**
@@ -61,6 +62,7 @@ fun NoteText(
     val spans = remember(content) { NoteLinks.annotate(content) }
     val uriHandler = LocalUriHandler.current
     val openArticle = LocalOpenArticle.current
+    val openList = LocalOpenList.current
     val primary = MaterialTheme.colorScheme.primary
     val noteLabel = stringResource(R.string.note_ref_label)
     val addressLabel = stringResource(R.string.address_ref_label)
@@ -73,6 +75,7 @@ fun NoteText(
     val profile by rememberUpdatedState(onOpenProfile)
     val note by rememberUpdatedState(onOpenNote)
     val article by rememberUpdatedState(openArticle)
+    val list by rememberUpdatedState(openList)
     val uris by rememberUpdatedState(uriHandler)
     // only the names this text shows: a profile batch for other notes leaves it alone
     val labels = spans.mapNotNull { (it as? NoteSpan.Mention)?.let { m -> MentionNames.label(m.pubkey, names) } }
@@ -90,7 +93,11 @@ fun NoteText(
                     is NoteSpan.NoteRef -> withLink(LinkAnnotation.Clickable("note", nameStyles) { note(s.noteId) }) { append(noteLabel) }
                     is NoteSpan.AddressRef -> withLink(LinkAnnotation.Clickable("address", nameStyles) {
                         val open = article
-                        if (s.ref.kind == Article.KIND && open != null) open(s.ref, true) else runCatching { uris.openUri(AddressLinks.web(s.ref)) }
+                        val openIn = list
+                        val listAddress = ListAddress.of(s.ref)
+                        if (s.ref.kind == Article.KIND && open != null) open(s.ref, true)
+                        else if (listAddress != null && openIn != null) openIn(listAddress)
+                        else runCatching { uris.openUri(AddressLinks.web(s.ref)) }
                     }) { append(addressLabel) }
                     is NoteSpan.Url -> withLink(LinkAnnotation.Clickable("url", styles) { runCatching { uris.openUri(s.url) } }) { append(s.text) }
                     is NoteSpan.Invoice -> withLink(LinkAnnotation.Clickable("invoice", nameStyles) { openInvoice(context, s.invoice.raw, invoiceCopied) }) { append("⚡ " + invoiceLabel) }

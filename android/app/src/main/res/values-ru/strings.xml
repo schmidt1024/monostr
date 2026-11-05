@@ -80,7 +80,7 @@
     <string name="note_tips_open">Показать, кто дал чаевые</string>
     <string name="note_reposted_by">Репост от %1$s</string>
     <string name="repost_original_unavailable">Репостнутая заметка недоступна. Нажмите, чтобы найти её.</string>
-    <string name="note_tip_pending">Чаевые отправлены, ожидают подтверждения</string>
+    <string name="note_tip_pending">Ожидание платежа</string>
     <string name="note_tips_chip">%1$s · %2$d</string>
     <string name="media_sensitive">Чувствительный контент</string>
     <string name="media_tap_to_show">Нажмите, чтобы показать</string>
@@ -343,6 +343,8 @@
     <string name="settings_pow_hint">Некоторые релеи принимают заметки только с доказательством работы (NIP-13). Больше бит — шире приём, но отправка дольше.</string>
     <string name="settings_pow_off">Выкл.</string>
     <string name="settings_pow_bits">%1$d бит</string>
+    <string name="settings_pow_filter">Минимальный proof of work для показа заметок</string>
+    <string name="settings_pow_filter_hint">Скрывает заметки ниже этого значения от людей, на которых вы не подписаны. Немногие приложения отправляют proof of work, поэтому большинство их заметок исчезнет. Открытые вами заметки и чаевые остаются.</string>
     <string name="settings_client_tag">Показывать «via monostr»</string>
     <string name="settings_client_tag_hint">Заметки, лайки и репосты содержат тег клиента, который другие приложения показывают как «via monostr».</string>
     <string name="note_via">через %1$s</string>
@@ -713,6 +715,19 @@
     <string name="discover_following">Вы подписаны</string>
     <string name="discover_follow_all">Подписаться на всех</string>
     <string name="discover_all_followed">Подписаны на всех</string>
+    <plurals name="follow_all_confirm_title">
+        <item quantity="one">Подписаться на %1$d аккаунт?</item>
+        <item quantity="few">Подписаться на %1$d аккаунта?</item>
+        <item quantity="many">Подписаться на %1$d аккаунтов?</item>
+        <item quantity="other">Подписаться на %1$d аккаунта?</item>
+    </plurals>
+    <string name="follow_all_confirm_text">Все они сразу попадут в ваш список подписок. Это можно отменить сразу после.</string>
+    <plurals name="follow_all_done">
+        <item quantity="one">Добавлен %1$d аккаунт</item>
+        <item quantity="few">Добавлено %1$d аккаунта</item>
+        <item quantity="many">Добавлено %1$d аккаунтов</item>
+        <item quantity="other">Добавлено %1$d аккаунта</item>
+    </plurals>
     <string name="discover_show_all">Показать всех</string>
     <string name="discover_failed">Не удалось загрузить</string>
     <string name="discover_retry">Повторить</string>

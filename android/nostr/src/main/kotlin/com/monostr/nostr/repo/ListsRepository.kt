@@ -266,7 +266,7 @@ class NostrListsRepository(
     }
 
     override suspend fun byAddress(address: ListAddress, fetch: Boolean): FollowSet? {
-        if (address.pubkey == signer.pubkey) {
+        if (address.pubkey == signer.pubkey && address.kind == FollowSetCodec.KIND) {
             ensureOwn()
             _own.value?.firstOrNull { it.address == address }?.let { return it }
             if (!fetch) return null
@@ -282,7 +282,8 @@ class NostrListsRepository(
                 set
             }
         }
-        val filter = authorFilter(address.pubkey).identifier(address.d)
+        // a foreign list, or a follow pack of anyone: those are never among the own lists
+        val filter = Filter().kind(Kind(address.kind.toUShort())).author(PublicKey.parse(address.pubkey)).identifier(address.d)
         if (fetch) foreignRefresh.awaitStamped("list:$address") { fetchWide(engine, filter, fetchTimeout, Exit.NewestPerAuthor(setOf(address.pubkey))) { authorRelays.writeRelays(address.pubkey) + defaultRelays } }
         return engine.queryDecoded(filter).maxByOrNull { it.createdAt }?.let { FollowSetCodec.decode(it, null, interactive = false) }
     }

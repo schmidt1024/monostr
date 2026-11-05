@@ -119,4 +119,14 @@ class UiSettingsStoreTest {
         }
         assertTrue(s.clientTag.first()); assertFalse(s.mediaOnTap.first())
     }
+
+    @Test
+    fun `the proof of work filter starts off and keeps a valid choice`() = runTest {
+        val settings = PrefsUiSettingsStore(store())
+        assertEquals(0, settings.powFilterBits.first())
+        settings.setPowFilterBits(16)
+        assertEquals(16, settings.powFilterBits.first())
+        settings.setPowFilterBits(9)
+        assertEquals(8, settings.powFilterBits.first())
+    }
 }

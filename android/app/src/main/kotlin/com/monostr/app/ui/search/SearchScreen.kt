@@ -1,5 +1,6 @@
 package com.monostr.app.ui.search
 
+import com.monostr.app.ui.discover.DiscoverFollowAllHost
 import com.monostr.app.ui.common.NoteLinks
 import com.monostr.app.ui.discover.DiscoverController
 import com.monostr.app.ui.discover.discoverItems
@@ -134,7 +135,7 @@ fun SearchScreen(
     val dmUnread by vm.dmUnread.collectAsStateWithLifecycle()
     val discoverUi by vm.discover.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
-    discoverUi.message?.let { m -> val text = m.asString(); LaunchedEffect(m) { snackbar.showSnackbar(text); vm.discover.clearMessage() } }
+    DiscoverFollowAllHost(discoverUi, snackbar, vm.discover)
     if (state.mode == SearchMode.IDLE && state.query.isBlank() && discoverUi.sections.any { it.rows.isNotEmpty() }) LaunchedEffect(Unit) { PerfTrace.mark("discover shown") }
     var tippersFor by remember { mutableStateOf<Note?>(null) }
     val focus = remember { FocusRequester() }

@@ -19,10 +19,10 @@ data class AddressRef(val kind: Int, val pubkey: String, val identifier: String,
         Nip19Coordinate(Coordinate(Kind(kind.toUShort()), PublicKey.parse(pubkey), identifier), relays.map { RelayUrl.parse(it) }).toBech32()
 }
 
-/** `nostr:naddr1…` in note text (spec 2026-10-29 naddr); mirrors [NoteQuote] for find and strip. */
+/** `nostr:naddr1…` or a bare `naddr1…` in note text (spec 2026-10-29 naddr); mirrors [NoteQuote] for find and strip. */
 object NoteAddress {
     const val MAX_HINTS = 3
-    private val REF = Regex("(?i:nostr:naddr1)[0-9a-zA-Z]+") // regex
+    private val REF = Regex(NostrRefs.pattern("naddr1")) // regex
 
     /** Hints come from someone else's note: only public wss relays, at most [MAX_HINTS]. */
     fun decode(link: String): AddressRef? {

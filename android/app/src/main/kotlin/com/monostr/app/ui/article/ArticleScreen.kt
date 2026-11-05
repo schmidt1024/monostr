@@ -78,6 +78,7 @@ import com.monostr.app.session.NostrSession
 import com.monostr.app.ui.common.AddressCard
 import com.monostr.app.ui.common.Avatar
 import com.monostr.app.ui.common.LocalOpenArticle
+import com.monostr.app.ui.common.LocalOpenList
 import com.monostr.app.ui.common.LocalAllowForeign
 import androidx.compose.runtime.CompositionLocalProvider
 import com.monostr.app.ui.common.LoadingScreen
@@ -321,10 +322,11 @@ private fun Reader(
     }
     // Spec 8: cards and links inside a reader opened from a direct message follow the same rule as the reader itself
     val parentOpen = LocalOpenArticle.current
+    val parentOpenList = LocalOpenList.current
     val scopedOpen = remember(parentOpen, allowForeign) {
         if (allowForeign || parentOpen == null) parentOpen else { ref: AddressRef, _: Boolean -> val (r, f) = embedTarget(ref, false); parentOpen(r, f) }
     }
-    CompositionLocalProvider(LocalOpenArticle provides scopedOpen, LocalAllowForeign provides allowForeign) {
+    CompositionLocalProvider(LocalOpenArticle provides scopedOpen, LocalOpenList provides parentOpenList.takeIf { allowForeign }, LocalAllowForeign provides allowForeign) {
     val listState = rememberLazyListState()
     // backlog 28: muted strand heads the user tapped open, for this screen only (the account stays muted)
     var shownMuted by rememberSaveable { mutableStateOf(emptySet<String>()) }
