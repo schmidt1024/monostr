@@ -1,0 +1,2 @@
+- Mance: appena un tentativo arriva, gli altri tentativi non pagati su quella nota o persona non mostrano più «In attesa del pagamento»
+- Mance: se i relay del watcher hanno perso la tua mancia per una connessione debole, monostr la invia di nuovo

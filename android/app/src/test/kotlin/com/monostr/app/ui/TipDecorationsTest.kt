@@ -66,6 +66,64 @@ class TipDecorationsTest {
     }
 
     @Test
+    fun `the receipt of one attempt ends the waiting line of the other attempts on that note`() = runTest {
+        val tips = FakeTips()
+        val pending = FakePendingTips()
+        val d = TipDecorations(tips, pending, profiles, FakePublish(), eager()) { 5_000 }
+        d.start()
+        val tipped = note('1', alice, 1000)
+        val other = note('2', alice, 1000)
+        d.track(listOf(tipped, other))
+        advanceUntilIdle()
+        val paid = "e".repeat(64)
+        val onOtherNote = "d".repeat(64)
+        pending.add(PendingTip("f".repeat(64), tipped.id, 5, 4_000)) // never paid
+        pending.add(PendingTip(paid, tipped.id, 5, 4_100))
+        pending.add(PendingTip(onOtherNote, other.id, 5, 4_000))
+        advanceUntilIdle()
+        tips.receipts.value = mapOf(tipped.id to TipSummary(5, 1, listOf(receipt(tipped.id, paid, 5, 4_500))))
+        advanceUntilIdle()
+        assertFalse(d.decorate(NoteUi(tipped, Profile.empty(alice), Profile.empty(alice))).pendingTip)
+        assertTrue(d.decorate(NoteUi(other, Profile.empty(alice), Profile.empty(alice))).pendingTip, "another note keeps its line")
+    }
+
+    @Test
+    fun `a stranger's receipt on the note leaves the own attempt waiting`() = runTest {
+        val tips = FakeTips()
+        val pending = FakePendingTips()
+        val d = TipDecorations(tips, pending, profiles, FakePublish(), eager()) { 5_000 }
+        d.start()
+        val n = note('1', alice, 1000)
+        d.track(listOf(n))
+        advanceUntilIdle()
+        pending.add(PendingTip("f".repeat(64), n.id, 5, 4_000))
+        advanceUntilIdle()
+        tips.receipts.value = mapOf(n.id to TipSummary(5, 1, listOf(receipt(n.id, "9".repeat(64), 5, 4_500))))
+        advanceUntilIdle()
+        assertTrue(d.decorate(NoteUi(n, Profile.empty(alice), Profile.empty(alice))).pendingTip)
+    }
+
+    @Test
+    fun `a new tip after an arrived one waits, also when the old receipt comes again`() = runTest {
+        val tips = FakeTips()
+        val pending = FakePendingTips()
+        val d = TipDecorations(tips, pending, profiles, FakePublish(), eager()) { 5_000 }
+        d.start()
+        val n = note('1', alice, 1000)
+        d.track(listOf(n))
+        advanceUntilIdle()
+        val first = "e".repeat(64)
+        pending.add(PendingTip(first, n.id, 5, 4_000))
+        advanceUntilIdle()
+        tips.receipts.value = mapOf(n.id to TipSummary(5, 1, listOf(receipt(n.id, first, 5, 4_500))))
+        advanceUntilIdle()
+        pending.add(PendingTip("f".repeat(64), n.id, 5, 4_600))
+        tips.receipts.value = mapOf(n.id to TipSummary(5, 1, listOf(receipt(n.id, first, 5, 4_501))))
+        advanceUntilIdle()
+        assertTrue(d.decorate(NoteUi(n, Profile.empty(alice), Profile.empty(alice))).pendingTip)
+    }
+
+    @Test
     fun `five quick changes of the tracked set make one relay observe, the stored sums follow each at once`() = runTest {
         val tips = FakeTips()
         val d = TipDecorations(tips, FakePendingTips(), profiles, FakePublish(), eager()) { 5_000 }
@@ -209,6 +267,37 @@ class TipDecorationsTest {
         assertEquals(1, tips.anonymousResends.size)
         assertTrue(publish.calls.isEmpty())
         assertTrue(pending.state.value.single().anonDelivered)
+    }
+
+    private val relayOfWatcher = "wss://w.example"
+    private fun publicPending(delivered: Boolean = false) =
+        PendingTip("1234".padStart(64, '0'), "1".repeat(64), 5, 4_000, watcherRelays = listOf(relayOfWatcher), watcherDelivered = delivered)
+
+    @Test
+    fun `at the start a public intent no watcher relay took goes to them too, and only until one does`() = runTest {
+        val pending = FakePendingTips()
+        pending.add(publicPending())
+        val tips = FakeTips()
+        val publish = FakePublish()
+        TipDecorations(tips, pending, profiles, publish, eager()) { 5_000 }.start()
+        advanceUntilIdle()
+        assertEquals(listOf("resend:1234"), publish.calls)
+        assertEquals(listOf(publicPending().intentId to listOf(relayOfWatcher)), tips.watcherResends)
+        assertTrue(pending.state.value.single().watcherDelivered)
+        TipDecorations(tips, pending, profiles, FakePublish(), eager()) { 5_000 }.start()
+        advanceUntilIdle()
+        assertEquals(1, tips.watcherResends.size)
+    }
+
+    @Test
+    fun `a public intent the watcher relays refused again stays undelivered`() = runTest {
+        val pending = FakePendingTips()
+        pending.add(publicPending())
+        val tips = FakeTips(watcherAccepts = false)
+        TipDecorations(tips, pending, profiles, FakePublish(), eager()) { 5_000 }.start()
+        advanceUntilIdle()
+        assertEquals(1, tips.watcherResends.size)
+        assertFalse(pending.state.value.single().watcherDelivered)
     }
 
     @Test

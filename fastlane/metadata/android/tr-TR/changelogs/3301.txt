@@ -1,0 +1,2 @@
+- Bahşişler: bir deneme ulaştığında, aynı not veya kişi için ödenmemiş diğer denemeler artık «Ödeme bekleniyor» göstermez
+- Bahşişler: zayıf bağlantı nedeniyle watcher röleleri bahşişinizi almadıysa monostr yeniden gönderir

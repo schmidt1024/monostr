@@ -1,0 +1,2 @@
+- Tips: Sobald ein Versuch angekommen ist, zeigen deine anderen unbezahlten Versuche auf dieselbe Notiz oder Person kein «Wartet auf Zahlung» mehr
+- Tips: Haben die Relays des Watchers deinen Tip bei schwachem Netz verpasst, sendet monostr ihn erneut

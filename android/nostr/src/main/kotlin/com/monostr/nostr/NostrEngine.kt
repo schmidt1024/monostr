@@ -1775,6 +1775,12 @@ const val NOTE_NOT_IN_DATABASE = "Note nicht in der Datenbank"
 /** Outcome of a publish: the new event's id and which relays accepted it. Plain Kotlin so `:app` needs no rust-nostr types. */
 data class PublishResult(val eventId: String, val kind: Int, val successRelays: List<String>, val failedRelays: Map<String, String>) {
     val sentToAny: Boolean get() = successRelays.isNotEmpty()
+
+    /** One of [relays] accepted the event. */
+    fun reached(relays: List<String>): Boolean {
+        val accepted = successRelays.map { it.trimEnd('/') }.toSet()
+        return relays.any { it.trimEnd('/') in accepted }
+    }
 }
 
 /** The user's NIP-65 relay list. */

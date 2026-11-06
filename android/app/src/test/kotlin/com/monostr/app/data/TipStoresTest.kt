@@ -91,9 +91,55 @@ class TipStoresTest {
         assertEquals(listOf(a, b), pending.pending.first(), "same intent id is not stored twice")
         pending.prune(now = 1000 + 86_400)
         assertEquals(listOf(b), pending.pending.first())
-        pending.remove(listOf(b.intentId))
+        pending.settle(listOf(b.intentId))
         assertTrue(pending.pending.first().isEmpty())
         scope.cancel()
+    }
+
+    @Test
+    fun `settling removes the arrived tip and supersedes the other attempts on its target, across a re-read`() = runTest {
+        val file = dir.resolve("settled.preferences_pb").toFile()
+        val person = "c".repeat(64)
+        val paid = PendingTip("a".repeat(64), "1".repeat(64), 5, 1000, recipient = person)
+        val sameNote = PendingTip("b".repeat(64), "1".repeat(64), 5, 900, recipient = person, anonEvent = "{}", anonRelays = listOf("wss://w.example"))
+        val otherNote = PendingTip("d".repeat(64), "2".repeat(64), 5, 1000, recipient = person)
+        val profileTip = PendingTip("e".repeat(64), null, 5, 1000, recipient = person)
+        val profilePaid = PendingTip("f".repeat(64), null, 5, 1100, recipient = person)
+        val otherPerson = PendingTip("9".repeat(64), null, 5, 1000, recipient = "8".repeat(64))
+        val first = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val pending = PrefsPendingTipStore(PreferenceDataStoreFactory.create(scope = first) { file })
+        listOf(paid, sameNote, otherNote, profileTip, profilePaid, otherPerson).forEach { pending.add(it) }
+        pending.settle(listOf(paid.intentId, profilePaid.intentId))
+        val expected = listOf(sameNote.copy(superseded = true), otherNote, profileTip.copy(superseded = true), otherPerson)
+        assertEquals(expected, pending.pending.first())
+        first.cancel()
+        val second = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val reread = PrefsPendingTipStore(PreferenceDataStoreFactory.create(scope = second) { file })
+        assertEquals(expected, reread.pending.first())
+        second.cancel()
+    }
+
+    @Test
+    fun `a public intent keeps its watcher relays and delivery across a re-read`() = runTest {
+        val file = dir.resolve("watcher.preferences_pb").toFile()
+        val tip = PendingTip("a".repeat(64), "1".repeat(64), 5, 1000)
+        val first = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val pending = PrefsPendingTipStore(PreferenceDataStoreFactory.create(scope = first) { file })
+        pending.add(tip)
+        pending.setWatcherRelays(tip.intentId, listOf("wss://w.example"))
+        pending.markDelivered(tip.intentId)
+        first.cancel()
+        val second = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val reread = PrefsPendingTipStore(PreferenceDataStoreFactory.create(scope = second) { file })
+        assertEquals(listOf(tip.copy(watcherRelays = listOf("wss://w.example"), watcherDelivered = true)), reread.pending.first())
+        second.cancel()
+    }
+
+    @Test
+    fun `a superseded attempt no longer waits but stays active until its lifetime ends`() {
+        val tip = PendingTip("a".repeat(64), "1".repeat(64), 5, 1000, superseded = true)
+        assertEquals(listOf(tip), PendingTips.active(listOf(tip), now = 1000))
+        assertTrue(PendingTips.waiting(listOf(tip), now = 1000).isEmpty())
     }
 
     @Test

@@ -334,6 +334,96 @@ class TipSheetControllerTest {
         assertFalse(rig.pending.state.value.single().anonDelivered, "no relay accepted it: the next start sends it again")
     }
 
+    private val watcherRelay = "wss://watcher-relay.example"
+
+    @Test
+    fun `a public tip the watcher's relays accepted at once is not sent to them again`() = runTest {
+        val rig = Rig(FakeTips(infos = mapOf(alice to enabled)))
+        val c = controller(rig)
+        c.open(n)
+        advanceUntilIdle()
+        c.send()
+        advanceUntilIdle()
+        val tip = rig.pending.state.value.single()
+        assertEquals(listOf(watcherRelay), tip.watcherRelays)
+        assertTrue(tip.watcherDelivered)
+        assertTrue(rig.tips.watcherResends.isEmpty())
+    }
+
+    @Test
+    fun `a public tip only the own relays accepted goes to the watcher's relays again until one takes it`() = runTest {
+        val rig = Rig(FakeTips(infos = mapOf(alice to enabled), watcherAccepts = false))
+        val c = controller(rig)
+        c.open(n)
+        advanceUntilIdle()
+        c.send()
+        runCurrent()
+        assertTrue(c.state.value.phase is TipPhase.Pay, "the wallet opens at once")
+        assertFalse(rig.pending.state.value.single().watcherDelivered)
+        advanceTimeBy(TipSheetController.REDELIVER_DELAYS_MS[0] + 1)
+        assertEquals(1, rig.tips.watcherResends.size)
+        assertEquals(listOf(watcherRelay), rig.tips.watcherResends.single().second)
+        rig.tips.watcherAccepts = true
+        advanceUntilIdle()
+        assertEquals(2, rig.tips.watcherResends.size, "no further send once a relay took it")
+        assertTrue(rig.pending.state.value.single().watcherDelivered)
+    }
+
+    @Test
+    fun `the repeats end after the last delay and the tip stays undelivered for the next start`() = runTest {
+        val rig = Rig(FakeTips(infos = mapOf(alice to enabled), watcherAccepts = false))
+        val c = controller(rig)
+        c.open(n)
+        advanceUntilIdle()
+        c.send()
+        advanceUntilIdle()
+        assertEquals(TipSheetController.REDELIVER_DELAYS_MS.size, rig.tips.watcherResends.size)
+        assertFalse(rig.pending.state.value.single().watcherDelivered)
+    }
+
+    @Test
+    fun `a watcher that did not answer at the send is asked again and its relays are kept`() = runTest {
+        val rig = Rig(FakeTips(infos = mapOf(alice to enabled), watcherAccepts = false))
+        rig.gateway.infoError = IllegalStateException("no answer")
+        val c = controller(rig)
+        c.open(n)
+        advanceUntilIdle()
+        c.send()
+        runCurrent()
+        assertTrue(rig.pending.state.value.single().watcherRelays.isEmpty())
+        rig.gateway.infoError = null
+        advanceTimeBy(TipSheetController.REDELIVER_DELAYS_MS[0] + 1)
+        assertEquals(listOf(watcherRelay), rig.pending.state.value.single().watcherRelays)
+        assertEquals(listOf(watcherRelay), rig.tips.watcherResends.single().second)
+    }
+
+    @Test
+    fun `an anonymous tip no relay took is sent again soon, not only at the next start`() = runTest {
+        val rig = Rig(FakeTips(infos = mapOf(alice to enabled), relaysOk = false), settings = FakeTipSettings())
+        val c = controller(rig)
+        c.open(n)
+        advanceUntilIdle()
+        c.send()
+        runCurrent()
+        rig.tips.relaysOk = true
+        advanceUntilIdle()
+        assertEquals(1, rig.tips.anonymousResends.size)
+        assertTrue(rig.pending.state.value.single().anonDelivered)
+    }
+
+    @Test
+    fun `a tip settled meanwhile is not sent again`() = runTest {
+        val rig = Rig(FakeTips(infos = mapOf(alice to enabled), watcherAccepts = false))
+        val c = controller(rig)
+        c.open(n)
+        advanceUntilIdle()
+        c.send()
+        runCurrent()
+        rig.pending.settle(listOf(rig.pending.state.value.single().intentId))
+        advanceUntilIdle()
+        assertTrue(rig.tips.watcherResends.isEmpty())
+    }
+
     @Test
     fun `an anonymous send that throws publishes nothing and records nothing`() = runTest {
         val rig = Rig(FakeTips(infos = mapOf(alice to enabled), failSend = true), settings = FakeTipSettings())
@@ -380,10 +470,10 @@ class TipSheetControllerTest {
         assertFalse((c.state.value.phase as TipPhase.Pay).arrived)
         val other = "9".repeat(64)
         rig.pending.add(PendingTip(other, "2".repeat(64), 5, 5_000))
-        rig.pending.remove(listOf(other))
+        rig.pending.settle(listOf(other))
         advanceUntilIdle()
         assertFalse((c.state.value.phase as TipPhase.Pay).arrived, "another tip settling means nothing for this sheet")
-        rig.pending.remove(listOf(mine))
+        rig.pending.settle(listOf(mine))
         advanceUntilIdle()
         assertTrue((c.state.value.phase as TipPhase.Pay).arrived)
     }
@@ -402,7 +492,7 @@ class TipSheetControllerTest {
         c.send()
         advanceUntilIdle()
         assertFalse((c.state.value.phase as TipPhase.Pay).arrived, "an empty read is not a receipt")
-        inner.remove(listOf(inner.state.value.single().intentId))
+        inner.settle(listOf(inner.state.value.single().intentId))
         advanceUntilIdle()
         assertTrue((c.state.value.phase as TipPhase.Pay).arrived)
     }
@@ -419,7 +509,7 @@ class TipSheetControllerTest {
         c.dismiss()
         c.open(n)
         advanceUntilIdle()
-        rig.pending.remove(listOf(mine))
+        rig.pending.settle(listOf(mine))
         advanceUntilIdle()
         assertEquals(TipPhase.Ready, c.state.value.phase)
         c.dismiss()

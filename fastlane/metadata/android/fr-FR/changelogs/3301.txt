@@ -1,0 +1,2 @@
+- Pourboires : dès qu'une tentative arrive, vos autres tentatives non payées sur cette note ou cette personne n'affichent plus « En attente du paiement »
+- Pourboires : si les relais du watcher n'ont pas reçu votre pourboire à cause d'une connexion faible, monostr le renvoie

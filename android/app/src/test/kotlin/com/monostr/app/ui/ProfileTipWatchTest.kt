@@ -90,7 +90,7 @@ class ProfileTipWatchTest {
     }
 
     @Test
-    fun `of two pending profile tips only the confirmed one goes`() = runTest {
+    fun `the receipt of one profile tip ends the waiting of the other attempts to this person`() = runTest {
         val rig = Rig()
         val second = "5".repeat(64)
         rig.pending.add(PendingTip(mine, null, 5, 4_000, recipient = alice))
@@ -100,7 +100,7 @@ class ProfileTipWatchTest {
         rig.tips.profileReceipts.value = setOf(mine)
         advanceUntilIdle()
         assertEquals(listOf(second), rig.pending.state.value.map { it.intentId })
-        assertTrue(w.pendingTip.value, "the other one is still waiting")
+        assertFalse(w.pendingTip.value, "the other attempt no longer shows as waiting")
         assertEquals(1, rig.arrivals)
     }
 
@@ -173,7 +173,7 @@ class ProfileTipWatchTest {
     fun `an anonymous arrival is signalled even when the store write suspends after the entry is gone`() = runTest {
         val rig = Rig()
         // the removal ends the watch (its key becomes null) while remove is still suspended
-        rig.pending.afterRemove = { delay(1) }
+        rig.pending.afterSettle = { delay(1) }
         rig.tips.anonymousProfileReceipts.value = setOf(mine)
         rig.pending.add(anonymous(mine, 4_000))
         val w = watch(rig)

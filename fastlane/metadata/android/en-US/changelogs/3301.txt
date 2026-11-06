@@ -1,0 +1,2 @@
+- Tips: once one attempt arrives, your other unpaid attempts on that note or person stop showing «Waiting for payment»
+- Tips: if the watcher's relays missed your tip on a weak connection, monostr sends it to them again

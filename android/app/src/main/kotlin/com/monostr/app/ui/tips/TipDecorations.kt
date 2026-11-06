@@ -1,6 +1,7 @@
 package com.monostr.app.ui.tips
 
 import com.monostr.nostr.StartupGate
+import com.monostr.app.data.PendingTip
 import com.monostr.app.data.PendingTipStore
 import com.monostr.app.data.PendingTips
 import com.monostr.app.ui.feed.NoteUi
@@ -29,6 +30,23 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+
+/**
+ * Sends the intent of [tip] to the watcher's relays unless one has it, and notes it when one takes it; true once one
+ * has it. An anonymous intent travels over its own connection, and only until accepted: every send is another
+ * connection from this device. A public one is sent to relays the user's own list may not contain.
+ */
+internal suspend fun deliverToWatcher(tips: TipsRepository, pending: PendingTipStore, tip: PendingTip): Boolean {
+    if (tip.isDelivered) return true
+    val anonymous = tip.anonEvent
+    val accepted = when {
+        anonymous != null -> tips.resendAnonymousIntent(anonymous, tip.anonRelays).sentToAny
+        tip.watcherRelays.isEmpty() -> false
+        else -> tips.resendIntentToWatcher(tip.intentId, tip.watcherRelays).reached(tip.watcherRelays)
+    }
+    if (accepted) pending.markDelivered(tip.intentId)
+    return accepted
+}
 
 /** [name] is null for an anonymous tip; the UI shows "Anonymous" in its language. */
 data class TipperUi(val name: String?, val amount: Long?, val comment: String, val createdAt: Long)
@@ -88,7 +106,7 @@ class TipDecorations(
             pending.pending
                 .catch { /* store read failed: keep the last markers */ }
                 // a tip to a profile has no note to mark
-                .collect { all -> _pendingNotes.value = PendingTips.active(all, now()).mapNotNull { it.noteId }.toSet() }
+                .collect { all -> _pendingNotes.value = PendingTips.waiting(all, now()).mapNotNull { it.noteId }.toSet() }
         }
     }
 
@@ -199,14 +217,9 @@ class TipDecorations(
         }
         for (tip in active) {
             try {
-                // an anonymous intent only ever travels over its own connection to the watcher relays,
-                // and only until one accepted it: every resend is another connection from this device
-                val anonymous = tip.anonEvent
-                if (anonymous == null) {
-                    publish.resend(tip.intentId)
-                } else if (!tip.anonDelivered) {
-                    if (tips.resendAnonymousIntent(anonymous, tip.anonRelays).sentToAny) pending.markDelivered(tip.intentId)
-                }
+                // an anonymous intent never goes to the user's relays
+                if (tip.anonEvent == null) publish.resend(tip.intentId)
+                deliverToWatcher(tips, pending, tip)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -220,7 +233,7 @@ class TipDecorations(
         if (confirmed.isEmpty()) return
         try {
             val done = pending.pending.first().filter { it.intentId in confirmed }.map { it.intentId }
-            if (done.isNotEmpty()) pending.remove(done)
+            if (done.isNotEmpty()) pending.settle(done)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

@@ -360,6 +360,8 @@ class FakeTips(
     var infos: Map<String, PaymentInfo> = emptyMap(),
     var relaysOk: Boolean = true,
     var failSend: Boolean = false,
+    /** The watcher's relays take a public intent. */
+    var watcherAccepts: Boolean = true,
 ) : TipsRepository {
     val sentIntents = ArrayList<PreparedTip>()
     val sentWatcherRelays = ArrayList<List<String>>()
@@ -459,7 +461,14 @@ class FakeTips(
         sendGate?.await()
         if (failSend) throw IllegalStateException("boom")
         sentIntents += prepared; sentWatcherRelays += watcherRelays
-        return PublishResult((++counter).toString().padStart(64, '0'), 9738, if (relaysOk) listOf("wss://r") else emptyList(), emptyMap())
+        return PublishResult((++counter).toString().padStart(64, '0'), 9738, (if (relaysOk) listOf("wss://r") else emptyList()) + (if (watcherAccepts) watcherRelays else emptyList()), emptyMap())
+    }
+    /** (intent id, relays) of every send of a public intent to the watcher's relays after the first. */
+    val watcherResends = ArrayList<Pair<String, List<String>>>()
+    override suspend fun resendIntentToWatcher(intentId: String, relays: List<String>): PublishResult {
+        if (failSend) throw IllegalStateException("boom")
+        watcherResends += intentId to relays
+        return PublishResult(intentId, 9738, if (watcherAccepts) relays else emptyList(), emptyMap())
     }
     val anonymousIntents = ArrayList<PreparedTip>()
     val anonymousRelays = ArrayList<List<String>>()
@@ -646,14 +655,15 @@ class FakePendingTips : PendingTipStore {
     val state = MutableStateFlow<List<PendingTip>>(emptyList())
     override val pending: Flow<List<PendingTip>> = state
     override suspend fun add(tip: PendingTip) { if (state.value.none { it.intentId == tip.intentId }) state.value = state.value + tip }
-    /** When set, `remove` runs it after the state changed, before returning: a store whose write suspends (like DataStore's `edit`). */
-    var afterRemove: (suspend () -> Unit)? = null
-    override suspend fun remove(intentIds: Collection<String>) {
-        state.value = state.value.filter { it.intentId !in intentIds }
-        afterRemove?.invoke()
+    /** When set, `settle` runs it after the state changed, before returning: a store whose write suspends (like DataStore's `edit`). */
+    var afterSettle: (suspend () -> Unit)? = null
+    override suspend fun settle(intentIds: Collection<String>) {
+        state.value = PendingTips.settled(state.value, intentIds)
+        afterSettle?.invoke()
     }
     override suspend fun prune(now: Long) { state.value = PendingTips.active(state.value, now) }
-    override suspend fun markDelivered(intentId: String) { state.value = state.value.map { if (it.intentId == intentId) it.copy(anonDelivered = true) else it } }
+    override suspend fun markDelivered(intentId: String) { state.value = state.value.map { if (it.intentId == intentId) PendingTips.delivered(it) else it } }
+    override suspend fun setWatcherRelays(intentId: String, relays: List<String>) { state.value = state.value.map { if (it.intentId == intentId) it.copy(watcherRelays = relays) else it } }
     override suspend fun clear() { state.value = emptyList() }
 }
 

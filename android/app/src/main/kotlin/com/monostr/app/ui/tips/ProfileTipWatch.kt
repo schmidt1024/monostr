@@ -58,7 +58,7 @@ class ProfileTipWatch(
         scope.launch {
             pending.pending
                 .catch { /* store read failed: no marker */ }
-                .map { all -> PendingTips.active(all, now()).filter(::isMine) }
+                .map { all -> PendingTips.waiting(all, now()).filter(::isMine) }
                 .collect { own ->
                     mine.value = own
                     _pendingTip.value = own.isNotEmpty()
@@ -105,7 +105,7 @@ class ProfileTipWatch(
             // once removed, the arrival must be signalled, whatever happens to this coroutine meanwhile
             // (the removal itself ends the watch for this tip)
             withContext(NonCancellable) {
-                pending.remove(done)
+                pending.settle(done)
                 arrivals.trySend(Unit)
             }
         } catch (e: CancellationException) {

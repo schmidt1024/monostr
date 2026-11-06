@@ -30,13 +30,37 @@ data class PendingTip(
     val anonRelays: List<String> = emptyList(),
     /** Anonymous tips only: a watcher relay accepted the intent, so it is not sent again. */
     val anonDelivered: Boolean = false,
-)
+    /** Another attempt on the same target arrived: no longer shown as waiting. Stays stored, so that an undelivered intent of a tip that was paid after all still goes out. */
+    val superseded: Boolean = false,
+    /** Public tips only: the watcher's relays the intent goes to; empty while the watcher named none. */
+    val watcherRelays: List<String> = emptyList(),
+    /** Public tips only: one of [watcherRelays] accepted the intent, so it is not sent to them again. */
+    val watcherDelivered: Boolean = false,
+) {
+    /** A watcher relay has the intent, as far as this device knows. */
+    val isDelivered: Boolean get() = if (anonEvent != null) anonDelivered else watcherDelivered
+}
 
 object PendingTips {
     private val json = Json { ignoreUnknownKeys = true }
 
     /** Tips younger than the intent lifetime; older ones disappear silently (spec 5.5). */
     fun active(all: List<PendingTip>, now: Long): List<PendingTip> = all.filter { now - it.createdAt < TipIntent.TTL_SECONDS }
+
+    /** [tip] with its watcher delivery noted, on the path it travels. */
+    fun delivered(tip: PendingTip): PendingTip = if (tip.anonEvent != null) tip.copy(anonDelivered = true) else tip.copy(watcherDelivered = true)
+
+    /** Active tips to show as waiting for payment. */
+    fun waiting(all: List<PendingTip>, now: Long): List<PendingTip> = active(all, now).filter { !it.superseded }
+
+    /** [all] without the arrived [intentIds], every other attempt on one of their targets marked superseded. */
+    fun settled(all: List<PendingTip>, intentIds: Collection<String>): List<PendingTip> {
+        val arrived = all.filter { it.intentId in intentIds }
+        return all.filter { it.intentId !in intentIds }.map { tip -> if (arrived.any { sameTarget(it, tip) }) tip.copy(superseded = true) else tip }
+    }
+
+    private fun sameTarget(a: PendingTip, b: PendingTip): Boolean =
+        if (a.noteId != null) a.noteId == b.noteId else b.noteId == null && a.recipient == b.recipient
 
     fun encode(list: List<PendingTip>): String = json.encodeToString(ListSerializer(PendingTip.serializer()), list)
 
@@ -48,10 +72,13 @@ object PendingTips {
 interface PendingTipStore {
     val pending: Flow<List<PendingTip>>
     suspend fun add(tip: PendingTip)
-    suspend fun remove(intentIds: Collection<String>)
+    /** The receipts of [intentIds] came in: drops them and supersedes the other attempts on their targets, see [PendingTips.settled]. */
+    suspend fun settle(intentIds: Collection<String>)
     suspend fun prune(now: Long)
-    /** Notes that a watcher relay accepted the anonymous intent [intentId]; no-op if it is not pending. */
+    /** Notes that a watcher relay accepted the intent [intentId]; no-op if it is not pending. */
     suspend fun markDelivered(intentId: String)
+    /** Notes the watcher relays of the public intent [intentId], once the watcher named them; no-op if it is not pending. */
+    suspend fun setWatcherRelays(intentId: String, relays: List<String>)
     /** Drops every pending tip (logout). */
     suspend fun clear()
 }
@@ -64,12 +91,15 @@ class PrefsPendingTipStore(private val store: DataStore<Preferences>) : PendingT
 
     override suspend fun add(tip: PendingTip) = update { list -> if (list.any { it.intentId == tip.intentId }) list else list + tip }
 
-    override suspend fun remove(intentIds: Collection<String>) = update { list -> list.filter { it.intentId !in intentIds } }
+    override suspend fun settle(intentIds: Collection<String>) = update { list -> PendingTips.settled(list, intentIds) }
 
     override suspend fun prune(now: Long) = update { PendingTips.active(it, now) }
 
     override suspend fun markDelivered(intentId: String) =
-        update { list -> list.map { if (it.intentId == intentId) it.copy(anonDelivered = true) else it } }
+        update { list -> list.map { if (it.intentId == intentId) PendingTips.delivered(it) else it } }
+
+    override suspend fun setWatcherRelays(intentId: String, relays: List<String>) =
+        update { list -> list.map { if (it.intentId == intentId) it.copy(watcherRelays = relays) else it } }
 
     override suspend fun clear() { store.edit { it.remove(PENDING) } }
 

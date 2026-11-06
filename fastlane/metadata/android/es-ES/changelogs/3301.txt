@@ -1,0 +1,2 @@
+- Propinas: cuando llega un intento, tus otros intentos sin pagar en esa nota o persona dejan de mostrar «Esperando el pago»
+- Propinas: si los relés del watcher no recibieron tu propina con una conexión débil, monostr la envía de nuevo

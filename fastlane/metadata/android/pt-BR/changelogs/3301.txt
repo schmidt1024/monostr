@@ -1,0 +1,2 @@
+- Gorjetas: quando uma tentativa chega, suas outras tentativas não pagas nessa nota ou pessoa deixam de mostrar «Aguardando pagamento»
+- Gorjetas: se os relays do watcher não receberam sua gorjeta por causa de uma conexão fraca, o monostr a envia de novo

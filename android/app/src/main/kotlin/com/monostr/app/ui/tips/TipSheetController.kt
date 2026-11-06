@@ -25,6 +25,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -227,9 +228,15 @@ class TipSheetController(
                 } else {
                     val result = tips.sendIntent(prepared, watcherRelays)
                     intentId = result.eventId
-                    pending.add(PendingTip(result.eventId, target.noteId, amount, now(), target.recipient))
+                    pending.add(
+                        PendingTip(
+                            result.eventId, target.noteId, amount, now(), target.recipient,
+                            watcherRelays = watcherRelays, watcherDelivered = result.reached(watcherRelays),
+                        ),
+                    )
                     sentToAny = result.sentToAny
                 }
+                redeliver(intentId, info)
                 if (_state.value.target?.key != key) return@launch // the tip went out; the sheet now shows another target
                 _state.update {
                     it.copy(
@@ -245,6 +252,37 @@ class TipSheetController(
                 _state.update { it.copy(phase = TipPhase.Ready, error = e.userMessage()) }
             }
         }
+    }
+
+    /**
+     * Sends the intent [intentId] again a few times while no watcher relay has it. The next start would be too
+     * late: the watcher looks for the payment from the moment it knows the intent, and the wallet is open now.
+     */
+    private fun redeliver(intentId: String, info: PaymentInfo.Enabled) {
+        scope.launch {
+            for (pause in REDELIVER_DELAYS_MS) {
+                try {
+                    val stored = pending.pending.first().firstOrNull { it.intentId == intentId } ?: return@launch
+                    if (stored.isDelivered) return@launch
+                    delay(pause)
+                    val tip = pending.pending.first().firstOrNull { it.intentId == intentId } ?: return@launch
+                    if (deliverToWatcher(tips, pending, withWatcherRelays(tip, info))) return@launch
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // still offline: the next pause tries again, then the next start
+                }
+            }
+        }
+    }
+
+    /** [tip], for a public one with the relays of a watcher that did not answer at the send, if it answers now. */
+    private suspend fun withWatcherRelays(tip: PendingTip, info: PaymentInfo.Enabled): PendingTip {
+        if (tip.anonEvent != null || tip.watcherRelays.isNotEmpty()) return tip
+        val relays = watcherRelays(info)
+        if (relays.isEmpty()) return tip
+        pending.setWatcherRelays(tip.intentId, relays)
+        return tip.copy(watcherRelays = relays)
     }
 
     /** Spec 0.4 §4.2: a personal watcher's relays are in its tag, no `/v1/info`; an HTTP watcher is asked, empty when it does not answer in time. */
@@ -307,5 +345,7 @@ class TipSheetController(
         val NOTICE_OFFLINE = uiText(R.string.tip_notice_offline)
         const val FRESH_INFO_TIMEOUT_MS = 3_000L
         const val WATCHER_TIMEOUT_MS = 5_000L
+        /** Pauses between the sends right after a tip no watcher relay took: the watcher must know the intent before the payment is scanned. */
+        val REDELIVER_DELAYS_MS = listOf(10_000L, 30_000L, 60_000L)
     }
 }

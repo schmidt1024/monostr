@@ -92,6 +92,8 @@ interface TipsRepository {
     suspend fun sendAnonymousIntent(prepared: PreparedTip, watcherRelays: List<String>): AnonymousIntent
     /** Sends an anonymous intent again, the same way: its own connection, [relays] only. */
     suspend fun resendAnonymousIntent(eventJson: String, relays: List<String>): PublishResult
+    /** Sends the stored public intent [intentId] to the watcher's [relays] only: the user's own relays may not be the ones the watcher listens to. */
+    suspend fun resendIntentToWatcher(intentId: String, relays: List<String>): PublishResult
     /**
      * Valid receipts per note for [notes] = note id → author pubkey. Emits the local state at
      * once, again after one relay fetch, then on every receipt that arrives live. Notes without
@@ -277,6 +279,8 @@ class NostrTipsRepository(
         val event = withContext(engine.ffiDispatcher) { Event.fromJson(eventJson) }
         return detached.send(event, relays)
     }
+
+    override suspend fun resendIntentToWatcher(intentId: String, relays: List<String>): PublishResult = engine.sendTo(relays, intentId)
 
     override suspend fun localReceipts(notes: Map<String, String>): Map<String, TipSummary> =
         if (notes.isEmpty()) emptyMap() else withContext(Dispatchers.IO) { summaries(notes) }

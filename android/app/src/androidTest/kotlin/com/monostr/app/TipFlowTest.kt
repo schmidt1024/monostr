@@ -149,6 +149,8 @@ class TipFlowTest {
         assertEquals("a tip publishes no like", 0, likes.size)
 
         rule.onNodeWithTag("tip-done").performClick()
+        // notes that land above it meanwhile may have pushed the note out of the composed part of the list
+        rule.onNodeWithTag("feed-list").performScrollToNode(hasText(text))
         rule.waitUntil(10_000) { nodes("note-pending-$id8").isNotEmpty() }
         rule.onNodeWithTag("note-pending-$id8").assertIsDisplayed()
     }
