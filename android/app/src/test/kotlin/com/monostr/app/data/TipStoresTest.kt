@@ -245,4 +245,31 @@ class TipStoresTest {
         assertEquals(1_400L, settings.lastTipNotifiedAt())
         scope.cancel()
     }
+
+    @Test
+    fun `an entry written before underTor reads as false, and the marker survives a round trip`() {
+        val old = """[{"intentId":"${"a".repeat(64)}","noteId":null,"amount":5,"createdAt":1000}]"""
+        assertFalse(PendingTips.decode(old).single().underTor)
+        val tip = PendingTip("b".repeat(64), null, 7, 2000, underTor = true)
+        assertEquals(listOf(tip), PendingTips.decode(PendingTips.encode(listOf(tip))))
+    }
+
+    @Test
+    fun `dropUnderTor removes those tips only, says how many, and holds across a re-read`() = runTest {
+        val file = dir.resolve("under-tor.preferences_pb").toFile()
+        val anonymous = PendingTip("a".repeat(64), null, 5, 1000, anonEvent = "{}", anonRelays = listOf("wss://w.example"), underTor = true)
+        val public = PendingTip("b".repeat(64), "1".repeat(64), 5, 1000, underTor = true, watcherDelivered = true)
+        val direct = PendingTip("c".repeat(64), "2".repeat(64), 5, 1000)
+        val first = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val pending = PrefsPendingTipStore(PreferenceDataStoreFactory.create(scope = first) { file })
+        listOf(anonymous, public, direct).forEach { pending.add(it) }
+        assertEquals(2, pending.dropUnderTor())
+        assertEquals(0, pending.dropUnderTor(), "nothing left to drop")
+        assertEquals(listOf(direct), pending.pending.first())
+        first.cancel()
+        first.coroutineContext[kotlinx.coroutines.Job]!!.join()
+        val again = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        assertEquals(listOf(direct), PrefsPendingTipStore(PreferenceDataStoreFactory.create(scope = again) { file }).pending.first())
+        again.cancel()
+    }
 }

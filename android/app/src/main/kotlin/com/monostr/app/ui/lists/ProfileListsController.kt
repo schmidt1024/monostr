@@ -1,5 +1,7 @@
 package com.monostr.app.ui.lists
 
+import com.monostr.app.ui.common.asMessage
+import com.monostr.app.net.SendGate
 import kotlinx.coroutines.flow.combine
 import com.monostr.nostr.model.SaveResult
 import com.monostr.app.R
@@ -35,11 +37,13 @@ class ProfileListsController(
     private val writeScope: CoroutineScope = scope,
     /** Spec perf 3.5/3.7: the session's last profiles, their lists too; null (tests that do not care) keeps nothing. */
     private val cache: ProfileCache? = null,
+    /** Whether anything may leave now; open only in tests. */
+    private val sendGate: SendGate = SendGate.OPEN,
 ) {
     private val _state = MutableStateFlow(ProfileListsState())
     val state: StateFlow<ProfileListsState> = _state.asStateFlow()
     val isSelf: Boolean get() = author == self
-    private val pinActions = PinActions(pins, writeScope) { m -> _state.update { it.copy(message = m) } }
+    private val pinActions = PinActions(pins, writeScope, sendGate) { m -> _state.update { it.copy(message = m) } }
     private var opened = false
 
     /** The tab opened: reads once (the own lists stay live, a foreign profile is read when opened). */
@@ -77,6 +81,10 @@ class ProfileListsController(
     /** Backlog 38: the own list at [from] dropped at [to]; stores the whole shown order (one write), says so when no relay took it. */
     fun move(from: Int, to: Int) {
         if (!isSelf) return
+        if (!sendGate.canSend.value) {
+            _state.update { it.copy(message = uiText(R.string.send_blocked_tor).asMessage()) }
+            return
+        }
         val before = _state.value.lists ?: return
         val shown = before.map { it.address }
         val next = ListOrder.move(shown, from, to)

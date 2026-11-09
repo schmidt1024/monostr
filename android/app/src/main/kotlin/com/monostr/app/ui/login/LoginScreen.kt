@@ -1,6 +1,11 @@
 package com.monostr.app.ui.login
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import com.monostr.app.ui.common.TorLoginRow
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Spacer
@@ -73,7 +78,9 @@ fun LoginScreen(onCreate: () -> Unit = {}, vm: LoginViewModel = hiltViewModel())
     var password by remember { mutableStateOf("") } // plain remember: never saved state
     val needsPassword = Nip49.isNcryptsec(secret)
     LaunchedEffect(state.passwordError) { if (state.passwordError != null) password = "" }
-    Column(Modifier.fillMaxSize().safeDrawingPadding().padding(24.dp), verticalArrangement = Arrangement.Center) {
+    // scrolls once it no longer fits, as with a large font: the Tor row must stay reachable
+    BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding()) {
+      Column(Modifier.verticalScroll(rememberScrollState()).fillMaxWidth().heightIn(min = maxHeight).padding(24.dp), verticalArrangement = Arrangement.Center) {
         Image(
             painter = painterResource(R.drawable.ic_logo_mark),
             contentDescription = null, // decorative; the wordmark below carries the name
@@ -124,5 +131,7 @@ fun LoginScreen(onCreate: () -> Unit = {}, vm: LoginViewModel = hiltViewModel())
         Spacer(Modifier.height(16.dp))
         // spec 2026-10-17 §2: the way in for someone without a key
         TextButton(onClick = onCreate, enabled = !state.busy, modifier = Modifier.fillMaxWidth().testTag("login-create")) { Text(stringResource(R.string.login_create)) }
+        TorLoginRow()
+      }
     }
 }

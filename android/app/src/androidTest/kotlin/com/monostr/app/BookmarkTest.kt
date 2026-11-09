@@ -4,7 +4,9 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasStateDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -111,6 +113,9 @@ class BookmarkTest {
         assertEquals(1, stored.size)
         assertTrue("content must be NIP-44, never the note id in clear", !stored[0].content().contains(note.id().toHex()))
 
+        // the scroll to the note hid the bottom bar, and a tap on a hidden tab does nothing
+        rule.onNodeWithTag("feed-list").performTouchInput { swipeDown() }
+        rule.waitUntil(5_000) { rule.onNodeWithTag("hide-on-scroll-footer").getBoundsInRoot().let { it.bottom - it.top } > 1.dp }
         rule.onNodeWithTag("tab-bookmarks").performClick()
         rule.waitUntil(15_000) { nodes("bookmarks-list").isNotEmpty() }
         rule.onNodeWithTag("bookmarks-list").performScrollToNode(hasText(text))

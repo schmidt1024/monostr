@@ -1,5 +1,6 @@
 package com.monostr.app.ui.feed
 
+import com.monostr.app.ui.common.GuardedDropdownMenu
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -18,7 +19,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -104,7 +104,7 @@ internal fun FeedTabRow(
                 )
                 if (tab is HomeTab.Pinned) {
                     val (left, right) = tabMoves(i, state.tabs.size)
-                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, modifier = Modifier.testTag("feed-tab-menu")) {
+                    GuardedDropdownMenu(expanded = menu, onDismissRequest = { menu = false }, modifier = Modifier.testTag("feed-tab-menu")) {
                         DropdownMenuItem(text = { Text(stringResource(R.string.feed_tab_menu_open)) }, onClick = { menu = false; onOpenList(tab.address) }, modifier = Modifier.testTag("feed-tab-menu-open"))
                         DropdownMenuItem(text = { Text(stringResource(R.string.list_unpin)) }, onClick = { menu = false; onUnpin(tab.address) }, modifier = Modifier.testTag("feed-tab-menu-unpin"))
                         if (left) DropdownMenuItem(text = { Text(stringResource(R.string.feed_tab_menu_left)) }, onClick = { menu = false; onMove(tab.address, -1) }, modifier = Modifier.testTag("feed-tab-menu-left"))

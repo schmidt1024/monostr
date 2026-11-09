@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- monostr's own onion drawing, a layer of the Tor status icon; the colour comes from the tint. Not the Tor Project's logo. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:pathData="M10.5 2.5c.2 2-.6 3.4-2.6 4.8C5.3 9 3.2 11.2 3.2 14.3c0 4.4 3.9 7.2 8.8 7.2s8.8-2.8 8.8-7.2c0-3.1-2.1-5.3-4.7-7-2-1.4-2.8-2.8-2.6-4.8z" android:strokeColor="#FFFFFFFF" android:strokeWidth="1.8" android:strokeLineJoin="round" android:strokeLineCap="round" />
+</vector>

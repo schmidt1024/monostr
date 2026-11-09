@@ -1,5 +1,6 @@
 package com.monostr.app.ui.settings
 
+import com.monostr.app.net.SendGate
 import com.monostr.app.R
 import com.monostr.app.ui.common.UiText
 import com.monostr.app.ui.common.uiText
@@ -14,8 +15,9 @@ import kotlinx.coroutines.CancellationException
  * itself only creates one when none exists, so a list left behind by another client stays until
  * the user replaces it here.
  */
-suspend fun publishRelayList(entries: suspend () -> List<RelayEntry>, publish: suspend (List<RelayEntry>) -> PublishResult): UiText =
+suspend fun publishRelayList(entries: suspend () -> List<RelayEntry>, publish: suspend (List<RelayEntry>) -> PublishResult, sendGate: SendGate = SendGate.OPEN): UiText =
     try {
+        sendGate.requireCanSend()
         if (publish(entries()).sentToAny) uiText(R.string.settings_msg_relay_list_published) else uiText(R.string.settings_msg_relay_list_not_published)
     } catch (e: CancellationException) {
         throw e

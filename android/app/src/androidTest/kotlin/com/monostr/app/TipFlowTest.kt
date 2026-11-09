@@ -70,6 +70,8 @@ class TipFlowTest {
         val ctx = InstrumentationRegistry.getInstrumentation().targetContext
         val session = EntryPointAccessors.fromApplication(ctx, NostrSessionEntryPoint::class.java).session()
         runBlocking { runCatching { session.applyRelays(PrefsRelayStore.DEFAULT_RELAYS) } }
+        // the next test finds the login screen, as it would on a fresh install
+        runBlocking { runCatching { session.logout() } }
         runBlocking { runCatching { EntryPointAccessors.fromApplication(ctx, TipCheckWorker.Deps::class.java).settings().setAnonymous(true) } }
     }
 

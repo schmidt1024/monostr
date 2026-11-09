@@ -8,6 +8,7 @@ import com.monostr.nostr.PublishResult
 import com.monostr.nostr.RefreshGate
 import com.monostr.nostr.RustConvert
 import com.monostr.nostr.StartupGate
+import com.monostr.nostr.net.NetworkGate
 import com.monostr.tips.Kinds
 import com.monostr.tips.PaymentInfo
 import com.monostr.tips.Payto
@@ -89,9 +90,9 @@ interface TipsRepository {
      * and never touches the user's own relay connection; the caller keeps [AnonymousIntent.eventJson]
      * for [resendAnonymousIntent]. Throws [IllegalArgumentException] without relays.
      */
-    suspend fun sendAnonymousIntent(prepared: PreparedTip, watcherRelays: List<String>): AnonymousIntent
+    suspend fun sendAnonymousIntent(prepared: PreparedTip, watcherRelays: List<String>, torOnly: Boolean = false): AnonymousIntent
     /** Sends an anonymous intent again, the same way: its own connection, [relays] only. */
-    suspend fun resendAnonymousIntent(eventJson: String, relays: List<String>): PublishResult
+    suspend fun resendAnonymousIntent(eventJson: String, relays: List<String>, torOnly: Boolean = false): PublishResult
     /** Sends the stored public intent [intentId] to the watcher's [relays] only: the user's own relays may not be the ones the watcher listens to. */
     suspend fun resendIntentToWatcher(intentId: String, relays: List<String>): PublishResult
     /**
@@ -127,7 +128,8 @@ interface TipsRepository {
 
 class NostrTipsRepository(
     private val engine: NostrEngine,
-    private val detached: DetachedSender = DetachedSender(engine.ffiDispatcher),
+    /** The default gate stays unknown, so its sender only ever fails: a real one is passed in, and nothing can go direct by omission. */
+    private val detached: DetachedSender = DetachedSender(engine.ffiDispatcher, NetworkGate()),
     private val fetchTimeout: Duration = Duration.ofSeconds(8),
     /** Spec perf2 A3: the receipts' relay part (fetch + subscription) waits until the home feed's first page is in. */
     private val gate: StartupGate = StartupGate.OPEN,
@@ -162,6 +164,9 @@ class NostrTipsRepository(
         infoRefresh.await(pubkey, force = true, block = fetch)
         return parsePaymentInfo(engine.query(filter).firstOrNull())
     }
+
+    /** What was asked so far counts as not asked: the answers came from no relay (the engine was held, Tor plan Task 6). */
+    fun forgetFetched() = infoRefresh.forget()
 
     override suspend fun cachedPaymentInfo(pubkey: String): PaymentInfo = parsePaymentInfo(engine.query(infoFilter(pubkey)).firstOrNull())
 
@@ -264,7 +269,7 @@ class NostrTipsRepository(
         return PublishResult(own.eventId, own.kind, (own.successRelays + more.successRelays).distinct(), own.failedRelays + more.failedRelays)
     }
 
-    override suspend fun sendAnonymousIntent(prepared: PreparedTip, watcherRelays: List<String>): AnonymousIntent {
+    override suspend fun sendAnonymousIntent(prepared: PreparedTip, watcherRelays: List<String>, torOnly: Boolean): AnonymousIntent {
         require(watcherRelays.isNotEmpty()) { "an anonymous intent needs the watcher's relays" }
         require(prepared.intent.anonymous) { "the intent is not marked anonymous" }
         // a fresh key per tip, never stored: nothing links two anonymous tips to each other or to the user
@@ -272,12 +277,12 @@ class NostrTipsRepository(
             val signed = RustConvert.toBuilder(prepared.unsignedEvent).signWithKeys(Keys.generate())
             signed to signed.asJson()
         }
-        return AnonymousIntent(detached.send(event, watcherRelays), json)
+        return AnonymousIntent(detached.send(event, watcherRelays, torOnly = torOnly), json)
     }
 
-    override suspend fun resendAnonymousIntent(eventJson: String, relays: List<String>): PublishResult {
+    override suspend fun resendAnonymousIntent(eventJson: String, relays: List<String>, torOnly: Boolean): PublishResult {
         val event = withContext(engine.ffiDispatcher) { Event.fromJson(eventJson) }
-        return detached.send(event, relays)
+        return detached.send(event, relays, torOnly = torOnly)
     }
 
     override suspend fun resendIntentToWatcher(intentId: String, relays: List<String>): PublishResult = engine.sendTo(relays, intentId)
@@ -347,6 +352,8 @@ class NostrTipsRepository(
         if (info !is PaymentInfo.Enabled) return@flow
         val filter = withContext(engine.ffiDispatcher) { profileReceiptFilter(recipient, info, since) }
         val confirmed = LinkedHashSet<String>()
+        // a caller's retry only comes back here: nothing is tried, nothing fails, until the route is known
+        detached.awaitKnownMode()
         // over a connection of its own, and never saved into the engine database
         detached.subscribe(filter, relays).collect { event ->
             val ids = withContext(engine.ffiDispatcher) { validProfileIntentIds(listOf(event), recipient, info) }

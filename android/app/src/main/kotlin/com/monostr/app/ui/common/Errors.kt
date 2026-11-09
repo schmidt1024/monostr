@@ -1,5 +1,6 @@
 package com.monostr.app.ui.common
 
+import com.monostr.app.net.SendRefused
 import com.monostr.app.R
 import com.monostr.app.media.UploadException
 import com.monostr.nostr.NOTE_NOT_IN_DATABASE
@@ -15,6 +16,7 @@ import kotlinx.coroutines.CancellationException
  */
 fun Throwable.userMessage(): UiText = when {
     this is CancellationException -> throw this
+    this is SendRefused -> uiText(R.string.send_blocked_tor)
     this is SigningRejectedException -> uiText(R.string.error_signing_rejected)
     this is FollowError.NoList -> uiText(R.string.follow_no_list)
     this is WatcherException.Network -> uiText(R.string.error_watcher_unreachable)
@@ -28,6 +30,7 @@ fun Throwable.userMessage(): UiText = when {
 /** Like [userMessage], for a failed picture upload (spec 5.5): one fixed text per kind of failure. */
 fun Throwable.uploadMessage(): UiText = when (this) {
     is CancellationException -> throw this
+    is SendRefused -> uiText(R.string.send_blocked_tor)
     is SigningRejectedException -> uiText(R.string.upload_error_signing)
     is UploadException.Nsfw -> uiText(R.string.upload_error_nsfw)
     is UploadException.TooLarge -> uiText(R.string.upload_error_too_large)

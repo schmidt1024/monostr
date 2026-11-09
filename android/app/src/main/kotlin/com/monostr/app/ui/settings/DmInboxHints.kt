@@ -1,5 +1,6 @@
 package com.monostr.app.ui.settings
 
+import com.monostr.app.net.SendGate
 import com.monostr.app.data.DmSettingsStore
 import com.monostr.nostr.PublishResult
 import com.monostr.nostr.repo.DmRelaysRepository
@@ -27,7 +28,8 @@ object DmInboxHints {
  * stored and the DM sync restarted on it ([changed]). A refused or failed publish throws and leaves
  * the stored list as it was, so [SettingsController] shows the old list (and the hint card) again.
  */
-suspend fun applyDmRelays(list: List<String>, publish: suspend (List<String>) -> PublishResult, settings: DmSettingsStore, changed: suspend () -> Unit) {
+suspend fun applyDmRelays(list: List<String>, publish: suspend (List<String>) -> PublishResult, settings: DmSettingsStore, sendGate: SendGate = SendGate.OPEN, changed: suspend () -> Unit) {
+    sendGate.requireCanSend()
     if (!publish(list).sentToAny) error("dm relay list not accepted by any relay")
     settings.setRelays(list)
     changed()

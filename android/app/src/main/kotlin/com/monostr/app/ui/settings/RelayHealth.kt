@@ -10,6 +10,7 @@ import com.monostr.nostr.model.RelayInfo
 import com.monostr.nostr.model.RelayMode
 import com.monostr.nostr.model.RelayModes
 import com.monostr.nostr.model.RelayState
+import com.monostr.tips.RelayHosts
 
 /**
  * 0.24.3: one relay's status line in the settings: its [state], then when it was last connected ([lastSeenAgo], from
@@ -17,9 +18,16 @@ import com.monostr.nostr.model.RelayState
  */
 data class RelayStatusLine(val state: UiText, val lastSeenAgo: UiText? = null, val neverSeen: Boolean = false)
 
-/** [info]: the engine's view of the relay (null: not in the pool); [lastSeen]: epoch seconds it was last seen connected, if ever recorded. */
-fun relayStatusLine(info: RelayInfo?, lastSeen: Long?, now: Long): RelayStatusLine {
-    if (info == null) return RelayStatusLine(uiText(R.string.relay_not_connected))
+/** The engine's view of [url]: the pool spells a host in lower case, so a hidden service matches without regard to case, any other relay exactly. */
+fun relayInfoFor(live: List<RelayInfo>, url: String): RelayInfo? {
+    val key = url.trimEnd('/')
+    return live.firstOrNull { it.url.trimEnd('/').let { u -> u == key || (RelayHosts.isOnionHost(key) && u.equals(key, ignoreCase = true)) } }
+}
+
+/** [info]: the engine's view of the relay (null: not in the pool); [lastSeen]: epoch seconds it was last seen connected, if ever recorded. [onion]: the relay is a `.onion` address. */
+fun relayStatusLine(info: RelayInfo?, lastSeen: Long?, now: Long, onion: Boolean = false): RelayStatusLine {
+    // a hidden service the engine does not hold (the switch is off): said as it is, nothing is asked to find out
+    if (info == null) return RelayStatusLine(uiText(if (onion) R.string.relay_needs_tor else R.string.relay_not_connected))
     val state = if (info.resting) uiText(R.string.relay_resting) else info.state.label()
     if (info.state != RelayState.DISCONNECTED) return RelayStatusLine(state)
     return when {
@@ -41,7 +49,8 @@ data class RelayListDiff(val unpublished: Int, val missing: Int, val noneFound: 
 fun relayListDiff(local: List<String>, published: RelayList?, chosen: Map<String, RelayMode> = emptyMap()): RelayListDiff? {
     if (published == null) return RelayListDiff(0, 0, noneFound = true)
     fun norm(urls: List<String>) = urls.map { it.trim().trimEnd('/') }.toSet()
-    val mine = norm(local)
+    // a hidden service is never published: it cannot be missing from the published list
+    val mine = norm(local.filterNot { RelayHosts.isOnionHost(it) })
     val theirs = norm(published.read + published.write)
     val read = published.read.map { it.trim().trimEnd('/') }.toSet()
     val write = published.write.map { it.trim().trimEnd('/') }.toSet()

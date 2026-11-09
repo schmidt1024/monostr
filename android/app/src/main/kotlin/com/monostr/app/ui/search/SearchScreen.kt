@@ -1,5 +1,6 @@
 package com.monostr.app.ui.search
 
+import com.monostr.app.ui.common.TorBannerSlot
 import com.monostr.app.ui.discover.DiscoverFollowAllHost
 import com.monostr.app.ui.common.NoteLinks
 import com.monostr.app.ui.discover.DiscoverController
@@ -97,14 +98,14 @@ import javax.inject.Inject
 class SearchViewModel @Inject constructor(session: NostrSession, factory: TipSheetFactory, searchRelays: SearchRelayStore, recentSearches: RecentSearchesStore, handle: SavedStateHandle) : ViewModel() {
     private val ready = session.requireReady()
     val decorations = factory.decorations(viewModelScope)
-    val bookmarks = BookmarkActions(ready.bookmarks, viewModelScope, background = ready.engine.backgroundScope)
-    val controller = SearchController(ready.search, ready.profiles, ready.publish, decorations, bookmarks, searchRelays.relays, viewModelScope, mentions = MentionResolver(ready.profiles, viewModelScope, Dispatchers.Default), deletions = ready.deletions, visibility = ready.visibility, afterDelete = ready.afterNoteDelete, own = ready.ownReactions, mute = ready.mute, muteScope = ready.engine.backgroundScope, recentSearches = recentSearches)
+    val bookmarks = BookmarkActions(ready.bookmarks, viewModelScope, background = ready.engine.backgroundScope, sendGate = ready.sendGate)
+    val controller = SearchController(ready.search, ready.profiles, ready.publish, decorations, bookmarks, searchRelays.relays, viewModelScope, mentions = MentionResolver(ready.profiles, viewModelScope, Dispatchers.Default), deletions = ready.deletions, visibility = ready.visibility, afterDelete = ready.afterNoteDelete, own = ready.ownReactions, mute = ready.mute, muteScope = ready.engine.backgroundScope, recentSearches = recentSearches, sendGate = ready.sendGate)
     val deletions = ready.deletions
     val menu = ready.noteMenu(delete = controller::delete, mute = controller::mute)
     val tipSheet = factory.tipSheet(viewModelScope)
     val dmUnread: StateFlow<Int> = ready.dmStore.unreadTotalExcept(ready.muted).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
     /** Spec 2026-10-27 §6: «Entdecken» while the field is empty, for every account. */
-    val discover = DiscoverController(ready.discover, ready.follows, ready.profiles, ready.mute, ready.pubkey, viewModelScope, writeScope = ready.engine.backgroundScope)
+    val discover = DiscoverController(ready.discover, ready.follows, ready.profiles, ready.mute, ready.pubkey, viewModelScope, writeScope = ready.engine.backgroundScope, sendGate = ready.sendGate)
     init {
         controller.start()
         discover.start()
@@ -152,7 +153,7 @@ fun SearchScreen(
         topBar = {
             // deviation from the brief: an OutlinedTextField inside TopAppBar(title = …) clips
             // against the app bar's fixed height; a plain Row keeps the same field and tags.
-            Row(
+            Column { Row(
                 Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 8.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -166,6 +167,7 @@ fun SearchScreen(
                     modifier = Modifier.fillMaxWidth().focusRequester(focus).testTag("search-field"),
                 )
             }
+            TorBannerSlot() }
         },
         bottomBar = { HideOnScrollFooter(hide) { MonostrBottomBar(BottomTab.SEARCH, unread = 0, dmUnread = dmUnread, onFeed = onFeed, onSearch = hide::show, onBookmarks = onBookmarks, onMessages = onMessages, onNotifications = onNotifications, windowInsets = WindowInsets(0)) } },
         snackbarHost = { SnackbarHost(snackbar, Modifier.muteUndoTag(state.message)) },

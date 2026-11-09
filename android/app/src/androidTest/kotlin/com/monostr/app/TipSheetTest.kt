@@ -77,6 +77,15 @@ class TipSheetTest {
     }
 
     @Test
+    fun blockedStateGivesTheReasonAndCanBeClosed() {
+        render(TipSheetState(target = TipTarget.Note(note), phase = TipPhase.Blocked, error = com.monostr.app.ui.tips.TipSheetController.ERROR_TOR))
+        rule.onNodeWithText(str(R.string.send_blocked_tor)).assertIsDisplayed()
+        rule.onNodeWithTag("tip-done").assertIsDisplayed()
+        rule.onAllNodesWithTag("tip-no-monero").assertCountEquals(0)
+        rule.onAllNodesWithTag("tip-send").assertCountEquals(0)
+    }
+
+    @Test
     fun sendingDisablesTheButton() {
         render(TipSheetState(target = TipTarget.Note(note), phase = TipPhase.Sending, selected = 1_000_000_000L))
         rule.onNodeWithTag("tip-send").assertIsNotEnabled()

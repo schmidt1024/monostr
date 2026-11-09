@@ -6,12 +6,12 @@ import com.monostr.app.R
 /** One account of the fixed follow list; [name] is only a fallback label before login (spec 2026-10-17 §5, §11). */
 data class SuggestedFollow(val pubkey: String, val name: String, @StringRes val who: Int)
 
-/** The 14 suggested accounts (spec 2026-10-17 §5; 2026-10-27: monostr, Schmidt, then members of the Monero list in its order). */
+/** The 14 suggested accounts (spec 2026-10-17 §5; 2026-10-27: Monostr, Schmidt, then members of the Monero list in its order). */
 object SuggestedFollows {
     val all: List<SuggestedFollow> = listOf(
         SuggestedFollow(
             "1601fcacdf227ddda10e33e71917930b49be436b43bdd030b799948a9f274ed3",
-            "monostr",
+            "Monostr",
             R.string.create_who_monostr,
         ),
         SuggestedFollow(

@@ -1,0 +1,5 @@
+- Tor eingebaut, standardmässig aus: eingeschaltet sehen Relays, Bilder, Uploads und der Watcher Tor statt deiner IP-Adresse; Status in der oberen Leiste
+- Onion-Relays in der eigenen Relay-Liste, wenn Tor an ist
+- Web-Links fragen vor dem Öffnen; mit Tor: In Tor Browser öffnen oder Link kopieren
+- Der Name schreibt sich jetzt Monostr
+- Korrekturen

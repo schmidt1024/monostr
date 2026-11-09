@@ -1,5 +1,9 @@
 package com.monostr.app.ui.profile
 
+import com.monostr.app.ui.common.GuardedDropdownMenu
+import com.monostr.app.ui.common.GuardedAlertDialog
+import com.monostr.app.ui.common.LocalCanSend
+import com.monostr.app.net.SendGate
 import com.monostr.app.ui.common.mapKeep
 
 import com.monostr.app.ui.lists.DragHandle
@@ -55,12 +59,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -260,12 +262,14 @@ class ProfileController(
     private val followCounts: FollowCountsRepository? = null,
     /** Spec perf 3.5: the session's last profiles; null (tests that do not care) keeps nothing. */
     private val cache: ProfileCache? = null,
+    /** Whether anything may leave now; open only in tests. */
+    private val sendGate: SendGate = SendGate.OPEN,
 ) {
     val names: StateFlow<Map<String, String>> get() = mentions.names
     private val _state = MutableStateFlow(ProfileUiState(Profile.empty(pubkey), isSelf = pubkey == selfPubkey))
     val state: StateFlow<ProfileUiState> = _state.asStateFlow()
-    private val actions = NoteActions(publish, scope, counts, deletions, afterDelete, own)
-    private val muteActions = mute?.let { MuteActions(it, scope, profiles, background = muteScope) }
+    private val actions = NoteActions(publish, scope, counts, deletions, afterDelete, own, sendGate = sendGate)
+    private val muteActions = mute?.let { MuteActions(it, scope, profiles, background = muteScope, sendGate = sendGate) }
 
     /** The author's write relays currently attached (spec 5); empty when the setting is off or none were found. */
     private var attached: List<String> = emptyList()
@@ -635,6 +639,11 @@ class ProfileController(
     private fun writeFollow(action: suspend (FollowRepository) -> Unit) {
         val repo = follows ?: return
         if (_state.value.isSelf || _state.value.followBusy) return
+        // the button is disabled while blocked; the question answered after Tor went still comes here
+        if (!sendGate.canSend.value) {
+            _state.update { it.copy(message = uiText(R.string.send_blocked_tor).asMessage()) }
+            return
+        }
         _state.update { it.copy(followBusy = true) }
         scope.launch {
             try {
@@ -674,7 +683,7 @@ class ProfileViewModel @Inject constructor(
     private val ready = session.requireReady()
     private val pubkey: String = checkNotNull(handle["pubkey"])
     val decorations = factory.decorations(viewModelScope)
-    val bookmarks = BookmarkActions(ready.bookmarks, viewModelScope, background = ready.engine.backgroundScope)
+    val bookmarks = BookmarkActions(ready.bookmarks, viewModelScope, background = ready.engine.backgroundScope, sendGate = ready.sendGate)
     val controller = ProfileController(
         pubkey, ready.pubkey, ready.feed, ready.profiles, ready.publish, decorations, bookmarks, ready.counts,
         ready.authorRelays, { uiSettings.authorRelays.first() }, viewModelScope,
@@ -684,6 +693,7 @@ class ProfileViewModel @Inject constructor(
         mute = ready.mute, muteScope = ready.engine.backgroundScope,
         followCounts = ready.followCounts,
         cache = ready.profileCache,
+        sendGate = ready.sendGate,
     )
     val deletions = ready.deletions
     val menu = ready.noteMenu(delete = controller::delete, mute = controller::mute)
@@ -691,9 +701,9 @@ class ProfileViewModel @Inject constructor(
     /** The user's own pending profile tips to this person; idle on the own profile (no tip button there). */
     val tipWatch = factory.profileTipWatch(pubkey, viewModelScope)
     /** The Lists tab (spec 2026-10-18 §2.2); pin writes run on the background scope so leaving does not cancel them. */
-    val lists = ProfileListsController(pubkey, ready.pubkey, ready.lists, ready.feedTabs, viewModelScope, writeScope = ready.engine.backgroundScope, cache = ready.profileCache)
+    val lists = ProfileListsController(pubkey, ready.pubkey, ready.lists, ready.feedTabs, viewModelScope, writeScope = ready.engine.backgroundScope, cache = ready.profileCache, sendGate = ready.sendGate)
     /** The "Add to list" sheet; started when it opens, so other profiles do not load the own lists for nothing. */
-    val addToList = AddToListController(pubkey, ready.lists, viewModelScope, writeScope = ready.engine.backgroundScope, pins = ready.feedTabs)
+    val addToList = AddToListController(pubkey, ready.lists, viewModelScope, writeScope = ready.engine.backgroundScope, pins = ready.feedTabs, sendGate = ready.sendGate)
     init {
         controller.start()
         if (pubkey != ready.pubkey) tipWatch.start()
@@ -761,7 +771,7 @@ fun ProfileScreen(
                     IconButton(onClick = { open = true }, modifier = Modifier.testTag("profile-menu")) {
                         Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.note_menu))
                     }
-                    DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                    GuardedDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
                         // spec 2026-10-18 §2.5
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.profile_menu_lists)) },
@@ -1009,7 +1019,7 @@ fun ProfileScreen(
         )
     }
     if (state.confirmUnfollow) {
-        AlertDialog(
+        GuardedAlertDialog(
             onDismissRequest = vm.controller::dismissUnfollow,
             title = { Text(stringResource(R.string.profile_unfollow_title, state.profile.shownName)) },
             confirmButton = {
@@ -1046,9 +1056,10 @@ private fun ListSpinner() {
 @Composable
 private fun FollowButton(follow: FollowState, busy: Boolean, onFollow: () -> Unit, onUnfollow: () -> Unit) {
     val tagged = Modifier.testTag("profile-follow")
+    val canSend = LocalCanSend.current
     when (follow) {
-        FollowState.Following -> OutlinedButton(onClick = onUnfollow, enabled = !busy, modifier = tagged) { Text(stringResource(R.string.profile_following)) }
-        FollowState.NotFollowing -> Button(onClick = onFollow, enabled = !busy, modifier = tagged) { Text(stringResource(R.string.profile_follow)) }
+        FollowState.Following -> OutlinedButton(onClick = onUnfollow, enabled = !busy && canSend, modifier = tagged) { Text(stringResource(R.string.profile_following)) }
+        FollowState.NotFollowing -> Button(onClick = onFollow, enabled = !busy && canSend, modifier = tagged) { Text(stringResource(R.string.profile_follow)) }
         FollowState.Unknown -> Button(onClick = {}, enabled = false, modifier = tagged) { Text(stringResource(R.string.profile_follow)) }
     }
 }

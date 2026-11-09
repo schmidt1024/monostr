@@ -147,8 +147,9 @@ class ArticleViewModel @Inject constructor(
         mentions = com.monostr.app.ui.common.MentionResolver(ready.profiles, viewModelScope, kotlinx.coroutines.Dispatchers.Default),
         own = ready.ownReactions, muted = ready.muted, allowForeign = allowForeign,
         replies = ready.articleReplies, deletions = ready.deletions, visibility = ready.visibility, afterDelete = ready.afterNoteDelete,
-        bookmarks = BookmarkActions(ready.bookmarks, viewModelScope, background = ready.engine.backgroundScope),
+        bookmarks = BookmarkActions(ready.bookmarks, viewModelScope, background = ready.engine.backgroundScope, sendGate = ready.sendGate),
         mute = ready.mute, muteScope = ready.engine.backgroundScope, translator = translator,
+        sendGate = ready.sendGate,
     )
     val menu = ready.noteMenu(delete = controller::delete, mute = controller::mute)
 

@@ -1,5 +1,7 @@
 package com.monostr.app.ui.discover
 
+import com.monostr.app.ui.common.uiText
+import com.monostr.app.net.SendGate
 import com.monostr.app.R
 import com.monostr.app.ui.common.FollowAll
 import com.monostr.app.ui.common.UiText
@@ -59,6 +61,8 @@ class DiscoverController(
     private val scope: CoroutineScope,
     /** Follow writes run here (the engine's background scope in the app): leaving the screen must not cancel them. */
     private val writeScope: CoroutineScope = scope,
+    /** Whether anything may leave now; open only in tests. */
+    private val sendGate: SendGate = SendGate.OPEN,
 ) {
     private val _state = MutableStateFlow(DiscoverUi())
     val state: StateFlow<DiscoverUi> = _state.asStateFlow()
@@ -93,6 +97,7 @@ class DiscoverController(
     }
 
     fun follow(pubkey: String) {
+        if (refused()) return
         writeScope.launch {
             try {
                 follows.follow(pubkey)
@@ -121,7 +126,7 @@ class DiscoverController(
     fun dismissFollowAll() = _state.update { it.copy(followAllConfirm = null) }
 
     private fun writeFollowAll(address: ListAddress, targets: List<String>) {
-        if (!followingAll.add(address)) return
+        if (refused() || !followingAll.add(address)) return
         val muted = mute.muted.value
         writeScope.launch {
             try {
@@ -139,7 +144,15 @@ class DiscoverController(
         }
     }
 
+    /** Buttons are disabled while blocked; a question answered or an Undo tapped after Tor went still comes here. */
+    private fun refused(): Boolean {
+        if (sendGate.canSend.value) return false
+        _state.update { it.copy(message = uiText(R.string.send_blocked_tor)) }
+        return true
+    }
+
     private fun undoFollowAll(added: List<String>) {
+        if (refused()) return
         writeScope.launch {
             try {
                 follows.unfollowAll(added)

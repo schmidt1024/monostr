@@ -27,7 +27,7 @@ class SuggestedFollowsTest {
     fun `the list is the 14 approved accounts in order`() {
         assertEquals(14, SuggestedFollows.all.size)
         assertEquals(expected, SuggestedFollows.all.map { it.pubkey })
-        assertEquals("monostr", SuggestedFollows.all[0].name)
+        assertEquals("Monostr", SuggestedFollows.all[0].name)
         assertEquals("Schmidt", SuggestedFollows.all[1].name)
     }
 

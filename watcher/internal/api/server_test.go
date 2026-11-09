@@ -129,7 +129,7 @@ func TestHomePage(t *testing.T) {
 	if resp.StatusCode != 200 || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/html") {
 		t.Fatalf("%d %q", resp.StatusCode, resp.Header.Get("Content-Type"))
 	}
-	for _, want := range []string{"monostr watcher", "stagenet", "42", "wss://r.example", "npub1", "open to everyone", "github.com/schmidt1024/monostr"} {
+	for _, want := range []string{"Monostr watcher", "stagenet", "42", "wss://r.example", "npub1", "open to everyone", "github.com/schmidt1024/monostr"} {
 		if !strings.Contains(page, want) {
 			t.Fatalf("page lacks %q", want)
 		}

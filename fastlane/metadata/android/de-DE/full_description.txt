@@ -1,4 +1,4 @@
-monostr ist ein Nostr-Client für Android mit Tips in Monero.
+Monostr ist ein Nostr-Client für Android mit Tips in Monero.
 
 <b>Nostr, wie du es kennst</b>
 • Feed der Leute, denen du folgst, Threads, Profile mit den Tabs Posts, Antworten, Reposts, Artikel und Listen
@@ -12,12 +12,20 @@ monostr ist ein Nostr-Client für Android mit Tips in Monero.
 
 <b>Tips in Monero</b>
 • Tip für eine Note oder ein Profil aus deiner eigenen Wallet-App (Unstoppable, monfluo, Cake …) über einen monero:-Link
-• monostr hat keine Wallet und keinen Spend-Key
-• Um Tips zu empfangen, gibt es zwei Wege. Entweder veröffentlichst du einfach deine Monero-Adresse (NIP-A3 payto): andere zahlen aus ihrer Wallet, ohne Beleg in monostr
+• Monostr hat keine Wallet und keinen Spend-Key
+• Um Tips zu empfangen, gibt es zwei Wege. Entweder veröffentlichst du einfach deine Monero-Adresse (NIP-A3 payto): andere zahlen aus ihrer Wallet, ohne Beleg in Monostr
 • Oder du meldest Adresse und privaten View-Key bei einem Watcher an (Standard watcher.monostr.com, oder ein eigener). Der Watcher sieht deine eingehenden Zahlungen und veröffentlicht signierte Tip-Belege auf Nostr, damit alle den Tip an der Note sehen
 • Anonyme Tips sind möglich
 
-<b>Offen</b>
-monostr ist freie Software (AGPL-3.0-or-later). Notes, Likes und Reposts tragen „via monostr“ (standardmässig aus, einschaltbar).
+<b>Privatsphäre</b>
+• Tor eingebaut, standardmässig aus. Eingeschaltet sehen Relays, Bilder, Uploads und der Watcher Tor statt deiner IP-Adresse, auch Nachrichten und Tips werden im Hintergrund über Tor geprüft, und solange Tor nicht verbunden ist, geht nichts direkt hinaus
+• Onion-Relays in der eigenen Relay-Liste, wenn Tor an ist
+• Web-Links fragen vor dem Öffnen; mit Tor kannst du sie in Tor Browser öffnen oder kopieren
+• Tor verbirgt deine IP-Adresse, nicht dein Konto, deine Wallet oder deinen Browser
 
-monostr ist in der Beta.
+<b>Offen</b>
+Monostr ist freie Software (AGPL-3.0-or-later). Notes, Likes und Reposts tragen „via Monostr“ (standardmässig aus, einschaltbar).
+
+Tor ist eine Marke von The Tor Project. Monostr wird vom Tor Project weder unterstützt noch ist es mit ihm verbunden.
+
+Monostr ist in der Beta.

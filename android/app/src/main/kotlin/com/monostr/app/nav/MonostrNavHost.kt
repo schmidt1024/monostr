@@ -45,7 +45,10 @@ import com.monostr.app.ui.common.NoteTranslationViewModel
 import com.monostr.app.ui.common.TranslateConsentSheet
 import com.monostr.app.ui.settings.SettingsSection
 import com.monostr.app.ui.common.QuoteLoader
+import com.monostr.app.ui.common.LocalTorSheets
 import com.monostr.app.ui.common.StartScreen
+import com.monostr.app.ui.common.TorReturnEffect
+import com.monostr.app.ui.common.TorReturnForget
 import com.monostr.app.ui.compose.ComposeScreen
 import com.monostr.app.ui.dm.ChatScreen
 import com.monostr.app.ui.dm.ConversationsScreen
@@ -115,6 +118,18 @@ object Routes {
         text != null -> "compose?text=" + android.net.Uri.encode(text)
         else -> "compose"
     }
+    /**
+     * Where a Tor switch brings the user back to, as it rebuilds the session and with it this nav host (spec 2026-11-06): null for the feed, where
+     * the host starts anyway, and for a screen deep in the stack, whose state went with the old session.
+     */
+    fun afterTorSwitch(destination: String?): String? = when {
+        destination == null -> null
+        destination.startsWith(SETTINGS) -> settings(SettingsSection.PRIVACY)
+        destination == MESSAGES || destination == BOOKMARKS || destination == NOTIFICATIONS -> destination
+        destination == SEARCH -> "search"
+        else -> null
+    }
+
     /** Settings scrolled to one section ([SettingsSection]). */
     fun settings(section: String) = "settings?section=$section"
     fun moneroSetup(intro: Boolean, upgrade: Boolean = false) = "monero-setup?intro=$intro&upgrade=$upgrade"
@@ -150,6 +165,7 @@ fun MonostrNavHost(session: NostrSession) {
     when (val s = state) {
         SessionState.Loading -> StartScreen()
         is SessionState.LoggedOut -> {
+            TorReturnForget()
             // spec 2026-10-17 §11: login is not a nav route; a saved flag switches to the create flow
             var creating by rememberSaveable { mutableStateOf(false) }
             if (creating) CreateAccountScreen(onLeave = { creating = false }) else LoginScreen(onCreate = { creating = true })
@@ -167,12 +183,24 @@ private fun LoggedInNavHost(
 ) {
     val nav = rememberNavController()
     // spec perf2 A2 (3): the first screen other than the home feed lets the session's background work go at once
+    val torSheets = LocalTorSheets.current
     DisposableEffect(nav, ready) {
         val listener = NavController.OnDestinationChangedListener { _, destination, _ ->
             if (destination.route != Routes.FEED) ready.startupGate.open("navigation")
+            torSheets.returnRoute = Routes.afterTorSwitch(destination.route)
         }
         nav.addOnDestinationChangedListener(listener)
-        onDispose { nav.removeOnDestinationChangedListener(listener) }
+        onDispose {
+            nav.removeOnDestinationChangedListener(listener)
+            torSheets.returnRoute = null
+        }
+    }
+    TorReturnEffect { route ->
+        // a route stored by an older version may be gone by now: the feed then, where the host starts anyway
+        try {
+            nav.navigate(route) { popUpTo(Routes.FEED); launchSingleTop = true }
+        } catch (_: IllegalArgumentException) {
+        }
     }
     val showIntro by gate.showIntro.collectAsState()
     val mediaSettings by media.settings.collectAsState()

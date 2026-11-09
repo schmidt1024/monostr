@@ -1,5 +1,11 @@
 package com.monostr.app.ui.follows
 
+import com.monostr.app.ui.common.GuardedAlertDialog
+import com.monostr.app.ui.common.asString
+import com.monostr.app.ui.common.uiText
+import com.monostr.app.ui.common.UiText
+import com.monostr.app.net.SendGate
+import com.monostr.app.ui.common.LocalCanSend
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,7 +23,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.TextButton
@@ -90,6 +95,8 @@ class FollowsController(
     private val pageSize: Int = PAGE_SIZE,
     /** The rows' follow buttons (like X); null in tests without them. */
     private val follows: FollowRepository? = null,
+    /** Whether anything may leave now; open only in tests. */
+    private val sendGate: SendGate = SendGate.OPEN,
 ) {
     /** Whom the user follows (null = not known yet: the buttons wait), and which rows are writing right now. */
     val followed: StateFlow<Set<String>?> = follows?.followed()?.stateIn(scope, SharingStarted.Eagerly, null) ?: MutableStateFlow(null)
@@ -99,9 +106,18 @@ class FollowsController(
     fun follow(target: String) = write(target) { it.follow(target) }
     fun unfollow(target: String) = write(target) { it.unfollow(target) }
 
+    private val _message = MutableStateFlow<UiText?>(null)
+    /** The reason a write was refused; the buttons are disabled while blocked, a question answered after Tor went still comes here. */
+    val message: StateFlow<UiText?> = _message.asStateFlow()
+    fun clearMessage() { _message.value = null }
+
     private fun write(target: String, block: suspend (FollowRepository) -> Unit) {
         val repo = follows ?: return
         if (target in _busy.value) return
+        if (!sendGate.canSend.value) {
+            _message.value = uiText(R.string.send_blocked_tor)
+            return
+        }
         _busy.update { it + target }
         // a failed write leaves the list as it was; the button shows the stored state again
         scope.launch { try { safe { block(repo) } } finally { _busy.update { it - target } } }
@@ -183,7 +199,7 @@ class FollowsViewModel @Inject constructor(session: NostrSession, handle: SavedS
     private val ready = session.requireReady()
     val startOnFollowers: Boolean = handle.get<Boolean>("followers") ?: false
     val self: String = ready.pubkey
-    val controller = FollowsController(checkNotNull(handle["pubkey"]), ready.followLists, ready.profiles, viewModelScope, follows = ready.follows).also { it.start() }
+    val controller = FollowsController(checkNotNull(handle["pubkey"]), ready.followLists, ready.profiles, viewModelScope, follows = ready.follows, sendGate = ready.sendGate).also { it.start() }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -200,7 +216,11 @@ fun FollowsScreen(onBack: () -> Unit, onOpenProfile: (String) -> Unit, vm: Follo
         )
     }
     var tab by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableIntStateOf(if (vm.startOnFollowers) 1 else 0) }
-    Scaffold(topBar = {
+    val snackbar = androidx.compose.runtime.remember { androidx.compose.material3.SnackbarHostState() }
+    val refusal by vm.controller.message.collectAsStateWithLifecycle()
+    val refusalText = refusal?.asString()
+    LaunchedEffect(refusalText) { refusalText?.let { snackbar.showSnackbar(it); vm.controller.clearMessage() } }
+    Scaffold(snackbarHost = { androidx.compose.material3.SnackbarHost(snackbar) }, topBar = {
         TopAppBar(
             title = { Text(state.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
             navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back)) } },
@@ -220,7 +240,7 @@ fun FollowsScreen(onBack: () -> Unit, onOpenProfile: (String) -> Unit, vm: Follo
     }
     // like the profile's button: unfollowing asks first
     confirm?.let { p ->
-        AlertDialog(
+        GuardedAlertDialog(
             onDismissRequest = { confirm = null },
             title = { Text(stringResource(R.string.profile_unfollow_title, p.shownName)) },
             confirmButton = {
@@ -247,9 +267,10 @@ private fun PersonRow(p: Profile, follow: FollowState?, busy: Boolean, onOpen: (
                     Spacer(Modifier.width(8.dp))
                     val tag = Modifier.height(32.dp).testTag("follows-follow-${p.pubkey.take(8)}")
                     val pad = PaddingValues(horizontal = 16.dp)
+                    val canSend = LocalCanSend.current
                     when (follow) {
-                        FollowState.Following -> OutlinedButton(onClick = onUnfollow, enabled = !busy, contentPadding = pad, modifier = tag) { Text(stringResource(R.string.profile_following), style = MaterialTheme.typography.labelMedium) }
-                        FollowState.NotFollowing -> Button(onClick = onFollow, enabled = !busy, contentPadding = pad, modifier = tag) { Text(stringResource(R.string.profile_follow), style = MaterialTheme.typography.labelMedium) }
+                        FollowState.Following -> OutlinedButton(onClick = onUnfollow, enabled = !busy && canSend, contentPadding = pad, modifier = tag) { Text(stringResource(R.string.profile_following), style = MaterialTheme.typography.labelMedium) }
+                        FollowState.NotFollowing -> Button(onClick = onFollow, enabled = !busy && canSend, contentPadding = pad, modifier = tag) { Text(stringResource(R.string.profile_follow), style = MaterialTheme.typography.labelMedium) }
                         FollowState.Unknown -> Button(onClick = {}, enabled = false, contentPadding = pad, modifier = tag) { Text(stringResource(R.string.profile_follow), style = MaterialTheme.typography.labelMedium) }
                     }
                 }

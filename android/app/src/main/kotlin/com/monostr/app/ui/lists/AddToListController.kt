@@ -1,5 +1,6 @@
 package com.monostr.app.ui.lists
 
+import com.monostr.app.net.SendGate
 import com.monostr.app.R
 import com.monostr.app.ui.common.Message
 import com.monostr.app.ui.common.attempt
@@ -37,6 +38,8 @@ class AddToListController(
     private val writeScope: CoroutineScope = scope,
     /** Backlog 56: the order of Profile > Lists (dragged order, pinned first without one); null keeps the lists' own order. */
     private val pins: FeedTabsRepository? = null,
+    /** Whether anything may leave now; open only in tests. */
+    private val sendGate: SendGate = SendGate.OPEN,
 ) {
     private val _state = MutableStateFlow(AddToListState())
     val state: StateFlow<AddToListState> = _state.asStateFlow()
@@ -63,6 +66,11 @@ class AddToListController(
     }
 
     private fun write(address: ListAddress, want: Boolean) {
+        // here, so that Retry passes it too; before the repository: a private list's write has the signer encrypt first
+        if (!sendGate.canSend.value) {
+            _state.update { it.copy(message = Message(uiText(R.string.send_blocked_tor))) }
+            return
+        }
         val n = ++seq
         pending.update { it + (address to (want to n)) }
         writeScope.launch {

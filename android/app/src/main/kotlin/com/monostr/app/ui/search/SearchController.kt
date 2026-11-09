@@ -1,5 +1,6 @@
 package com.monostr.app.ui.search
 
+import com.monostr.app.net.SendGate
 import com.monostr.app.ui.common.mapKeep
 
 import com.monostr.app.ui.common.NoteLinks
@@ -97,14 +98,16 @@ class SearchController(
     muteScope: CoroutineScope? = null,
     /** Spec 11.4 §2: where typed searches are remembered; null in tests that do not care. */
     private val recentSearches: RecentSearchesStore? = null,
+    /** Whether anything may leave now; open only in tests. */
+    private val sendGate: SendGate = SendGate.OPEN,
 ) {
     val names: StateFlow<Map<String, String>> get() = mentions.names
     private val _state = MutableStateFlow(SearchUiState())
     val state: StateFlow<SearchUiState> = _state.asStateFlow()
     private val _nav = MutableSharedFlow<SearchNav>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     val nav: SharedFlow<SearchNav> = _nav
-    private val actions = NoteActions(publish, scope, deletions = deletions, afterDelete = afterDelete, own = own)
-    private val muteActions = mute?.let { MuteActions(it, scope, profiles, background = muteScope) }
+    private val actions = NoteActions(publish, scope, deletions = deletions, afterDelete = afterDelete, own = own, sendGate = sendGate)
+    private val muteActions = mute?.let { MuteActions(it, scope, profiles, background = muteScope, sendGate = sendGate) }
     private var debounce: Job? = null
     private var running: Job? = null
     private var attached: List<String> = emptyList()

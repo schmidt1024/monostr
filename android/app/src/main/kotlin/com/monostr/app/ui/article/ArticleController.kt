@@ -1,5 +1,6 @@
 package com.monostr.app.ui.article
 
+import com.monostr.app.net.SendGate
 import com.monostr.app.ui.common.mapKeep
 
 import com.monostr.app.ui.common.BookmarkActions
@@ -133,14 +134,16 @@ class ArticleController(
     muteScope: CoroutineScope? = null,
     /** Spec 2026-11-03 «Articles»: detects the language once the text shows; null (tests): no translation. */
     private val translator: com.monostr.app.translate.ArticleTranslator? = null,
+    /** Whether anything may leave now; open only in tests. */
+    private val sendGate: SendGate = SendGate.OPEN,
 ) {
     private val _state = MutableStateFlow<ArticleUi>(ArticleUi.Loading)
     val state: StateFlow<ArticleUi> = _state.asStateFlow()
     private val _message = MutableStateFlow<Message?>(null)
     val message: StateFlow<Message?> = _message.asStateFlow()
     val names: StateFlow<Map<String, String>> get() = mentions.names
-    private val actions = NoteActions(publish, scope, counts, deletions, afterDelete, own)
-    private val muteActions = mute?.let { MuteActions(it, scope, profiles, background = muteScope) }
+    private val actions = NoteActions(publish, scope, counts, deletions, afterDelete, own, sendGate = sendGate)
+    private val muteActions = mute?.let { MuteActions(it, scope, profiles, background = muteScope, sendGate = sendGate) }
     private val _replies = MutableStateFlow(ArticleReplies())
     val repliesState: StateFlow<ArticleReplies> = _replies.asStateFlow()
 

@@ -1,5 +1,6 @@
 package com.monostr.app.ui.lists
 
+import com.monostr.app.ui.common.GuardedAlertDialog
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,7 +12,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -53,6 +53,7 @@ class ListEditViewModel @Inject constructor(session: NostrSession, handle: Saved
     val controller = ListEditController(
         handle.get<String>("address")?.let(ListAddress::parse), ready.pubkey, handle.get<String>("add"),
         ready.lists, ready.feedTabs, viewModelScope, writeScope = ready.engine.backgroundScope,
+        sendGate = ready.sendGate,
     )
     init { controller.start() }
 }
@@ -112,7 +113,7 @@ fun ListEditScreen(onDone: (deleted: Boolean) -> Unit, vm: ListEditViewModel = h
         }
     }
     if (state.confirmPublic) {
-        AlertDialog(
+        GuardedAlertDialog(
             onDismissRequest = vm.controller::dismissPublic,
             text = { Text(stringResource(R.string.list_public_text)) },
             confirmButton = { TextButton(onClick = vm.controller::confirmPublic, modifier = Modifier.testTag("list-public-confirm")) { Text(stringResource(R.string.list_public_confirm)) } },
@@ -120,7 +121,7 @@ fun ListEditScreen(onDone: (deleted: Boolean) -> Unit, vm: ListEditViewModel = h
         )
     }
     if (state.confirmDelete) {
-        AlertDialog(
+        GuardedAlertDialog(
             onDismissRequest = vm.controller::dismissDelete,
             text = { Text(stringResource(R.string.list_delete_text)) },
             confirmButton = { TextButton(onClick = vm.controller::delete, modifier = Modifier.testTag("list-delete-confirm")) { Text(stringResource(R.string.list_delete_confirm)) } },

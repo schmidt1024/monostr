@@ -43,6 +43,10 @@ class UiSettingsStoreTest {
         assertFalse(settings.clientTag.first())
         settings.setClientTag(true)
         assertTrue(settings.clientTag.first())
+        // link prompt: asks by default, "always open" round-trips
+        assertFalse(settings.linkAlwaysOpen.first())
+        settings.setLinkAlwaysOpen(true)
+        assertTrue(settings.linkAlwaysOpen.first())
         settings.setCustomHue(33.5f); assertEquals(33.5f, settings.customHue.first())
         settings.setCustomHue(400f); assertEquals(200f, settings.customHue.first())
         settings.setAccent(Accent.CUSTOM); assertEquals(Accent.CUSTOM, settings.accent.first())

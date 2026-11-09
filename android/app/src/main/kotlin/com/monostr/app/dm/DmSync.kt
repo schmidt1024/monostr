@@ -1,5 +1,6 @@
 package com.monostr.app.dm
 
+import com.monostr.app.net.SendGate
 import com.monostr.nostr.StartupGate
 import com.monostr.app.data.DmSettingsStore
 import com.monostr.app.data.dm.DmMessage
@@ -78,6 +79,8 @@ class DmSync(
     private val authRejection: (String) -> NostrEngine.AuthRejection? = { null },
     /** Spec perf2 A3: the backlog (attach, fetch, subscribe) waits until the home feed's first page is in; live wraps, [sync], [send] and [drainPending] do not. */
     private val gate: StartupGate = StartupGate.OPEN,
+    /** Whether anything may leave now; open only in tests. */
+    private val sendGate: SendGate = SendGate.OPEN,
 ) {
     private val _state = MutableStateFlow(DmSyncState())
     val state: StateFlow<DmSyncState> = _state.asStateFlow()
@@ -345,6 +348,8 @@ class DmSync(
      * so a later process does not look the list up again for the same account.
      */
     private suspend fun ensureOwnList() {
+        // the next adoptOwnList asks again, nothing waits for Tor
+        if (!sendGate.canSend.value) return
         val changed = ownListMutex.withLock {
             if (ownListSettled) return
             if (settings.listAdopted.first()) {
@@ -493,11 +498,15 @@ class DmSync(
     /**
      * Stores SENDING at once, wraps and sends, then SENT or FAILED. The work runs on DmSync's own
      * scope and the caller only awaits it: a caller that goes away (the chat closed) does not
-     * cancel the delivery.
+     * cancel the delivery. While [sendGate] refuses, the row is FAILED at once and nothing is wrapped: only the user's retry sends it.
      */
     suspend fun send(peer: String, text: String): DmStatus = scope.async {
         val tempId = "$PENDING_PREFIX${UUID.randomUUID()}"
         val at = now()
+        if (!sendGate.canSend.value) {
+            store.upsert(DmMessage(tempId, peer, outgoing = true, content = text, createdAt = at, receivedAt = at, status = DmStatus.FAILED, wrapId = null))
+            return@async DmStatus.FAILED
+        }
         store.upsert(DmMessage(tempId, peer, outgoing = true, content = text, createdAt = at, receivedAt = at, status = DmStatus.SENDING, wrapId = null))
         deliver(tempId, peer, text)
     }.await()
@@ -509,6 +518,7 @@ class DmSync(
     suspend fun retry(rumorId: String): DmStatus = scope.async {
         val m = store.message(rumorId) ?: return@async DmStatus.FAILED
         if (!m.outgoing || m.status != DmStatus.FAILED) return@async m.status
+        if (!sendGate.canSend.value) return@async DmStatus.FAILED
         store.setStatus(rumorId, DmStatus.SENDING)
         // The retry is a new rumor; the old one's self-copy may still arrive and must not revive it.
         superseded += rumorId

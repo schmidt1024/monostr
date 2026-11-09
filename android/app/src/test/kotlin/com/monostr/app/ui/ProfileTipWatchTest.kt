@@ -29,6 +29,8 @@ class ProfileTipWatchTest {
 
     private class Rig(val tips: FakeTips = FakeTips(), val pending: FakePendingTips = FakePendingTips()) {
         var arrivals = 0
+        /** The session's repository as the watch sees it: gone at logout, another one after a Tor switch. */
+        val session = kotlinx.coroutines.flow.MutableStateFlow<com.monostr.nostr.repo.TipsRepository?>(tips)
         /** The watch's scope; tests cancel it at the end. */
         lateinit var scope: CoroutineScope
     }
@@ -36,7 +38,7 @@ class ProfileTipWatchTest {
     private fun TestScope.watch(rig: Rig, collect: Boolean = true, visible: Boolean = true): ProfileTipWatch {
         val scope = eager()
         rig.scope = scope
-        val w = ProfileTipWatch(alice, rig.tips, rig.pending, scope) { 5_000 }
+        val w = ProfileTipWatch(alice, rig.session, rig.pending, scope) { 5_000 }
         if (!visible) w.setVisible(false)
         if (collect) scope.launch { w.arrived.collect { rig.arrivals++ } }
         w.start()
@@ -200,5 +202,80 @@ class ProfileTipWatchTest {
         assertTrue(rig.pending.state.value.isEmpty())
         assertEquals(1, rig.arrivals)
         rig.scope.cancel()
+    }
+
+    @Test
+    fun `logout ends the watch, and a failing one does not come back`() = runTest {
+        val rig = Rig()
+        val w = watch(rig)
+        rig.pending.add(anonymous(mine, 4_000))
+        rig.pending.add(PendingTip("2".repeat(64), null, 5, 4_000, recipient = alice))
+        advanceUntilIdle()
+        val public = rig.tips.profileObserved.size
+        val anonymous = rig.tips.anonymousProfileObserved.size
+        assertEquals(1, rig.tips.profileReceipts.subscriptionCount.value)
+        assertEquals(1, rig.tips.anonymousProfileReceipts.subscriptionCount.value)
+        rig.session.value = null
+        advanceUntilIdle()
+        assertEquals(0, rig.tips.profileReceipts.subscriptionCount.value, "the public watch is still running")
+        assertEquals(0, rig.tips.anonymousProfileReceipts.subscriptionCount.value, "the anonymous connection is still open")
+        advanceTimeBy(60_000)
+        advanceUntilIdle()
+        assertEquals(public, rig.tips.profileObserved.size)
+        assertEquals(anonymous, rig.tips.anonymousProfileObserved.size, "asked again after logout")
+        assertTrue(w.pendingTip.value, "the marker follows the store, not the session")
+        rig.scope.cancel()
+    }
+
+    @Test
+    fun `after a Tor switch the watch asks the new repository`() = runTest {
+        val rig = Rig()
+        watch(rig)
+        rig.pending.add(anonymous(mine, 4_000))
+        rig.pending.add(PendingTip("2".repeat(64), null, 5, 4_000, recipient = alice))
+        advanceUntilIdle()
+        val rebuilt = FakeTips()
+        rig.session.value = rebuilt
+        advanceUntilIdle()
+        assertEquals(1, rebuilt.profileObserved.size)
+        assertEquals(1, rebuilt.anonymousProfileObserved.size)
+        rebuilt.profileReceipts.value = setOf("2".repeat(64))
+        advanceUntilIdle()
+        assertEquals(1, rig.arrivals)
+        rig.scope.cancel()
+    }
+
+    @Test
+    fun `an underTor tip in Direct never reaches the watcher relays or the user's relays, the marker stays`() = runTest {
+        val rig = Rig()
+        rig.pending.add(anonymous("9".repeat(64), 4_000).copy(underTor = true))
+        rig.pending.add(PendingTip("8".repeat(64), null, 5, 4_000, recipient = alice, underTor = true))
+        val scope = eager()
+        rig.scope = scope
+        val w = ProfileTipWatch(alice, rig.session, rig.pending, scope, sendGate = SendRig(com.monostr.nostr.net.NetworkMode.Direct).send) { 5_000 }
+        w.start()
+        advanceUntilIdle()
+        assertTrue(rig.tips.anonymousProfileObserved.isEmpty(), "that would link the tip to the IP")
+        assertTrue(rig.tips.profileObserved.isEmpty())
+        assertTrue(w.pendingTip.value)
+        scope.coroutineContext[kotlinx.coroutines.Job]!!.cancel()
+    }
+
+    @Test
+    fun `under Tor the same tip is watched, and a tip made in Direct is watched in Direct`() = runTest {
+        val tor = Rig()
+        tor.pending.add(anonymous("9".repeat(64), 4_000).copy(underTor = true))
+        val a = eager()
+        ProfileTipWatch(alice, tor.session, tor.pending, a, sendGate = SendRig().send) { 5_000 }.start()
+        advanceUntilIdle()
+        assertEquals(1, tor.tips.anonymousProfileObserved.size)
+        a.coroutineContext[kotlinx.coroutines.Job]!!.cancel()
+        val direct = Rig()
+        direct.pending.add(anonymous("7".repeat(64), 4_000))
+        val b = eager()
+        ProfileTipWatch(alice, direct.session, direct.pending, b, sendGate = SendRig(com.monostr.nostr.net.NetworkMode.Direct).send) { 5_000 }.start()
+        advanceUntilIdle()
+        assertEquals(1, direct.tips.anonymousProfileObserved.size)
+        b.coroutineContext[kotlinx.coroutines.Job]!!.cancel()
     }
 }

@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -105,7 +104,7 @@ fun PasswordBackupDialog(secretHex: String, onDismiss: () -> Unit) {
     var copiedAt by remember { mutableStateOf<Long?>(null) }
     val step = state.step
     val editing = step == PasswordBackupState.Step.Edit || step == PasswordBackupState.Step.Failed
-    AlertDialog(
+    GuardedAlertDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(securePolicy = SecureFlagPolicy.SecureOn, dismissOnClickOutside = false),
         title = { Text(stringResource(R.string.backup_password_title)) },

@@ -24,17 +24,36 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.annotation.OptIn
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.ViewModel
 import androidx.media3.common.MediaItem
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
 import com.monostr.app.R
+import dagger.hilt.android.lifecycle.HiltViewModel
+import okhttp3.OkHttpClient
+import javax.inject.Inject
 
-/** Spec 3.3: fullscreen ExoPlayer with media3 controls; the player is released when the screen leaves. */
+/** Hands the screen the app's gated client. */
+@HiltViewModel
+class VideoPlayerViewModel @Inject constructor(val http: OkHttpClient) : ViewModel()
+
+/**
+ * Spec 3.3: fullscreen ExoPlayer with media3 controls; the player is released when the screen leaves. All its HTTP goes through
+ * [http] (Tor spec 7.2), and no other source exists: the default one also opens udp:// and the platform's own HTTP stack. Redirects
+ * stay on their scheme, as they did with that stack; `newBuilder()` keeps the gate.
+ */
+@OptIn(UnstableApi::class)
 @Composable
-fun VideoPlayerScreen(url: String, onBack: () -> Unit) {
+fun VideoPlayerScreen(url: String, onBack: () -> Unit, http: OkHttpClient = hiltViewModel<VideoPlayerViewModel>().http) {
     val context = LocalContext.current
     val player = remember(url) {
-        ExoPlayer.Builder(context).build().apply {
+        val source = OkHttpDataSource.Factory(http.newBuilder().followSslRedirects(false).build())
+        ExoPlayer.Builder(context).setMediaSourceFactory(DefaultMediaSourceFactory(source)).build().apply {
             setMediaItem(MediaItem.fromUri(Uri.parse(url)))
             prepare()
             playWhenReady = true

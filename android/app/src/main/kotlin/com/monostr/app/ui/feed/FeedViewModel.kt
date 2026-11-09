@@ -1,5 +1,6 @@
 package com.monostr.app.ui.feed
 
+import com.monostr.app.net.SendGate
 import com.monostr.app.ui.common.mapKeep
 import com.monostr.app.ui.common.mapValuesKeep
 
@@ -169,12 +170,16 @@ class FeedController(
     private val onFirstFresh: () -> Unit = {},
     /** Spec 2026-10-23 §5.1: pull-to-refresh forgets the "searched, not found" marks before the chains are tried again (session: the locator's forget without a retry signal, so the refresh walks them once). */
     private val forgetMisses: () -> Unit = {},
+    /** The relays came back after this feed's fetch gave up on them (Tor connected late): asked again like a follow change. */
+    private val reopened: Flow<Unit> = emptyFlow(),
+    /** Whether anything may leave now; open only in tests. */
+    private val sendGate: SendGate = SendGate.OPEN,
 ) {
     val names: StateFlow<Map<String, String>> get() = mentions.names
     private val _state = MutableStateFlow(FeedUiState())
     val state: StateFlow<FeedUiState> = _state.asStateFlow()
-    private val actions = NoteActions(publish, scope, counts, deletions, afterDelete, own)
-    private val muteActions = mute?.let { MuteActions(it, scope, profiles, background = muteScope) }
+    private val actions = NoteActions(publish, scope, counts, deletions, afterDelete, own, sendGate = sendGate)
+    private val muteActions = mute?.let { MuteActions(it, scope, profiles, background = muteScope, sendGate = sendGate) }
 
     /**
      * Local notes first: the live collector emits the database window immediately, while the
@@ -223,7 +228,7 @@ class FeedController(
         // hidden (visibility); an unmute, also one reverted after a failed publish, restarts the list like a follow
         // change does, so the account's notes are asked for again. Restarting on every mute threw away the first
         // page on a cold start, when the mute list arrives from the relays seconds after the feed (2026-10-19).
-        scope.launch { merge(followChanges, unmutes(), visibility.relaxed).collect { if (liveOn) { startLive(); refresh() } } }
+        scope.launch { merge(followChanges, unmutes(), visibility.relaxed, reopened).collect { if (liveOn) { startLive(); refresh() } } }
         // a raised minimum may leave too little to read: older pages fill up
         scope.launch { visibility.pow.drop(1).collect { if (it.on) { fillLeft = FILL_PAGES; fillUp() } } }
         // a newly muted account would keep its places in the live window until a restart: the live list alone
@@ -651,24 +656,26 @@ fun NoteUi.withProfiles(byKey: Map<String, Profile>): NoteUi {
 /** A list's feed (spec 2026-10-18 §4.3): the home feed's controller over [source], on its own [scope]; a pinned tab passes its [snapshot] (spec perf 3.7). */
 fun Ready.listFeed(factory: TipSheetFactory, source: FeedSource.Authors, scope: CoroutineScope, snapshot: FeedSnapshot? = null): FeedController = FeedController(
     feed, profiles, publish, factory.decorations(scope),
-    BookmarkActions(bookmarks, scope, background = engine.backgroundScope), counts, scope,
+    BookmarkActions(bookmarks, scope, background = engine.backgroundScope, sendGate = sendGate), counts, scope,
     conversations = conversations, mentions = MentionResolver(profiles, scope, Dispatchers.Default),
     deletions = deletions, visibility = visibility, afterDelete = afterNoteDelete, own = ownReactions,
     mute = mute, muteScope = engine.backgroundScope, source = source, snapshot = snapshot,
     forgetMisses = { locator?.forget(notify = false) },
+    reopened = engine.reopened,
+    sendGate = sendGate,
 )
 
 @HiltViewModel
 class FeedViewModel @Inject constructor(session: NostrSession, private val factory: TipSheetFactory, settings: TipSettingsStore, private val hints: HintStore) : ViewModel() {
     private val ready = session.requireReady()
     val decorations = factory.decorations(viewModelScope)
-    val bookmarks = BookmarkActions(ready.bookmarks, viewModelScope, background = ready.engine.backgroundScope)
-    val controller = FeedController(ready.feed, ready.profiles, ready.publish, decorations, bookmarks, ready.counts, viewModelScope, conversations = ready.conversations, mentions = MentionResolver(ready.profiles, viewModelScope, Dispatchers.Default), followChanges = ready.follows.changes, deletions = ready.deletions, visibility = ready.visibility, afterDelete = ready.afterNoteDelete, own = ready.ownReactions, mute = ready.mute, muteScope = ready.engine.backgroundScope, snapshot = ready.feedSnapshot, forgetMisses = { ready.locator?.forget(notify = false) }, onFirstFresh = { ready.startupGate.open("feed fresh page") })
+    val bookmarks = BookmarkActions(ready.bookmarks, viewModelScope, background = ready.engine.backgroundScope, sendGate = ready.sendGate)
+    val controller = FeedController(ready.feed, ready.profiles, ready.publish, decorations, bookmarks, ready.counts, viewModelScope, conversations = ready.conversations, mentions = MentionResolver(ready.profiles, viewModelScope, Dispatchers.Default), followChanges = ready.follows.changes, deletions = ready.deletions, visibility = ready.visibility, afterDelete = ready.afterNoteDelete, own = ready.ownReactions, mute = ready.mute, muteScope = ready.engine.backgroundScope, snapshot = ready.feedSnapshot, forgetMisses = { ready.locator?.forget(notify = false) }, onFirstFresh = { ready.startupGate.open("feed fresh page") }, reopened = ready.engine.reopened, sendGate = ready.sendGate)
     val deletions = ready.deletions
     val menu = ready.noteMenu(delete = controller::delete, mute = controller::mute)
 
     /** Spec 2026-10-18 §4.3: Following plus one feed per pinned list. */
-    val tabs = HomeTabsController(ready.feedTabs, ready.lists, viewModelScope, ready.pubkey, controller, ready.listSnapshots, ready.startupGate) { source, scope, snapshot ->
+    val tabs = HomeTabsController(ready.feedTabs, ready.lists, viewModelScope, ready.pubkey, controller, ready.listSnapshots, ready.startupGate, sendGate = ready.sendGate) { source, scope, snapshot ->
         ready.listFeed(factory, source, scope, snapshot)
     }
 
@@ -696,7 +703,7 @@ class FeedViewModel @Inject constructor(session: NostrSession, private val facto
     }
 
     /** Spec 2026-10-27 §4/§5: the curated lists above the home feed for accounts with a thin feed. */
-    val discover = DiscoverController(ready.discover, ready.follows, ready.profiles, ready.mute, ready.pubkey, viewModelScope, writeScope = ready.engine.backgroundScope)
+    val discover = DiscoverController(ready.discover, ready.follows, ready.profiles, ready.mute, ready.pubkey, viewModelScope, writeScope = ready.engine.backgroundScope, sendGate = ready.sendGate)
     val discoverShown: StateFlow<Boolean> = ready.discoverDecision.shown.map { it == true }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     init {
@@ -719,7 +726,7 @@ class FeedViewModel @Inject constructor(session: NostrSession, private val facto
     }
 
     private val amountsQuestion = AmountsQuestion(
-        AmountsPrompt(settings, ready.tips, hints, AmountsVisibility(ready.tips, ready.watchers, settings), ready.pubkey), viewModelScope,
+        AmountsPrompt(settings, ready.tips, hints, AmountsVisibility(ready.tips, ready.watchers, settings, sendGate = ready.sendGate), ready.pubkey), viewModelScope,
     )
 
     /** The one-time "hide tip amounts?" question, decided once per start after the feed loaded; never while a tip sheet is open. */

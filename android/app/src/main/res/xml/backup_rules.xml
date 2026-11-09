@@ -3,4 +3,6 @@
     <exclude domain="file" path="datastore/monostr.preferences_pb" />
     <!-- the per-account DM databases hold decrypted messages: they never leave the device -->
     <exclude domain="database" path="." />
+    <!-- Tor's guards, keys and torrc: copied to another phone they would link the two installs -->
+    <exclude domain="root" path="app_TorService/" />
 </full-backup-content>

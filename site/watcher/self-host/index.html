@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Host a watcher - monostr</title>
-<meta name="description" content="Host a monostr watcher with your own Monero node and domain: Docker Compose with monerod, monero-lws, the watcher and Caddy.">
-<meta property="og:title" content="Host a watcher - monostr">
-<meta property="og:description" content="Run a monostr watcher with your own Monero node and domain, for yourself or for others.">
+<title>Host a watcher - Monostr</title>
+<meta name="description" content="Host a Monostr watcher with your own Monero node and domain: Docker Compose with monerod, monero-lws, the watcher and Caddy.">
+<meta property="og:title" content="Host a watcher - Monostr">
+<meta property="og:description" content="Run a Monostr watcher with your own Monero node and domain, for yourself or for others.">
 <meta property="og:image" content="https://monostr.com/assets/monostr-banner.png">
 <meta property="og:url" content="https://monostr.com/watcher/self-host/">
 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
@@ -21,7 +21,7 @@
 <body>
 <main>
     <header class="page-head">
-        <p class="crumb"><a href="/">monostr</a> / Watcher</p>
+        <p class="crumb"><a href="/">Monostr</a> / Watcher</p>
         <h1>Host a watcher</h1>
         <p class="lead">Run a watcher like watcher.monostr.com on your own server: with your own Monero node, under your own domain, for yourself or for others.</p>
     </header>
@@ -80,7 +80,7 @@ curl https://watcher.example.com/v1/info</code></pre>
 
     <section>
         <h2>4. Connect the app</h2>
-        <p>In monostr: <strong>Settings → Monero tips → Switch watcher</strong> (or <strong>Set up receiving Monero tips</strong> if you have not set up tips yet). Enter <code>https://watcher.example.com</code> as the watcher URL, tap <strong>Check watcher</strong> and register your tip wallet: its primary address and private view key.</p>
+        <p>In Monostr: <strong>Settings → Monero tips → Switch watcher</strong> (or <strong>Set up receiving Monero tips</strong> if you have not set up tips yet). Enter <code>https://watcher.example.com</code> as the watcher URL, tap <strong>Check watcher</strong> and register your tip wallet: its primary address and private view key.</p>
         <p>The app removes your account from the previous watcher and announces the new one in your profile, so senders use it from then on.</p>
         <p>Use a wallet only for tips: the view key shows the watcher every incoming payment of that wallet, not only tips. It can never spend anything.</p>
     </section>
@@ -120,7 +120,7 @@ cd watcher && docker compose -f compose.selfhost.yml up -d --build</code></pre>
 
     <section>
         <h2>More</h2>
-        <p>The technical reference is <a href="https://github.com/schmidt1024/monostr/blob/main/watcher/SELFHOST.md">SELFHOST.md</a> in the repository. Questions or problems: open an <a href="https://github.com/schmidt1024/monostr/issues">issue</a> or mention monostr on Nostr.</p>
+        <p>The technical reference is <a href="https://github.com/schmidt1024/monostr/blob/main/watcher/SELFHOST.md">SELFHOST.md</a> in the repository. Questions or problems: open an <a href="https://github.com/schmidt1024/monostr/issues">issue</a> or mention Monostr on Nostr.</p>
     </section>
 
     <footer>

@@ -3,6 +3,7 @@ package com.monostr.nostr
 import com.monostr.nostr.model.RelayInfo
 import com.monostr.nostr.model.RelayMode
 import com.monostr.nostr.model.RelayState
+import com.monostr.tips.RelayHosts
 import com.monostr.tips.event.EventJson
 import com.monostr.tips.event.Event as JsonEvent
 import android.util.Log
@@ -25,7 +26,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
@@ -33,6 +37,11 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import com.monostr.nostr.net.addRoutedRelay
+import com.monostr.nostr.net.addRoutedWriteRelay
+import com.monostr.nostr.net.awaitConnected
+import com.monostr.nostr.net.addTemporaryRelay
+import com.monostr.nostr.net.throughSocks
 import rust.nostr.sdk.Client
 import rust.nostr.sdk.ClientBuilder
 import rust.nostr.sdk.ClientOptions
@@ -48,7 +57,6 @@ import rust.nostr.sdk.NostrSigner
 import rust.nostr.sdk.PublicKey
 import rust.nostr.sdk.RelayMessage
 import rust.nostr.sdk.RelayMessageEnum
-import rust.nostr.sdk.RelayOptions
 import rust.nostr.sdk.RelayStatus
 import rust.nostr.sdk.RelayUrl
 import rust.nostr.sdk.SignerBackend
@@ -75,8 +83,100 @@ class NostrEngine private constructor(
      * whose nested FFI call then blocks the main thread for good (the Plan 10d device-suite hangs).
      */
     val ffiDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    /** The SOCKS port from [create]; every relay added with its own options has to be told again. */
+    private val socksPort: Int? = null,
+    held: Boolean = false,
 ) {
     val pubkey: String? = signer?.pubkey
+
+    /** May this engine reach for a socket; the first thing to change, either way. */
+    private val route = MutableStateFlow(!held)
+    private val told = MutableStateFlow(!held)
+
+    /**
+     * False while this engine may reach for no socket (Tor plan Task 6): our SOCKS port is ours only while Tor is connected, at any
+     * other time another local app could be listening on it, and it would hear the relays' host names. The database stays readable,
+     * a publish fails with [NOT_CONNECTED] and so on, as on a device without network. Always true for an engine not [held]. True only
+     * once the relays were told to connect, so whoever waits for it finds rust-nostr ready to take a request.
+     */
+    val routeOpen: StateFlow<Boolean> = told
+
+    /** Orders [holdConnections]' disconnect against [openConnections]' connect: the latest state wins, whichever runs last. */
+    private val routeTurn = Mutex()
+
+    /** A fetch came back empty because the route stayed closed; whoever showed that hears of it through [reopened]. */
+    private val missedFetch = AtomicBoolean(false)
+    private val _reopened = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+
+    /** The route opened after a fetch gave up on it: what is on screen lacks that answer. */
+    val reopened: SharedFlow<Unit> = _reopened
+
+    /**
+     * Stops every new connection at once, without suspending, and ends the running ones right behind that: rust-nostr's own retries
+     * cannot be asked, so its pool must not stay connected or trying. Nothing here waits for rust, a caller can go on immediately.
+     */
+    fun holdConnections() {
+        if (!route.compareAndSet(true, false)) return
+        told.value = false
+        scope.launch(ffiDispatcher) { disconnectIfHeld() }
+    }
+
+    /**
+     * Hands the pool back to rust-nostr and asks there what was subscribed meanwhile. False when nothing changed: open already, or
+     * the engine is closing (a late call starts nothing after logout).
+     */
+    suspend fun openConnections(): Boolean {
+        if (closing || !route.compareAndSet(false, true)) return false
+        // the first minute's grace of the fetches counts from this connection, not from the session's start: after a hold every
+        // relay connects anew, and a fetch asked before that is answered empty at once (Pixel 2026-11-08, worker after Tor came back)
+        connectedAt = System.nanoTime()
+        resting.clear()
+        ffi {
+            routeTurn.withLock {
+                if (closing || !route.value) return@withLock
+                poolProbe?.invoke("opening")
+                ignoringErrors { client.connect() } // under routeTurn: a dial would wait for itself
+                told.value = true
+                if (!route.value) told.value = false // a hold came in between, its disconnect waits for this lock
+                // a subscription of an earlier run is stored in the relay and asked again by the pool: the same id replaces it
+                val read = readParsed()
+                active.forEach { (id, filter) -> ignoringErrors { client.subscribeWithIdTo(read, id, filter, null) } }
+            }
+        }
+        if (missedFetch.compareAndSet(true, false)) _reopened.tryEmit(Unit)
+        return true
+    }
+
+    private suspend fun disconnectIfHeld() {
+        if (route.value) return
+        routeTurn.withLock { if (!route.value) runCatching { client.disconnect() } }
+    }
+
+    /**
+     * Every connection this engine asks for goes through here (`NoBareClientsTest`). The second look covers a hold that came while
+     * [block] ran: the disconnect of that hold may have been before it.
+     */
+    private suspend inline fun dial(block: () -> Unit) {
+        if (!route.value) return
+        block()
+        disconnectIfHeld()
+    }
+
+    /**
+     * What is left of [timeout] once the route is open; null: nothing was asked, too little time left to get an answer, and
+     * [reopened] will tell.
+     */
+    private suspend fun awaitRoute(timeout: Duration): Duration? {
+        if (told.value) return timeout
+        val began = System.nanoTime()
+        val opened = withTimeoutOrNull(timeout.toMillis()) { told.first { it } } != null
+        val left = timeout.minusNanos(System.nanoTime() - began)
+        if (opened && left >= MIN_FETCH_LEFT) return left
+        missedFetch.set(true)
+        // it opened just now: openConnections may have looked already
+        if (told.value && missedFetch.compareAndSet(true, false)) _reopened.tryEmit(Unit)
+        return null
+    }
 
     /** Runs [block] (rust-nostr calls) on [ffiDispatcher], whatever the caller's dispatcher. */
     private suspend fun <T> ffi(block: suspend () -> T): T = withContext(ffiDispatcher) { block() }
@@ -95,7 +195,7 @@ class NostrEngine private constructor(
 
     private val started = AtomicBoolean(false)
 
-    /** [System.nanoTime] of the first [connect]; 0 before it. [fetchSettled] works around rust-nostr's first minute only. */
+    /** [System.nanoTime] of the first [connect], or of the latest [openConnections]; 0 before it. [fetchSettled] works around rust-nostr's first minute only. */
     @Volatile private var connectedAt = 0L
 
     /** Normalised URLs [restFailing] took out of the pool's retries, with the [System.nanoTime] they began to rest. */
@@ -112,7 +212,7 @@ class NostrEngine private constructor(
     private suspend fun restFailing() {
         while (true) {
             delay(restCheckMs)
-            ignoringErrors {
+            if (route.value) ignoringErrors {
                 val set = snapshot()
                 resting.keys.retainAll(set.normalSet)
                 connectedOnce.retainAll(set.normalSet)
@@ -123,7 +223,7 @@ class NostrEngine private constructor(
                         val since = resting[key] ?: continue
                         if (relay.status() == RelayStatus.TERMINATED && now - since >= restPeriodMs * 1_000_000) {
                             resting.remove(key)
-                            ignoringErrors { relay.connect() }
+                            dial { ignoringErrors { relay.connect() } }
                         }
                     }
                     val online = relays.any { (key, relay) -> key in connectedOnce || relay.stats().success() > 0uL }
@@ -227,6 +327,8 @@ class NostrEngine private constructor(
         ffi {
         urls.forEach { url ->
             val parsed = runCatching { RelayUrl.parse(url) }.getOrNull() ?: return@forEach
+            // a hidden service is dialled through Tor only: without a proxy it is never added, never resolved (spec 2026-11-06 Tor 7.4)
+            if (socksPort == null && RelayHosts.isOnionHost(parsed.toString())) return@forEach
             val norm = parsed.toString().trimEnd('/')
             // The whole promotion (including the network calls and a failed rollback) runs under
             // temporaryMutex: releasing it between the `temporary.remove` and the rollback would let
@@ -240,7 +342,7 @@ class NostrEngine private constructor(
                 temporary.remove(norm)
                 temporaryRefs.remove(norm)
                 try {
-                    client.addRelay(parsed)
+                    client.addRoutedRelay(parsed, socksPort)
                     poolProbe?.invoke("added")
                     replaySubscriptions(parsed)
                 } catch (e: CancellationException) {
@@ -252,13 +354,13 @@ class NostrEngine private constructor(
                     // marked before the relay re-enters the pool: no refresh may see it unmarked (spec wave 2 B1)
                     temporary += norm
                     temporaryRefs[norm] = previousRefs
-                    ignoringErrors { client.addRelayWithOpts(parsed, RelayOptions().read(true).write(false)) }
+                    ignoringErrors { client.addTemporaryRelay(parsed, socksPort) }
                 }
                 true
             }
             if (!promoted) {
                 val added = try {
-                    client.addRelay(parsed)
+                    client.addRoutedRelay(parsed, socksPort)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -274,6 +376,21 @@ class NostrEngine private constructor(
         }
     }
 
+    /** Parses each URL, silently skipping ones that fail to parse and, without a proxy, hidden services (judged on rust's spelling): nothing may be asked of them. */
+    private fun List<String>.toRelayUrls(): List<RelayUrl> =
+        mapNotNull { runCatching { RelayUrl.parse(it.trim()) }.getOrNull() }.filter { socksPort != null || !RelayHosts.isOnionHost(it.toString()) }
+
+    /**
+     * [toRelayUrls] for callers that name relays they do not own: a hidden service counts only when it is in the normal set (the user's
+     * own list, held only through Tor), a hint never reaches a relay the pool does not have ("relay not found").
+     */
+    private suspend fun List<String>.toHeldRelayUrls(): List<RelayUrl> {
+        val parsed = toRelayUrls()
+        if (parsed.none { RelayHosts.isOnionHost(it.toString()) }) return parsed
+        val normal = snapshot().normal.toSet()
+        return parsed.filter { !RelayHosts.isOnionHost(it.toString()) || it.toString().trimEnd('/') in normal }
+    }
+
     /** Live subscriptions by id ([subscribe] adds, [unsubscribe] removes), replayed to relays that join the normal set later. */
     private val active = java.util.concurrent.ConcurrentHashMap<String, Filter>()
 
@@ -286,7 +403,7 @@ class NostrEngine private constructor(
     private suspend fun replaySubscriptions(url: RelayUrl) {
         if (active.isEmpty()) return
         ffi {
-            ignoringErrors { client.connectRelay(url) }
+            dial { ignoringErrors { client.connectRelay(url) } }
             if (isWriteOnly(url)) return@ffi
             active.forEach { (id, filter) -> ignoringErrors { client.subscribeWithIdTo(listOf(url), id, filter, null) } }
         }
@@ -476,6 +593,7 @@ class NostrEngine private constructor(
     suspend fun fetchWriteOnly(filter: Filter, timeout: Duration = Duration.ofSeconds(8)): List<Event> {
         val only = writeOnly
         if (only.isEmpty()) return emptyList()
+        @Suppress("NAME_SHADOWING") val timeout = awaitRoute(timeout) ?: return emptyList()
         val set = snapshot()
         val asked = set.parsed.filterIndexed { i, _ -> set.normal[i] in only }
         if (asked.isEmpty()) return emptyList()
@@ -575,7 +693,8 @@ class NostrEngine private constructor(
         }
     }
 
-    fun temporaryRelayUrls(): List<String> = temporary.toList()
+    /** A copy through `toArray`: `toList()` reads the size and then iterates, which throws on a concurrent removal. */
+    fun temporaryRelayUrls(): List<String> = ArrayList(temporary)
 
     /** Normalised URLs (trailing slash trimmed) of all pool relays, temporary included, whose status is CONNECTED; one `status()` per cached relay. */
     suspend fun connectedRelayUrls(): Set<String> {
@@ -627,6 +746,8 @@ class NostrEngine private constructor(
         val taken = ArrayList<String>()
         for (raw in urls) {
             val url = runCatching { RelayUrl.parse(raw.trim()) }.getOrNull() ?: continue
+            // only the user's own list names a hidden service ([addRelays]); here every address is someone else's hint (Tor 7.4)
+            if (RelayHosts.isOnionHost(url.toString())) continue
             val norm = url.toString().trimEnd('/')
             temporaryMutex.withLock {
                 if (norm in temporary) { temporaryRefs.merge(norm, 1, Int::plus); taken += norm; return@withLock }
@@ -635,7 +756,7 @@ class NostrEngine private constructor(
                 temporary += norm
                 temporaryRefs[norm] = 1
                 val added = try {
-                    client.addRelayWithOpts(url, RelayOptions().read(true).write(false)).also { poolProbe?.invoke("add-returned") }
+                    client.addTemporaryRelay(url, socksPort).also { poolProbe?.invoke("add-returned") }
                 } catch (e: CancellationException) {
                     // rust may have inserted the relay before the cancellation landed: out of the pool first, unmarked after
                     dropFromPool(url)
@@ -649,7 +770,7 @@ class NostrEngine private constructor(
                 poolProbe?.invoke("added")
                 taken += norm
                 attachedAt[norm] = System.nanoTime()
-                ignoringErrors { client.connectRelay(url) }
+                dial { ignoringErrors { client.connectRelay(url) } }
             }
         }
         taken
@@ -710,9 +831,10 @@ class NostrEngine private constructor(
      * went out (after the connection grace of [reachable]): only those were really asked.
      */
     suspend fun fetchFrom(relays: List<String>, filter: Filter, timeout: Duration = Duration.ofSeconds(8), attach: Boolean = true, exit: Exit? = null, reached: MutableSet<String>? = null): List<Event> {
+        @Suppress("NAME_SHADOWING") val timeout = awaitRoute(timeout) ?: return emptyList()
         if (attach) attachTemporary(relays)
         if (exit != null) return fetchExit(relays, filter, timeout, exit, reached).events
-        val targets = reachable(relays.toRelayUrls(), reached)
+        val targets = reachable(relays.toHeldRelayUrls(), reached)
         if (targets.isEmpty()) return emptyList()
         // the client stores every event it receives in the database already (rust-nostr); saving them again here
         // cost a few milliseconds per event on a phone, seconds per refresh (hundreds of known deletion requests)
@@ -745,9 +867,9 @@ class NostrEngine private constructor(
 
     /** Connects (or reconnects after a relay list change); the notification loop is started only once per engine. */
     suspend fun connect() {
-        ffi { client.connect() }
+        ffi { dial { client.connect() } }
         if (started.compareAndSet(false, true)) {
-            connectedAt = System.nanoTime()
+            if (route.value) connectedAt = System.nanoTime()
             scope.launch(Dispatchers.Default) { decodeIncoming() }
             notifications = scope.launch(ffiDispatcher) { runNotifications() }
             scope.launch { restFailing() }
@@ -841,6 +963,14 @@ class NostrEngine private constructor(
      * doc comment for why the exclusion happens here rather than via a read/write flag).
      */
     suspend fun subscribe(filter: Filter): String {
+        // rust-nostr refuses a subscription on a relay not told to connect; [openConnections] asks it
+        if (!told.value) {
+            val id = java.util.UUID.randomUUID().toString()
+            active[id] = filter
+            // opened meanwhile: its replay may have gone over the list already
+            if (told.value) ignoringErrors { ffi { client.subscribeWithIdTo(readParsed(), id, filter, null) } }
+            return id
+        }
         val targets = readParsed()
         val id = ffi { client.subscribeTo(targets, filter, null) }.id
         active[id] = filter
@@ -861,8 +991,9 @@ class NostrEngine private constructor(
      * inherit it, unlike [subscribe].
      */
     suspend fun subscribeTo(relays: List<String>, filter: Filter): String {
-        val targets = relays.toRelayUrls()
+        val targets = relays.toHeldRelayUrls()
         require(targets.isNotEmpty()) { "no relays" }
+        if (!told.value) throw java.io.IOException("connections are held")
         return ffi { client.subscribeTo(targets, filter, null) }.id
     }
 
@@ -976,6 +1107,7 @@ class NostrEngine private constructor(
      * without throwing.
      */
     suspend fun fetch(filter: Filter, timeout: Duration = Duration.ofSeconds(8), exit: Exit? = null): List<Event> {
+        @Suppress("NAME_SHADOWING") val timeout = awaitRoute(timeout) ?: return emptyList()
         if (exit != null) return fetchExit(null, filter, timeout, exit).events
         val targets = reachable(readParsed())
         if (targets.isEmpty()) return emptyList()
@@ -994,6 +1126,7 @@ class NostrEngine private constructor(
      * leaves a relay that keeps failing out itself, and a page never waits for the grace.
      */
     suspend fun fetchSettled(filter: Filter, timeout: Duration = Duration.ofSeconds(8)): List<Event> {
+        @Suppress("NAME_SHADOWING") val timeout = awaitRoute(timeout) ?: return emptyList()
         val targets = readParsed()
         val since = connectedAt
         if (targets.isEmpty() || since == 0L || System.nanoTime() - since > startWindow.toNanos()) return fetch(filter, timeout)
@@ -1044,7 +1177,8 @@ class NostrEngine private constructor(
      * engine's scope, so [close] (logout) ends it; the caller's cancellation ends it too and is rethrown.
      */
     internal suspend fun fetchExit(relays: List<String>?, filter: Filter, timeout: Duration, exit: Exit, reached: MutableSet<String>? = null): ExitFetch {
-        val targets = reachable(relays?.toRelayUrls() ?: readParsed(), reached)
+        @Suppress("NAME_SHADOWING") val timeout = awaitRoute(timeout) ?: return ExitFetch(emptyList(), met = false)
+        val targets = reachable(relays?.toHeldRelayUrls() ?: readParsed(), reached)
         if (targets.isEmpty()) return ExitFetch(emptyList(), met = false)
         val progress = ExitProgress(exit)
         if (progress.empty) return ExitFetch(ffi { client.fetchEventsFrom(targets, filter, timeout).toVec() }, met = false)
@@ -1306,12 +1440,13 @@ class NostrEngine private constructor(
         try {
             for (raw in relays) {
                 val url = runCatching { RelayUrl.parse(raw.trim()) }.getOrNull() ?: continue
+                if (RelayHosts.isOnionHost(url.toString())) continue // a watcher's relay: not the user's own list (Tor 7.4)
                 val norm = url.toString().trimEnd('/')
                 // Under the mutex: a concurrent detachTemporary must not remove the relay between the
                 // check and the upgrade (addWriteRelay would then add it back as a permanent relay).
                 val held = temporaryMutex.withLock {
                     if (norm !in temporary) return@withLock false
-                    ffi { runCatching { client.addWriteRelay(url) } }
+                    ffi { runCatching { client.addRoutedWriteRelay(url, socksPort) } }
                     true
                 }
                 if (!held && norm !in known) {
@@ -1321,17 +1456,23 @@ class NostrEngine private constructor(
                     touched = true
                     attempted += url
                     attemptedNames += norm
-                    if (!ffi { runCatching { client.addWriteRelay(url).also { poolProbe?.invoke("add-returned") } }.getOrDefault(false) }) continue
+                    if (!ffi { runCatching { client.addRoutedWriteRelay(url, socksPort).also { poolProbe?.invoke("add-returned") } }.getOrDefault(false) }) continue
                     added += url
                 }
                 targets += url
             }
             if (targets.isEmpty()) return PublishResult(idHex, kind, emptyList(), emptyMap())
-            val out = ffi {
-                if (added.isNotEmpty()) runCatching { client.tryConnect(connectTimeout) }
-                client.sendEventTo(targets, event)
-            }
-            return PublishResult(idHex, kind, out.success.map { it.toString() }, out.failed.mapKeys { it.key.toString() }).also { logFailures(it) }
+            // Only the relays added here are dialled: client.tryConnect would dial every relay of the pool, and behind SOCKS it
+            // ignores its timeout, so one host that takes no tor circuit held a tip for tor's two minutes (Pixel 2026-11-07). The send
+            // goes out once one target is connected (awaitConnected); the added relays are removed below, so one still connecting costs nothing.
+            if (added.isNotEmpty()) ffi { dial { added.forEach { url -> runCatching { client.relay(url).connect() } } } }
+            // on the ffi dispatcher: a wall-clock wait whatever dispatcher the caller is on (a test scheduler skips delays)
+            if (added.isNotEmpty()) ffi { awaitConnected(targets, connectTimeout) { url -> runCatching { client.relay(url).isConnected() }.getOrDefault(false) } }
+            val ready = targets.filter { url -> ffi { runCatching { client.relay(url).isConnected() }.getOrDefault(false) } }
+            val unreached = (targets - ready.toSet()).associate { it.toString() to NOT_CONNECTED }
+            if (ready.isEmpty()) return PublishResult(idHex, kind, emptyList(), unreached).also { logFailures(it) }
+            val out = ffi { client.sendEventTo(ready, event) }
+            return PublishResult(idHex, kind, out.success.map { it.toString() }, out.failed.mapKeys { it.key.toString() } + unreached).also { logFailures(it) }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -1540,9 +1681,9 @@ class NostrEngine private constructor(
         val wanted = targets.map { it.toString().trimEnd('/') }.toSet()
         val neededKeys = if (needed === targets) wanted else needed.map { it.toString().trimEnd('/') }.toSet()
         // a network change racing logout: no relay is renewed or connected while (or after) close() shuts the client down
-        if (wanted.isEmpty() || neededKeys.isEmpty() || closing) return
+        if (wanted.isEmpty() || neededKeys.isEmpty() || closing || !route.value) return
         wakeMutex.withLock {
-            if (closing) return
+            if (closing || !route.value) return
             ffi {
                 val pool = snapshot().pool
                 val mine = pool.filterKeys { it in wanted }.values
@@ -1562,7 +1703,7 @@ class NostrEngine private constructor(
                     if (force) renew(mine.filter { it.status().name !in LOST }, held)
                     lost.forEach { runCatching { it.disconnect() } }
                     try {
-                        ignoringErrors { client.tryConnect(RECONNECT_WAIT) }
+                        dial { ignoringErrors { client.tryConnect(RECONNECT_WAIT) } }
                         // unlike the pool's own reconnect, tryConnect does not ask the relay's subscriptions
                         // again (they are still stored in the relay)
                         for (relay in lost) {
@@ -1578,7 +1719,7 @@ class NostrEngine private constructor(
                             }
                         }
                     } finally {
-                        runCatching { client.connect() }
+                        dial { runCatching { client.connect() } }
                     }
                 }
             }
@@ -1619,7 +1760,7 @@ class NostrEngine private constructor(
                         if (!temp && runCatching { relay.stats().success() > 0uL }.getOrDefault(false)) connectedOnce += norm
                         ignoringErrors { client.forceRemoveRelay(url) }
                         suspend fun add() = runCatching {
-                            if (temp) client.addRelayWithOpts(url, RelayOptions().read(true).write(false)) else client.addRelay(url)
+                            if (temp) client.addTemporaryRelay(url, socksPort) else client.addRoutedRelay(url, socksPort)
                         }.isSuccess
                         var added = add()
                         if (!added) {
@@ -1636,7 +1777,7 @@ class NostrEngine private constructor(
             refreshRelaySet()
         }
         for ((url, stored) in renewed) {
-            ignoringErrors { client.connectRelay(url) }
+            dial { ignoringErrors { client.connectRelay(url) } }
             for ((id, filters) in stored) {
                 // one filter per subscription in this engine; rust stores it and asks it on every connection of the relay
                 val filter = filters.singleOrNull() ?: continue
@@ -1712,6 +1853,8 @@ class NostrEngine private constructor(
         }
 
         private const val AUTH_POLL_MS = 50L
+        /** Less than this after waiting for the route is no time for a relay to answer: the fetch gives up and [reopened] tells. */
+        private val MIN_FETCH_LEFT: Duration = Duration.ofMillis(500)
         /** Undecoded events the callback may queue (spec wave 2 B2). */
         private const val RAW_CAPACITY = 2048
         /** Decoded events a slow collector may lag behind. */
@@ -1740,27 +1883,29 @@ class NostrEngine private constructor(
         /** Relay states in which rust-nostr is not trying to connect right now. */
         private val LOST = setOf(RelayStatus.DISCONNECTED.name, RelayStatus.TERMINATED.name, RelayStatus.SLEEPING.name)
 
-        /** [ffi]: where every rust-nostr call runs (injectable for tests); never Main. */
-        suspend fun create(dbPath: String, signer: Signer?, relays: List<String>, ffi: CoroutineDispatcher = Dispatchers.IO): NostrEngine = withContext(ffi) {
+        /**
+         * [ffi]: where every rust-nostr call runs (injectable for tests); never Main. [socksPort]: the loopback SOCKS port every
+         * relay connection of this engine goes through, by host name, for its whole life; null connects directly. [held]: starts
+         * with [routeOpen] false, until [openConnections].
+         */
+        suspend fun create(dbPath: String, signer: Signer?, relays: List<String>, ffi: CoroutineDispatcher = Dispatchers.IO, socksPort: Int? = null, held: Boolean = false): NostrEngine = withContext(ffi) {
             val database = NostrDatabase.lmdb(dbPath)
             // The adapter is created once here and handed to both the Client and the engine's
             // `nostrSigner` field, so the two are always the same NostrSigner instance.
             val authIds: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
             val nostrSigner = signer?.let { NostrSigner.custom(SignerAdapter(it) { id -> authIds += id }) }
-            var builder = ClientBuilder().database(database).opts(ClientOptions().automaticAuthentication(true))
+            var builder = ClientBuilder().database(database).opts(ClientOptions().automaticAuthentication(true).throughSocks(socksPort))
             if (nostrSigner != null) builder = builder.signer(nostrSigner)
             val client = builder.build()
             // The handler drops exceptions: a failure in handleNotifications must not take the process down.
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + CoroutineExceptionHandler { _, _ -> })
-            val engine = NostrEngine(client, signer, scope, nostrSigner, authIds, ffi)
+            val engine = NostrEngine(client, signer, scope, nostrSigner, authIds, ffi, socksPort, held)
             engine.addRelays(relays)
             engine
         }
     }
 }
 
-/** Parses each URL, silently skipping ones that fail to parse. */
-private fun List<String>.toRelayUrls(): List<RelayUrl> = mapNotNull { runCatching { RelayUrl.parse(it.trim()) }.getOrNull() }
 
 /** Failure reported for a relay a publish left out because it was not connected. */
 const val NOT_CONNECTED = "not connected"

@@ -1,5 +1,7 @@
 package com.monostr.app.ui.feed
 
+import com.monostr.app.ui.common.GuardedAlertDialog
+import com.monostr.app.ui.common.LocalCanSend
 import com.monostr.app.ui.discover.DiscoverFollowAllHost
 import com.monostr.app.ui.common.asString
 import com.monostr.app.ui.discover.discoverItems
@@ -15,7 +17,6 @@ import com.monostr.app.ui.common.rememberHideOnScroll
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Card
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.clickable
@@ -74,6 +75,11 @@ import com.monostr.app.ui.common.MessageSnackbar
 import com.monostr.app.ui.common.MonostrBottomBar
 import com.monostr.app.ui.common.HideOnScrollFooter
 import com.monostr.app.ui.common.RelayDot
+import com.monostr.app.ui.common.LocalTorActive
+import com.monostr.app.ui.common.TorBannerSlot
+import com.monostr.app.ui.common.TorBarIcon
+import com.monostr.app.ui.common.torAwareEmptyText
+import com.monostr.nostr.model.RelayState
 import com.monostr.app.ui.common.muteUndoTag
 import com.monostr.app.ui.tips.TipSheetHost
 import com.monostr.app.ui.tips.TippersDialog
@@ -144,45 +150,8 @@ fun FeedScreen(
     Scaffold(
         modifier = Modifier.nestedScroll(hide.connection),
         topBar = { HideOnScrollHeader(hide) { Column {
-            TopAppBar(
-                windowInsets = WindowInsets(0),
-                title = {
-                    val toTopLabel = stringResource(R.string.feed_to_top)
-                    // the ripple covers the mark only, not the whole bar; the target is 48 dp high
-                    Box(
-                        Modifier
-                            .heightIn(min = 48.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable(role = Role.Button, onClickLabel = toTopLabel, onClick = toTop)
-                            .semantics { contentDescription = toTopLabel }
-                            .testTag("feed-wordmark")
-                            .padding(horizontal = 4.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        // the wordmark, not the app name as text: the brand is always the lowercase "monostr" glyphs
-                        Image(
-                            painter = painterResource(R.drawable.ic_wordmark),
-                            contentDescription = null,
-                            colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onSurface),
-                            modifier = Modifier.height(22.dp),
-                        )
-                    }
-                },
-                actions = {
-                    // from the right: own avatar, settings, relay indicator (bookmarks live in the bottom bar since 11.1)
-                    RelayDot(relays.map { it.state })
-                    IconButton(onClick = onSettings) { Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.feed_settings)) }
-                    val selfLabel = stringResource(R.string.feed_profile)
-                    IconButton(onClick = { onOpenProfile(vm.selfPubkey) }, modifier = Modifier.testTag("feed-profile")) {
-                        val picture = self.picture
-                        if (picture.isNullOrBlank()) {
-                            Icon(Icons.Outlined.AccountCircle, contentDescription = selfLabel, modifier = Modifier.size(28.dp))
-                        } else {
-                            AsyncImage(model = picture, contentDescription = selfLabel, contentScale = ContentScale.Crop, modifier = Modifier.size(28.dp).clip(CircleShape))
-                        }
-                    }
-                },
-            )
+            FeedTopBar(relays.map { it.state }, self.picture, toTop, onSettings) { onOpenProfile(vm.selfPubkey) }
+            TorBannerSlot()
             // spec 2026-10-18 §2.1: only with a pinned list; it hides and returns with the other bars
             if (tabs.showRow) {
                 FeedTabRow(
@@ -226,7 +195,7 @@ fun FeedScreen(
                         listState = listState,
                         menu = menu,
                         nav = nav,
-                        emptyText = stringResource(if (pinned == null) R.string.feed_empty else R.string.list_feed_empty),
+                        emptyText = torAwareEmptyText(if (pinned == null) R.string.feed_empty else R.string.list_feed_empty),
                         snackbar = snackbar,
                         hide = hide,
                         header = {
@@ -253,7 +222,7 @@ fun FeedScreen(
     TipSheetHost(vm.tipSheet)
     if (amountsPrompt.shown) {
         // back or a tap outside is no answer: the question comes again next start
-        AlertDialog(
+        GuardedAlertDialog(
             onDismissRequest = vm::deferAmountsPrompt,
             title = { Text(stringResource(R.string.amounts_prompt_title)) },
             text = {
@@ -261,7 +230,7 @@ fun FeedScreen(
                     Text(stringResource(R.string.amounts_prompt_text))
                     if (amountsPrompt.failed) {
                         Text(
-                            stringResource(R.string.setup_err_not_published), color = MaterialTheme.colorScheme.error,
+                            stringResource(if (LocalCanSend.current) R.string.setup_err_not_published else R.string.send_blocked_tor), color = MaterialTheme.colorScheme.error,
                             modifier = Modifier.padding(top = 8.dp).testTag("amounts-prompt-error"),
                         )
                     }
@@ -280,6 +249,51 @@ fun FeedScreen(
         )
     }
     tippersFor?.let { TippersDialog(it, load = vm.decorations::tippers, onDismiss = { tippersFor = null }) }
+}
+
+/** Left to right: logo, then right-aligned the Tor onion (only with the switch on), relay dot, settings, avatar, about 24 dp apart as seen (spec 2026-11-06 5.5). */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun FeedTopBar(relayStates: List<RelayState>, picture: String?, onToTop: () -> Unit, onSettings: () -> Unit, onProfile: () -> Unit) {
+    TopAppBar(
+        windowInsets = WindowInsets(0),
+        title = {
+            val toTopLabel = stringResource(R.string.feed_to_top)
+            // the ripple covers the mark only, not the whole bar; the target is 48 dp high
+            Box(
+                Modifier
+                    .heightIn(min = 48.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(role = Role.Button, onClickLabel = toTopLabel, onClick = onToTop)
+                    .semantics { contentDescription = toTopLabel }
+                    .testTag("feed-wordmark")
+                    .padding(horizontal = 4.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                // the wordmark, not the app name as text: the brand is always the "Monostr" glyphs
+                Image(
+                    painter = painterResource(R.drawable.ic_wordmark),
+                    contentDescription = null,
+                    colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onSurface),
+                    modifier = Modifier.height(22.dp),
+                )
+            }
+        },
+        actions = {
+            // from the right: own avatar, settings, relay indicator (bookmarks live in the bottom bar since 11.1), Tor
+            if (LocalTorActive.current) TorBarIcon()
+            RelayDot(relayStates)
+            IconButton(onClick = onSettings, modifier = Modifier.testTag("feed-settings")) { Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.feed_settings)) }
+            val selfLabel = stringResource(R.string.feed_profile)
+            IconButton(onClick = onProfile, modifier = Modifier.testTag("feed-profile")) {
+                if (picture.isNullOrBlank()) {
+                    Icon(Icons.Outlined.AccountCircle, contentDescription = selfLabel, modifier = Modifier.size(28.dp))
+                } else {
+                    AsyncImage(model = picture, contentDescription = selfLabel, contentScale = ContentScale.Crop, modifier = Modifier.size(28.dp).clip(CircleShape))
+                }
+            }
+        },
+    )
 }
 
 /** Spec 4: "Enjoying Monostr?" with Support and Hide; both end it for good. */

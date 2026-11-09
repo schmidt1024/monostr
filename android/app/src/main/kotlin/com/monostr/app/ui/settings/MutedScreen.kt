@@ -1,5 +1,6 @@
 package com.monostr.app.ui.settings
 
+import com.monostr.app.net.SendGate
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -69,8 +70,10 @@ class MutedController(
     private val scope: CoroutineScope,
     /** The scope mute writes run on, so they survive the screen that started them (session: the engine's background scope); null (tests) = [scope]. */
     muteScope: CoroutineScope? = null,
+    /** Whether anything may leave now; open only in tests. */
+    private val sendGate: SendGate = SendGate.OPEN,
 ) {
-    private val actions = MuteActions(mute, scope, profiles, background = muteScope)
+    private val actions = MuteActions(mute, scope, profiles, background = muteScope, sendGate = sendGate)
     private val _state = MutableStateFlow(MutedUiState())
     val state: StateFlow<MutedUiState> = _state.asStateFlow()
 
@@ -122,7 +125,7 @@ class MutedController(
 @HiltViewModel
 class MutedViewModel @Inject constructor(session: NostrSession) : ViewModel() {
     private val ready = session.requireReady()
-    val controller = MutedController(ready.mute, ready.profiles, viewModelScope, muteScope = ready.engine.backgroundScope)
+    val controller = MutedController(ready.mute, ready.profiles, viewModelScope, muteScope = ready.engine.backgroundScope, sendGate = session.requireReady().sendGate)
     init { controller.start() }
 }
 

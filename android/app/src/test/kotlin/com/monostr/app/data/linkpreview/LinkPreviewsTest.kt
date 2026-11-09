@@ -1,5 +1,18 @@
 package com.monostr.app.data.linkpreview
 
+import com.monostr.app.net.FakeSocks5
+import com.monostr.app.net.dropAllConnections
+import com.monostr.app.net.gatedOkHttp
+import com.monostr.nostr.net.NetworkGate
+import com.monostr.nostr.net.NetworkMode
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
+import okhttp3.OkHttpClient
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.MockWebServer
+import java.net.InetAddress
+import java.net.ServerSocket
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.CompletableDeferred
@@ -21,6 +34,131 @@ class LinkPreviewsTest {
 
     private fun repo(calls: AtomicInteger, answer: LinkPreview? = p, gate: CompletableDeferred<Unit>? = null) =
         LinkPreviews({ calls.incrementAndGet(); gate?.await(); answer }, File(dir, "lp"), now = { clock })
+
+    @Test
+    fun `Tor not ready is no miss, the next call fetches again`() = runBlocking {
+        var ready = false
+        val r = LinkPreviews({ if (!ready) throw com.monostr.app.net.TorNotReadyException() else p }, File(dir, "lp"), now = { clock })
+        assertNull(r.get("https://a.example/"))
+        ready = true
+        assertEquals(p, r.get("https://a.example/"))
+    }
+
+    private val page = """<head><meta property="og:title" content="Hello"></head>"""
+
+    /** The real fetcher on a gated client in Tor mode, ready; [socks] carries or refuses the connection. */
+    private fun torPreviews(socks: Int, gate: NetworkGate = NetworkGate(pickPorts = { socks to 1 }).apply { set(torMode()) }, totalMs: Long = 8_000): Pair<LinkPreviews, OkHttpClient> {
+        val http = gatedOkHttp(gate) { true }
+        return LinkPreviews(LinkPreviewFetcher(http, "ua", AddressPolicy.PUBLIC_ONLY, totalMs = totalMs)::fetch, File(dir, "lp"), now = { clock }) to http
+    }
+
+    private fun remembered() = File(dir, "lp").listFiles()?.size ?: 0
+
+    @Test
+    fun `Tor mode, a refusing proxy leaves no miss behind`() = runBlocking {
+        FakeSocks5().use { refusing ->
+            val (r, _) = torPreviews(refusing.port)
+            assertNull(r.get("http://preview.example/"))
+            assertEquals(0, remembered())
+            assertNull(r.get("http://preview.example/"))
+            assertEquals(2, refusing.asks.size, "asked again, nothing remembered")
+        }
+    }
+
+    @Test
+    fun `Tor mode, a stopped proxy leaves no miss behind`() = runBlocking {
+        val dead = ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { it.localPort }
+        assertNull(torPreviews(dead).first.get("http://preview.example/"))
+        assertEquals(0, remembered())
+    }
+
+    @Test
+    fun `Tor mode, a timeout leaves no miss behind and the page loads later`() = runBlocking {
+        val server = MockWebServer().apply { start(InetAddress.getByName("127.0.0.1"), 0) }
+        try {
+            FakeSocks5(server.port).use { socks ->
+                server.enqueue(MockResponse().setHeader("Content-Type", "text/html").setBody(page).setHeadersDelay(1, TimeUnit.SECONDS))
+                assertNull(torPreviews(socks.port, totalMs = 200).first.get("http://preview.example/"))
+                assertEquals(0, remembered())
+                server.enqueue(MockResponse().setHeader("Content-Type", "text/html").setBody(page))
+                assertEquals("Hello", torPreviews(socks.port).first.get("http://preview.example/")?.title)
+            }
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    private suspend fun cancelledByDrop(afterDrop: NetworkGate.() -> Unit, beforeDrop: NetworkGate.() -> Unit = {}) {
+        val server = MockWebServer().apply { start(InetAddress.getByName("127.0.0.1"), 0) }
+        try {
+            FakeSocks5(server.port).use { socks ->
+                val gate = NetworkGate(pickPorts = { socks.port to 1 }).apply { set(torMode()) }
+                val (r, http) = torPreviews(socks.port, gate)
+                server.enqueue(MockResponse().setHeader("Content-Type", "text/html").setBody(page).setHeadersDelay(2, TimeUnit.SECONDS))
+                coroutineScope {
+                    val preview = async(Dispatchers.IO) { r.get("http://preview.example/") }
+                    server.takeRequest(3, TimeUnit.SECONDS)
+                    gate.beforeDrop()
+                    http.dropAllConnections()
+                    gate.afterDrop()
+                    assertNull(preview.await())
+                }
+                assertEquals(0, remembered())
+            }
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `Tor mode, cancelled by dropAllConnections leaves no miss behind`() = runBlocking {
+        cancelledByDrop(afterDrop = {})
+    }
+
+    @Test
+    fun `switching Tor off, a fetch it cancels leaves no miss behind either`() = runBlocking {
+        cancelledByDrop(afterDrop = {}, beforeDrop = { set(NetworkMode.Direct) })
+    }
+
+    @Test
+    fun `Tor mode, a page that answers 404 stays a miss`() = runBlocking {
+        val server = MockWebServer().apply { start(InetAddress.getByName("127.0.0.1"), 0) }
+        try {
+            FakeSocks5(server.port).use { socks ->
+                server.enqueue(MockResponse().setResponseCode(404))
+                val (r, _) = torPreviews(socks.port)
+                assertNull(r.get("http://preview.example/"))
+                assertEquals(1, remembered())
+                assertNull(r.get("http://preview.example/"))
+                assertEquals(1, server.requestCount)
+            }
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `Tor mode, a page without metadata stays a miss`() = runBlocking {
+        val server = MockWebServer().apply { start(InetAddress.getByName("127.0.0.1"), 0) }
+        try {
+            FakeSocks5(server.port).use { socks ->
+                server.enqueue(MockResponse().setHeader("Content-Type", "text/plain").setBody("nothing"))
+                assertNull(torPreviews(socks.port).first.get("http://preview.example/"))
+                assertEquals(1, remembered())
+            }
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `Direct, a refused connection stays a remembered miss, as ever`() = runBlocking {
+        val dead = ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { it.localPort }
+        val http = gatedOkHttp(NetworkGate().apply { set(NetworkMode.Direct) }) { false }
+        val r = LinkPreviews(LinkPreviewFetcher(http, "ua", AddressPolicy.ANY)::fetch, File(dir, "lp"), now = { clock })
+        assertNull(r.get("http://127.0.0.1:$dead/"))
+        assertEquals(1, remembered())
+    }
 
     @Test
     fun `memory hit after the first fetch`() = runBlocking {

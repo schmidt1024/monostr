@@ -1,5 +1,6 @@
 package com.monostr.app.ui.media
 
+import com.monostr.app.ui.common.GuardedModalBottomSheet
 import com.monostr.app.data.GifMode
 import android.Manifest
 import android.content.Context
@@ -35,7 +36,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -255,7 +255,7 @@ fun MediaViewerScreen(onBack: () -> Unit, vm: MediaViewerViewModel = hiltViewMod
     sheetFor?.let { m ->
         val clipboard = LocalClipboardManager.current
         val uriHandler = LocalUriHandler.current
-        ModalBottomSheet(onDismissRequest = { sheetFor = null }) {
+        GuardedModalBottomSheet(onDismissRequest = { sheetFor = null }) {
             MediaSheetItems(
                 onSave = {
                     sheetFor = null

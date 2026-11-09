@@ -1,5 +1,6 @@
 package com.monostr.app.ui.thread
 
+import com.monostr.app.net.SendGate
 import com.monostr.app.ui.common.mapKeep
 
 import com.monostr.nostr.repo.OwnReactions
@@ -163,6 +164,8 @@ class ThreadController(
     mute: MuteRepository? = null,
     /** The scope mute writes run on, so they survive the screen that started them (session: the engine's background scope); null (tests) = [scope]. */
     muteScope: CoroutineScope? = null,
+    /** Whether anything may leave now; open only in tests. */
+    private val sendGate: SendGate = SendGate.OPEN,
 ) {
     val names: StateFlow<Map<String, String>> get() = mentions.names
     /** The thread's first shown content is marked once (spec perf 3.9). */
@@ -177,8 +180,8 @@ class ThreadController(
     }
     private val _state = MutableStateFlow(ThreadUiState())
     val state: StateFlow<ThreadUiState> = _state.asStateFlow()
-    private val actions = NoteActions(publish, scope, counts, deletions, afterDelete, own)
-    private val muteActions = mute?.let { MuteActions(it, scope, profiles, background = muteScope) }
+    private val actions = NoteActions(publish, scope, counts, deletions, afterDelete, own, sendGate = sendGate)
+    private val muteActions = mute?.let { MuteActions(it, scope, profiles, background = muteScope, sendGate = sendGate) }
 
     fun start() {
         // a profile the background lookup finds replaces the shown one (spec perf 3.2); flags and counts stay
@@ -322,8 +325,8 @@ class ThreadController(
 class ThreadViewModel @Inject constructor(session: NostrSession, handle: SavedStateHandle, factory: TipSheetFactory) : ViewModel() {
     private val ready = session.requireReady()
     val decorations = factory.decorations(viewModelScope)
-    val bookmarks = BookmarkActions(ready.bookmarks, viewModelScope, background = ready.engine.backgroundScope)
-    val controller = ThreadController(checkNotNull(handle["id"]), ready.threads, ready.profiles, ready.publish, decorations, bookmarks, ready.counts, viewModelScope, mentions = MentionResolver(ready.profiles, viewModelScope, Dispatchers.Default), deletions = ready.deletions, visibility = ready.visibility, afterDelete = ready.afterNoteDelete, own = ready.ownReactions, mute = ready.mute, muteScope = ready.engine.backgroundScope)
+    val bookmarks = BookmarkActions(ready.bookmarks, viewModelScope, background = ready.engine.backgroundScope, sendGate = ready.sendGate)
+    val controller = ThreadController(checkNotNull(handle["id"]), ready.threads, ready.profiles, ready.publish, decorations, bookmarks, ready.counts, viewModelScope, mentions = MentionResolver(ready.profiles, viewModelScope, Dispatchers.Default), deletions = ready.deletions, visibility = ready.visibility, afterDelete = ready.afterNoteDelete, own = ready.ownReactions, mute = ready.mute, muteScope = ready.engine.backgroundScope, sendGate = ready.sendGate)
     val deletions = ready.deletions
     val menu = ready.noteMenu(delete = controller::delete, mute = controller::mute)
     val tipSheet = factory.tipSheet(viewModelScope)

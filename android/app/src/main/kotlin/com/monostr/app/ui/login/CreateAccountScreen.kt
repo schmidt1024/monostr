@@ -1,5 +1,7 @@
 package com.monostr.app.ui.login
 
+import com.monostr.app.ui.common.GuardedAlertDialog
+import com.monostr.app.ui.common.TorLoginRow
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -17,7 +19,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
@@ -101,7 +102,7 @@ fun CreateAccountScreen(onLeave: () -> Unit, vm: CreateAccountViewModel = hiltVi
     val leave = { vm.discard(); onLeave() }
     BackHandler { if (!state.busy && !controller.back()) leave() }
     if (state.confirmCancel) {
-        AlertDialog(
+        GuardedAlertDialog(
             onDismissRequest = controller::dismissCancel,
             text = { Text(stringResource(R.string.create_cancel_text)) },
             confirmButton = { TextButton(onClick = leave, modifier = Modifier.testTag("create-cancel-yes")) { Text(stringResource(R.string.create_cancel_yes)) } },
@@ -131,6 +132,7 @@ fun CreateAccountScreen(onLeave: () -> Unit, vm: CreateAccountViewModel = hiltVi
             CreateStep.Follow -> Follow(state, controller)
         }
         Spacer(Modifier.height(16.dp))
+        TorLoginRow()
         if (state.step == CreateStep.Follow) {
             state.error?.let {
                 Text(it.asString(), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)

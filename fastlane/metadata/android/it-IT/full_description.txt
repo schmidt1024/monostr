@@ -1,4 +1,4 @@
-monostr è un client Nostr per Android con mance in Monero.
+Monostr è un client Nostr per Android con mance in Monero.
 
 <b>Nostr, come lo conosci</b>
 • Feed delle persone che segui, thread, profili con le schede Post, Risposte, Ripubblicati, Articoli e Liste
@@ -12,12 +12,20 @@ monostr è un client Nostr per Android con mance in Monero.
 
 <b>Mance in Monero</b>
 • Lascia una mancia a una nota o a un profilo dalla tua app wallet (Unstoppable, monfluo, Cake …) tramite un link monero:
-• monostr non contiene un wallet né una chiave di spesa
-• Per ricevere mance ci sono due strade. O pubblichi semplicemente il tuo indirizzo Monero (NIP-A3 payto): gli altri pagano dal proprio wallet, senza ricevuta in monostr
+• Monostr non contiene un wallet né una chiave di spesa
+• Per ricevere mance ci sono due strade. O pubblichi semplicemente il tuo indirizzo Monero (NIP-A3 payto): gli altri pagano dal proprio wallet, senza ricevuta in Monostr
 • Oppure registri indirizzo e chiave di visualizzazione privata presso un watcher (watcher.monostr.com di default, o il tuo). Il watcher vede i pagamenti in entrata e pubblica ricevute firmate su Nostr, così tutti vedono la mancia sotto la nota
 • Sono possibili mance anonime
 
-<b>Aperto</b>
-monostr è software libero (AGPL-3.0-or-later). Note, mi piace e ripubblicazioni riportano «via monostr» (disattivato di default, attivabile).
+<b>Privacy</b>
+• Tor integrato, disattivato di default. Se attivo, relay, immagini, caricamenti e il watcher vedono Tor invece del tuo indirizzo IP, anche messaggi e mance vengono controllati tramite Tor in background, e nulla esce direttamente finché Tor non è connesso
+• Relay onion nella tua lista di relay con Tor attivo
+• I link web chiedono prima di aprirsi; con Tor puoi aprirli in Tor Browser o copiarli
+• Tor nasconde il tuo indirizzo IP, non il tuo account, il tuo portafoglio o il tuo browser
 
-monostr è in beta.
+<b>Aperto</b>
+Monostr è software libero (AGPL-3.0-or-later). Note, mi piace e ripubblicazioni riportano «via Monostr» (disattivato di default, attivabile).
+
+Tor è un marchio di The Tor Project. Monostr non è approvato dal Tor Project né affiliato ad esso.
+
+Monostr è in beta.

@@ -1,10 +1,10 @@
-# monostr
+# Monostr
 
 **Nostr client for Android with tips in Monero.** No Lightning, no custodian, no wallet inside the app.
 
 [monostr.com](https://monostr.com) · relay `wss://relay.monostr.com` · watcher `https://watcher.monostr.com`
 
-monostr is in beta.
+Monostr is in beta.
 
 [<img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png" alt="Get it on F-Droid" height="80">](https://f-droid.org/packages/com.monostr.app/)
 
@@ -19,7 +19,7 @@ Also on [Zapstore](https://zapstore.dev/apps/com.monostr.app) and as APK in the 
 
 ## How the Monero tips work
 
-1. The sender taps the Monero icon under a note or on a profile. monostr opens the sender's own wallet app (Monerujo, Cake, Feather …) with a `monero:` link; the app never holds a wallet or a spend key.
+1. The sender taps the Monero icon under a note or on a profile. Monostr opens the sender's own wallet app (Monerujo, Cake, Feather …) with a `monero:` link; the app never holds a wallet or a spend key.
 2. To receive tips, a user registers the primary address and the **private view key** with a *watcher* — `watcher.monostr.com` by default, or one they run themselves (`watcher/`). The view key lets the watcher see incoming payments but never spend; the watcher operator can see them too.
 3. The watcher publishes a signed tip receipt on Nostr. Clients show the tip under the note.
 
@@ -59,13 +59,13 @@ Release APKs are signed with this certificate (SHA-256):
 - Tip amounts are hidden by default for new setups from 0.18 (protocol 0.5; existing setups are asked once): the intent and receipt leave out the amount, so only the count of tips shows; Settings can show amounts again.
 - DM notifications hide the sender name by default; Settings can show it.
 - Pictures load only on tap by default; Settings can load them automatically.
-- Notes, likes and reposts carry a NIP-89 `client` tag ("via monostr") only if you switch it on in Settings; off by default.
+- Notes, likes and reposts carry a NIP-89 `client` tag ("via Monostr") only if you switch it on in Settings; off by default.
 - Long-form articles (NIP-23) open in an in-app reader with likes, reposts, replies, bookmarks and Monero tips; profiles show an Articles tab.
-- A Monero address can be published without a watcher (NIP-A3 payto); tips to people who only have a payto address open your wallet without a confirmation in monostr.
+- A Monero address can be published without a watcher (NIP-A3 payto); tips to people who only have a payto address open your wallet without a confirmation in Monostr.
 - Follower numbers are the largest count the relays report (NIP-45); no proprietary index is asked (since 0.22.4).
 
 ## License
 
-monostr (app, watcher, relay and ops configuration) is free software under the GNU Affero General Public License v3.0 or later (`SPDX-License-Identifier: AGPL-3.0-or-later`), see [`LICENSE`](LICENSE). Copyright (C) 2026 The monostr contributors.
+Monostr (app, watcher, relay and ops configuration) is free software under the GNU Affero General Public License v3.0 or later (`SPDX-License-Identifier: AGPL-3.0-or-later`), see [`LICENSE`](LICENSE). Copyright (C) 2026 The Monostr contributors.
 
 Parts of the code were written with the help of AI coding tools.

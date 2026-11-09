@@ -177,4 +177,19 @@ class DiscoverControllerTest {
         c.confirmFollowAll(); runCurrent()
         assertEquals(listOf("followAll:11"), follows.calls)
     }
+
+    @Test
+    fun `the snackbar's Undo refuses while canSend is false, with the reason`() = runTest {
+        val small = list("small", pk(1), pk(2))
+        val follows = FakeFollows()
+        val send = com.monostr.app.ui.SendRig()
+        val c = DiscoverController(FakeDiscover(listOf(small)), follows, FakeProfiles(), FakeMute(), self, eager(), sendGate = send.send)
+        c.start(); runCurrent()
+        c.followAll(small.address); runCurrent()
+        val undo = c.state.value.undo!!
+        send.connected.value = false
+        undo(); runCurrent()
+        assertEquals(listOf("followAll:2"), follows.calls)
+        assertEquals(com.monostr.app.ui.common.uiText(com.monostr.app.R.string.send_blocked_tor), c.state.value.message)
+    }
 }

@@ -13,6 +13,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.IOException
 import java.security.MessageDigest
 
 /**
@@ -86,7 +87,11 @@ class LinkPreviews(
     private suspend fun load(url: String, gen: Int): LinkPreview? {
         val file = File(dir, sha256(url))
         withContext(Dispatchers.IO) { readEntry(file, url) }?.takeIf { fresh(it) }?.let { remember(url, it, gen); return it.preview }
-        val preview = gate.withPermit { fetch(url) }
+        val preview = try {
+            gate.withPermit { fetch(url) }
+        } catch (_: IOException) {
+            return null // the fetcher's way to say it learned nothing about the page (Tor): no miss to remember
+        }
         val entry = Entry(preview, now())
         // memory and disk under one lock with the generation check, so a clear() in between leaves no trace
         withContext(Dispatchers.IO) { synchronized(memory) { if (generation == gen) { memory[url] = entry; writeEntry(file, url, entry) } } }

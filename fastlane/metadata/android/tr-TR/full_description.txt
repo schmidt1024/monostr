@@ -1,4 +1,4 @@
-monostr, Monero ile bahşiş verilebilen bir Android Nostr istemcisidir.
+Monostr, Monero ile bahşiş verilebilen bir Android Nostr istemcisidir.
 
 <b>Bildiğin Nostr</b>
 • Takip ettiklerinin akışı, konuşmalar, Gönderiler, Yanıtlar, Paylaşımlar, Makaleler ve Listeler sekmeli profiller
@@ -12,12 +12,20 @@ monostr, Monero ile bahşiş verilebilen bir Android Nostr istemcisidir.
 
 <b>Monero ile bahşiş</b>
 • Bir nota veya profile kendi cüzdan uygulamandan (Unstoppable, monfluo, Cake …) monero: bağlantısıyla bahşiş ver
-• monostr'da cüzdan ve harcama anahtarı yoktur
-• Bahşiş almak için iki yol var. Ya Monero adresini yayımlarsın (NIP-A3 payto): başkaları kendi cüzdanından öder, monostr'da makbuz olmadan
+• Monostr'da cüzdan ve harcama anahtarı yoktur
+• Bahşiş almak için iki yol var. Ya Monero adresini yayımlarsın (NIP-A3 payto): başkaları kendi cüzdanından öder, Monostr'da makbuz olmadan
 • Ya da adresini ve özel görüntüleme anahtarını bir watcher'a kaydedersin (varsayılan watcher.monostr.com ya da kendi watcher'ın). Watcher gelen ödemelerini görür ve imzalı bahşiş makbuzlarını Nostr'da yayımlar; böylece herkes bahşişi notta görür
 • Anonim bahşiş mümkündür
 
-<b>Açık</b>
-monostr özgür yazılımdır (AGPL-3.0-or-later). Notlar, beğeniler ve paylaşımlar “via monostr” taşır (varsayılan olarak kapalı, açılabilir).
+<b>Gizlilik</b>
+• Yerleşik Tor, varsayılan olarak kapalı. Açıkken relay'ler, resimler, yüklemeler ve watcher IP adresin yerine Tor'u görür, mesajlar ve bahşişler de arka planda Tor üzerinden denetlenir ve Tor bağlı değilken hiçbir şey doğrudan gitmez
+• Tor açıkken kendi relay listende onion relay'ler
+• Web bağlantıları açılmadan önce sorar; Tor ile onları Tor Browser'da açabilir veya kopyalayabilirsin
+• Tor IP adresini gizler; hesabını, cüzdanını veya tarayıcını değil
 
-monostr beta aşamasındadır.
+<b>Açık</b>
+Monostr özgür yazılımdır (AGPL-3.0-or-later). Notlar, beğeniler ve paylaşımlar “via Monostr” taşır (varsayılan olarak kapalı, açılabilir).
+
+Tor, The Tor Project'in ticari markasıdır. Monostr, Tor Project tarafından desteklenmez ve onunla bağlantılı değildir.
+
+Monostr beta aşamasındadır.

@@ -1,4 +1,4 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -13,6 +13,9 @@
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="monero" />
         </intent>
+        <!-- torbrowser brief 2026-11-07: under Tor the link prompt offers Tor Browser, stable before alpha (TorBrowser.PACKAGES) -->
+        <package android:name="org.torproject.torbrowser" />
+        <package android:name="org.torproject.torbrowser_alpha" />
     </queries>
     <application
         android:icon="@mipmap/ic_launcher"
@@ -37,5 +40,8 @@
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
         </provider>
+        <!-- docs/testing/tor-spike.md: the AAR's entry would run tor in the main process, where its abort takes the app down -->
+        <service android:name="org.torproject.jni.TorService" tools:node="remove" />
+        <service android:name=".TorProcessService" android:process=":tor" android:exported="false" />
     </application>
 </manifest>

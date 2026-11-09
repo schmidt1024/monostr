@@ -6,6 +6,14 @@ import org.junit.jupiter.api.Test
 import java.net.InetAddress
 
 class AddressPolicyTest {
+    /** On the JVM these never reach the interceptor (java.net.URI finds no host); on Android they do. */
+    @Test
+    fun `proxied hosts with a numeric last label but other labels are refused, not thrown`() {
+        for (host in listOf("a.b.c.1", "1a.0.0.1", "1.2.3.٣", "+1.0.0.1")) {
+            assertFalse(proxiedHostAllowed(host, AddressPolicy.ANY), host)
+        }
+    }
+
     private fun public(ip: String) = AddressPolicy.isPublic(InetAddress.getByName(ip))
 
     @Test

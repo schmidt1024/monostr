@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- app -->
-    <string name="app_name" translatable="false">monostr</string>
+    <string name="app_name" translatable="false">Monostr</string>
     <string name="login_tagline">Nostr with Monero tips</string>
 
     <!-- shared actions and states -->
@@ -24,6 +24,7 @@
     <string name="relay_connecting">connecting…</string>
     <string name="relay_disconnected">disconnected</string>
     <string name="relay_not_connected">not connected</string>
+    <string name="relay_needs_tor">needs Tor</string>
     <string name="relay_resting">unreachable, tried again every 10 minutes</string>
     <string name="relay_last_seen">last connected: %1$s</string>
     <string name="relay_never_seen">never connected yet</string>
@@ -196,8 +197,8 @@
     <string name="tip_sent">Wallet opened. The tip is waiting for the watcher\'s confirmation.</string>
     <string name="tip_error_amount">Invalid amount (e.g. 0.005)</string>
     <string name="tip_payto_title_plain">Send Monero</string>
-    <string name="tip_payto_note">Goes to their address, not to this note. No confirmation: monostr can\'t see whether you paid.</string>
-    <string name="tip_payto_profile">No confirmation: monostr can\'t see whether you paid.</string>
+    <string name="tip_payto_note">Goes to their address, not to this note. No confirmation: Monostr can\'t see whether you paid.</string>
+    <string name="tip_payto_profile">No confirmation: Monostr can\'t see whether you paid.</string>
     <string name="tip_payto_pay">Pay with wallet</string>
     <string name="tip_no_monero">Recipient has not set up Monero</string>
     <string name="tip_notice_offline">No relay reachable, intent saved locally</string>
@@ -228,7 +229,7 @@
     <string name="setup_watcher_info">Watcher %1$s · %2$s · height %3$d</string>
     <string name="setup_privacy">The watcher sees every incoming payment of this wallet. That is why you should use a separate wallet just for tips.</string>
     <string name="setup_watcher_privacy">The watcher stores only what it needs: your Nostr public key, the wallet address with its view key, and the open tip intents and receipts (which are public on Nostr anyway). No IP addresses are logged or stored. Disabling tips deletes your account at the watcher; its scanner keeps the address and view key marked inactive until the operator purges them.</string>
-    <string name="setup_path_new_hint">Creates a fresh 25-word seed on this phone. monostr only watches incoming tips; to spend them, import the seed into Cake Wallet, Monerujo or Feather.</string>
+    <string name="setup_path_new_hint">Creates a fresh 25-word seed on this phone. Monostr only watches incoming tips; to spend them, import the seed into Cake Wallet, Monerujo or Feather.</string>
     <string name="setup_path_existing_hint">Paste the primary address and the private view key from Cake Wallet, Monerujo or Feather.</string>
     <string name="setup_announced_warning">This account already receives tips at %1$s…%2$s, set up on another device. Setting up here replaces that address.</string>
     <string name="setup_announced_notice">Tips are already set up for this account (address %1$s…%2$s).</string>
@@ -247,7 +248,7 @@
     <string name="setup_seed_written">Written down</string>
     <string name="seed_copy">Copy seed</string>
     <string name="seed_copy_warning_title">Copy the seed to the clipboard?</string>
-    <string name="seed_copy_warning_text">Other apps can read the clipboard. Paste the seed into your wallet right away; monostr removes it from the clipboard after 60 seconds.</string>
+    <string name="seed_copy_warning_text">Other apps can read the clipboard. Paste the seed into your wallet right away; Monostr removes it from the clipboard after 60 seconds.</string>
     <string name="seed_copied">Copied. The clipboard is cleared after 60 seconds.</string>
     <string name="setup_verify_title">Three words to check</string>
     <string name="setup_verify_word">Word no. %1$d</string>
@@ -310,6 +311,7 @@
     <string name="settings_relays">Relays</string>
     <string name="settings_relay_placeholder" translatable="false">wss://…</string>
     <string name="settings_relay_invalid">Invalid relay URL (ws:// or wss:// expected)</string>
+    <string name="settings_relay_onion_main_only">An .onion address works only in the main relay list</string>
     <string name="settings_relay_keep_one">At least one relay stays</string>
     <string name="relay_mode_both">Read and write</string>
     <string name="relay_mode_read">Read only</string>
@@ -341,6 +343,9 @@
     <string name="settings_gif_off">Off</string>
     <string name="media_gif_play">Play GIF</string>
     <string name="media_gif_pause">Pause GIF</string>
+    <string name="settings_privacy">Privacy</string>
+    <string name="settings_ask_links">Ask before opening links</string>
+    <string name="settings_ask_links_hint">The site you open learns your IP address.</string>
     <string name="settings_link_previews">Link previews</string>
     <string name="settings_link_previews_hint">Shows title and picture of linked pages. Those sites, and the servers of their pictures, then see your IP address.</string>
     <string name="link_preview_cd">Link preview: %1$s, %2$s</string>
@@ -353,8 +358,8 @@
     <string name="settings_pow_bits">%1$d bits</string>
     <string name="settings_pow_filter">Minimum proof of work to show notes</string>
     <string name="settings_pow_filter_hint">Hides notes below this value from people you don\'t follow. Few apps send proof of work, so most of their notes disappear. Notes you open and tips stay.</string>
-    <string name="settings_client_tag">Say “via monostr”</string>
-    <string name="settings_client_tag_hint">Notes, likes and reposts carry a client tag that other apps show as “via monostr”.</string>
+    <string name="settings_client_tag">Say “via Monostr”</string>
+    <string name="settings_client_tag_hint">Notes, likes and reposts carry a client tag that other apps show as “via Monostr”.</string>
     <string name="note_via">via %1$s</string>
     <string name="settings_monero">Monero tips</string>
     <string name="settings_monero_not_set_up">Not set up. Not needed for sending tips.</string>
@@ -399,7 +404,7 @@
     <string name="settings_publish_relays_hint">Other apps and the tip watcher look for you on the relays of this list. Publishing replaces a list from another app.</string>
     <string name="settings_adopt_relays_hint">The relays of this app are replaced by the relay list published for your account. A list from another app may name relays that no longer exist.</string>
     <string name="settings_reset_relays">Restore default relays</string>
-    <string name="settings_reset_relays_hint">The relays of this app are replaced by monostr\'s default relays.</string>
+    <string name="settings_reset_relays_hint">The relays of this app are replaced by Monostr\'s default relays.</string>
     <string name="settings_msg_relay_list_published">Relay list published</string>
     <string name="settings_msg_relay_list_not_published">No relay accepted the relay list</string>
     <string name="settings_err_presets">Presets: valid %1$s amounts, e.g. 0.001</string>
@@ -561,21 +566,21 @@
     <string name="profile_unfollow_title">Unfollow @%1$s?</string>
     <string name="profile_unfollow_confirm">Unfollow</string>
     <string name="follow_no_list">Your follow list could not be loaded, so nothing was changed. Try again later.</string>
-    <string name="support_title">Support monostr</string>
-    <string name="support_text">monostr is open source, with no ads and no tracking. If you find it useful, you can support its development with Monero.</string>
+    <string name="support_title">Support Monostr</string>
+    <string name="support_text">Monostr is open source, with no ads and no tracking. If you find it useful, you can support its development with Monero.</string>
     <string name="support_button">Support with Monero</string>
     <string name="support_contributors">Contributors</string>
     <string name="support_repo">Source code</string>
-    <string name="support_hint_title">Enjoying monostr?</string>
+    <string name="support_hint_title">Enjoying Monostr?</string>
     <string name="support_hint_action">Support</string>
     <string name="support_hint_dismiss">Hide</string>
-    <string name="about_title">About monostr</string>
+    <string name="about_title">About Monostr</string>
     <string name="about_version">Version %1$s (build %2$d)</string>
     <string name="about_beta">Beta</string>
     <string name="about_feedback">Feedback on Nostr</string>
     <string name="about_issues">Report a problem</string>
     <string name="about_license">Licence: %1$s</string>
-    <string name="dm_relay_hint_missing">relay.monostr.com is missing from your inbox list, so monostr users may not reach you.</string>
+    <string name="dm_relay_hint_missing">relay.monostr.com is missing from your inbox list, so Monostr users may not reach you.</string>
     <string name="dm_relay_hint_add">Add</string>
     <string name="dm_relay_hint_second">A second inbox relay makes your messages more reliable.</string>
     <string name="dm_relay_hint_dismiss">Hide</string>
@@ -604,7 +609,7 @@
     <string name="settings_media_server_hint">Pictures you attach are uploaded to this Blossom server. They are public.</string>
     <string name="settings_media_server_invalid">Must be an https:// address without a path</string>
     <string name="settings_media_server_reset">Default</string>
-    <string name="about_media">Pictures you upload are stored on %1$s and are public to anyone who has the link. To report a picture, send its link to the monostr project account on Nostr.</string>
+    <string name="about_media">Pictures you upload are stored on %1$s and are public to anyone who has the link. To report a picture, send its link to the Monostr project account on Nostr.</string>
     <string name="note_menu">More</string>
     <string name="note_menu_copy_link">Copy link</string>
     <string name="note_menu_copy_text">Copy text</string>
@@ -630,7 +635,7 @@
     <string name="conversation_unavailable">This note is unavailable</string>
     <string name="conversation_pending">Looking for this note…</string>
     <string name="create_who_monostr">This app</string>
-    <string name="create_who_schmidt">Makes monostr</string>
+    <string name="create_who_schmidt">Makes Monostr</string>
     <string name="create_who_mrl">Monero research</string>
     <string name="create_who_orangefren">Monero community</string>
     <string name="login_create">New to Nostr? Create an account</string>
@@ -768,10 +773,56 @@
     <string name="translate_consent_translate">Translate</string>
     <string name="translate_consent_settings">Settings</string>
     <string name="settings_translate">Translation</string>
-    <string name="settings_translate_monostr">monostr (translate.monostr.com)</string>
+    <string name="settings_translate_monostr">Monostr (translate.monostr.com)</string>
     <string name="settings_translate_custom">Own LibreTranslate server</string>
     <string name="settings_translate_off">Off</string>
     <string name="settings_translate_url">Server address</string>
     <string name="settings_translate_url_invalid">Invalid address</string>
     <string name="settings_translate_hint">The text of a note you translate goes to the chosen server. The server sees which notes you translate and your IP address. Messages are never translated.</string>
+    <string name="link_prompt_title">Open this link?</string>
+    <string name="link_prompt_reason">The site will learn your IP address.</string>
+    <string name="link_prompt_open">Open</string>
+    <string name="link_prompt_cancel">Cancel</string>
+    <string name="link_prompt_always">Always open</string>
+    <string name="link_prompt_unknown_host">Unknown address</string>
+    <string name="send_blocked_tor">Tor is not connected. Nothing is sent.</string>
+    <string name="tor_connect">Connect through Tor</string>
+    <string name="tor_connected">Connected through Tor</string>
+    <string name="tor_explanation">Tor hides your IP address from relays and servers. It does not hide your account, your wallet or your browser.</string>
+    <string name="tor_restart_once">Monostr restarts once.</string>
+    <string name="tor_turn_on">Turn on</string>
+    <string name="tor_cancel">Cancel</string>
+    <string name="tor_banner_connecting">Tor connecting, stored content only</string>
+    <string name="tor_banner_failed">Tor not connected, nothing is loaded</string>
+    <string name="tor_try_again">Try again</string>
+    <string name="tor_try_again_short">Try again</string>
+    <string name="tor_details">Details</string>
+    <string name="tor_details_progress">Connecting: %d%%</string>
+    <string name="tor_off_action">Turn off Tor</string>
+    <string name="tor_off_text">Relays and servers will see your IP address.</string>
+    <string name="tor_off_button">Turn off</string>
+    <string name="tor_turning_on">Turning on Tor…</string>
+    <string name="tor_turning_off">Turning off Tor…</string>
+    <string name="tor_error_on">Tor could not be turned on.</string>
+    <string name="tor_error_off">Tor could not be turned off. Tor stays on.</string>
+    <string name="tor_orbot">With Orbot\'s VPN on, you don\'t need this; both together are slow.</string>
+    <string name="tor_wallet_note">Your wallet does not use Monostr\'s Tor.</string>
+    <string name="link_prompt_tor">Your browser does not use Monostr\'s Tor.</string>
+    <string name="link_prompt_copy">Copy link</string>
+    <string name="link_prompt_torbrowser">Open in Tor Browser</string>
+    <string name="link_prompt_copied">Link copied</string>
+    <string name="link_prompt_torbrowser_failed">Tor Browser could not be opened.</string>
+    <string name="tor_desc_connecting">Tor: connecting</string>
+    <string name="tor_desc_connected">Tor: connected</string>
+    <string name="tor_desc_failed">Tor: not connected</string>
+    <string name="feed_empty_tor">Notes appear once Tor is connected.</string>
+    <string name="tor_off_title">Turn off Tor?</string>
+    <string name="tor_settings_connected">Connected</string>
+    <string name="tor_login_connecting">Tor connecting…</string>
+    <string name="tor_login_failed">Tor not connected</string>
+    <string name="tor_credit" translatable="false">Tor is a trademark of The Tor Project; all rights reserved. This product is not endorsed or sponsored by, or affiliated with, the Tor Project.</string>
+    <plurals name="tor_off_tips">
+        <item quantity="one">%d pending tip will be dropped.</item>
+        <item quantity="other">%d pending tips will be dropped.</item>
+    </plurals>
 </resources>

@@ -276,4 +276,16 @@ class BlossomClientTest {
         server.shutdown()
         assertEquals(false, client.absent(base, hash))
     }
+
+    @Test
+    fun `while canSend is false no upload or delete reaches the signer or the server`() = runTest {
+        var signed = 0
+        val counting = FakeSigner(pubkey, onSign = { signed++; error("not to be asked") }, onSilent = { signed++; error("not to be asked") })
+        val blocked = BlossomClient(OkHttpClient(), counting, com.monostr.app.ui.SendRig(connected = false).send) { 1000L }
+        assertTrue(failure { blocked.upload(base, byteArrayOf(1), "image/jpeg", hash) } is com.monostr.app.net.SendRefused)
+        assertTrue(failure { blocked.delete(base, hash, silent = false) } is com.monostr.app.net.SendRefused)
+        assertTrue(failure { blocked.delete(base, hash) } is com.monostr.app.net.SendRefused)
+        assertEquals(0, signed)
+        assertEquals(0, server.requestCount)
+    }
 }

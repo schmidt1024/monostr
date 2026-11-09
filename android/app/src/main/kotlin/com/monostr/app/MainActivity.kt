@@ -6,6 +6,8 @@ import com.monostr.app.ui.tips.LocalAmountUnit
 import androidx.compose.runtime.CompositionLocalProvider
 import com.monostr.app.ui.common.LocalQuickReactions
 import com.monostr.app.ui.common.Reactions
+import com.monostr.app.ui.common.LinkPromptHost
+import com.monostr.app.ui.common.ProvideTorUi
 import android.app.Activity
 import android.content.Intent
 import android.net.ConnectivityManager
@@ -50,6 +52,9 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var session: NostrSession
     @Inject lateinit var uiSettings: UiSettingsStore
     @Inject lateinit var tipSettings: TipSettingsStore
+    @Inject lateinit var torSwitch: com.monostr.app.net.TorSwitch
+    @Inject lateinit var sendGate: com.monostr.app.net.SendGate
+    @Inject lateinit var torUi: com.monostr.app.net.TorUi
 
     companion object {
         /** True while an instance is started (between onStart and onStop); the background worker must not release a shared engine then. */
@@ -95,6 +100,7 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         inForeground.set(true)
+        torSwitch.onForeground()
         // back from the background the relay sockets are usually gone: reconnect now instead of
         // waiting for the pool's next retry (a publish in that window found no relay, v0.8.1)
         lifecycleScope.launch { session.reconnectIfLost() }
@@ -104,6 +110,7 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         unregisterNetworkWatch()
         inForeground.set(false)
+        torSwitch.onBackground()
         super.onStop()
     }
 
@@ -166,7 +173,8 @@ class MainActivity : ComponentActivity() {
             MonostrTheme(mode!!, accent!!, customHue!!) {
                 val quick by uiSettings.quickReactions.collectAsState(initial = Reactions.QUICK)
                 val unit by tipSettings.amountUnit.collectAsState(initial = AmountUnit.XMR)
-                CompositionLocalProvider(LocalQuickReactions provides quick, LocalAmountUnit provides unit) {
+                val canSend by sendGate.canSend.collectAsState()
+                CompositionLocalProvider(LocalQuickReactions provides quick, LocalAmountUnit provides unit, com.monostr.app.ui.common.LocalCanSend provides canSend) {
                 // NIP-55: whenever the bridge has a new pending request, launch the signer once and
                 // hand the result back correlated by request id (a request can be superseded before
                 // the launcher's callback fires, e.g. after a config change).
@@ -187,7 +195,13 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
-                Surface { MonostrNavHost(session) }
+                val linkAlways by uiSettings.linkAlwaysOpen.collectAsState(initial = false)
+                // not yet known counts as on, read at each tap: a stored «Always open» must not slip through while the mode is being read
+                LinkPromptHost(linkAlways, { lifecycleScope.launch { uiSettings.setLinkAlwaysOpen(true) } }, torOn = { !sendGate.direct }) {
+                    ProvideTorUi(torUi) {
+                        Surface { MonostrNavHost(session) }
+                    }
+                }
                 }
             }
         }

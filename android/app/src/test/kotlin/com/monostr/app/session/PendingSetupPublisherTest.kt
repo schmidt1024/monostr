@@ -118,4 +118,16 @@ class PendingSetupPublisherTest {
         assertTrue(publisher().run())
         assertTrue(publish.calls.isEmpty())
     }
+
+    @Test
+    fun `publishes nothing while canSend is false and keeps the record`() = runTest {
+        store.save(pk, setup())
+        val send = com.monostr.app.ui.SendRig(connected = false)
+        val p = PendingSetupPublisher(store, pk, publish, followRepo, dmSettings, exists = { it in existing }, sendGate = send.send)
+        assertFalse(p.run())
+        assertTrue(publish.calls.isEmpty() && followRepo.calls.isEmpty())
+        assertEquals(setup(), store.load(pk))
+        send.connected.value = true
+        assertTrue(p.run())
+    }
 }

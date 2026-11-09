@@ -1,5 +1,6 @@
 package com.monostr.app.ui.lists
 
+import com.monostr.app.ui.common.GuardedModalBottomSheet
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -19,7 +20,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -38,7 +38,7 @@ import com.monostr.app.R
 @Composable
 fun AddToListSheet(controller: AddToListController, onNewList: () -> Unit, onDismiss: () -> Unit) {
     val state by controller.state.collectAsStateWithLifecycle()
-    ModalBottomSheet(onDismissRequest = onDismiss, modifier = Modifier.testTag("add-to-list-sheet")) {
+    GuardedModalBottomSheet(onDismissRequest = onDismiss, modifier = Modifier.testTag("add-to-list-sheet")) {
         Text(stringResource(R.string.profile_menu_lists), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
         val rows = state.rows
         if (rows == null) {

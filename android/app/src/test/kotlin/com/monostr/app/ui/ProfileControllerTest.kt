@@ -311,8 +311,8 @@ class ProfileControllerTest {
         c.close(); advanceUntilIdle()
     }
 
-    private fun TestScope.followController(follows: FakeFollows, self: String = "a".repeat(64), scope: CoroutineScope = eager()) =
-        ProfileController(bob, self, FakeFeed(), FakeProfiles(), FakePublish(), decorations(), BookmarkActions(FakeBookmarks(), scope), FakeCounts(), FakeAuthorRelays(), { false }, scope, refreshMs = 1_000, follows = follows)
+    private fun TestScope.followController(follows: FakeFollows, self: String = "a".repeat(64), scope: CoroutineScope = eager(), sendGate: com.monostr.app.net.SendGate = com.monostr.app.net.SendGate.OPEN) =
+        ProfileController(bob, self, FakeFeed(), FakeProfiles(), FakePublish(), decorations(), BookmarkActions(FakeBookmarks(), scope), FakeCounts(), FakeAuthorRelays(), { false }, scope, refreshMs = 1_000, follows = follows, sendGate = sendGate)
 
     @Test
     fun `the follow state comes from the repository and follow writes once while busy`() = runTest {
@@ -408,5 +408,21 @@ class ProfileControllerTest {
         second.start(); runCurrent()
         assertEquals(listOf(y.id), second.state.value.notes.map { it.note.id })
         second.close()
+    }
+
+    @Test
+    fun `an unfollow confirmed after Tor went refuses, with the reason`() = runTest {
+        val follows = FakeFollows(mapOf(bob to FollowState.Following))
+        val send = SendRig()
+        val c = followController(follows, sendGate = send.send)
+        c.start(); runCurrent()
+        c.askUnfollow()
+        send.connected.value = false
+        c.unfollow(); runCurrent()
+        assertTrue(follows.calls.isEmpty(), "calls: ${follows.calls}")
+        assertEquals(false, c.state.value.confirmUnfollow)
+        assertEquals(false, c.state.value.followBusy)
+        assertEquals(com.monostr.app.ui.common.uiText(com.monostr.app.R.string.send_blocked_tor), c.state.value.message?.text)
+        c.close()
     }
 }

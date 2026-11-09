@@ -9,8 +9,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -101,7 +99,7 @@ private fun NoteMenuButton(note: NoteUi, shown: Note, authorName: String, menu: 
         IconButton(onClick = { open = true }, modifier = Modifier.testTag("note-menu-${shown.id.take(8)}")) {
             Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.note_menu), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        GuardedDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.note_menu_copy_link)) },
                 onClick = { open = false; scope.launch { runCatching { menu.link(shown) }.onSuccess(::copy) } },
@@ -132,7 +130,7 @@ private fun NoteMenuButton(note: NoteUi, shown: Note, authorName: String, menu: 
         }
     }
     if (confirm) {
-        AlertDialog(
+        GuardedAlertDialog(
             onDismissRequest = { confirm = false },
             title = { Text(stringResource(R.string.note_delete_title)) },
             text = {

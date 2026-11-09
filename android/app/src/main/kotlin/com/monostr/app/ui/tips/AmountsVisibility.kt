@@ -1,5 +1,6 @@
 package com.monostr.app.ui.tips
 
+import com.monostr.app.net.SendGate
 import com.monostr.app.data.MoneroSetup
 import com.monostr.app.data.TipSettingsStore
 import com.monostr.app.data.WatcherGateway
@@ -18,6 +19,8 @@ class AmountsVisibility(
     private val tips: TipsRepository,
     private val gateway: WatcherGateway,
     private val settings: TipSettingsStore,
+    /** Whether anything may leave now; open only in tests. */
+    private val sendGate: SendGate = SendGate.OPEN,
 ) {
     /** Whether the setup's watcher speaks protocol 0.5; null when it cannot be asked right now. */
     suspend fun supported(setup: MoneroSetup): Boolean? {
@@ -41,6 +44,7 @@ class AmountsVisibility(
      * address does not parse, or publishing failed or reached no relay: then nothing is stored.
      */
     suspend fun setHidden(hidden: Boolean): Boolean {
+        if (!sendGate.canSend.value) return false
         val setup = settings.setup.first() ?: return false
         try {
             if (!tips.publishPaymentInfo(Address.parse(setup.address), setup.watcher(), hidden).sentToAny) return false

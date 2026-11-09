@@ -55,7 +55,7 @@ interface UiSettingsStore {
     val mediaServer: Flow<String>
     /** Spec 11.4 §3: the hue (0 ≤ h < 360) of [Accent.CUSTOM]; an invalid stored value falls back to the default. */
     val customHue: Flow<Float>
-    /** NIP-89: notes, likes and reposts carry a `client` tag, so other apps show "via monostr"; off by default (0.18). */
+    /** NIP-89: notes, likes and reposts carry a `client` tag, so other apps show "via Monostr"; off by default (0.18). */
     val clientTag: Flow<Boolean>
     /** The quick reactions of the long press on the heart, in the user's order; the default until edited. */
     val quickReactions: Flow<List<String>>
@@ -65,6 +65,9 @@ interface UiSettingsStore {
     /** Notes below this NIP-13 difficulty are hidden, except from follows; 0 = off (GitHub #4). */
     val powFilterBits: Flow<Int>
     suspend fun setPowFilterBits(bits: Int)
+    /** Open web links without asking; off by default, the site sees the IP. Ignored while Tor is on. */
+    val linkAlwaysOpen: Flow<Boolean>
+    suspend fun setLinkAlwaysOpen(value: Boolean)
     suspend fun setThemeMode(mode: ThemeMode)
     suspend fun setAccent(accent: Accent)
     suspend fun setBlurSensitive(on: Boolean)
@@ -88,6 +91,8 @@ class PrefsUiSettingsStore(private val store: DataStore<Preferences>) : UiSettin
     override val gifMode: Flow<GifMode> = data.map { p -> GifMode.entries.firstOrNull { it.name == p[GIF_MODE] } ?: GifMode.AUTO }
     override suspend fun setGifMode(mode: GifMode) { store.edit { it[GIF_MODE] = mode.name } }
     override val linkPreviews: Flow<Boolean> = data.map { it[LINK_PREVIEWS] ?: false }
+    override val linkAlwaysOpen: Flow<Boolean> = data.map { it[LINK_ALWAYS_OPEN] ?: false }
+    override suspend fun setLinkAlwaysOpen(value: Boolean) { store.edit { it[LINK_ALWAYS_OPEN] = value } }
     override val authorRelays: Flow<Boolean> = data.map { it[AUTHOR_RELAYS] ?: true }
     override val mediaServer: Flow<String> = data.map { it[MEDIA_SERVER]?.takeIf { v -> v.isNotBlank() } ?: MediaServer.DEFAULT }
     override val clientTag: Flow<Boolean> = data.map { it[CLIENT_TAG] ?: false }
@@ -123,6 +128,7 @@ class PrefsUiSettingsStore(private val store: DataStore<Preferences>) : UiSettin
         val MEDIA_ON_TAP = booleanPreferencesKey("ui.media_on_tap")
         val GIF_MODE = stringPreferencesKey("ui.gif_mode")
         val LINK_PREVIEWS = booleanPreferencesKey("ui.link_previews")
+        val LINK_ALWAYS_OPEN = booleanPreferencesKey("ui.link_always_open")
         val AUTHOR_RELAYS = booleanPreferencesKey("ui.author_relays")
         val MEDIA_SERVER = stringPreferencesKey("ui.media_server")
     }

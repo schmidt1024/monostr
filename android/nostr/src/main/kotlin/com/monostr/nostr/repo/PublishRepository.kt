@@ -12,6 +12,7 @@ import com.monostr.nostr.model.NoteAttachment
 import com.monostr.nostr.model.RelayEntry
 import com.monostr.nostr.model.RelayMode
 import com.monostr.nostr.model.RelayModes
+import com.monostr.tips.RelayHosts
 import rust.nostr.sdk.EventBuilder
 import rust.nostr.sdk.EventId
 import rust.nostr.sdk.Kind
@@ -115,7 +116,7 @@ class NostrPublishRepository(
     /** First normal relay that is connected; rust-nostr keeps no "seen on" relays, so connected stands in for "knows the note". */
     private suspend fun relayHint(): String? {
         val connected = engine.connectedNormalRelayUrls()
-        return engine.relayUrls().firstOrNull { it in connected }
+        return engine.relayUrls().firstOrNull { it in connected && !RelayHosts.isOnionHost(it) }
     }
 
     override suspend fun profile(json: String): PublishResult = engine.signAndPublish(EventBuilder(Kind(0u), json))
@@ -169,16 +170,18 @@ class NostrPublishRepository(
 
     override suspend fun noteLink(note: Note): String {
         val connected = engine.connectedNormalRelayUrls()
-        val hints = engine.relayUrls().filter { it in connected }.take(2)
+        val hints = engine.relayUrls().filter { it in connected && !RelayHosts.isOnionHost(it) }.take(2)
         return Nip19Event(EventId.parse(note.id), PublicKey.parse(note.author), Kind(1u), hints.map { RelayUrl.parse(it) }).toNostrUri()
     }
 
     override suspend fun resend(eventId: String): PublishResult = engine.resend(eventId)
 
     // signAndSend (store first) on purpose: the onboarding / offline-resend flow of Plan 5 relies on it
-    override suspend fun relayList(entries: List<RelayEntry>): PublishResult = engine.signAndSend(relayListBuilder(entries))
+    override suspend fun relayList(entries: List<RelayEntry>): PublishResult =
+        if (!publishable(entries)) NOTHING_PUBLIC else engine.signAndSend(relayListBuilder(entries))
 
     override suspend fun publishRelayList(entries: List<RelayEntry>): PublishResult {
+        if (!publishable(entries)) return NOTHING_PUBLIC
         val own = engine.signAndPublish(relayListBuilder(entries))
         val index = indexRelays.map { it.trim().trimEnd('/') } - engine.relayUrls().toSet()
         if (!own.sentToAny || index.isEmpty()) return own
@@ -187,15 +190,36 @@ class NostrPublishRepository(
         return PublishResult(own.eventId, own.kind, (own.successRelays + more.successRelays).distinct(), own.failedRelays + more.failedRelays)
     }
 
-    override suspend fun initialRelayList(relays: List<String>): PublishResult = engine.signAndPublish(relayListBuilder(relays.map { RelayEntry(it, RelayMode.BOTH) }))
+    override suspend fun initialRelayList(relays: List<String>): PublishResult {
+        val entries = relays.map { RelayEntry(it, RelayMode.BOTH) }
+        return if (!publishable(entries)) NOTHING_PUBLIC else engine.signAndPublish(relayListBuilder(entries))
+    }
 
     private fun relayListBuilder(entries: List<RelayEntry>): EventBuilder =
-        EventBuilder(Kind(10002u), "").tags(entries.map { Tag.parse(RelayModes.tag(it)) })
+        EventBuilder(Kind(10002u), "").tags(relayListTags(entries).map { Tag.parse(it) })
+
 
     // signAndPublish: stored only after a relay OK, so a refused list never gets adopted by DmSync (spec 11)
     override suspend fun dmRelayList(relays: List<String>): PublishResult =
-        engine.signAndPublish(EventBuilder(Kind(10050u), "").tags(relays.map { Tag.parse(listOf("relay", it.trim().trimEnd('/'))) }))
+        if (dmRelayTags(relays).isEmpty()) NOTHING_PUBLIC else engine.signAndPublish(EventBuilder(Kind(10050u), "").tags(dmRelayTags(relays).map { Tag.parse(it) }))
 }
+
+/** What a list holding only hidden services publishes: nothing, and certainly not an empty list that would wipe the user's real one. */
+private val NOTHING_PUBLIC = PublishResult("", 0, emptyList(), mapOf("*" to "no public relay to publish"))
+
+/** The `r` tags of a kind 10002 list: a `.onion` relay is not in it, it is the user's own and for Tor only (spec 2026-11-06 Tor 7.4). */
+internal fun relayListTags(entries: List<RelayEntry>): List<List<String>> =
+    entries.filterNot { RelayHosts.isOnionHost(it.url) }.map { RelayModes.tag(it) }
+
+/** What is left of [entries] once onion is out still has a relay to read from and one to write to; a list without either is not published. */
+internal fun publishable(entries: List<RelayEntry>): Boolean {
+    val left = entries.filterNot { RelayHosts.isOnionHost(it.url) }
+    return RelayModes.valid(left.map { it.url }, left.associate { it.url to it.mode })
+}
+
+/** The `relay` tags of a kind 10050 list, without hidden services (see [relayListTags]). */
+internal fun dmRelayTags(relays: List<String>): List<List<String>> =
+    relays.filterNot { RelayHosts.isOnionHost(it) }.map { listOf("relay", it.trim().trimEnd('/')) }
 
 private const val ARTICLE_KIND = 30023
 private const val COMMENT_KIND = 1111

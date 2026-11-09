@@ -59,9 +59,12 @@ class AddressCardTest {
     private val entry get() = EntryPointAccessors.fromApplication(ctx, NostrSessionEntryPoint::class.java)
     private fun nodes(tag: String) = rule.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes()
 
+    @org.junit.Before fun openLinksAtOnce() { runBlocking { entry.uiSettings().setLinkAlwaysOpen(true) } }
+
     @After fun restore() {
         runCatching { Intents.release() }
         runBlocking {
+            runCatching { entry.uiSettings().setLinkAlwaysOpen(false) }
             runCatching { entry.session().applyRelays(PrefsRelayStore.DEFAULT_RELAYS) }
             runCatching { entry.session().logout() }
         }

@@ -188,7 +188,7 @@ func runPersonal(logger *slog.Logger) error {
 	defer pollTicker.Stop()
 	statusTicker := time.NewTicker(statusInterval)
 	defer statusTicker.Stop()
-	logger.Info("personal watcher running; paste the nprofile into monostr", "nprofile", nprofile)
+	logger.Info("personal watcher running; paste the nprofile into Monostr", "nprofile", nprofile)
 	for {
 		select {
 		case <-ctx.Done():

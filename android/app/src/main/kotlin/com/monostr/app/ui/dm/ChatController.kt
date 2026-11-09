@@ -1,5 +1,6 @@
 package com.monostr.app.ui.dm
 
+import com.monostr.app.net.SendGate
 import kotlinx.coroutines.flow.map
 import com.monostr.app.ui.common.MentionResolver
 import com.monostr.app.R
@@ -56,6 +57,8 @@ class ChatController(
     private val mentions: MentionResolver = MentionResolver(profiles, scope),
     /** Where rows become bubbles (NoteMedia.parse per message): off the main thread (spec perf2 D5). Tests pass theirs. */
     private val work: CoroutineDispatcher = Dispatchers.Default,
+    /** Only for the reason shown: `DmSync` is the one that refuses. Open only in tests. */
+    private val sendGate: SendGate = SendGate.OPEN,
 ) {
     val names: StateFlow<Map<String, String>> get() = mentions.names
     private val sendFn = send
@@ -161,7 +164,7 @@ class ChatController(
     fun clearMessage() = _state.update { it.copy(message = null) }
 
     private fun report(status: DmStatus) {
-        if (status == DmStatus.FAILED) _state.update { it.copy(message = uiText(R.string.chat_error_send)) }
+        if (status == DmStatus.FAILED) _state.update { it.copy(message = uiText(if (sendGate.canSend.value) R.string.chat_error_send else R.string.send_blocked_tor)) }
     }
 
     /** The author is for display only: own bubbles carry [me], the others [peer]. */

@@ -25,6 +25,9 @@ class RefreshGate<K : Any>(
     /** Epoch seconds when the last refresh of [key] finished in this process; null before one. */
     fun fetchedAt(key: K): Long? = doneAt[key]
 
+    /** Every key is due again; a refresh running now stamps its key when it ends. */
+    fun forget() = doneAt.clear()
+
     /** A refresh of [key] finished less than [ttlSeconds] ago. */
     fun isFresh(key: K): Boolean = doneAt[key]?.let { now() - it < ttlSeconds } == true
 

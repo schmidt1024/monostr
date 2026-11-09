@@ -1,6 +1,7 @@
 package com.monostr.app.ui.common
 
 import com.monostr.app.ui.tips.LocalAmountUnit
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
@@ -43,7 +44,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.minimumInteractiveComponentSize
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -73,6 +73,9 @@ import com.monostr.app.ui.theme.MonostrFonts
 import com.monostr.nostr.model.Note
 import androidx.compose.ui.unit.Dp
 
+/** False while Tor is on and not connected (spec 2026-11-06 5.3); read where an action sends by itself, set once in `MainActivity`. */
+val LocalCanSend = compositionLocalOf { true }
+
 /**
  * Reply · repost · like · bookmark · tip (+ tipper chip) of a note card (spec 4.2); shared by the list card
  * and the detail card (spec 11.5). [spread] distributes the icons over the width (the detail card, like X's
@@ -94,6 +97,8 @@ fun NoteActionRow(
     /** Launch feedback: a long press on the heart picks an emoji reaction (NIP-25). */
     onReact: (String) -> Unit = {},
 ) {
+    // reply and tip stay open: the composer keeps a draft, the tip sheet says why it cannot send
+    val canSend = LocalCanSend.current
     var repostMenu by remember { mutableStateOf(false) }
     var reactMenu by remember { mutableStateOf(false) }
     // one node for the callers: the row, the pending-tip line below it, and the sheet
@@ -112,14 +117,14 @@ fun NoteActionRow(
             ActionIcon(
                 icon = if (note.reposted) Icons.Filled.RepeatOn else Icons.Outlined.Repeat, description = stringResource(R.string.note_repost), selected = note.reposted,
                 tint = if (note.reposted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                onClick = { repostMenu = true }, tag = "note-repost-${shown.id.take(8)}", count = note.counts?.reposts?.takeIf { showCounts },
+                onClick = { repostMenu = true }, tag = "note-repost-${shown.id.take(8)}", enabled = canSend, count = note.counts?.reposts?.takeIf { showCounts },
             )
             // the own reaction shows in place of the heart when it is an emoji; "+" is the filled heart
             val emoji = if (note.liked) Reactions.shown(note.reaction) else null
             ActionIcon(
                 icon = if (note.liked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder, description = stringResource(R.string.note_like), selected = note.liked,
                 tint = if (note.liked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                onClick = onLike, tag = "note-like-${shown.id.take(8)}", count = note.counts?.likes?.takeIf { showCounts },
+                onClick = onLike, tag = "note-like-${shown.id.take(8)}", enabled = canSend, count = note.counts?.likes?.takeIf { showCounts },
                 onLongClick = { if (!note.liked) reactMenu = true }, longClickLabel = stringResource(R.string.note_react), emoji = emoji,
                 stateDescription = emoji?.let { stringResource(R.string.note_reacted_with, it) },
             )
@@ -129,7 +134,7 @@ fun NoteActionRow(
                 icon = if (note.bookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder, description = stringResource(R.string.note_bookmark),
                 selected = note.bookmarked, stateDescription = if (note.bookmarked) bookmarkedLabel else notBookmarkedLabel,
                 tint = if (note.bookmarked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                onClick = onBookmark, tag = "note-bookmark-${shown.id.take(8)}", enabled = note.bookmarkEnabled,
+                onClick = onBookmark, tag = "note-bookmark-${shown.id.take(8)}", enabled = note.bookmarkEnabled && canSend,
             )
             // spec 5.5: the tip is its own action; the pending state also shows as text below
             val pendingLabel = stringResource(R.string.note_tip_pending)
@@ -248,7 +253,7 @@ private fun ActionIcon(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun RepostSheet(reposted: Boolean, onRepost: () -> Unit, onQuote: () -> Unit, onDismiss: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss, modifier = Modifier.testTag("repost-sheet")) {
+    GuardedModalBottomSheet(onDismissRequest = onDismiss, modifier = Modifier.testTag("repost-sheet")) {
         ListItem(
             headlineContent = { Text(stringResource(if (reposted) R.string.action_undo_repost else R.string.note_repost)) },
             leadingContent = { Icon(Icons.Outlined.Repeat, contentDescription = null) },
@@ -341,7 +346,7 @@ object Reactions {
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun ReactionSheet(onPick: (String) -> Unit, onDismiss: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss, modifier = Modifier.testTag("reaction-sheet")) {
+    GuardedModalBottomSheet(onDismissRequest = onDismiss, modifier = Modifier.testTag("reaction-sheet")) {
         Column(Modifier.padding(horizontal = 16.dp)) {
             Text(stringResource(R.string.note_react), style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(12.dp))

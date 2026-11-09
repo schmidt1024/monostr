@@ -1,12 +1,12 @@
 package com.monostr.app.ui.tips
 
+import com.monostr.app.ui.common.GuardedAlertDialog
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -36,7 +36,7 @@ fun TippersDialog(note: Note, load: suspend (Note) -> List<TipperUi>, onDismiss:
             emptyList()
         }
     }
-    AlertDialog(
+    GuardedAlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) } },
         title = { Text(stringResource(R.string.tippers_title)) },

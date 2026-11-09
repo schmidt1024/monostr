@@ -1,5 +1,6 @@
 package com.monostr.app.ui.common
 
+import com.monostr.app.net.SendGate
 import com.monostr.app.R
 import com.monostr.app.ui.feed.NoteUi
 import com.monostr.app.ui.feed.target
@@ -22,6 +23,8 @@ class BookmarkActions(
      * only updates the screen's state flow.
      */
     private val background: CoroutineScope? = null,
+    /** Whether anything may leave now; open only in tests. */
+    private val sendGate: SendGate = SendGate.OPEN,
 ) {
     /** Emits on every change of the bookmark list; controllers re-flag their notes on it. */
     val changes: Flow<BookmarksState> = bookmarks.state
@@ -56,6 +59,8 @@ class BookmarkActions(
     }
 
     private fun run(write: suspend () -> BookmarkOutcome, onResult: (UiText?) -> Unit) {
+        // before the repository: the private list's write has the signer encrypt first
+        if (!sendGate.canSend.value) return onResult(uiText(R.string.send_blocked_tor))
         (background ?: scope).launch {
             val message = try {
                 when (write()) {

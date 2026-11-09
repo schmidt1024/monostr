@@ -286,4 +286,102 @@ class ComposeDraftsTest {
         assertEquals(text, c.state.value.restoredText)
         assertTrue(c.state.value.mentionNames.isEmpty())
     }
+
+    @Test
+    fun `compose keeps the draft and refuses`() = runTest {
+        val drafts = FakeDraftStore()
+        val publish = FakePublish()
+        val send = SendRig(connected = false)
+        val c = ComposeController(null, FakeThreads(emptyMap()), publish, eager(), uploader = FakeMediaUploader(), drafts = drafts, account = me, background = eager(), now = { 5_000L }, sendGate = send.send)
+        c.start()
+        advanceUntilIdle()
+        c.onTextChange("through Tor please", 18)
+        c.saveDraftNow()
+        advanceUntilIdle()
+        c.send("through Tor please")
+        advanceUntilIdle()
+        assertTrue(publish.calls.isEmpty())
+        assertEquals(com.monostr.app.ui.common.uiText(com.monostr.app.R.string.send_blocked_tor), c.state.value.error)
+        assertTrue(!c.state.value.sending && !c.state.value.done && !c.state.value.pendingResend)
+        assertEquals("through Tor please", drafts.stored(me, DraftTargets.NOTE)!!.text)
+        // typing on is saved as before, and leaving keeps it
+        c.onTextChange("through Tor please!", 19)
+        c.discardUnsent()
+        advanceUntilIdle()
+        assertEquals("through Tor please!", drafts.stored(me, DraftTargets.NOTE)!!.text)
+        // nothing went out when Tor came back
+        send.connected.value = true
+        advanceUntilIdle()
+        assertTrue(publish.calls.isEmpty())
+    }
+
+    @Test
+    fun `Tor going while the note is under way keeps the draft, gives the reason, and a second tap sends the same event`() = runTest {
+        val drafts = FakeDraftStore()
+        val publish = FakePublish(relaysOk = false)
+        val send = SendRig()
+        val c = ComposeController(null, FakeThreads(emptyMap()), publish, eager(), uploader = FakeMediaUploader(), drafts = drafts, account = me, background = eager(), now = { 5_000L }, sendGate = send.send)
+        c.start()
+        advanceUntilIdle()
+        c.onTextChange("through Tor please", 18)
+        val inFlight = kotlinx.coroutines.CompletableDeferred<Unit>()
+        publish.gate = inFlight
+        c.send("through Tor please")
+        send.connected.value = false
+        inFlight.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(com.monostr.app.ui.common.uiText(com.monostr.app.R.string.send_blocked_tor), c.state.value.error)
+        assertTrue(!c.state.value.sending && !c.state.value.done)
+        assertEquals("through Tor please", drafts.stored(me, DraftTargets.NOTE)!!.text, "the text is not left only in a stored unsent event")
+        assertEquals(1, publish.calls.size)
+
+        // a tap while still blocked changes nothing
+        c.send("through Tor please")
+        advanceUntilIdle()
+        assertEquals(1, publish.calls.size)
+
+        // Tor back: the same event, no second note
+        send.connected.value = true
+        publish.relaysOk = true
+        c.send("through Tor please")
+        advanceUntilIdle()
+        assertEquals(2, publish.calls.size)
+        assertTrue(publish.calls.last().startsWith("resend:"), "calls: ${publish.calls}")
+        assertTrue(c.state.value.done)
+        assertEquals(null, drafts.stored(me, DraftTargets.NOTE))
+    }
+
+    @Test
+    fun `leaving after Tor went keeps the draft`() = runTest {
+        val drafts = FakeDraftStore()
+        val publish = FakePublish(relaysOk = false)
+        val send = SendRig()
+        val c = ComposeController(null, FakeThreads(emptyMap()), publish, eager(), uploader = FakeMediaUploader(), drafts = drafts, account = me, background = eager(), now = { 5_000L }, sendGate = send.send)
+        c.start()
+        advanceUntilIdle()
+        c.onTextChange("keep me", 7)
+        val inFlight = kotlinx.coroutines.CompletableDeferred<Unit>()
+        publish.gate = inFlight
+        c.send("keep me")
+        send.connected.value = false
+        inFlight.complete(Unit)
+        c.discardUnsent()
+        advanceUntilIdle()
+        assertEquals("keep me", drafts.stored(me, DraftTargets.NOTE)!!.text)
+    }
+
+    @Test
+    fun `with canSend still true a publish no relay took is plain offline as before`() = runTest {
+        val drafts = FakeDraftStore()
+        val publish = FakePublish(relaysOk = false)
+        val c = ComposeController(null, FakeThreads(emptyMap()), publish, eager(), uploader = FakeMediaUploader(), drafts = drafts, account = me, background = eager(), now = { 5_000L }, sendGate = SendRig().send)
+        c.start()
+        advanceUntilIdle()
+        c.onTextChange("offline", 7)
+        c.send("offline")
+        advanceUntilIdle()
+        assertEquals(com.monostr.app.ui.common.uiText(com.monostr.app.R.string.compose_notice_offline), c.state.value.error)
+        assertTrue(c.state.value.pendingResend)
+        assertEquals(null, drafts.stored(me, DraftTargets.NOTE))
+    }
 }

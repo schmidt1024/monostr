@@ -1,5 +1,6 @@
 package com.monostr.app.ui.common
 
+import com.monostr.app.net.SendGate
 import com.monostr.nostr.repo.LIKE
 import com.monostr.app.R
 import com.monostr.app.ui.feed.NoteUi
@@ -33,6 +34,8 @@ class NoteActions(
     private val afterDelete: suspend (Note) -> UiText? = { null },
     /** The session's own likes and reposts (stored kind 7/6 plus marks set meanwhile); a fresh one in tests. */
     private val own: OwnReactions = MemoryOwnReactions(),
+    /** Whether anything may leave now; open only in tests. */
+    private val sendGate: SendGate = SendGate.OPEN,
 ) {
     private val _changes = MutableStateFlow(0)
 
@@ -64,6 +67,7 @@ class NoteActions(
      * the events. Nothing stored to name: the mark just goes. A refusal or failure puts the mark back.
      */
     private fun withdraw(target: Note, kind: Int, onResult: (UiText) -> Unit) {
+        if (!sendGate.canSend.value) return onResult(uiText(R.string.send_blocked_tor))
         val previous = own.reactions.value[target.id] ?: LIKE
         own.remove(kind, target.id)
         counts?.bump(target.id, kind, -1)
@@ -109,6 +113,10 @@ class NoteActions(
      * The texts go to [NoteDeletions.messages], not to the calling screen, which may be gone by then.
      */
     fun delete(note: Note) {
+        if (!sendGate.canSend.value) {
+            deletions.post(uiText(R.string.send_blocked_tor))
+            return
+        }
         if (!deletions.begin(note.id)) return
         _changes.update { it + 1 }
         (deletions.background ?: scope).launch {
@@ -139,6 +147,7 @@ class NoteActions(
 
     // once only: a note the user liked or reposted already gets no second event
     private fun act(target: Note, kind: Int, onResult: (UiText) -> Unit, content: String = LIKE, block: suspend () -> PublishResult) {
+        if (!sendGate.canSend.value) return onResult(uiText(R.string.send_blocked_tor))
         if (!own.add(kind, target.id, content)) return
         counts?.bump(target.id, kind, +1)
         scope.launch {

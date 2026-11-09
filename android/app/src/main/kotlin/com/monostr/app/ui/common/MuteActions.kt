@@ -1,5 +1,6 @@
 package com.monostr.app.ui.common
 
+import com.monostr.app.net.SendGate
 import com.monostr.app.R
 import com.monostr.nostr.model.Profile
 import com.monostr.nostr.repo.ListOutcome
@@ -23,11 +24,15 @@ class MuteActions(
      * only updates the screen's state flow.
      */
     private val background: CoroutineScope? = null,
+    /** Whether anything may leave now; open only in tests. */
+    private val sendGate: SendGate = SendGate.OPEN,
 ) {
     private val writes: CoroutineScope get() = background ?: scope
 
     /** [onResult] gets "Name muted" and true on success (the screen offers "Undo"), a failure text and false otherwise. */
     fun mute(pubkey: String, onResult: (UiText, Boolean) -> Unit) {
+        // before the repository: the private list's write has the signer encrypt first
+        if (!sendGate.canSend.value) return onResult(uiText(R.string.send_blocked_tor), false)
         writes.launch {
             // read before the write, so the confirmation (and its "Undo") shows as soon as the write returns
             val name = name(pubkey)
@@ -55,6 +60,7 @@ class MuteActions(
 
     /** Success is silent ([onResult] gets null). */
     fun unmute(pubkey: String, onResult: (UiText?) -> Unit) {
+        if (!sendGate.canSend.value) return onResult(uiText(R.string.send_blocked_tor))
         writes.launch {
             val message = try {
                 mute.unmute(pubkey).let { if (it == ListOutcome.Ok) null else failure(it) }

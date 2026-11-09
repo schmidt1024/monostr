@@ -1,0 +1,5 @@
+- Tor integrato, disattivato di default: se attivo, relay, immagini, caricamenti e il watcher vedono Tor invece del tuo indirizzo IP; stato nella barra in alto
+- Relay onion nella tua lista di relay con Tor attivo
+- I link web chiedono prima di aprirsi; con Tor: Apri in Tor Browser o Copia link
+- Il nome ora si scrive Monostr
+- Correzioni

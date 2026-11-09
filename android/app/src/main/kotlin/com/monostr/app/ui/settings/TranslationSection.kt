@@ -34,6 +34,7 @@ import com.monostr.app.translate.TranslationMode
 /** Sections [SettingsScreen] can be opened at (the route's `section` argument). */
 object SettingsSection {
     const val TRANSLATION = "translation"
+    const val PRIVACY = "privacy"
 }
 
 /**

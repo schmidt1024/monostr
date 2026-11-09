@@ -1171,4 +1171,60 @@ class DmSyncTest {
         assertEquals(subs + 1, r.repo.subscribeCalls.size)
         assertEquals(listOf(relay), r.repo.fetchCalls.last().first)
     }
+
+    private inner class GatedRig(scope: CoroutineScope, own: OwnDmRelays, connected: Boolean) {
+        val send = com.monostr.app.ui.SendRig(connected = connected)
+        val repo = FakeDmRepository()
+        val relays = FakeDmRelays(own, emptyMap())
+        val store = InMemoryDmStore()
+        val publish = FakePublish()
+        val settings = FakeDmSettings(listOf(relay))
+        val dms = DmSync(
+            repo, relays, store, settings, publish, attach = { it }, detach = {},
+            closed = MutableSharedFlow(), scope = scope, loadWrap = { null }, now = { 10_000_000L }, sendGate = send.send,
+        )
+    }
+
+    @Test
+    fun `DM stays failed and does not retry itself`() = runTest {
+        val r = GatedRig(eager(), OwnDmRelays.None, connected = false)
+        assertEquals(DmStatus.FAILED, r.dms.send(bob, "hi"))
+        val row = r.store.messages(bob).first().single()
+        assertEquals(DmStatus.FAILED, row.status)
+        assertTrue(row.outgoing)
+        assertEquals("hi", row.content)
+        assertTrue(r.repo.sent.isEmpty(), "nothing wrapped, nothing sent")
+
+        // a tap on retry while still blocked changes nothing, not even the row's id
+        assertEquals(DmStatus.FAILED, r.dms.retry(row.rumorId))
+        assertEquals(listOf(row), r.store.messages(bob).first())
+
+        // Connected returns: nothing moves on its own
+        r.send.connected.value = true
+        testScheduler.advanceUntilIdle()
+        assertTrue(r.repo.sent.isEmpty())
+        assertEquals(DmStatus.FAILED, r.store.messages(bob).first().single().status)
+
+        // the user's own tap sends it
+        r.repo.sendResult = DmSendResult("2".repeat(64), 950, sentToPeer = true, sentToSelf = true)
+        assertEquals(DmStatus.SENT, r.dms.retry(row.rumorId))
+        assertEquals(1, r.repo.sent.size)
+    }
+
+    @Test
+    fun `the own list is neither looked up nor published while canSend is false`() = runTest {
+        val r = GatedRig(eager(), OwnDmRelays.None, connected = false)
+        r.dms.adoptOwnList()
+        testScheduler.advanceUntilIdle()
+        assertEquals(0, r.relays.ownCalls, "not looked up")
+        assertTrue(r.publish.calls.isEmpty())
+        assertFalse(r.settings.listAdopted.first())
+        // nor later on its own; the next time the user deals with messages it runs
+        r.send.connected.value = true
+        testScheduler.advanceUntilIdle()
+        assertTrue(r.publish.calls.isEmpty())
+        r.dms.adoptOwnList()
+        testScheduler.advanceUntilIdle()
+        assertEquals(1, r.publish.calls.size)
+    }
 }

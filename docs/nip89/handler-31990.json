@@ -1,6 +1,6 @@
 {
   "kind": 31990,
-  "content": "{\"name\":\"monostr\",\"display_name\":\"monostr\",\"about\":\"Android Nostr client with Monero tips instead of zaps. No Lightning, no custodian.\",\"picture\":\"https://monostr.com/monostr-icon.png\",\"website\":\"https://monostr.com\",\"nip05\":\"\"}",
+  "content": "{\"name\":\"Monostr\",\"display_name\":\"Monostr\",\"about\":\"Android Nostr client with Monero tips instead of zaps. No Lightning, no custodian.\",\"picture\":\"https://monostr.com/monostr-icon.png\",\"website\":\"https://monostr.com\",\"nip05\":\"\"}",
   "tags": [
     ["d", "monostr"],
     ["k", "1"],

@@ -129,7 +129,9 @@ class SessionRelays(
         run.removeRelays(gone)
         run.applyRelayModes(chosen)
         run.addRelays(added)
-        if (gone.isNotEmpty() || added.isNotEmpty()) {
+        // a relay the engine would not take (a hidden service in Direct) joined nothing: no reconnect, no DM restart for it
+        val joined = run.relayUrls().toSet() != current.toSet() - gone.toSet()
+        if (gone.isNotEmpty() || joined) {
             run.connect()
             run.restartDms()
         }

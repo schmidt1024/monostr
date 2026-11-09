@@ -21,10 +21,12 @@ val detectorOtherLanguages = listOf(
 )
 
 android {
-    namespace = "com.monostr.app"; compileSdk = 37
+    namespace = "com.monostr.app"
+    // tor-android 0.4.9.14's AAR metadata requires compileSdk 37.1 (targetSdk is untouched)
+    compileSdk { version = release(37) { minorApiLevel = 1 } }
     defaultConfig {
         applicationId = "com.monostr.app"; minSdk = 26; targetSdk = 36; versionCode = appVersionCode; versionName = appVersionName
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner = "com.monostr.app.MonostrTestRunner"
         buildConfigField("String", "SUPPORT_ADDRESS", "\"${appValue("MONOSTR_SUPPORT_ADDRESS")}\"")
         buildConfigField("String", "FEEDBACK_NPUB", "\"${appValue("MONOSTR_FEEDBACK_NPUB")}\"")
         buildConfigField("String", "REPO_URL", "\"${appValue("MONOSTR_REPO_URL")}\"")
@@ -62,6 +64,8 @@ android {
     buildFeatures { compose = true; buildConfig = true }
     testOptions.unitTests.all { it.useJUnitPlatform() }
     packaging {
+        // spec 2026-11-06 Tor 7.5: libtor.so is 14.4 MB raw, compressed in the APK and extracted at install
+        jniLibs.useLegacyPackaging = true
         resources.excludes += setOf(
             "META-INF/LICENSE.md", "META-INF/LICENSE-notice.md",
             // BouncyCastle is used for Keccak only (:monero): its post-quantum tables and X.509 texts were 1.3 MB of the APK
@@ -110,9 +114,11 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.commonmark); implementation(libs.commonmark.gfm.tables); implementation(libs.commonmark.gfm.strikethrough)
     implementation(libs.work.runtime); implementation(libs.core.ktx); implementation(libs.zxing.core); implementation(libs.language.detector) { exclude(group = "com.intellij", module = "annotations") }; implementation(libs.core.splashscreen)
-    implementation(libs.media3.exoplayer); implementation(libs.media3.ui)
+    implementation(libs.media3.exoplayer); implementation(libs.media3.ui); implementation(libs.media3.datasource.okhttp)
     // spec 2026-10-27 video §4: a picked video is encoded on the device
     implementation(libs.media3.transformer); implementation(libs.media3.effect)
+    // spec 2026-11-06 Tor 7.1: embedded C tor; TorService is only bound by the app when the switch is on
+    implementation(libs.tor.android)
     testImplementation(libs.rustnostr.jvm); testImplementation(libs.junit.jupiter); testImplementation(libs.kotlinx.coroutines.test); testImplementation(libs.turbine); testRuntimeOnly(libs.junit.platform.launcher)
     testImplementation(libs.okhttp.mockwebserver)
     androidTestImplementation(platform(libs.compose.bom)); androidTestImplementation(libs.compose.ui.test.junit4); androidTestImplementation(libs.androidx.test.runner); androidTestImplementation(libs.androidx.test.ext.junit); androidTestImplementation(libs.espresso.core)

@@ -2,7 +2,25 @@ package com.monostr.app.data.linkpreview
 
 import java.net.Inet4Address
 import java.net.Inet6Address
+import com.monostr.tips.RelayHosts
 import java.net.InetAddress
+
+/**
+ * Behind a SOCKS proxy the proxy resolves names and no lookup may happen here (Tor spec 4), so only what the host says about
+ * itself can be judged: literals by [policy], local-only names and anything that is no public name by their form. Numeric forms
+ * other than four plain decimal octets (127.1, 2130706433, 0x7f.0.0.1) are refused, as they mean different things to different
+ * resolvers. A public name that points at a LAN address is left to the proxy: Tor's exits do not connect to private addresses.
+ * [host] as [okhttp3.HttpUrl.host] gives it. Nothing here resolves.
+ */
+fun proxiedHostAllowed(host: String, policy: AddressPolicy): Boolean {
+    val name = host.lowercase().trimEnd('.')
+    if (':' in name) return runCatching { InetAddress.getByName(name) }.getOrNull()?.let(policy::allows) ?: false // a v6 literal: parsed
+    val last = name.substringAfterLast('.')
+    if (last.all(Char::isDigit) || (last.startsWith("0x") && last.drop(2).all { it.isDigit() || it in 'a'..'f' })) {
+        return RelayHosts.ipv4(name)?.let(policy::allows) ?: false
+    }
+    return '.' in name && !RelayHosts.isLocalName(name)
+}
 
 /** Spec 3.3: which addresses a link preview may contact; a note must not make the phone probe the local network. */
 fun interface AddressPolicy {

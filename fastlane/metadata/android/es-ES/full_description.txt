@@ -1,4 +1,4 @@
-monostr es un cliente Nostr para Android con propinas en Monero.
+Monostr es un cliente Nostr para Android con propinas en Monero.
 
 <b>Nostr, como ya lo conoces</b>
 • Feed de las personas que sigues, hilos, perfiles con las pestañas Publicaciones, Respuestas, Reposts, Artículos y Listas
@@ -12,12 +12,20 @@ monostr es un cliente Nostr para Android con propinas en Monero.
 
 <b>Propinas en Monero</b>
 • Da propina a una nota o a un perfil desde tu propia app de cartera (Unstoppable, monfluo, Cake …) mediante un enlace monero:
-• monostr no tiene cartera ni clave de gasto
-• Para recibir propinas hay dos vías. O simplemente publicas tu dirección de Monero (NIP-A3 payto): los demás pagan desde su cartera, sin recibo en monostr
+• Monostr no tiene cartera ni clave de gasto
+• Para recibir propinas hay dos vías. O simplemente publicas tu dirección de Monero (NIP-A3 payto): los demás pagan desde su cartera, sin recibo en Monostr
 • O registras tu dirección y tu clave privada de visualización en un watcher (watcher.monostr.com por defecto, o el tuyo). El watcher ve tus pagos entrantes y publica recibos firmados en Nostr, para que todos vean la propina en la nota
 • Las propinas anónimas son posibles
 
-<b>Abierto</b>
-monostr es software libre (AGPL-3.0-or-later). Las notas, me gusta y republicaciones llevan «via monostr» (desactivado por defecto, se puede activar).
+<b>Privacidad</b>
+• Tor integrado, desactivado por defecto. Al activarlo, relays, imágenes, subidas y el watcher ven Tor en lugar de tu dirección IP, los mensajes y las propinas también se comprueban por Tor en segundo plano, y nada sale directamente mientras Tor no está conectado
+• Relays onion en tu propia lista de relays con Tor activado
+• Los enlaces web preguntan antes de abrirse; con Tor puedes abrirlos en Tor Browser o copiarlos
+• Tor oculta tu dirección IP, no tu cuenta, tu monedero ni tu navegador
 
-monostr está en beta.
+<b>Abierto</b>
+Monostr es software libre (AGPL-3.0-or-later). Las notas, me gusta y republicaciones llevan «via Monostr» (desactivado por defecto, se puede activar).
+
+Tor es una marca de The Tor Project. Monostr no está respaldado por el Tor Project ni afiliado a él.
+
+Monostr está en beta.

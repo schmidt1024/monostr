@@ -1,0 +1,5 @@
+- Tor built in, off by default: switched on, relays, pictures, uploads and the watcher see Tor instead of your IP address; status in the top bar
+- Onion relays in your own relay list when Tor is on
+- Web links ask before they open; with Tor on: Open in Tor Browser or Copy link
+- The name is spelled Monostr now
+- Fixes

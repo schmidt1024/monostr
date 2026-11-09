@@ -13,4 +13,13 @@ class PrefsTest {
         assertFalse(isValidRelayUrl("https://a"))
         assertFalse(isValidRelayUrl("wss://"))
     }
+
+    @Test
+    fun `an onion relay takes ws or wss, in any case, with a port`() {
+        assertTrue(isValidRelayUrl("ws://abcdefghijklmnop.onion"))
+        assertTrue(isValidRelayUrl("ws://ABC.ONION:7777"))
+        assertTrue(isValidRelayUrl("wss://abc.onion"))
+        assertFalse(isValidRelayUrl("http://abc.onion"))
+        assertFalse(isValidRelayUrl("ws://abc.onion/ x"))
+    }
 }

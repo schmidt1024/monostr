@@ -251,4 +251,47 @@ class NoteActionsTest {
         advanceUntilIdle()
         assertEquals(listOf(n.id), ran)
     }
+
+    @Test
+    fun `like and repost disabled while canSend is false, with the reason and no mark`() = runTest {
+        val publish = FakePublish()
+        val counts = FakeCounts()
+        val send = SendRig(connected = false)
+        val deletions = com.monostr.app.ui.common.NoteDeletions()
+        val own = com.monostr.nostr.repo.MemoryOwnReactions()
+        val actions = NoteActions(publish, eager(), counts, deletions = deletions, own = own, sendGate = send.send)
+        val messages = ArrayList<UiText>()
+        actions.like(n) { messages += it }
+        actions.react(n, "🤙") { messages += it }
+        actions.repost(n) { messages += it }
+        advanceUntilIdle()
+        assertTrue(publish.calls.isEmpty())
+        assertTrue(counts.bumps.isEmpty())
+        assertFalse(actions.flags(ui).liked)
+        assertFalse(actions.flags(ui).reposted)
+        assertEquals(List(3) { uiText(R.string.send_blocked_tor) }, messages)
+        // taking one back is a send too: the mark stays
+        send.connected.value = true
+        actions.like(n) {}
+        advanceUntilIdle()
+        send.connected.value = false
+        messages.clear()
+        actions.like(n) { messages += it }
+        advanceUntilIdle()
+        assertTrue(actions.flags(ui).liked)
+        assertEquals(listOf(uiText(R.string.send_blocked_tor)), messages)
+        assertTrue(publish.withdrawKinds.isEmpty())
+    }
+
+    @Test
+    fun `a deletion is refused while canSend is false`() = runTest {
+        val publish = FakePublish()
+        val deletions = com.monostr.app.ui.common.NoteDeletions()
+        val actions = NoteActions(publish, eager(), deletions = deletions, sendGate = SendRig(connected = false).send)
+        actions.delete(n)
+        advanceUntilIdle()
+        assertTrue(publish.calls.isEmpty())
+        assertFalse(n.id in deletions.pending.value)
+        assertEquals(listOf(uiText(R.string.send_blocked_tor)), deletions.messages.value)
+    }
 }

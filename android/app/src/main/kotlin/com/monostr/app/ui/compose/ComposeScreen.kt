@@ -1,5 +1,6 @@
 package com.monostr.app.ui.compose
 
+import com.monostr.app.net.SendGate
 import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -197,6 +198,8 @@ class ComposeController(
     private val commentParentId: String? = null,
     /** Loads the article for [articleRef]; only the user's own relays and the database are asked (the reader just showed it). */
     private val addresses: AddressableRepository? = null,
+    /** Whether anything may leave now; open only in tests. */
+    private val sendGate: SendGate = SendGate.OPEN,
 ) {
     private val _state = MutableStateFlow(ComposeUiState())
     val state: StateFlow<ComposeUiState> = _state.asStateFlow()
@@ -406,6 +409,10 @@ class ComposeController(
 
     /** Spec 5.2: the picked pictures join the note, as far as there is room, and start uploading at once. */
     fun attach(sources: List<String>) {
+        if (refusedUpload()) {
+            sources.forEach(release)
+            return
+        }
         val up = uploader
         val taken = if (up == null || !_state.value.canAttachPictures) {
             emptyList()
@@ -430,6 +437,10 @@ class ComposeController(
     fun attachVideo(source: String) {
         val up = uploader
         if (up == null || !_state.value.canAttachVideo) {
+            release(source)
+            return
+        }
+        if (refusedUpload()) {
             release(source)
             return
         }
@@ -498,9 +509,16 @@ class ComposeController(
         val up = uploader ?: return
         if (_state.value.sending) return
         val a = _state.value.attachments.firstOrNull { it.id == id } ?: return
-        if (a.error == null) return
+        if (a.error == null || refusedUpload()) return
         patch(id) { it.copy(error = null, progress = 0f) }
         if (a.video) startVideoUpload(up, id, a.source) else startUpload(up, id, a.source)
+    }
+
+    /** Before the file is prepared and before the signer: an upload asks it for its authorization. The text stays as it is. */
+    private fun refusedUpload(): Boolean {
+        if (sendGate.canSend.value) return false
+        _state.update { it.copy(error = uiText(R.string.send_blocked_tor)) }
+        return true
     }
 
     /** Takes a picture off the note; one that is already on the server is deleted there (spec 5.2). */
@@ -577,6 +595,11 @@ class ComposeController(
             _state.update { it.copy(error = uiText(R.string.compose_error_reply_target)) }
             return
         }
+        // refused before anything is frozen: the text and pictures stay an ordinary draft
+        if (!sendGate.canSend.value) {
+            _state.update { it.copy(error = uiText(R.string.send_blocked_tor)) }
+            return
+        }
         // synchronously, before the launch: the pictures are frozen and protected from this tap on
         val firstSend = pendingEventId == null
         consumed = true
@@ -597,6 +620,13 @@ class ComposeController(
                     else -> publish.post(text, media, sensitive)
                 }
                 pendingEventId = if (result.sentToAny) null else result.eventId
+                if (!result.sentToAny && !sendGate.canSend.value) {
+                    // Tor went during the send. The text stays a draft, not only a stored event nobody sends; a tap with Tor back sends that same event
+                    consumed = false
+                    _state.update { it.copy(sending = false, pendingResend = true, error = uiText(R.string.send_blocked_tor)) }
+                    scheduleSave()
+                    return@launch
+                }
                 // spec 2026-10-16 §8.2: sent, or stored for a resend that names the pictures: the draft is done
                 clearDraft()
                 _state.update {
@@ -637,6 +667,7 @@ class ComposeViewModel @Inject constructor(
         articleRef = handle.get<String>("article")?.let { NoteAddress.decode("nostr:$it") },
         commentParentId = handle["parent"],
         addresses = ready.addresses,
+        sendGate = ready.sendGate,
     )
     val prefill: String? = handle["text"]
     /** The user's own picture beside the text, like X's editor (2026-10-30). */

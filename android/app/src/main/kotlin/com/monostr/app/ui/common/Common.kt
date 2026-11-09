@@ -103,6 +103,7 @@ fun RelayDot(states: List<RelayState>) {
         Modifier
             .padding(horizontal = 12.dp)
             .size(10.dp)
+            .testTag("relay-dot")
             .clip(CircleShape)
             .background(color)
             .semantics { contentDescription = description },

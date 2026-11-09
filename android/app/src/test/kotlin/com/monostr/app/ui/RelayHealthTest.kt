@@ -2,6 +2,7 @@ package com.monostr.app.ui
 
 import com.monostr.app.R
 import com.monostr.app.ui.common.uiText
+import com.monostr.app.ui.settings.relayInfoFor
 import com.monostr.app.ui.settings.relayShownUrl
 import com.monostr.app.ui.settings.RelayListDiff
 import com.monostr.app.ui.settings.RelayStatusLine
@@ -87,5 +88,30 @@ class RelayHealthTest {
         assertEquals("relay.example.com/inbox", relayShownUrl("wss://relay.example.com/inbox/"))
         assertEquals("relay.example.com", relayShownUrl("WSS://relay.example.com"))
         assertEquals("ws://10.0.0.2:7777", relayShownUrl("ws://10.0.0.2:7777"))
+    }
+
+    @Test
+    fun `an onion relay the engine does not hold reads needs Tor, others not connected`() {
+        assertEquals(RelayStatusLine(uiText(R.string.relay_needs_tor)), relayStatusLine(null, lastSeen = null, now = now, onion = true))
+        assertEquals(RelayStatusLine(uiText(R.string.relay_not_connected)), relayStatusLine(null, lastSeen = null, now = now))
+        // with Tor on the engine holds it: the state is the engine's
+        assertEquals(RelayStatusLine(uiText(R.string.relay_connected)), relayStatusLine(RelayInfo("ws://a.onion", RelayState.CONNECTED, everConnected = true), lastSeen = null, now = now, onion = true))
+    }
+
+    @Test
+    fun `an onion relay is not counted as unpublished, it is never published`() {
+        val published = RelayList(read = listOf("wss://a.example"), write = listOf("wss://a.example"))
+        assertEquals(null, relayListDiff(listOf("wss://a.example", "ws://abc.onion"), published))
+        assertEquals(null, relayListDiff(listOf("wss://a.example", "ws://abc%2Eonion", "wss://x_y.onion"), published))
+        assertEquals(RelayListDiff(1, 0), relayListDiff(listOf("wss://a.example", "wss://b.example", "ws://abc.onion"), published))
+    }
+
+    @Test
+    fun `the pool spells an onion host in lower case, the row still finds it`() {
+        val live = listOf(RelayInfo("ws://abc.onion", RelayState.CONNECTED), RelayInfo("wss://Path.example/Case", RelayState.CONNECTED))
+        assertEquals(live[0], relayInfoFor(live, "ws://ABC.ONION"))
+        assertEquals(live[0], relayInfoFor(live, "ws://abc.onion/"))
+        assertEquals(null, relayInfoFor(live, "wss://path.example/case"), "other relays keep an exact match")
+        assertEquals(live[1], relayInfoFor(live, "wss://Path.example/Case"))
     }
 }

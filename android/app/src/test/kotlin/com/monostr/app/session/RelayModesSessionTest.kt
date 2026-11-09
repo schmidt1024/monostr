@@ -334,4 +334,22 @@ class RelayModesSessionTest {
         assertEquals(emptyMap<String, RelayMode>(), store.modes.first())
         scope.cancel()
     }
+
+    @Test
+    fun `an unchanged list with a stored onion in Direct neither reconnects nor restarts the DMs`() = runTest {
+        val onion = "ws://abcdefghijklmnop.onion"
+        val f = Fixture(listOf(a, onion))
+        // the engine of a Direct session never holds the onion
+        f.running.pool = listOf(a)
+        val direct = object : RunningRelays by f.running {
+            override suspend fun addRelays(urls: List<String>) { f.running.calls += "add:$urls" ; f.running.pool = f.running.pool + urls.filterNot { it.endsWith(".onion") } }
+        }
+        val session = SessionRelays(f.relayStore, f.modeStore, Mutex()) { direct }
+        session.ensure(emptyList())
+        session.apply(listOf(a, onion))
+        assertFalse(f.running.calls.any { it == "connect" || it == "dms" }, f.running.calls.toString())
+        // a relay that really joins still reconnects
+        session.apply(listOf(a, onion, b))
+        assertTrue(f.running.calls.contains("connect") && f.running.calls.contains("dms"), f.running.calls.toString())
+    }
 }

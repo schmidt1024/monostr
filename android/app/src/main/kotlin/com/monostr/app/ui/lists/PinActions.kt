@@ -1,5 +1,6 @@
 package com.monostr.app.ui.lists
 
+import com.monostr.app.net.SendGate
 import com.monostr.app.R
 import com.monostr.app.ui.common.Message
 import com.monostr.app.ui.common.asMessage
@@ -16,8 +17,9 @@ import kotlinx.coroutines.launch
  * save offers Retry. [scope] should outlive the screen (the engine's background scope), so leaving at once
  * does not cancel the write.
  */
-class PinActions(private val pins: FeedTabsRepository, private val scope: CoroutineScope, private val onMessage: (Message) -> Unit) {
+class PinActions(private val pins: FeedTabsRepository, private val scope: CoroutineScope, private val sendGate: SendGate = SendGate.OPEN, private val onMessage: (Message) -> Unit) {
     fun toggle(address: ListAddress, pinned: Boolean) {
+        if (!sendGate.canSend.value) return onMessage(uiText(R.string.send_blocked_tor).asMessage())
         scope.launch {
             when (attempt { if (pinned) pins.unpin(address) else pins.pin(address) } ?: SaveResult.Failed) {
                 SaveResult.Ok -> Unit

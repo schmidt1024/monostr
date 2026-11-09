@@ -29,7 +29,7 @@ class WatcherClientTest {
     @BeforeEach
     fun start() {
         server.start()
-        client = WatcherClient(server.url("/").toString(), signer, clock = { now })
+        client = WatcherClient(server.url("/").toString(), signer, okhttp3.OkHttpClient(), clock = { now })
     }
 
     @AfterEach
@@ -102,7 +102,7 @@ class WatcherClientTest {
 
     @Test
     fun `info hits v1 info beneath a base url path`() = runTest {
-        val pathClient = WatcherClient(server.url("/api/").toString(), signer, clock = { now })
+        val pathClient = WatcherClient(server.url("/api/").toString(), signer, okhttp3.OkHttpClient(), clock = { now })
         server.enqueue(MockResponse().setBody(infoJson).addHeader("Content-Type", "application/json"))
         pathClient.info()
         val req = server.takeRequest()
@@ -129,7 +129,7 @@ class WatcherClientTest {
         val deadServer = MockWebServer().also { it.start() }
         val url = deadServer.url("/").toString()
         deadServer.shutdown()
-        val dead = WatcherClient(url, signer, clock = { now })
+        val dead = WatcherClient(url, signer, okhttp3.OkHttpClient(), clock = { now })
         val e = assertThrowsSuspend<WatcherException.Network> { dead.info() }
         assertTrue(e.cause is java.io.IOException)
     }
@@ -200,7 +200,7 @@ class WatcherClientTest {
 
     @Test
     fun `register over cleartext to a non-loopback host is rejected before any network access`() = runTest {
-        val insecureClient = WatcherClient("http://10.0.0.1:1/", signer, clock = { now })
+        val insecureClient = WatcherClient("http://10.0.0.1:1/", signer, okhttp3.OkHttpClient(), clock = { now })
         val e = assertThrowsSuspend<IllegalArgumentException> {
             insecureClient.register(Address.parse(mainnet), viewKey.hexToBytes())
         }

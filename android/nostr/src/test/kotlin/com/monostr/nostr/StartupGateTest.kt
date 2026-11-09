@@ -69,4 +69,26 @@ class StartupGateTest {
         assertTrue(waiter.isCancelled)
         assertFalse(g.isOpen)
     }
+
+    @Test
+    fun `behind a closed route neither the timer nor an open call lets anyone through, and both count once it opens`() = runTest {
+        val route = kotlinx.coroutines.flow.MutableStateFlow(false)
+        val g = TimedStartupGate(backgroundScope, route = route)
+        g.open("feed fresh page")
+        advanceTimeBy(10_000); runCurrent()
+        assertFalse(g.isOpen)
+        route.value = true
+        runCurrent()
+        assertTrue(g.isOpen, "the open call was kept for the route")
+
+        val route2 = kotlinx.coroutines.flow.MutableStateFlow(false)
+        val timed = TimedStartupGate(backgroundScope, route = route2)
+        advanceTimeBy(10_000); runCurrent()
+        assertFalse(timed.isOpen)
+        route2.value = true
+        runCurrent()
+        assertFalse(timed.isOpen, "the three seconds start with the route")
+        advanceTimeBy(3_001); runCurrent()
+        assertTrue(timed.isOpen)
+    }
 }

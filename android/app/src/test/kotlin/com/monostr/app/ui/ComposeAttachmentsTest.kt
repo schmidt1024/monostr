@@ -365,4 +365,38 @@ class ComposeAttachmentsTest {
         c.discardUnsent()
         assertTrue(uploader.discarded.isEmpty())
     }
+
+    @Test
+    fun `pictures and a video refuse while canSend is false, nothing is prepared or signed, the sources go, the text stays`() = runTest {
+        val up = FakeMediaUploader()
+        val released = ArrayList<String>()
+        val send = SendRig(connected = false)
+        val c = ComposeController(null, FakeThreads(emptyMap()), FakePublish(), eager(), uploader = up, release = { released += it }, sendGate = send.send)
+        c.start(); advanceUntilIdle()
+        c.onTextChange("with a picture", 14)
+        c.attach(listOf("file:///r/1")); advanceUntilIdle()
+        assertEquals(com.monostr.app.ui.common.uiText(com.monostr.app.R.string.send_blocked_tor), c.state.value.error)
+        c.attachVideo("file:///r/v"); advanceUntilIdle()
+        assertTrue(up.uploads.isEmpty(), "uploads: ${up.uploads}")
+        assertEquals(emptyList<Any>(), c.state.value.attachments)
+        assertEquals(listOf("file:///r/1", "file:///r/v"), released)
+        assertEquals(com.monostr.app.ui.common.uiText(com.monostr.app.R.string.send_blocked_tor), c.state.value.error)
+    }
+
+    @Test
+    fun `the Retry of a failed picture refuses while canSend is false, the tile stays failed`() = runTest {
+        val up = FakeMediaUploader().apply { failure = com.monostr.app.media.UploadException.Network(java.io.IOException("x")) }
+        val send = SendRig()
+        val c = ComposeController(null, FakeThreads(emptyMap()), FakePublish(), eager(), uploader = up, sendGate = send.send)
+        c.start(); advanceUntilIdle()
+        c.attach(listOf("file:///r/1")); advanceUntilIdle()
+        val tile = c.state.value.attachments.single()
+        assertTrue(tile.error != null)
+        val started = up.uploads.size
+        send.connected.value = false
+        c.retry(tile.id); advanceUntilIdle()
+        assertEquals(started, up.uploads.size)
+        assertEquals(tile.error, c.state.value.attachments.single().error)
+        assertEquals(com.monostr.app.ui.common.uiText(com.monostr.app.R.string.send_blocked_tor), c.state.value.error)
+    }
 }

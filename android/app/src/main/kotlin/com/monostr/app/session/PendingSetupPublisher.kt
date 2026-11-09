@@ -1,5 +1,6 @@
 package com.monostr.app.session
 
+import com.monostr.app.net.SendGate
 import com.monostr.app.data.DmSettingsStore
 import com.monostr.app.data.PendingSetupStore
 import com.monostr.nostr.model.ProfileJson
@@ -19,9 +20,12 @@ class PendingSetupPublisher(
     private val follows: FollowRepository,
     private val dmSettings: DmSettingsStore,
     private val exists: suspend (kind: Int) -> Boolean,
+    /** Whether anything may leave now; open only in tests. */
+    private val sendGate: SendGate = SendGate.OPEN,
 ) {
     /** Publishes what spec 2026-10-17 §4 left open, in §4 order; each part that is done (or already on the relays, §7/§11) is saved as done at once. True = nothing left. */
     suspend fun run(): Boolean {
+        if (!sendGate.canSend.value) return false
         var s = store.load(pubkey) ?: return true
         suspend fun part(done: Boolean, kind: Int, mark: (PendingSetup) -> PendingSetup, send: suspend () -> Boolean) {
             if (done) return

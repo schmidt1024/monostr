@@ -1,4 +1,4 @@
-monostr is a Nostr client for Android with tips in Monero.
+Monostr is a Nostr client for Android with tips in Monero.
 
 <b>Nostr, the way you know it</b>
 • Feed of the people you follow, threads, profiles with Posts, Replies, Reposts, Articles and Lists tabs
@@ -12,12 +12,20 @@ monostr is a Nostr client for Android with tips in Monero.
 
 <b>Tips in Monero</b>
 • Tip a note or a profile from your own wallet app (Unstoppable, monfluo, Cake …) through a monero: link
-• monostr holds no wallet and no spend key
-• To receive tips there are two ways. Either just publish your Monero address (NIP-A3 payto): others pay from their wallet, without a receipt in monostr
+• Monostr holds no wallet and no spend key
+• To receive tips there are two ways. Either just publish your Monero address (NIP-A3 payto): others pay from their wallet, without a receipt in Monostr
 • Or you register your address and private view key with a watcher (watcher.monostr.com by default, or your own). The watcher sees your incoming payments and publishes signed tip receipts on Nostr, so everybody sees the tip on the note
 • Anonymous tips are possible
 
-<b>Open</b>
-monostr is free software (AGPL-3.0-or-later). Notes, likes and reposts say “via monostr” (off by default, can be switched on).
+<b>Privacy</b>
+• Tor built in, off by default. Switched on, relays, pictures, uploads and the watcher see Tor instead of your IP address, messages and tips are checked through Tor in the background too, and nothing goes out directly while Tor is not connected
+• Onion relays in your own relay list when Tor is on
+• Web links ask before they open; with Tor on you can open them in Tor Browser or copy them
+• Tor hides your IP address, not your account, your wallet or your browser
 
-monostr is in beta.
+<b>Open</b>
+Monostr is free software (AGPL-3.0-or-later). Notes, likes and reposts say “via Monostr” (off by default, can be switched on).
+
+Tor is a trademark of The Tor Project. Monostr is not endorsed by or affiliated with the Tor Project.
+
+Monostr is in beta.

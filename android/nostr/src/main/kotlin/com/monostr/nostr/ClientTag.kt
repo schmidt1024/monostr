@@ -8,7 +8,7 @@ import rust.nostr.sdk.Tag
  * (`npub1zcqletx…`); the relay is where that event can be found.
  */
 object ClientTag {
-    const val NAME = "monostr"
+    const val NAME = "Monostr"
     const val PROJECT_PUBKEY = "1601fcacdf227ddda10e33e71917930b49be436b43bdd030b799948a9f274ed3"
     const val HANDLER_D = "monostr"
     const val RELAY = "wss://relay.monostr.com"

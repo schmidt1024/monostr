@@ -1,5 +1,6 @@
 package com.monostr.app.ui.lists
 
+import com.monostr.app.ui.common.LocalCanSend
 import com.monostr.app.ui.discover.FollowPill
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.clickable
@@ -82,7 +83,7 @@ import javax.inject.Inject
 class ListViewModel @Inject constructor(session: NostrSession, handle: SavedStateHandle, factory: TipSheetFactory) : ViewModel() {
     private val ready = session.requireReady()
     val address: ListAddress = checkNotNull(ListAddress.parseViewable(checkNotNull(handle.get<String>("address"))))
-    val controller = ListController(address, ready.pubkey, ready.lists, ready.feedTabs, ready.profiles, viewModelScope, writeScope = ready.engine.backgroundScope, follows = ready.follows, mute = ready.mute) { source, scope ->
+    val controller = ListController(address, ready.pubkey, ready.lists, ready.feedTabs, ready.profiles, viewModelScope, writeScope = ready.engine.backgroundScope, follows = ready.follows, mute = ready.mute, sendGate = ready.sendGate) { source, scope ->
         ready.listFeed(factory, source, scope)
     }
     val tipSheet = factory.tipSheet(viewModelScope)
@@ -200,7 +201,7 @@ private fun MemberList(
     LazyColumn(Modifier.fillMaxSize().testTag("list-members"), state = listState) {
         if (followed != null) item(key = "follow-all") {
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onFollowAll, enabled = !allFollowed, modifier = Modifier.testTag("list-follow-all")) {
+                TextButton(onClick = onFollowAll, enabled = !allFollowed && LocalCanSend.current, modifier = Modifier.testTag("list-follow-all")) {
                     Text(stringResource(if (allFollowed) R.string.discover_all_followed else R.string.discover_follow_all))
                 }
             }
@@ -212,7 +213,7 @@ private fun MemberList(
                 Text(p.shownName, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (followed != null && p.pubkey !in notFollowable) FollowPill(p.pubkey in followed, onClick = { onFollow(p.pubkey) }, tag = "list-member-follow-${p.pubkey.take(8)}")
                 if (own) {
-                    IconButton(onClick = { onRemove(p.pubkey) }, modifier = Modifier.testTag("list-member-remove")) {
+                    IconButton(onClick = { onRemove(p.pubkey) }, enabled = LocalCanSend.current, modifier = Modifier.testTag("list-member-remove")) {
                         Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.list_member_remove, p.shownName))
                     }
                 }

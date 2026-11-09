@@ -1,6 +1,5 @@
 package com.monostr.app.ui.common
 
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -21,7 +20,7 @@ object FollowAll {
 
 @Composable
 fun FollowAllConfirmDialog(count: Int, onConfirm: () -> Unit, onDismiss: () -> Unit) {
-    AlertDialog(
+    GuardedAlertDialog(
         onDismissRequest = onDismiss,
         modifier = Modifier.testTag("follow-all-confirm"),
         title = { Text(pluralStringResource(R.plurals.follow_all_confirm_title, count, count)) },

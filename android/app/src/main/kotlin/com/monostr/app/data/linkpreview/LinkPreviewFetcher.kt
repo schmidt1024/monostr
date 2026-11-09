@@ -1,5 +1,7 @@
 package com.monostr.app.data.linkpreview
 
+import com.monostr.app.net.TorNotReadyException
+import com.monostr.tips.RelayHosts
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runInterruptible
 import okhttp3.CookieJar
@@ -13,7 +15,9 @@ import okio.Buffer
 import okio.BufferedSource
 import okio.ByteString.Companion.encodeUtf8
 import java.io.IOException
+import java.io.InterruptedIOException
 import java.net.InetAddress
+import java.net.Proxy
 import java.net.UnknownHostException
 import java.nio.charset.Charset
 import java.util.concurrent.TimeUnit
@@ -24,8 +28,8 @@ class LinkPreviewFetcher(
     client: OkHttpClient,
     private val userAgent: String,
     private val addresses: AddressPolicy = AddressPolicy.PUBLIC_ONLY,
-    /** Name resolution; tests swap it to map a host to a private address. */
-    private val dns: Dns = Dns.SYSTEM,
+    /** Name resolution, the gated one of [client]; tests swap it to map a host to a private address. */
+    private val dns: Dns = client.dns,
     /** The budget for the whole fetch, all redirects included (spec 3.3: 8 s). */
     private val totalMs: Long = 8_000,
 ) {
@@ -42,24 +46,42 @@ class LinkPreviewFetcher(
         })
         .build()
 
-    /** Cancelling the caller interrupts the blocking call, so a preview nobody waits for stops loading. */
-    suspend fun fetch(url: String): LinkPreview? = try {
-        runInterruptible(Dispatchers.IO) { fetchBlocking(url) }
-    } catch (e: CancellationException) {
-        throw e
-    } catch (_: Exception) {
-        null
+    /**
+     * Cancelling the caller interrupts the blocking call, so a preview nobody waits for stops loading. Null is a miss, which the
+     * caller remembers. Thrown instead, as it says nothing about the page: [TorNotReadyException], and in Tor mode any [IOException]
+     * that ended the fetch without an answer (proxy stopped or refusing, a timeout, the cancel of a switch). Decided by the route at
+     * the start as well as now, since switching Tor off cancels its calls after the gate has moved to Direct.
+     */
+    suspend fun fetch(url: String): LinkPreview? {
+        var viaTor = false
+        return try {
+            runInterruptible(Dispatchers.IO) {
+                viaTor = onTorRoute(url)
+                fetchBlocking(url)
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: TorNotReadyException) {
+            throw e
+        } catch (e: IOException) {
+            if (viaTor || onTorRoute(url)) throw e
+            null
+        } catch (_: Exception) {
+            null
+        }
     }
+
+    private fun onTorRoute(url: String): Boolean = url.toHttpUrlOrNull()?.let(::proxyResolves) ?: false
 
     private fun fetchBlocking(start: String): LinkPreview? {
         var url = start.toHttpUrlOrNull() ?: return null
         val deadline = System.nanoTime() + totalMs * 1_000_000
         for (hop in 0..MAX_REDIRECTS) {
             val left = (deadline - System.nanoTime()) / 1_000_000
-            if (left <= 0) return null
+            if (left <= 0) throw InterruptedIOException("preview budget used up") // like a timeout within a hop
             // checked here as well as in the Dns: OkHttp skips the Dns for IP literals, and behind an HTTP proxy
             // the proxy resolves the host itself (a rebinding name could still answer the proxy differently)
-            if (!hostAllowed(url.host)) return null
+            if (!hostAllowed(url)) return null
             val request = Request.Builder().url(url)
                 .header("User-Agent", userAgent)
                 .header("Accept", "text/html,application/xhtml+xml")
@@ -76,9 +98,25 @@ class LinkPreviewFetcher(
         return null
     }
 
-    private fun hostAllowed(host: String): Boolean {
-        val literal = ':' in host || IPV4.matches(host)
-        return if (literal) addresses.allows(InetAddress.getByName(host)) else http.dns.lookup(host).isNotEmpty() // throws when none is allowed
+    private fun hostAllowed(url: HttpUrl): Boolean {
+        if (proxyResolves(url)) return proxiedHostAllowed(url.host, addresses)
+        val host = url.host
+        if (':' in host) return addresses.allows(InetAddress.getByName(host)) // parsed, never resolved
+        if (IPV4.matches(host)) return RelayHosts.ipv4(host)?.let(addresses::allows) ?: false // 999.1.1.1 is no address: no lookup either
+        return http.dns.lookup(host).isNotEmpty() // throws when none is allowed
+    }
+
+    /**
+     * SOCKS = Tor: the name goes to the proxy, no lookup here. Also asked for a URI without a host (127.1, foo_bar.example): OkHttp
+     * itself would not ask and takes the direct route, which refuses in Tor mode. The JDK's own selector throws on those.
+     */
+    private fun proxyResolves(url: HttpUrl): Boolean {
+        val proxy = http.proxy ?: try {
+            http.proxySelector.select(url.toUri()).firstOrNull()
+        } catch (_: IllegalArgumentException) {
+            null
+        }
+        return proxy?.type() == Proxy.Type.SOCKS
     }
 
     private fun read(resp: Response, url: HttpUrl): LinkPreview? {
@@ -95,8 +133,8 @@ class LinkPreviewFetcher(
     }
 
     private fun imageAllowed(image: String): Boolean {
-        val host = image.toHttpUrlOrNull()?.host ?: return false
-        return runCatching { hostAllowed(host) }.getOrDefault(false)
+        val parsed = image.toHttpUrlOrNull() ?: return false
+        return runCatching { hostAllowed(parsed) }.getOrDefault(false)
     }
 
     companion object {

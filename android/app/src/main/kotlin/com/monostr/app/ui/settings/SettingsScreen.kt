@@ -1,5 +1,8 @@
 package com.monostr.app.ui.settings
 
+import com.monostr.app.ui.common.GuardedDropdownMenu
+import com.monostr.app.ui.common.GuardedAlertDialog
+import com.monostr.app.ui.common.TorSettingsRow
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -36,12 +39,10 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -103,6 +104,7 @@ import com.monostr.app.ui.theme.AccentSeed
 import com.monostr.app.data.TipSettingsStore
 import com.monostr.app.data.UiSettingsStore
 import com.monostr.app.data.isValidRelayUrl
+import com.monostr.tips.RelayHosts
 import com.monostr.app.session.NostrSession
 import com.monostr.app.session.RenewResult
 import com.monostr.app.ui.common.UiText
@@ -126,6 +128,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -143,6 +146,8 @@ class SettingsController(
     private val scope: CoroutineScope,
     /** How many relays must stay; 1 for the feed relays, 0 for the search relays (spec 3.4). */
     private val minimum: Int = 1,
+    /** False for the search and DM lists: a `.onion` address works only in the main relay list (spec 2026-11-06 Tor 7.4). */
+    private val onionAllowed: Boolean = true,
 ) {
     private val _state = MutableStateFlow(SettingsUiState())
     val state: StateFlow<SettingsUiState> = _state.asStateFlow()
@@ -158,6 +163,10 @@ class SettingsController(
         val u = url.trim().trimEnd('/')
         if (!isValidRelayUrl(u)) {
             _state.update { it.copy(error = uiText(R.string.settings_relay_invalid)) }
+            return false
+        }
+        if (!onionAllowed && RelayHosts.isOnionHost(u)) {
+            _state.update { it.copy(error = uiText(R.string.settings_relay_onion_main_only)) }
             return false
         }
         if (u in _state.value.relays) return true
@@ -178,6 +187,10 @@ class SettingsController(
         val u = new.trim().trimEnd('/')
         if (!isValidRelayUrl(u)) {
             _state.update { it.copy(error = uiText(R.string.settings_relay_invalid)) }
+            return
+        }
+        if (!onionAllowed && RelayHosts.isOnionHost(u)) {
+            _state.update { it.copy(error = uiText(R.string.settings_relay_onion_main_only)) }
             return
         }
         val current = _state.value.relays
@@ -206,6 +219,8 @@ class SettingsController(
                 throw e
             } catch (e: RelayListRefused) {
                 _state.update { it.copy(relays = previous, error = uiText(R.string.settings_relay_keep_read_write)) }
+            } catch (e: com.monostr.app.net.SendRefused) {
+                _state.update { it.copy(relays = previous, error = uiText(R.string.send_blocked_tor)) }
             } catch (e: Exception) {
                 _state.update { it.copy(relays = previous, error = uiText(R.string.settings_relay_save_failed)) }
             }
@@ -231,20 +246,22 @@ class SettingsViewModel @Inject constructor(
     private val dmSettings: DmSettingsStore,
     private val hints: HintStore,
     private val translation: TranslationSettingsStore,
+    private val sendGate: com.monostr.app.net.SendGate,
 ) : ViewModel() {
     val controller = SettingsController(relayStore, { if (!session.applyRelays(it)) throw RelayListRefused() }, viewModelScope)
     private val relays: RelayStore = relayStore
-    val search = SettingsController(searchRelayStore, { searchRelayStore.set(it) }, viewModelScope, minimum = 0)
+    val search = SettingsController(searchRelayStore, { searchRelayStore.set(it) }, viewModelScope, minimum = 0, onionAllowed = false)
     val dm = SettingsController(
         DmRelayStoreAdapter(dmSettings),
         { list ->
             // spec 11 (Plan 10d): publish first; the list is stored and DmSync restarts only after a relay OK
-            applyDmRelays(list, { session.requireReady().publish.dmRelayList(it) }, dmSettings) {
+            applyDmRelays(list, { session.requireReady().publish.dmRelayList(it) }, dmSettings, sendGate) {
                 runCatching { session.requireReady().dms.ownRelaysChanged() }
             }
         },
         viewModelScope,
         minimum = 1,
+        onionAllowed = false,
     )
     val dmMissingDismissed: StateFlow<Boolean> = hints.dismissed(session.requireReady().pubkey, DmInboxHints.HINT_MISSING)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
@@ -255,7 +272,7 @@ class SettingsViewModel @Inject constructor(
     val dmPreviewText: StateFlow<Boolean> = dmSettings.previewText.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
     fun setDmPreviewName(on: Boolean) = viewModelScope.launch { dmSettings.setPreviewName(on) }
     fun setDmPreviewText(on: Boolean) = viewModelScope.launch { dmSettings.setPreviewText(on) }
-    val monero = MoneroSettingsController(settings, secrets, session.requireReady().tips, session.requireReady().watchers, { session.adoptRelayList() }, viewModelScope, session.requireReady().pubkey, hints = hints)
+    val monero = MoneroSettingsController(settings, secrets, session.requireReady().tips, session.requireReady().watchers, { session.adoptRelayList() }, viewModelScope, session.requireReady().pubkey, hints = hints, sendGate = sendGate)
     val pubkey: String = session.requireReady().pubkey
     val isAmber: Boolean = session.requireReady().signer is AmberSigner
     private val _notice = MutableStateFlow<UiText?>(null)
@@ -309,6 +326,8 @@ class SettingsViewModel @Inject constructor(
     fun setGifMode(mode: GifMode) = viewModelScope.launch { uiSettings.setGifMode(mode) }
     val linkPreviews: StateFlow<Boolean> = uiSettings.linkPreviews.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
     fun setLinkPreviews(on: Boolean) = viewModelScope.launch { uiSettings.setLinkPreviews(on) }
+    val askLinks: StateFlow<Boolean> = uiSettings.linkAlwaysOpen.map { !it }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+    fun setAskLinks(on: Boolean) = viewModelScope.launch { uiSettings.setLinkAlwaysOpen(!on) }
     val authorRelays: StateFlow<Boolean> = uiSettings.authorRelays.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
     fun setThemeMode(mode: ThemeMode) = viewModelScope.launch { uiSettings.setThemeMode(mode) }
     fun setAccent(accent: Accent) = viewModelScope.launch { uiSettings.setAccent(accent) }
@@ -358,7 +377,7 @@ class SettingsViewModel @Inject constructor(
         if (_relayListBusy.value) return@launch
         _relayListBusy.value = true
         try {
-            _notice.value = publishRelayList({ session.relayEntriesForPublish() }, { session.requireReady().publish.publishRelayList(it) })
+            _notice.value = publishRelayList({ session.relayEntriesForPublish() }, { session.requireReady().publish.publishRelayList(it) }, sendGate)
         } finally {
             _relayListBusy.value = false
             readPublished()
@@ -477,6 +496,15 @@ fun SettingsScreen(section: String? = null, onBack: () -> Unit, onMoneroSetup: (
             val mediaServer by vm.mediaServer.collectAsStateWithLifecycle()
             Spacer(Modifier.height(8.dp))
             MediaServerSetting(mediaServer, onSave = vm::setMediaServer, onReset = { vm.resetMediaServer() })
+            Spacer(Modifier.height(24.dp))
+            // Privacy: switches about what the app tells other parties.
+            Text(
+                stringResource(R.string.settings_privacy), style = MaterialTheme.typography.titleMedium,
+                modifier = if (section == SettingsSection.PRIVACY) Modifier.onPlaced { sectionTop = it.positionInParent().y.toInt() } else Modifier,
+            )
+            val askLinks by vm.askLinks.collectAsStateWithLifecycle()
+            SettingSwitch(stringResource(R.string.settings_ask_links), stringResource(R.string.settings_ask_links_hint), askLinks, vm::setAskLinks, "settings-ask-links")
+            TorSettingsRow()
             Spacer(Modifier.height(24.dp))
             val translateMode by vm.translateMode.collectAsStateWithLifecycle()
             val translateUrl by vm.translateUrl.collectAsStateWithLifecycle()
@@ -693,7 +721,7 @@ private fun RelayModeMenu(url: String, mode: RelayMode, onMode: (String, RelayMo
         IconButton(onClick = { open = true }, modifier = Modifier.testTag("relay-mode-$url")) {
             Icon(Icons.Filled.MoreVert, contentDescription = description)
         }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        GuardedDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             // the row may shorten the address: here it reads in full
             Text(
                 url, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -757,8 +785,8 @@ private fun RelayListEditor(
                 val mode = modes?.get(url)
                 if (mode != null && mode != RelayMode.BOTH) Text(relayModeLabel(mode), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (live != null) {
-                    val info = live.firstOrNull { it.url.trimEnd('/') == url }
-                    val line = relayStatusLine(info, seen[url.trimEnd('/')], System.currentTimeMillis() / 1000)
+                    val info = relayInfoFor(live, url)
+                    val line = relayStatusLine(info, seen[(info?.url ?: url).trimEnd('/')], System.currentTimeMillis() / 1000, onion = RelayHosts.isOnionHost(url))
                     val parts = listOfNotNull(
                         line.state.asString(),
                         line.lastSeenAgo?.let { stringResource(R.string.relay_last_seen, it.asString()) },
@@ -816,7 +844,7 @@ private fun MessagesSection(
             ) { Text(stringResource(R.string.dm_relay_hint_add)) }
         }
         if (choose) {
-            AlertDialog(
+            GuardedAlertDialog(
                 onDismissRequest = { choose = false },
                 title = { Text(stringResource(R.string.dm_relay_hint_replace)) },
                 text = {
@@ -918,7 +946,7 @@ private fun ShowKeyButton(onShowKey: () -> Unit) {
     var warn by rememberSaveable { mutableStateOf(false) }
     OutlinedButton(onClick = { warn = true }, modifier = Modifier.fillMaxWidth().testTag("settings-show-key")) { Text(stringResource(R.string.settings_show_key)) }
     if (warn) {
-        AlertDialog(
+        GuardedAlertDialog(
             onDismissRequest = { warn = false },
             text = { Text(stringResource(R.string.settings_show_key_warning)) },
             confirmButton = {

@@ -1,0 +1,5 @@
+- Yerleşik Tor, varsayılan olarak kapalı: açıkken relay'ler, resimler, yüklemeler ve watcher IP adresin yerine Tor'u görür; durum üst çubukta
+- Tor açıkken kendi relay listende onion relay'ler
+- Web bağlantıları açılmadan önce sorar; Tor ile: Tor Browser'da aç veya Bağlantıyı kopyala
+- Ad artık Monostr olarak yazılıyor
+- Düzeltmeler

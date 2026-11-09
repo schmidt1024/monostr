@@ -1,5 +1,6 @@
 package com.monostr.app.ui.tips
 
+import com.monostr.app.ui.common.GuardedModalBottomSheet
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -27,7 +28,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
@@ -53,6 +53,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.monostr.app.R
 import com.monostr.app.data.AmountUnit
 import com.monostr.app.data.Presets
+import com.monostr.app.ui.common.LocalCanSend
 import com.monostr.app.ui.common.QrCode
 import com.monostr.app.ui.common.asString
 import com.monostr.app.ui.theme.MonostrFonts
@@ -79,7 +80,7 @@ fun TipSheetHost(controller: TipSheetController) {
     LaunchedEffect(pay?.uri) {
         if (pay != null && pay.walletMissing == null) controller.walletResult(WalletOpener.open(context, pay.uri))
     }
-    ModalBottomSheet(onDismissRequest = controller::dismiss) {
+    GuardedModalBottomSheet(onDismissRequest = controller::dismiss) {
         TipSheetContent(
             state = state,
             onSelect = controller::select,
@@ -113,6 +114,11 @@ fun TipSheetContent(
         Spacer(Modifier.height(12.dp))
         when (val phase = state.phase) {
             TipPhase.Loading -> CircularProgressIndicator(Modifier.testTag("tip-loading"))
+            TipPhase.Blocked -> {
+                Text(state.error?.asString().orEmpty(), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("tip-blocked"))
+                Spacer(Modifier.height(16.dp))
+                TextButton(onClick = onDone, modifier = Modifier.align(Alignment.End).testTag("tip-done")) { Text(stringResource(R.string.action_close)) }
+            }
             TipPhase.NoMonero -> {
                 Text(TipSheetController.NO_MONERO.asString(), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("tip-no-monero"))
                 Spacer(Modifier.height(16.dp))
@@ -120,6 +126,7 @@ fun TipSheetContent(
             }
             is TipPhase.PayTo -> {
                 Text(stringResource(R.string.tip_payto_title_plain), style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("tip-payto"))
+                WalletNote(state.walletNote)
                 Text(
                     stringResource(if (state.target is TipTarget.Note) R.string.tip_payto_note else R.string.tip_payto_profile),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -137,6 +144,8 @@ fun TipSheetContent(
                 // only the amount error belongs to the amount field; every other error sits below the switch
                 val error = state.error
                 val amountError = error == TipSheetController.ERROR_AMOUNT
+                val canSend = LocalCanSend.current
+                WalletNote(state.walletNote)
                 Text(stringResource(R.string.tip_amount, state.unit.label), style = MaterialTheme.typography.labelLarge)
                 // numbers only (the unit sits in the heading); FlowRow wraps instead of clipping at large font scales
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -179,8 +188,12 @@ fun TipSheetContent(
                 if (error != null && !amountError) {
                     Text(error.asString(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("tip-error"))
                 }
+                // the reason the button is off; the same text from a refused send stands above already
+                if (!canSend && error != TipSheetController.ERROR_TOR) {
+                    Text(stringResource(R.string.send_blocked_tor), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("tip-blocked-reason"))
+                }
                 Spacer(Modifier.height(12.dp))
-                Button(onClick = onSend, enabled = phase == TipPhase.Ready, modifier = Modifier.fillMaxWidth().testTag("tip-send")) {
+                Button(onClick = onSend, enabled = phase == TipPhase.Ready && canSend, modifier = Modifier.fillMaxWidth().testTag("tip-send")) {
                     Text(stringResource(if (phase == TipPhase.Sending) R.string.state_sending else R.string.tip_pay))
                 }
             }
@@ -206,6 +219,13 @@ fun TipSheetContent(
             }
         }
     }
+}
+
+/** Spec 2026-11-06 5.6: once per account, only under Tor; the controller decides. */
+@Composable
+private fun WalletNote(shown: Boolean) {
+    if (!shown) return
+    Text(stringResource(R.string.tor_wallet_note), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 8.dp).testTag("tip-wallet-note"))
 }
 
 /** Pay-by-hand block when no wallet app took the `monero:` URI: wallet links, QR, address, copy buttons. No amount line when [amount] is null (payto). */

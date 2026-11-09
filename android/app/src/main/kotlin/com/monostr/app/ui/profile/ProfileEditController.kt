@@ -1,5 +1,6 @@
 package com.monostr.app.ui.profile
 
+import com.monostr.app.net.SendGate
 import com.monostr.app.R
 import com.monostr.app.media.ImageTarget
 import com.monostr.app.media.MediaUploader
@@ -81,6 +82,8 @@ class ProfileEditController(
     private val removePictures: suspend (List<String>) -> Unit = {},
     /** Outlives the screen, which closes after saving. */
     private val background: CoroutineScope = scope,
+    /** Whether anything may leave now; open only in tests. */
+    private val sendGate: SendGate = SendGate.OPEN,
 ) {
     private val _state = MutableStateFlow(ProfileEditUiState())
     val state: StateFlow<ProfileEditUiState> = _state.asStateFlow()
@@ -102,6 +105,11 @@ class ProfileEditController(
     fun upload(field: PictureField, source: String) {
         val up = uploader ?: return
         if (_state.value.uploading != null) return
+        // before the picture is prepared and before the signer: an upload asks it for its authorization
+        if (!sendGate.canSend.value) {
+            _state.update { it.copy(uploadError = field to uiText(R.string.send_blocked_tor)) }
+            return
+        }
         _state.update { it.copy(uploading = field, uploadError = null) }
         scope.launch {
             try {
@@ -120,6 +128,10 @@ class ProfileEditController(
     fun save() {
         val s = _state.value
         if (!s.canSave) return
+        if (!sendGate.canSend.value) {
+            _state.update { it.copy(message = uiText(R.string.send_blocked_tor)) }
+            return
+        }
         _state.update { it.copy(saving = true, message = null) }
         scope.launch {
             val ok = try {

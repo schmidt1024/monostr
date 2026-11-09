@@ -1,5 +1,7 @@
 package com.monostr.app.ui.tips
 
+import com.monostr.app.net.SendGate
+import kotlinx.coroutines.CoroutineStart
 import com.monostr.app.BuildConfig
 import com.monostr.tips.RelayHosts
 import com.monostr.app.data.AmountUnit
@@ -42,6 +44,8 @@ sealed class TipPhase {
     data class PayTo(val address: String, val uri: String, val walletMissing: Boolean? = null) : TipPhase()
     data object Ready : TipPhase()
     data object Sending : TipPhase()
+    /** Tor is not connected and the payment info is not known: nothing can be said about the recipient, [TipSheetState.error] says why. */
+    data object Blocked : TipPhase()
     /** The intent is published. [walletMissing] is null until the UI tried to open the wallet; [arrived] once the watcher's receipt settled the pending tip. */
     data class Pay(val uri: String, val address: String, val amount: Long, val walletMissing: Boolean? = null, val arrived: Boolean = false) : TipPhase()
 }
@@ -58,6 +62,8 @@ data class TipSheetState(
     val anonymous: Boolean = true,
     val error: UiText? = null,
     val notice: UiText? = null,
+    /** Under Tor, the first time on this account: the wallet goes its own way (spec 5.6). */
+    val walletNote: Boolean = false,
 ) {
     val visible: Boolean get() = target != null
 
@@ -85,6 +91,10 @@ class TipSheetController(
     private val authorRelaysEnabled: suspend () -> Boolean,
     /** The recipient names the watcher URL: a LAN or loopback one is never asked (debug builds allow it for local test watchers). */
     private val watcherAllowed: (String) -> Boolean = { BuildConfig.DEBUG || RelayHosts.isPublic(it) },
+    /** Whether anything may leave now; open only in tests. */
+    private val sendGate: SendGate = SendGate.OPEN,
+    /** True once: the one-time note about the wallet is due now. Asked only when the sheet reaches a phase that leads to the wallet. */
+    private val takeWalletNote: suspend () -> Boolean = { false },
     private val now: () -> Long = { System.currentTimeMillis() / 1000 },
 ) {
     private val _state = MutableStateFlow(TipSheetState())
@@ -133,7 +143,7 @@ class TipSheetController(
                 }
                 if (_state.value.target?.key != target.key) return@launch // dismissed or reopened meanwhile
                 recipient = info as? PaymentInfo.Enabled
-                val phase = if (recipient != null) TipPhase.Ready else {
+                val phase = if (recipient != null) TipPhase.Ready else if (!sendGate.canSend.value) TipPhase.Blocked else {
                     val payto = try {
                         tips.cachedPayto(target.recipient)
                     } catch (e: CancellationException) {
@@ -145,7 +155,15 @@ class TipSheetController(
                     if (payto != null) TipPhase.PayTo(payto, "monero:$payto") else TipPhase.NoMonero
                 }
                 PerfTrace.mark("tip sheet phase ${phase::class.simpleName}")
-                _state.update { it.copy(phase = phase) }
+                val walletNote = (phase == TipPhase.Ready || phase is TipPhase.PayTo) && try {
+                    takeWalletNote()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    false // a hint store that fails costs a note, never the tip
+                }
+                if (_state.value.target?.key != target.key) return@launch
+                _state.update { it.copy(phase = phase, walletNote = walletNote, error = if (phase == TipPhase.Blocked) ERROR_TOR else it.error) }
             } finally {
                 outbox.cancel()
             }
@@ -200,14 +218,20 @@ class TipSheetController(
             _state.update { it.copy(error = ERROR_AMOUNT) }
             return
         }
+        if (!sendGate.canSend.value) {
+            _state.update { it.copy(error = ERROR_TOR) }
+            return
+        }
         val key = target.key
         val anonymous = s.anonymous
+        val viaTor = sendGate.viaTor
         scope.launch {
             if (_state.value.target?.key != key) return@launch // dismissed or reopened meanwhile
             _state.update { it.copy(phase = TipPhase.Sending, error = null) }
             try {
                 val prepared = TipRequest.prepare(info, target.recipient, target.noteId, amount, TipType.TIP, "", now(), anonymous = anonymous)
                 val watcherRelays = watcherRelays(info)
+                if (!sendGate.canSend.value) return@launch refused(key)
                 val sentToAny: Boolean
                 val intentId: String
                 if (anonymous) {
@@ -216,22 +240,24 @@ class TipSheetController(
                         if (_state.value.target?.key == key) _state.update { it.copy(phase = TipPhase.Ready, error = ERROR_ANON_UNAVAILABLE) }
                         return@launch
                     }
-                    val sent = tips.sendAnonymousIntent(prepared, watcherRelays)
+                    val sent = tips.sendAnonymousIntent(prepared, watcherRelays, torOnly = viaTor)
+                    if (lostTor(sent.result.sentToAny)) return@launch refused(key)
                     intentId = sent.result.eventId
                     pending.add(
                         PendingTip(
                             sent.result.eventId, target.noteId, amount, now(), target.recipient,
-                            anonEvent = sent.eventJson, anonRelays = watcherRelays, anonDelivered = sent.result.sentToAny,
+                            anonEvent = sent.eventJson, anonRelays = watcherRelays, anonDelivered = sent.result.sentToAny, underTor = viaTor || sendGate.viaTor,
                         ),
                     )
                     sentToAny = sent.result.sentToAny
                 } else {
                     val result = tips.sendIntent(prepared, watcherRelays)
+                    if (lostTor(result.sentToAny)) return@launch refused(key)
                     intentId = result.eventId
                     pending.add(
                         PendingTip(
                             result.eventId, target.noteId, amount, now(), target.recipient,
-                            watcherRelays = watcherRelays, watcherDelivered = result.reached(watcherRelays),
+                            watcherRelays = watcherRelays, watcherDelivered = result.reached(watcherRelays), underTor = viaTor || sendGate.viaTor,
                         ),
                     )
                     sentToAny = result.sentToAny
@@ -249,30 +275,48 @@ class TipSheetController(
                 throw e
             } catch (e: Exception) {
                 if (_state.value.target?.key != key) return@launch
-                _state.update { it.copy(phase = TipPhase.Ready, error = e.userMessage()) }
+                _state.update { it.copy(phase = TipPhase.Ready, error = if (sendGate.canSend.value) e.userMessage() else ERROR_TOR) }
             }
         }
+    }
+
+    /** No relay took the intent, and Tor is the reason: that is a refusal, not an intent waiting to go out. */
+    private fun lostTor(sentToAny: Boolean): Boolean = !sentToAny && !sendGate.canSend.value
+
+    private fun refused(key: String) {
+        if (_state.value.target?.key == key) _state.update { it.copy(phase = TipPhase.Ready, error = ERROR_TOR) }
     }
 
     /**
      * Sends the intent [intentId] again a few times while no watcher relay has it. The next start would be too
      * late: the watcher looks for the payment from the moment it knows the intent, and the wallet is open now.
+     * It is not a queue: the moment sending stops, the schedule ends, also when Tor is back before the next send.
      */
     private fun redeliver(intentId: String, info: PaymentInfo.Enabled) {
         scope.launch {
-            for (pause in REDELIVER_DELAYS_MS) {
-                try {
-                    val stored = pending.pending.first().firstOrNull { it.intentId == intentId } ?: return@launch
-                    if (stored.isDelivered) return@launch
-                    delay(pause)
-                    val tip = pending.pending.first().firstOrNull { it.intentId == intentId } ?: return@launch
-                    if (deliverToWatcher(tips, pending, withWatcherRelays(tip, info))) return@launch
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    // still offline: the next pause tries again, then the next start
+            val schedule = launch(start = CoroutineStart.LAZY) {
+                for (pause in REDELIVER_DELAYS_MS) {
+                    try {
+                        val stored = pending.pending.first().firstOrNull { it.intentId == intentId } ?: return@launch
+                        if (stored.isDelivered) return@launch
+                        delay(pause)
+                        val tip = pending.pending.first().firstOrNull { it.intentId == intentId } ?: return@launch
+                        // before withWatcherRelays, which asks the watcher over HTTP
+                        if (!sendGate.mayResend(tip)) return@launch
+                        if (deliverToWatcher(tips, pending, withWatcherRelays(tip, info), sendGate)) return@launch
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        // still offline: the next pause tries again, then the next start
+                    }
                 }
             }
+            val stop = launch(start = CoroutineStart.UNDISPATCHED) {
+                sendGate.canSend.first { !it }
+                schedule.cancel()
+            }
+            schedule.join()
+            stop.cancel()
         }
     }
 
@@ -340,6 +384,7 @@ class TipSheetController(
 
     companion object {
         val ERROR_AMOUNT = uiText(R.string.tip_error_amount)
+        val ERROR_TOR = uiText(R.string.send_blocked_tor)
         val ERROR_ANON_UNAVAILABLE = uiText(R.string.tip_error_anon_unavailable)
         val NO_MONERO = uiText(R.string.tip_no_monero)
         val NOTICE_OFFLINE = uiText(R.string.tip_notice_offline)

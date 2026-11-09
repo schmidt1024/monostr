@@ -90,6 +90,7 @@ class ChatViewModel @Inject constructor(session: NostrSession, handle: SavedStat
         scope = viewModelScope,
         now = { System.currentTimeMillis() / 1000 },
         mentions = MentionResolver(ready.profiles, viewModelScope, Dispatchers.Default),
+        sendGate = ready.sendGate,
     )
     init {
         ready.dms.adoptOwnList() // idempotent; a chat opened from a profile settles the own inbox list too

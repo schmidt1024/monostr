@@ -256,4 +256,21 @@ class ChatControllerTest {
         assertSame(first, c.state.value.messages[0])
         assertEquals(DmStatus.FAILED, c.state.value.messages[1].message.status)
     }
+
+    @Test
+    fun `a message refused because Tor is not connected names the reason`() = runTest {
+        val send = com.monostr.app.ui.SendRig(connected = false)
+        val c = ChatController(
+            bob, me, InMemoryDmStore(), FakeProfiles(), { _, _ -> DmStatus.FAILED }, { DmStatus.FAILED }, eager(), { 1_000 },
+            work = UnconfinedTestDispatcher(testScheduler), sendGate = send.send,
+        )
+        c.send("hi")
+        advanceUntilIdle()
+        assertEquals(uiText(R.string.send_blocked_tor), c.state.value.message)
+        c.clearMessage()
+        send.connected.value = true
+        c.retry("x")
+        advanceUntilIdle()
+        assertEquals(uiText(R.string.chat_error_send), c.state.value.message, "any other failure keeps its own text")
+    }
 }

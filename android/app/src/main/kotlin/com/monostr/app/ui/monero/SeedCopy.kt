@@ -1,11 +1,11 @@
 package com.monostr.app.ui.monero
 
+import com.monostr.app.ui.common.GuardedAlertDialog
 import android.annotation.SuppressLint
 import android.content.ClipData
 import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.os.PersistableBundle
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -31,7 +31,7 @@ fun SeedCopyButton(words: String, onCopy: (String) -> Unit) {
     var confirm by remember { mutableStateOf(false) }
     TextButton(onClick = { confirm = true }, modifier = Modifier.testTag("seed-copy")) { Text(stringResource(R.string.seed_copy)) }
     if (confirm) {
-        AlertDialog(
+        GuardedAlertDialog(
             onDismissRequest = { confirm = false },
             title = { Text(stringResource(R.string.seed_copy_warning_title)) },
             text = { Text(stringResource(R.string.seed_copy_warning_text)) },

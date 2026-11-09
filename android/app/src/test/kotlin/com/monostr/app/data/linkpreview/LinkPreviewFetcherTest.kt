@@ -1,6 +1,16 @@
 package com.monostr.app.data.linkpreview
 
+import com.monostr.app.net.FakeSocks5
+import com.monostr.app.net.TorNotReadyException
+import com.monostr.app.net.gatedOkHttp
+import com.monostr.nostr.net.NetworkGate
+import org.junit.jupiter.api.assertThrows
+import java.io.IOException
 import org.junit.jupiter.api.Assertions.assertTrue
+import com.monostr.nostr.net.NetworkMode
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
@@ -118,6 +128,92 @@ class LinkPreviewFetcherTest {
         server.enqueue(html(head))
         assertNull(LinkPreviewFetcher(viaProxy, "ua", AddressPolicy.PUBLIC_ONLY, dns = intranet).fetch("http://intranet.example/admin"))
         assertEquals(0, server.requestCount)
+    }
+
+    private fun torFetcher(socks: FakeSocks5, ready: Boolean = true) = LinkPreviewFetcher(
+        gatedOkHttp(NetworkGate(pickPorts = { socks.port to 1 }).apply { set(torMode()) }) { ready }, "ua", AddressPolicy.PUBLIC_ONLY,
+    )
+
+    @Test
+    fun `switched off, a preview asked before the mode is known waits and then loads`() = runBlocking {
+        val gate = NetworkGate()
+        val fetcher = LinkPreviewFetcher(gatedOkHttp(gate) { false }, "ua", AddressPolicy.ANY)
+        server.enqueue(html(head))
+        val preview = async(Dispatchers.IO) { fetcher.fetch(server.url("/").toString()) }
+        delay(300)
+        assertEquals(0, server.requestCount)
+        gate.set(NetworkMode.Direct)
+        assertEquals("Hello", preview.await()?.title)
+    }
+
+    @Test
+    fun `a LAN literal is refused in Tor mode`() = runBlocking {
+        FakeSocks5(server.port).use { socks ->
+            val fetcher = torFetcher(socks)
+            for (url in listOf("http://192.168.1.10/", "http://127.0.0.1/", "http://[fd00::1]/", "http://[::ffff:192.168.1.1]/", "http://localhost/", "http://127.1/", "http://2130706433/", "http://0x7f.0.0.1/", "http://0177.0.0.1/", "http://999.1.1.1/", "http://nas.local/", "http://nas/", "http://a.b.c.1/", "http://1a.0.0.1/")) {
+                assertNull(fetcher.fetch(url), url)
+            }
+            assertEquals(emptyList<FakeSocks5.Ask>(), socks.asks.toList(), "the proxy is not even asked")
+            assertEquals(0, server.requestCount)
+        }
+    }
+
+    @Test
+    fun `a name in Tor mode goes to the proxy, no local lookup`() = runBlocking {
+        FakeSocks5(server.port).use { socks ->
+            server.enqueue(html(head))
+            // the name exists nowhere, so a local lookup would make this a miss
+            assertEquals("Hello", torFetcher(socks).fetch("http://preview.example/")?.title)
+            assertEquals(listOf(FakeSocks5.Ask(3, "preview.example", 80)), socks.asks.toList())
+        }
+    }
+
+    @Test
+    fun `a redirect to a LAN literal is refused in Tor mode`() = runBlocking {
+        FakeSocks5(server.port).use { socks ->
+            server.enqueue(MockResponse().setResponseCode(302).setHeader("Location", "http://192.168.1.1/admin"))
+            assertNull(torFetcher(socks).fetch("http://preview.example/"))
+            assertEquals(1, socks.asks.size)
+            assertEquals(1, server.requestCount)
+        }
+    }
+
+    @Test
+    fun `a picture on a LAN literal is dropped in Tor mode, a named one stays`() = runBlocking {
+        FakeSocks5(server.port).use { socks ->
+            server.enqueue(html("""<head><meta property="og:title" content="A"><meta property="og:image" content="http://192.168.1.1/x.png"></head>"""))
+            server.enqueue(html("""<head><meta property="og:title" content="B"><meta property="og:image" content="http://pictures.example/x.png"></head>"""))
+            assertNull(torFetcher(socks).fetch("http://preview.example/a")!!.imageUrl)
+            assertEquals("http://pictures.example/x.png", torFetcher(socks).fetch("http://preview.example/b")!!.imageUrl)
+        }
+    }
+
+    @Test
+    fun `a host java URI cannot parse fails typed in Tor mode and never goes direct`() = runBlocking<Unit> {
+        FakeSocks5(server.port).use { socks ->
+            assertThrows<TorNotReadyException> { runBlocking { torFetcher(socks).fetch("http://foo_bar.example/") } }
+            assertEquals(0, server.requestCount)
+        }
+    }
+
+    @Test
+    fun `in Tor mode a failure before any response is told apart from a miss`() = runBlocking<Unit> {
+        FakeSocks5().use { refusing -> assertThrows<IOException> { runBlocking { torFetcher(refusing).fetch("http://preview.example/") } } }
+    }
+
+    @Test
+    fun `in Direct a failure before any response is a plain miss, as ever`() = runBlocking {
+        val dead = java.net.ServerSocket(0, 1, java.net.InetAddress.getLoopbackAddress()).use { it.localPort }
+        val direct = LinkPreviewFetcher(gatedOkHttp(NetworkGate().apply { set(NetworkMode.Direct) }) { false }, "ua", AddressPolicy.ANY)
+        assertNull(direct.fetch("http://127.0.0.1:$dead/"))
+    }
+
+    @Test
+    fun `Tor not ready is told apart from a miss, the caller must not remember it`() = runBlocking<Unit> {
+        FakeSocks5(server.port).use { socks ->
+            assertThrows<TorNotReadyException> { runBlocking { torFetcher(socks, ready = false).fetch("http://preview.example/") } }
+            assertEquals(0, server.requestCount)
+        }
     }
 
     @Test

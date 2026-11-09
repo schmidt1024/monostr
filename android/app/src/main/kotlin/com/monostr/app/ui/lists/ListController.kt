@@ -1,5 +1,6 @@
 package com.monostr.app.ui.lists
 
+import com.monostr.app.net.SendGate
 import com.monostr.nostr.repo.FollowRepository
 import com.monostr.nostr.repo.MuteRepository
 import com.monostr.app.ui.common.userMessage
@@ -72,6 +73,8 @@ class ListController(
     private val writeScope: CoroutineScope = scope,
     private val follows: FollowRepository? = null,
     private val mute: MuteRepository? = null,
+    /** Whether anything may leave now; open only in tests. */
+    private val sendGate: SendGate = SendGate.OPEN,
     private val newFeed: (FeedSource.Authors, CoroutineScope) -> FeedController,
 ) {
     private val _state = MutableStateFlow(
@@ -82,7 +85,7 @@ class ListController(
     /** A «follow all» in flight: a second tap does nothing. */
     private val followingAll = AtomicBoolean(false)
     val state: StateFlow<ListUiState> = _state.asStateFlow()
-    private val pinActions = PinActions(pins, writeScope) { m -> _state.update { it.copy(message = m) } }
+    private val pinActions = PinActions(pins, writeScope, sendGate) { m -> _state.update { it.copy(message = m) } }
     private var feedScope: CoroutineScope? = null
 
     fun start() {
@@ -155,6 +158,7 @@ class ListController(
 
     /** The ✕ of a member row (own lists); the own lists bring the change, a failure offers Retry. */
     fun removeMember(pubkey: String) {
+        if (refused()) return
         writeScope.launch {
             val r = attempt { lists.setMember(address, pubkey, present = false) } ?: SaveResult.Failed
             if (r != SaveResult.Ok) _state.update { it.copy(message = Message(uiText(R.string.list_save_failed), retry = { removeMember(pubkey) })) }
@@ -170,6 +174,7 @@ class ListController(
 
     fun follow(pubkey: String) {
         val repo = follows ?: return
+        if (refused()) return
         writeScope.launch {
             try {
                 repo.follow(pubkey)
@@ -183,6 +188,7 @@ class ListController(
 
     /** Spec 2026-10-27 §5: every member not followed yet, not muted and not the user, in one contact list write; above [FollowAll.CONFIRM_ABOVE] it asks first. */
     fun followAll() {
+        if (refused()) return
         val s = _state.value
         val set = s.set ?: return
         if (follows == null) return
@@ -202,7 +208,7 @@ class ListController(
 
     private fun writeFollowAll(targets: List<String>) {
         val repo = follows ?: return
-        if (!followingAll.compareAndSet(false, true)) return
+        if (refused() || !followingAll.compareAndSet(false, true)) return
         val muted = mute?.muted?.value ?: emptySet()
         writeScope.launch {
             try {
@@ -222,6 +228,7 @@ class ListController(
 
     private fun undoFollowAll(added: List<String>) {
         val repo = follows ?: return
+        if (refused()) return
         writeScope.launch {
             try {
                 repo.unfollowAll(added)
@@ -234,4 +241,11 @@ class ListController(
     }
 
     fun close() = closeFeed()
+
+    /** Asked before the repository: a private list's write has the signer encrypt before it can fail. */
+    private fun refused(): Boolean {
+        if (sendGate.canSend.value) return false
+        _state.update { it.copy(message = Message(uiText(R.string.send_blocked_tor))) }
+        return true
+    }
 }

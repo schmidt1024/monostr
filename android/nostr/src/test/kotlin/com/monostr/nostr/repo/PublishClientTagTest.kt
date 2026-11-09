@@ -24,7 +24,7 @@ class PublishClientTagTest {
 
     @Test
     fun `the client tag names Monostr, the handler address and the home relay`() {
-        assertEquals(listOf("client", "monostr", "31990:1601fcacdf227ddda10e33e71917930b49be436b43bdd030b799948a9f274ed3:monostr", "wss://relay.monostr.com"), ClientTag.value)
+        assertEquals(listOf("client", "Monostr", "31990:1601fcacdf227ddda10e33e71917930b49be436b43bdd030b799948a9f274ed3:monostr", "wss://relay.monostr.com"), ClientTag.value)
     }
 
     @Test

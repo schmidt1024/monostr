@@ -1,5 +1,6 @@
 package com.monostr.app.session
 
+import com.monostr.app.net.SendGate
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flatMapLatest
@@ -48,6 +49,9 @@ import com.monostr.app.media.ImagePreparer
 import com.monostr.app.media.TransformerVideoPreparer
 import com.monostr.app.media.MediaUploader
 import com.monostr.app.media.OwnPictures
+import com.monostr.app.net.SwitchedSession
+import com.monostr.app.net.TorController
+import com.monostr.app.net.torConnected
 import com.monostr.app.ui.common.NoteDeletions
 import com.monostr.app.ui.common.NoteVisibility
 import com.monostr.app.ui.common.UiText
@@ -57,6 +61,7 @@ import com.monostr.app.ui.common.uiText
 import com.monostr.app.ui.media.MediaReveals
 import com.monostr.app.work.BackgroundCheckWorker
 import com.monostr.app.work.DmNotifier
+import com.monostr.nostr.DetachedSender
 import com.monostr.nostr.LocalSigner
 import com.monostr.nostr.NostrEngine
 import com.monostr.nostr.PerfTrace
@@ -66,6 +71,9 @@ import com.monostr.nostr.StartupGate
 import com.monostr.nostr.SyncMarks
 import com.monostr.nostr.TimedStartupGate
 import com.monostr.nostr.model.Note
+import com.monostr.nostr.net.NetworkGate
+import com.monostr.nostr.net.NetworkMode
+import com.monostr.nostr.net.sessionSocksPort
 import rust.nostr.sdk.Filter
 import rust.nostr.sdk.Kind
 import rust.nostr.sdk.PublicKey
@@ -157,6 +165,8 @@ import javax.inject.Singleton
 /** Everything screens need once a user is logged in. */
 class Ready(
     val pubkey: String,
+    /** Whether anything may leave now; the same for every session. */
+    val sendGate: SendGate,
     val signer: Signer,
     val engine: NostrEngine,
     val feed: FeedRepository,
@@ -261,6 +271,11 @@ interface NostrSessionEntryPoint {
     fun feedTabs(): FeedTabsCache
     fun sessions(): SessionStore
     fun translationSettings(): com.monostr.app.translate.TranslationSettingsStore
+    fun torSwitchControl(): com.monostr.app.net.TorSwitch
+    fun torSwitchStore(): com.monostr.app.net.TorSwitchStore
+    fun torController(): dagger.Lazy<TorController>
+    fun networkGate(): NetworkGate
+    fun http(): OkHttpClient
 }
 
 /** Spec 6: outcome of re-requesting Amber's permissions. */
@@ -300,7 +315,10 @@ class NostrSession @Inject constructor(
     private val drafts: DraftStore,
     private val pendingSetup: PendingSetupStore,
     private val feedTabsCache: FeedTabsCache,
-) {
+    private val networkGate: NetworkGate,
+    private val tor: dagger.Lazy<TorController>,
+    private val sendGate: SendGate,
+) : SwitchedSession {
     private val _state = MutableStateFlow<SessionState>(SessionState.Loading)
     val state: StateFlow<SessionState> = _state.asStateFlow()
     private val mutex = Mutex()
@@ -320,6 +338,8 @@ class NostrSession @Inject constructor(
         private const val DRAFT_CLEANUP_MS = 5_000L
         /** Spec 2026-10-17 §7: a pending setup that did not go out completely is tried once more after this long. */
         private const val SETUP_RETRY_MS = 30_000L
+        /** As `GatedHttp`: only a gate whose setting cannot be read waits this long. */
+        private const val UNKNOWN_WAIT_MS = 10_000L
 
         fun renewOutcome(sessionPubkey: String, ok: Boolean, response: Nip55.Response?): RenewResult = when (val o = Nip55.parsePubkeyResponse(ok, response)) {
             is Nip55.Outcome.Pubkey -> if (o.pubkey == sessionPubkey) RenewResult.Updated else RenewResult.WrongKey
@@ -332,24 +352,30 @@ class NostrSession @Inject constructor(
      * An unusable secret (Keystore key lost or invalidated, entry missing) clears the session
      * and secret. A failure to read the session or start the engine keeps both, so the next
      * start can retry, and shows [RESTORE_FAILED] on the login screen.
+     *
+     * @param onStarted told when this call is the one that built the session, also if it is cancelled right after. Not told when the
+     * session was there, or came up by someone else while this call waited for its turn, as during a Tor switch.
      */
-    suspend fun restore() = mutex.withLock {
-        if (_state.value is SessionState.Active) return@withLock
+    suspend fun restore(onStarted: (Ready) -> Unit = {}) = mutex.withLock { restoreLocked(onStarted) }
+
+    private suspend fun restoreLocked(onStarted: (Ready) -> Unit = {}) {
+        if (_state.value is SessionState.Active) return
         try {
             val info = sessions.session.first()
             if (info == null) {
                 _state.value = SessionState.LoggedOut()
-                return@withLock
+                return
             }
             PerfTrace.mark("restore: session read")
             val signer = signerFor(info)
             PerfTrace.mark("restore: signer ${info.signerType}")
             if (signer == null) {
                 clearStaleSession(info.pubkey)
-                return@withLock
+                return
             }
             val ready = start(signer)
             _state.value = SessionState.Active(ready)
+            onStarted(ready)
             PerfTrace.mark("session ready")
             markFirstLogin(signer.pubkey)
             resumeSetupLater(ready)
@@ -361,13 +387,43 @@ class NostrSession @Inject constructor(
     }
 
     /** Closes the engine but keeps the persisted session: the next [restore] starts it again. Used by background work that started the engine itself. */
-    suspend fun release() = mutex.withLock {
-        val ready = (_state.value as? SessionState.Active)?.ready ?: return@withLock
-        ready.dms.stop()
+    suspend fun release() = mutex.withLock { closeLocked() }
+
+    /** False without a running session. */
+    private suspend fun closeLocked(): Boolean {
+        val ready = (_state.value as? SessionState.Active)?.ready ?: return false
+        runCatching { ready.dms.stop() }
         runCatching { ready.foreign?.close() }
         runCatching { ready.engine.close() }
         runCatching { (ready.dmStore as? DmDatabase)?.close() }
         _state.value = SessionState.Loading
+        return true
+    }
+
+    /** A running session comes back after a Tor switch; a logged-out one stays as it is. Only touched while the switch holds [mutex]. */
+    private var rebuildAfterSwitch = false
+    private val switchLock = SwitchLock(mutex)
+
+    private fun holdRunningEngine() { (_state.value as? SessionState.Active)?.ready?.engine?.holdConnections() }
+
+    /**
+     * [mutex] is held from here to the end of [rebuild], so no restore (the UI asks for one as soon as the state is Loading), login or
+     * logout falls between the steps of a switch, and every [start] reads the mode it is built with. The first hold does not wait for
+     * the lock, the second is for an engine whose login finished while waiting. No step of a switch waits for Tor, so this stays short.
+     */
+    override suspend fun stop() {
+        holdRunningEngine()
+        switchLock.take()
+        rebuildAfterSwitch = false
+        holdRunningEngine()
+    }
+
+    override suspend fun close() { rebuildAfterSwitch = closeLocked() }
+
+    override suspend fun rebuild() = switchLock.finish {
+        // a step before the close failed: this engine is held for good, it has to go in any case
+        if (_state.value is SessionState.Active) rebuildAfterSwitch = closeLocked()
+        if (rebuildAfterSwitch) restoreLocked()
     }
 
     /**
@@ -426,7 +482,8 @@ class NostrSession @Inject constructor(
         _state.value = SessionState.Active(ready)
         PerfTrace.mark("session ready")
         markFirstLogin(ready.pubkey)
-        bestEffort { BackgroundCheckWorker.schedule(context) } // logout cancelled it
+        // logout cancelled it; a session runs, so the gate is known
+        bestEffort { BackgroundCheckWorker.schedule(context, torOn = networkGate.mode.value is NetworkMode.Tor) }
         resumeSetupLater(ready)
     }
 
@@ -611,7 +668,10 @@ class NostrSession @Inject constructor(
     private suspend fun start(signer: Signer): Ready {
         val dir = accountDir(context.filesDir, signer.pubkey).apply { mkdirs() }
         val modes = sessionRelays.startupModes()
-        val engine = NostrEngine.create(dir.absolutePath, signer, relayStore.relays.first())
+        // spec Tor 7.2: no engine before the route is known. Normally one file stat; a setting that cannot be read fails this start, it never goes direct
+        val port = networkGate.sessionSocksPort(UNKNOWN_WAIT_MS)
+        // with Tor the session runs on what is stored, and the engine waits: the port is ours only while Tor is connected (followTor below)
+        val engine = NostrEngine.create(dir.absolutePath, signer, relayStore.relays.first(), socksPort = port, held = port != null)
         engine.setRelayModes(modes)
         PerfTrace.mark("restore: engine created")
         try {
@@ -622,11 +682,11 @@ class NostrSession @Inject constructor(
         }
         PerfTrace.mark("restore: connect returned")
         // spec perf2 A2: on the engine's scope, so logout (engine close) ends the timer and every waiter
-        val startupGate = TimedStartupGate(engine.backgroundScope)
+        val startupGate = TimedStartupGate(engine.backgroundScope, route = engine.routeOpen.takeIf { port != null })
         val dmStore = DmDatabase(context, signer.pubkey)
         // spec 7.3: whatever fails from here on, the DM database and the engine are closed again
         try {
-            val tips = NostrTipsRepository(engine, gate = startupGate)
+            val tips = NostrTipsRepository(engine, DetachedSender(engine.ffiDispatcher, networkGate, torReady = torConnected(tor)), gate = startupGate)
             // spec 2026-10-23 §3/§4.4: one budget of foreign relays for the whole session, the indexers included
             val foreign = ForeignRelays(engine)
             val authorRelays = NostrAuthorRelaysRepository(engine, foreign = foreign)
@@ -653,7 +713,7 @@ class NostrSession @Inject constructor(
                 NostrDmRepository(engine), dmRelays, dmStore, dmSettings, publish,
                 engine::attachTemporary, engine::detachTemporary, engine.closed, engine.backgroundScope,
                 loadWrap = engine::eventById, authOk = engine.authenticated, authOkSeq = engine::authOkSeq,
-                authRejected = engine.authRejected, authRejection = engine::authRejection, gate = startupGate,
+                authRejected = engine.authRejected, authRejection = engine::authRejection, gate = startupGate, sendGate = sendGate,
             )
             // Live DMs and the unread badge from session start on; silent only, so safe for Amber. The
             // own kind 10050 is settled later, where the user opens the Messages tab or a chat.
@@ -686,7 +746,7 @@ class NostrSession @Inject constructor(
             engine.backgroundScope.launch { follows.changes.collect { followCounts.invalidateAll() } }
             // the user's own list and the lists of whom they follow stay stored; other followers' lists are passing
             val followLists = NostrFollowListsRepository(engine, kept = { feed.followsLocal().toHashSet() + signer.pubkey })
-            val blossom = BlossomClient(http, signer)
+            val blossom = BlossomClient(http, signer, sendGate)
             val mediaServer = uiSettings.mediaServer.stateIn(engine.backgroundScope, SharingStarted.Eagerly, MediaServer.DEFAULT)
             val pictures = OwnPictures(
                 mediaServer,
@@ -715,7 +775,20 @@ class NostrSession @Inject constructor(
                     engine.backgroundScope.launch { startupGate.await(); bestEffort { expireDrafts(drafts, signer.pubkey, System.currentTimeMillis() / 1000, media) } }
                 }
             }
+            // on the engine's scope: a logout during the wait ends it, and nothing starts afterwards
+            if (port != null) engine.backgroundScope.launch {
+                followTor(tor.get().state, hold = engine::holdConnections) {
+                    if (engine.openConnections()) {
+                        // what the DM run and the marks tried meanwhile found nobody there
+                        dms.restart()
+                        locator.forget()
+                        // an empty answer of a held fetch must not read as "no payment info" for the next hour
+                        tips.forgetFetched()
+                    }
+                }
+            }
             return Ready(
+                sendGate = sendGate,
                 startForegroundWork = startForegroundWork,
                 startupGate = startupGate,
                 syncMarks = syncMarks,
@@ -771,7 +844,7 @@ class NostrSession @Inject constructor(
         val publisher = PendingSetupPublisher(pendingSetup, pubkey, publish, follows, dmSettings, exists = { kind ->
             // spec wave 2 B4 call site 10: existence, so the first relay that has one decides
             storedOrFetched(engine, Filter().kind(Kind(kind.toUShort())).author(author).limit(1u), Duration.ofSeconds(5))
-        })
+        }, sendGate = sendGate)
         if (publisher.run()) return
         delay(SETUP_RETRY_MS)
         publisher.run()

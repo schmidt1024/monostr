@@ -65,6 +65,7 @@ class ProfileEditViewModel @Inject constructor(session: NostrSession) : ViewMode
     val controller = ProfileEditController(
         ready.pubkey, ready.profiles, ready.publish, viewModelScope, ready.media,
         removePictures = { ready.pictures.remove(it) }, background = ready.engine.backgroundScope,
+        sendGate = ready.sendGate,
     )
     init { controller.start() }
 }

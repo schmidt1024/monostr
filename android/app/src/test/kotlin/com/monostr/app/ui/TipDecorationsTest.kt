@@ -24,6 +24,8 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import com.monostr.nostr.net.NetworkMode
+import com.monostr.app.ui.tips.deliverToWatcher
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class TipDecorationsTest {
@@ -398,5 +400,105 @@ class TipDecorationsTest {
         d.add(listOf(n1)); advanceUntilIdle()
         assertEquals(3L, d.summaries.value[n1.id]?.total)
         assertEquals(2, tips.activeReceiptObservers, "the tracked set and the retried group")
+    }
+
+    private val anon = PendingTip("1234".padStart(64, 'e'), null, 5, 4_000, recipient = alice, anonEvent = "{\"id\":\"x\"}", anonRelays = listOf("wss://w.example"))
+    private val public = PendingTip("5678".padStart(64, 'e'), note('1', alice).id, 5, 4_000, watcherRelays = listOf("wss://w.example"))
+
+    @Test
+    fun `resendPending does nothing while canSend is false, not even when Tor comes back`() = runTest {
+        val pending = FakePendingTips()
+        pending.add(anon); pending.add(public)
+        val publish = FakePublish()
+        val tips = FakeTips()
+        val send = SendRig(connected = false)
+        val d = TipDecorations(tips, pending, profiles, publish, eager(), sendGate = send.send) { 5_000 }
+        d.start(); advanceUntilIdle()
+        send.connected.value = true
+        advanceUntilIdle()
+        assertTrue(publish.calls.isEmpty())
+        assertTrue(tips.anonymousResends.isEmpty() && tips.watcherResends.isEmpty())
+        assertEquals(2, pending.state.value.size, "they stay for the next start")
+    }
+
+    @Test
+    fun `at a start in direct mode an underTor tip left behind by a crash leaves the store and nothing goes out`() = runTest {
+        val pending = FakePendingTips()
+        pending.add(anon.copy(underTor = true)); pending.add(public.copy(underTor = true))
+        val publish = FakePublish()
+        val tips = FakeTips()
+        val d = TipDecorations(tips, pending, profiles, publish, eager(), sendGate = SendRig(NetworkMode.Direct).send) { 5_000 }
+        d.start(); advanceUntilIdle()
+        assertTrue(publish.calls.isEmpty())
+        assertTrue(tips.anonymousResends.isEmpty() && tips.watcherResends.isEmpty())
+        assertTrue(pending.state.value.isEmpty())
+    }
+
+    @Test
+    fun `an underTor tip stays out of the direct route even when it cannot be dropped`() = runTest {
+        val pending = FakePendingTips()
+        pending.add(anon.copy(underTor = true)); pending.add(public.copy(underTor = true))
+        pending.dropError = java.io.IOException("disk")
+        val publish = FakePublish()
+        val tips = FakeTips()
+        val d = TipDecorations(tips, pending, profiles, publish, eager(), sendGate = SendRig(NetworkMode.Direct).send) { 5_000 }
+        d.start(); advanceUntilIdle()
+        assertTrue(publish.calls.isEmpty())
+        assertTrue(tips.anonymousResends.isEmpty() && tips.watcherResends.isEmpty())
+    }
+
+    @Test
+    fun `an underTor tip that reaches the store after the switch went off does not go out direct`() = runTest {
+        val pending = FakePendingTips()
+        val tips = FakeTips()
+        // the gate says direct, yet the sender holds the tip: the check is the sender's, not the sweep's
+        val tip = anon.copy(underTor = true)
+        pending.add(tip)
+        assertFalse(deliverToWatcher(tips, pending, tip, SendRig(NetworkMode.Direct).send))
+        assertTrue(tips.anonymousResends.isEmpty())
+    }
+
+    @Test
+    fun `under connected Tor an underTor tip goes out as ever, over Tor only`() = runTest {
+        val pending = FakePendingTips()
+        pending.add(anon.copy(underTor = true)); pending.add(public.copy(underTor = true))
+        val publish = FakePublish()
+        val tips = FakeTips()
+        val d = TipDecorations(tips, pending, profiles, publish, eager(), sendGate = SendRig().send) { 5_000 }
+        d.start(); advanceUntilIdle()
+        assertEquals(1, tips.anonymousResends.size)
+        assertEquals(listOf(true), tips.anonymousTorOnly)
+        assertEquals(listOf("resend:5678"), publish.calls)
+        assertEquals(2, pending.state.value.size, "nothing is dropped in Tor mode")
+    }
+
+    @Test
+    fun `tip created in Direct mode is untouched`() = runTest {
+        for (mode in listOf(NetworkMode.Direct, NetworkMode.Tor(1, 2))) {
+            val pending = FakePendingTips()
+            pending.add(anon); pending.add(public)
+            val publish = FakePublish()
+            val tips = FakeTips()
+            val d = TipDecorations(tips, pending, profiles, publish, eager(), sendGate = SendRig(mode).send) { 5_000 }
+            d.start(); advanceUntilIdle()
+            assertEquals(1, tips.anonymousResends.size)
+            assertEquals(listOf(false), tips.anonymousTorOnly)
+            assertEquals(listOf("resend:5678"), publish.calls)
+            assertEquals(2, pending.state.value.size)
+        }
+    }
+
+    @Test
+    fun `the sweep in Direct runs before the first page, it needs no network`() = runTest {
+        val pending = FakePendingTips()
+        pending.add(anon.copy(underTor = true)); pending.add(public)
+        val gate = ManualGate()
+        val publish = FakePublish()
+        val d = TipDecorations(FakeTips(), pending, profiles, publish, eager(), gate = gate, sendGate = SendRig(NetworkMode.Direct).send) { 5_000 }
+        d.start(); advanceUntilIdle()
+        assertEquals(listOf(public), pending.state.value, "gone with the gate still closed")
+        assertTrue(publish.calls.isEmpty())
+        gate.open("test"); advanceUntilIdle()
+        assertEquals(listOf("resend:5678"), publish.calls, "the other waits for the first page as ever")
     }
 }

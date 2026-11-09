@@ -1,5 +1,6 @@
 package com.monostr.app.ui.monero
 
+import com.monostr.app.net.SendGate
 import com.monostr.app.R
 import com.monostr.app.data.KeystoreSecretStore
 import com.monostr.app.data.MoneroSetup
@@ -145,6 +146,8 @@ class MoneroSetupController(
     private val formatTime: (Long) -> String = ::localTime,
     /** Debug-only timing of the `/v1/info` calls (spec §12); the ViewModel passes a logcat writer in debug builds. */
     private val log: (String) -> Unit = {},
+    /** Whether anything may leave now; open only in tests. */
+    private val sendGate: SendGate = SendGate.OPEN,
 ) {
     private val startsAtWatcher = upgrade
     private val _state = MutableStateFlow(
@@ -262,6 +265,7 @@ class MoneroSetupController(
             return fail(ERR_ADDRESS)
         }
         if (net != Network.MAINNET) return fail(ERR_MAINNET)
+        if (refused()) return
         _state.update { it.copy(step = step.copy(loading = true), error = null) }
         scope.launch {
             try {
@@ -454,6 +458,7 @@ class MoneroSetupController(
             _state.update { it.copy(step = SetupStep.Verify(positions, wrong = true)) }
             return
         }
+        if (refused()) return
         val address = k.address(network)
         pendingAddress = address
         pendingViewKey = k.viewSecret.copyOf()
@@ -634,6 +639,7 @@ class MoneroSetupController(
         val asked = paytoAsked
         val profile = personalProfile ?: return
         val status = personalStatus ?: return
+        if (refused()) return
         _state.update { it.copy(step = SetupStep.Registering, error = null) }
         scope.launch {
             try {
@@ -677,7 +683,7 @@ class MoneroSetupController(
     /** Path B, or a retry after a failed registration: a path-A retry keeps the restore height. */
     fun confirm() {
         val step = _state.value.step as? SetupStep.Confirm ?: return
-        if (step.paytoPending) return
+        if (step.paytoPending || refused()) return
         register(restoreHeight = step.restoreHeight)
     }
 
@@ -708,7 +714,7 @@ class MoneroSetupController(
     /** Spec payto §4: after a payto write failed on [SetupStep.Done], tries only that write again. */
     fun retryPayto() {
         val step = _state.value.step as? SetupStep.Done ?: return
-        if (!step.paytoFailed || paytoRetry?.isActive == true) return
+        if (!step.paytoFailed || paytoRetry?.isActive == true || refused()) return
         paytoRetry = scope.launch {
             val failed = !publishPayto(step.address, retryAsked)
             _state.update { s -> (s.step as? SetupStep.Done)?.let { s.copy(step = it.copy(paytoFailed = failed)) } ?: s }
@@ -846,6 +852,8 @@ class MoneroSetupController(
      * Best effort: the next successful setup replaces whatever is left.
      */
     private suspend fun undoRegistration(previous: MoneroSetup?) {
+        // a watcher call signs first (NIP-98), and it could not leave: the next successful setup replaces what is left
+        if (!sendGate.canSend.value) return
         try {
             if (previous != null && previous.watcherUrl == url) {
                 val key = secrets.get(KeystoreSecretStore.SECRET_VIEW_KEY)?.trim()?.lowercase()?.takeIf(::isHex64)?.hexToBytes()
@@ -888,6 +896,13 @@ class MoneroSetupController(
         ProtocolVersion.supportsHiddenAmounts(protocol) && (existing?.amountsHidden ?: true)
 
     private fun fail(text: UiText) = _state.update { it.copy(error = text) }
+
+    /** Before the watcher learns a view key, before anything is signed. */
+    private fun refused(): Boolean {
+        if (sendGate.canSend.value) return false
+        fail(uiText(R.string.send_blocked_tor))
+        return true
+    }
 
     /** Spec §12: only an unreachable watcher or relay turns the button into "Try again". */
     private fun Exception.isNetwork() = this is WatcherException.Network || this is IOException

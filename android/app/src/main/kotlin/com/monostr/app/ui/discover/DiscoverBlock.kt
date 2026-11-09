@@ -1,5 +1,6 @@
 package com.monostr.app.ui.discover
 
+import com.monostr.app.ui.common.LocalCanSend
 import com.monostr.app.ui.common.asString
 import com.monostr.app.ui.common.FollowAllConfirmDialog
 import androidx.compose.runtime.LaunchedEffect
@@ -76,7 +77,7 @@ fun LazyListScope.discoverItems(
             item(key = "discover-$d-title") {
                 Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(section.title, Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    TextButton(onClick = { onFollowAll(section.address) }, enabled = !section.allFollowed, modifier = Modifier.testTag("discover-follow-all-$d")) {
+                    TextButton(onClick = { onFollowAll(section.address) }, enabled = LocalCanSend.current && !section.allFollowed, modifier = Modifier.testTag("discover-follow-all-$d")) {
                         Text(stringResource(if (section.allFollowed) R.string.discover_all_followed else R.string.discover_follow_all))
                     }
                 }
@@ -113,7 +114,7 @@ fun FollowPill(following: Boolean, onClick: () -> Unit, tag: String) {
     if (following) {
         OutlinedButton(onClick = {}, enabled = false, modifier = Modifier.testTag(tag)) { Text(stringResource(R.string.discover_following)) }
     } else {
-        Button(onClick = onClick, modifier = Modifier.testTag(tag)) { Text(stringResource(R.string.discover_follow)) }
+        Button(onClick = onClick, enabled = LocalCanSend.current, modifier = Modifier.testTag(tag)) { Text(stringResource(R.string.discover_follow)) }
     }
 }
 

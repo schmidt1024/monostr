@@ -15,17 +15,19 @@ import java.net.Proxy
 /**
  * Checks the address of every connection a request uses, redirects included, so the address
  * check cannot be skipped by a redirect or a DNS answer that changes between lookup and connect.
- * Behind a proxy the proxy connects, so the target name is resolved and checked instead.
+ * Behind an HTTP proxy the proxy connects, so the target name is resolved and checked instead. Behind SOCKS (only Tor) nothing
+ * may be resolved here: see [proxiedHostAllowed].
  */
-class AddressCheckInterceptor(private val policy: AddressPolicy = AddressPolicy.PUBLIC_ONLY) : Interceptor {
+class AddressCheckInterceptor(private val policy: AddressPolicy = AddressPolicy.PUBLIC_ONLY, private val dns: Dns) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         val route = chain.connection()?.route() ?: throw IOException("no connection")
-        val allowed = if (route.proxy.type() == Proxy.Type.DIRECT) {
-            policy.allows(route.socketAddress.address)
-        } else {
-            Dns.SYSTEM.lookup(chain.request().url.host).let { all -> all.isNotEmpty() && all.all(policy::allows) }
+        val host = chain.request().url.host
+        val allowed = when (route.proxy.type()) {
+            Proxy.Type.DIRECT -> policy.allows(route.socketAddress.address)
+            Proxy.Type.SOCKS -> proxiedHostAllowed(host, policy) // Tor: no local lookup
+            else -> dns.lookup(host).let { all -> all.isNotEmpty() && all.all(policy::allows) }
         }
-        if (!allowed) throw IOException("address refused for ${chain.request().url.host}")
+        if (!allowed) throw IOException("address refused for $host")
         return chain.proceed(chain.request())
     }
 }
@@ -35,7 +37,7 @@ class PreviewImages(val loader: ImageLoader) {
     companion object {
         fun create(context: Context, http: OkHttpClient): PreviewImages {
             val client by lazy {
-                http.newBuilder().cookieJar(CookieJar.NO_COOKIES).addNetworkInterceptor(AddressCheckInterceptor()).build()
+                http.newBuilder().cookieJar(CookieJar.NO_COOKIES).addNetworkInterceptor(AddressCheckInterceptor(dns = http.dns)).build()
             }
             return PreviewImages(
                 ImageLoader.Builder(context).serviceLoaderEnabled(false).components { add(OkHttpNetworkFetcherFactory(callFactory = { client })) }.build(),

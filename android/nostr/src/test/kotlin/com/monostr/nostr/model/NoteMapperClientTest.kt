@@ -33,6 +33,11 @@ class NoteMapperClientTest {
     }
 
     @Test
+    fun `an old note with the lowercase name keeps it as it is`() {
+        assertEquals("monostr", NoteMapper.note(event(listOf(listOf("client", "monostr", "31990:abc:monostr", "wss://r"))))!!.client)
+    }
+
+    @Test
     fun `a repost carries the reposter's client, the embedded note its own`() {
         val original = EventBuilder.textNote("orig").tags(listOf(Tag.parse(listOf("client", "Amethyst")))).signWithKeys(Keys.generate())
         val repost = EventBuilder.repost(original, null).tags(listOf(Tag.parse(listOf("client", "monostr")))).signWithKeys(keys)

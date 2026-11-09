@@ -227,4 +227,20 @@ class HomeTabsControllerTest {
             assertEquals(1, count { it.endsWith(" tab title shown") })
         }
     }
+
+    @Test
+    fun `unpin and move refuse while canSend is false, with the reason`() = runTest {
+        val friends = followSet("friends", listOf(bob), author = self, title = "Friends")
+        val pins = FakeFeedTabs(listOf(friends.address))
+        val scope = eager()
+        val following = feed(FakeFeed(), scope)
+        val c = HomeTabsController(pins, FakeLists(listOf(friends)), scope, self, following, sendGate = SendRig(connected = false).send) { source, s, snapshot -> feed(FakeFeed(), s, source, snapshot) }
+        c.start(); runCurrent()
+        c.unpin(friends.address); runCurrent()
+        assertEquals(com.monostr.app.ui.common.uiText(com.monostr.app.R.string.send_blocked_tor), c.state.value.message?.text)
+        c.clearMessage()
+        c.move(friends.address, 1); runCurrent()
+        assertEquals(com.monostr.app.ui.common.uiText(com.monostr.app.R.string.send_blocked_tor), c.state.value.message?.text)
+        assertTrue(pins.calls.isEmpty(), "calls: ${pins.calls}")
+    }
 }

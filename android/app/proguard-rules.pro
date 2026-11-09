@@ -28,3 +28,7 @@
 
 # language-detector (note translation) logs through slf4j-api 1.7 without a binding: it falls back to a no-op logger
 -dontwarn org.slf4j.impl.StaticLoggerBinder
+
+# Tor: the AAR has no consumer rules, and TorService is reached from JNI (torConfiguration, torControlFd, native methods)
+-keep class org.torproject.jni.** { *; }
+-keep class net.freehaven.tor.control.** { *; }

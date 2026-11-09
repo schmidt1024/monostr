@@ -1,5 +1,6 @@
 package com.monostr.app.ui.lists
 
+import com.monostr.app.net.SendGate
 import com.monostr.app.R
 import com.monostr.app.ui.common.Message
 import com.monostr.app.ui.common.attempt
@@ -44,6 +45,8 @@ class ListEditController(
     private val pins: FeedTabsRepository,
     private val scope: CoroutineScope,
     private val writeScope: CoroutineScope = scope,
+    /** Whether anything may leave now; open only in tests. */
+    private val sendGate: SendGate = SendGate.OPEN,
 ) {
     private val _state = MutableStateFlow(ListEditState(isNew = address == null, loading = address != null))
     val state: StateFlow<ListEditState> = _state.asStateFlow()
@@ -77,6 +80,7 @@ class ListEditController(
     fun save() {
         val s = _state.value
         if (!s.canSave) return
+        if (refused()) return
         val title = s.title.trim()
         val description = s.description.trim().ifBlank { null }
         val existing = original?.address
@@ -100,7 +104,9 @@ class ListEditController(
 
     fun delete() {
         val set = original ?: return
-        _state.update { it.copy(confirmDelete = false, saving = true) }
+        _state.update { it.copy(confirmDelete = false) }
+        if (refused()) return
+        _state.update { it.copy(saving = true) }
         writeScope.launch {
             val r = attempt { lists.delete(set) } ?: SaveResult.Failed
             if (r == SaveResult.Ok) {
@@ -114,6 +120,13 @@ class ListEditController(
     }
 
     fun clearMessage() = _state.update { it.copy(message = null) }
+
+    /** Asked before the repository: a private list's write has the signer encrypt before it can fail. */
+    private fun refused(): Boolean {
+        if (sendGate.canSend.value) return false
+        _state.update { it.copy(message = Message(uiText(R.string.send_blocked_tor))) }
+        return true
+    }
 
     companion object {
         const val MAX_TITLE = 50

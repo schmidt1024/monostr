@@ -57,10 +57,10 @@ class MoneroSetupControllerTest {
         val relays: MutableList<List<String>> = ArrayList(),
     )
 
-    private fun TestScope.controller(rig: Rig, intro: Boolean = false, upgrade: Boolean = false) = MoneroSetupController(
+    private fun TestScope.controller(rig: Rig, intro: Boolean = false, upgrade: Boolean = false, sendGate: com.monostr.app.net.SendGate = com.monostr.app.net.SendGate.OPEN) = MoneroSetupController(
         intro = intro, upgrade = upgrade, gateway = rig.gateway, tips = rig.tips, settings = rig.settings, secrets = rig.secrets,
         relays = { rig.relays += it }, scope = eager(), selfPubkey = self, keyGen = { rig.keys }, random = Random(7), now = { NOW },
-        formatTime = { "t$it" },
+        formatTime = { "t$it" }, sendGate = sendGate,
     ).also { it.start(); advanceUntilIdle() }
 
     private val watcherHex = Keys.generate().publicKey().toHex()
@@ -1357,5 +1357,66 @@ class MoneroSetupControllerTest {
 
     private companion object {
         const val NOW = 5_000L
+    }
+
+    @Test
+    fun `publishing the address refuses while canSend is false, the step stays`() = runTest {
+        val rig = Rig()
+        val c = controller(rig, intro = true, sendGate = SendRig(connected = false).send)
+        c.setAddress(sub); c.publishAddress(); advanceUntilIdle()
+        assertEquals(com.monostr.app.ui.common.uiText(com.monostr.app.R.string.send_blocked_tor), c.state.value.error)
+        assertTrue(c.state.value.step is SetupStep.Address)
+        assertTrue(rig.tips.publishedInfos.isEmpty())
+    }
+
+    @Test
+    fun `confirming a personal watcher refuses while canSend is false, the step stays`() = runTest {
+        val rig = Rig()
+        rig.tips.statuses[watcherHex] = status()
+        val send = SendRig()
+        val c = controller(rig, upgrade = true, sendGate = send.send)
+        loadPersonal(c, nprofile("wss://w.example"))
+        send.connected.value = false
+        c.confirmPersonal(); advanceUntilIdle()
+        assertEquals(com.monostr.app.ui.common.uiText(com.monostr.app.R.string.send_blocked_tor), c.state.value.error)
+        assertTrue(c.state.value.step is SetupStep.PersonalConfirm)
+        assertTrue(rig.tips.publishedInfos.isEmpty())
+    }
+
+    @Test
+    fun `confirming a watcher setup refuses before registering the view key`() = runTest {
+        val rig = Rig()
+        val wallet = MoneroKeys.generate()
+        val address = wallet.address(Network.MAINNET)
+        val send = SendRig()
+        val c = controller(rig, intro = true, sendGate = send.send)
+        c.createWallet(); advanceUntilIdle()
+        c.setWatcherUrl("https://w.example"); c.loadWatcher(); advanceUntilIdle()
+        c.startExisting(); c.setAddress(address.encode()); c.setViewKey(wallet.viewSecret.toHex()); c.checkExisting()
+        assertTrue(c.state.value.step is SetupStep.Confirm, "step: ${c.state.value.step}")
+        send.connected.value = false
+        c.confirm(); advanceUntilIdle()
+        assertEquals(com.monostr.app.ui.common.uiText(com.monostr.app.R.string.send_blocked_tor), c.state.value.error)
+        assertTrue(c.state.value.step is SetupStep.Confirm)
+        assertTrue(rig.gateway.registered.isEmpty())
+    }
+
+    @Test
+    fun `the seed path refuses at the last step with the reason, not that the watcher is unreachable`() = runTest {
+        val rig = Rig()
+        val send = SendRig()
+        val c = controller(rig, intro = true, sendGate = send.send)
+        c.createWallet(); advanceUntilIdle()
+        c.loadDefaultWatcher(); advanceUntilIdle()
+        c.startNew()
+        val seed = c.state.value.step as SetupStep.Seed
+        c.seedWritten()
+        val verify = c.state.value.step as SetupStep.Verify
+        send.connected.value = false
+        c.verify(verify.positions.map { seed.words[it] }); advanceUntilIdle()
+        assertEquals(com.monostr.app.ui.common.uiText(com.monostr.app.R.string.send_blocked_tor), c.state.value.error)
+        assertTrue(c.state.value.step is SetupStep.Verify, "step: ${c.state.value.step}")
+        assertTrue(rig.gateway.registered.isEmpty())
+        assertTrue(rig.tips.publishedInfos.isEmpty())
     }
 }

@@ -1,5 +1,6 @@
 package com.monostr.app.ui.settings
 
+import com.monostr.app.net.SendGate
 import com.monostr.app.session.AdoptResult
 import kotlinx.coroutines.flow.first
 import com.monostr.app.ui.tips.watcher
@@ -90,13 +91,15 @@ class MoneroSettingsController(
     private val now: () -> Long = { System.currentTimeMillis() / 1000 },
     /** With [selfPubkey]: a successful choice here also answers the one-time amounts question. */
     private val hints: HintStore? = null,
+    /** Whether anything may leave now; open only in tests. */
+    private val sendGate: SendGate = SendGate.OPEN,
 ) {
     private var statusJob: Job? = null
     private var supportJob: Job? = null
     private var paytoJob: Job? = null
     /** Counts published removals: a read that started before one must not bring the address back. */
     private var paytoRemovals = 0
-    private val visibility = AmountsVisibility(tips, gateway, settings)
+    private val visibility = AmountsVisibility(tips, gateway, settings, sendGate)
     private var followed = false
 
     private val _state = MutableStateFlow(MoneroSettingsState())
@@ -234,6 +237,7 @@ class MoneroSettingsController(
     /** Spec 6.5 "Abschalten": DELETE at the watcher, address-less payment info, local status cleared. The view key stays (spec 6.4). */
     fun disable() {
         val setup = _state.value.setup ?: return
+        if (refused()) return
         scope.launch {
             _state.update { it.copy(busy = true, error = null) }
             try {
@@ -272,7 +276,7 @@ class MoneroSettingsController(
 
     /** Takes the public Monero address off the account (no setup on this device); nothing changes unless it was published. */
     fun removePayto() {
-        if (_state.value.busy) return
+        if (_state.value.busy || refused()) return
         scope.launch {
             _state.update { it.copy(busy = true, error = null) }
             when (removeOwnPayto()) {
@@ -289,6 +293,7 @@ class MoneroSettingsController(
         if (st.setup == null || st.busy) return
         // switching back to public is always allowed; hiding needs a watcher that speaks 0.5
         if (if (public) !st.setup.amountsHidden else st.amountsSupported != true) return
+        if (refused()) return
         scope.launch {
             _state.update { it.copy(busy = true, error = null) }
             try {
@@ -336,6 +341,12 @@ class MoneroSettingsController(
     }
 
     fun clearMessage() = _state.update { it.copy(message = null) }
+
+    private fun refused(): Boolean {
+        if (sendGate.canSend.value) return false
+        _state.update { it.copy(error = uiText(R.string.send_blocked_tor)) }
+        return true
+    }
 
     companion object {
         /** "Presets: valid … amounts", naming the unit the fields are typed in. */

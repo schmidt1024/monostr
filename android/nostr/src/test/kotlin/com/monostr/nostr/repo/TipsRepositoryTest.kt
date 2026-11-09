@@ -1,7 +1,10 @@
 package com.monostr.nostr.repo
 
 import kotlinx.coroutines.launch
+import com.monostr.nostr.DetachedSender
 import com.monostr.nostr.ManualGate
+import com.monostr.nostr.net.NetworkGate
+import com.monostr.nostr.net.NetworkMode
 import com.monostr.monero.MoneroKeys
 import com.monostr.monero.Network
 import com.monostr.nostr.LocalSigner
@@ -42,6 +45,8 @@ import java.time.Duration
 
 class TipsRepositoryTest {
     @TempDir lateinit var dir: Path
+
+    private fun directGate() = NetworkGate().apply { set(NetworkMode.Direct) }
 
     private val me = Keys.parse("0000000000000000000000000000000000000000000000000000000000000001")
     private val alice = Keys.generate()
@@ -230,7 +235,7 @@ class TipsRepositoryTest {
                 val e = NostrEngine.create(dir.resolve("lmdb").toString(), LocalSigner(me.secretKey().toHex()), listOf(ownRelay.url))
                 try {
                     e.connect()
-                    val repo = NostrTipsRepository(e) { clock }
+                    val repo = NostrTipsRepository(e, DetachedSender(gate = directGate())) { clock }
                     val info = PaymentInfo.parse(RustConvert.toTips(alicePaymentInfo())) as PaymentInfo.Enabled
                     val aliceHex = alice.publicKey().toHex()
                     fun prepared() = TipRequest.prepare(info, aliceHex, null, 1_000_000_000, TipType.TIP, "", clock, anonymous = true)
@@ -307,7 +312,7 @@ class TipsRepositoryTest {
                 try {
                     e.connect()
                     e.save(alicePaymentInfo())
-                    val repo = NostrTipsRepository(e) { clock }
+                    val repo = NostrTipsRepository(e, DetachedSender(gate = directGate())) { clock }
                     val ids = repo.observeAnonymousProfileReceipts(aliceHex, since = clock, listOf(watcherRelay.url)).first()
                     assertEquals(setOf("1".repeat(64)), ids)
                     assertTrue(watcherRelay.requests.isNotEmpty())
@@ -321,13 +326,66 @@ class TipsRepositoryTest {
     }
 
     @Test
+    fun `while the network mode is unknown the anonymous watch fails nothing and asks nobody, then starts once it is known`() = kotlinx.coroutines.runBlocking<Unit> {
+        val aliceHex = alice.publicKey().toHex()
+        val valid = signed(watcher, TipReceipt.build(null, aliceHex, null, 1_000, "1".repeat(64), TipType.TIP, clock + 10))
+        SilentWsRelay(serve = listOf(valid.asJson())).use { watcherRelay ->
+            val e = NostrEngine.create(dir.resolve("lmdb").toString(), LocalSigner(me.secretKey().toHex()), emptyList())
+            try {
+                e.save(alicePaymentInfo())
+                val gate = NetworkGate()
+                val repo = NostrTipsRepository(e, DetachedSender(gate = gate)) { clock }
+                val watch = async(kotlinx.coroutines.Dispatchers.Default) { repo.observeAnonymousProfileReceipts(aliceHex, since = clock, listOf(watcherRelay.url)).first() }
+                kotlinx.coroutines.delay(500)
+                assertTrue(watch.isActive, "the watch neither ended nor failed")
+                assertEquals(0, watcherRelay.connections)
+                gate.set(NetworkMode.Direct)
+                assertEquals(setOf("1".repeat(64)), kotlinx.coroutines.withTimeout(10_000) { watch.await() })
+            } finally {
+                e.close()
+            }
+        }
+    }
+
+    @Test
+    fun `after the engine closed, the payment info still reads and the anonymous watch still runs`() = kotlinx.coroutines.runBlocking<Unit> {
+        val aliceHex = alice.publicKey().toHex()
+        val valid = signed(watcher, TipReceipt.build(null, aliceHex, null, 1_000, "1".repeat(64), TipType.TIP, clock + 10))
+        SilentWsRelay(serve = listOf(valid.asJson())).use { watcherRelay ->
+            val e = NostrEngine.create(dir.resolve("lmdb").toString(), LocalSigner(me.secretKey().toHex()), emptyList())
+            e.save(alicePaymentInfo())
+            val repo = NostrTipsRepository(e, DetachedSender(gate = directGate())) { clock }
+            e.close()
+            // Task 6 replaces such a watch; until then it must neither fail for good nor crash
+            assertTrue(repo.cachedPaymentInfo(aliceHex) is PaymentInfo.Enabled, "the database stays readable after close")
+            val ids = kotlinx.coroutines.withTimeout(5_000) { repo.observeAnonymousProfileReceipts(aliceHex, since = clock, listOf(watcherRelay.url)).first() }
+            assertEquals(setOf("1".repeat(64)), ids)
+        }
+    }
+
+    @Test
+    fun `what a held engine could not fetch does not count as asked, once the session says so`() = kotlinx.coroutines.runBlocking<Unit> {
+        val aliceHex = alice.publicKey().toHex()
+        val e = NostrEngine.create(dir.resolve("lmdb").toString(), LocalSigner(me.secretKey().toHex()), listOf("ws://relay.example"), socksPort = 1, held = true)
+        try {
+            val repo = NostrTipsRepository(e, DetachedSender(gate = directGate()), fetchTimeout = java.time.Duration.ofMillis(50)) { clock }
+            assertTrue(repo.paymentInfo(aliceHex) !is PaymentInfo.Enabled)
+            assertTrue(repo.lastFetchAt(aliceHex) != null, "the gate stamped the empty answer")
+            repo.forgetFetched()
+            assertEquals(null, repo.lastFetchAt(aliceHex))
+        } finally {
+            e.close()
+        }
+    }
+
+    @Test
     fun `without cached payment info nothing is asked`() = runTest {
         SilentWsRelay(answerEose = true).use { watcherRelay ->
             SilentWsRelay(answerEose = true).use { ownRelay ->
                 val e = NostrEngine.create(dir.resolve("lmdb").toString(), LocalSigner(me.secretKey().toHex()), listOf(ownRelay.url))
                 try {
                     e.connect()
-                    val repo = NostrTipsRepository(e) { clock }
+                    val repo = NostrTipsRepository(e, DetachedSender(gate = directGate())) { clock }
                     val before = ownRelay.requests.size
                     val ids = repo.observeAnonymousProfileReceipts(Keys.generate().publicKey().toHex(), since = clock, listOf(watcherRelay.url)).toList()
                     assertTrue(ids.isEmpty(), "the flow ends without a value")

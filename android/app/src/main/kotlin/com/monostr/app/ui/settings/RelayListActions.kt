@@ -1,7 +1,7 @@
 package com.monostr.app.ui.settings
 
+import com.monostr.app.ui.common.GuardedAlertDialog
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -69,7 +69,7 @@ fun RelayListActions(isDefault: Boolean, busy: Boolean, onPublish: () -> Unit, o
 
 @Composable
 private fun ConfirmRelayListAction(title: Int, text: Int, confirm: Int, confirmTag: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
-    AlertDialog(
+    GuardedAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(title)) },
         text = { Text(stringResource(text)) },

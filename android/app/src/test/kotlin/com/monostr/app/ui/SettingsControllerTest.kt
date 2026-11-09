@@ -175,4 +175,38 @@ class SettingsControllerTest {
         val failing = FakePublish(fail = true)
         assertEquals(uiText(R.string.error_send_failed), publishRelayList({ relays }, { failing.publishRelayList(it) }))
     }
+
+    @Test
+    fun `search and dm lists refuse an onion address at entry, the main list takes it`() = runTest {
+        for (spelling in listOf("ws://abc.onion", "wss://ABC.ONION/", "ws://sub.abc.onion:7777")) {
+            val search = FakeRelayStore(listOf("wss://s.example"))
+            val searchList = SettingsController(search, { search.set(it) }, eager(), minimum = 0, onionAllowed = false)
+            searchList.start(); advanceUntilIdle()
+            assertFalse(searchList.add(spelling), spelling)
+            assertEquals(uiText(R.string.settings_relay_onion_main_only), searchList.state.value.error)
+            assertEquals(listOf("wss://s.example"), searchList.state.value.relays)
+
+            val dm = FakeRelayStore(listOf("wss://d.example"))
+            val dmList = SettingsController(dm, { dm.set(it) }, eager(), onionAllowed = false)
+            dmList.start(); advanceUntilIdle()
+            dmList.replace("wss://d.example", spelling); advanceUntilIdle()
+            assertEquals(uiText(R.string.settings_relay_onion_main_only), dmList.state.value.error)
+            assertEquals(listOf("wss://d.example"), dmList.state.value.relays)
+        }
+        val main = FakeRelayStore(listOf("wss://m.example"))
+        val mainList = SettingsController(main, { main.set(it) }, eager())
+        mainList.start(); advanceUntilIdle()
+        assertTrue(mainList.add("ws://abc.onion")); advanceUntilIdle()
+        assertEquals(listOf("wss://m.example", "ws://abc.onion"), mainList.state.value.relays)
+    }
+
+    @Test
+    fun `an onion already stored in the search list is listed and does not crash`() = runTest {
+        val search = FakeRelayStore(listOf("wss://s.example", "ws://abc.onion"))
+        val list = SettingsController(search, { search.set(it) }, eager(), minimum = 0, onionAllowed = false)
+        list.start(); advanceUntilIdle()
+        assertEquals(listOf("wss://s.example", "ws://abc.onion"), list.state.value.relays)
+        list.remove("ws://abc.onion"); advanceUntilIdle()
+        assertEquals(listOf("wss://s.example"), list.state.value.relays)
+    }
 }

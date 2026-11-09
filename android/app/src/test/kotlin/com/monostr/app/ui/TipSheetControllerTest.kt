@@ -672,4 +672,213 @@ class TipSheetControllerTest {
         assertTrue(rig.tips.sentIntents.isEmpty())
         assertTrue(rig.pending.pending.first().isEmpty())
     }
+
+    private fun TestScope.gated(rig: Rig, send: SendRig) =
+        TipSheetController(rig.tips, rig.gateway, rig.settings, rig.pending, eager(), rig.authorRelays, { rig.authorRelaysOn }, sendGate = send.send, now = { 5_000 })
+
+    @Test
+    fun `tip send refused while canSend is false, with reason, no intent`() = runTest {
+        for (anonymous in listOf(false, true)) {
+            val rig = Rig(FakeTips(infos = mapOf(alice to enabled)))
+            rig.settings.anonymousState.value = anonymous
+            val send = SendRig(connected = false)
+            val c = gated(rig, send)
+            c.open(n)
+            advanceUntilIdle()
+            c.send()
+            advanceUntilIdle()
+            assertEquals(TipSheetController.ERROR_TOR, c.state.value.error)
+            assertEquals(TipPhase.Ready, c.state.value.phase, "the sheet stays as it was")
+            assertTrue(rig.tips.sentIntents.isEmpty() && rig.tips.anonymousIntents.isEmpty(), "no intent")
+            assertTrue(rig.pending.state.value.isEmpty(), "no pending tip")
+            // not a queue: Tor coming back sends nothing
+            send.connected.value = true
+            advanceUntilIdle()
+            assertTrue(rig.tips.sentIntents.isEmpty() && rig.tips.anonymousIntents.isEmpty())
+            assertTrue(rig.tips.watcherResends.isEmpty() && rig.tips.anonymousResends.isEmpty())
+            // the user's own tap then works
+            c.send()
+            advanceUntilIdle()
+            assertEquals(1, rig.pending.state.value.size)
+        }
+    }
+
+    @Test
+    fun `Tor going away while the watcher is asked refuses the tip`() = runTest {
+        val rig = Rig(FakeTips(infos = mapOf(alice to enabled)))
+        val send = SendRig()
+        val c = gated(rig, send)
+        c.open(n)
+        advanceUntilIdle()
+        val slow = CompletableDeferred<Unit>()
+        rig.gateway.infoGate = slow
+        c.send()
+        send.connected.value = false
+        slow.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(TipSheetController.ERROR_TOR, c.state.value.error)
+        assertEquals(TipPhase.Ready, c.state.value.phase)
+        assertTrue(rig.tips.sentIntents.isEmpty())
+    }
+
+    @Test
+    fun `an intent nobody took because Tor just went leaves no pending tip and no repeat`() = runTest {
+        for (anonymous in listOf(false, true)) {
+            val rig = Rig(FakeTips(infos = mapOf(alice to enabled), relaysOk = false, watcherAccepts = false))
+            rig.settings.anonymousState.value = anonymous
+            val send = SendRig()
+            val c = gated(rig, send)
+            c.open(n)
+            advanceUntilIdle()
+            val inFlight = CompletableDeferred<Unit>()
+            rig.tips.sendGate = inFlight
+            c.send()
+            send.connected.value = false
+            inFlight.complete(Unit)
+            advanceUntilIdle()
+            assertEquals(TipSheetController.ERROR_TOR, c.state.value.error)
+            assertEquals(TipPhase.Ready, c.state.value.phase)
+            assertTrue(rig.pending.state.value.isEmpty())
+            send.connected.value = true
+            advanceUntilIdle()
+            assertTrue(rig.tips.watcherResends.isEmpty() && rig.tips.anonymousResends.isEmpty())
+        }
+    }
+
+    @Test
+    fun `a tip sent under Tor is marked, travels Tor only, and one sent direct is neither`() = runTest {
+        for ((mode, viaTor) in listOf(com.monostr.nostr.net.NetworkMode.Tor(1, 2) to true, com.monostr.nostr.net.NetworkMode.Direct to false)) {
+            val rig = Rig(FakeTips(infos = mapOf(alice to enabled)))
+            rig.settings.anonymousState.value = true
+            val c = gated(rig, SendRig(mode))
+            c.open(n)
+            advanceUntilIdle()
+            c.send()
+            advanceUntilIdle()
+            assertEquals(listOf(viaTor), rig.tips.anonymousTorOnly)
+            assertEquals(viaTor, rig.pending.state.value.single().underTor)
+        }
+        val rig = Rig(FakeTips(infos = mapOf(alice to enabled)))
+        val c = gated(rig, SendRig())
+        c.open(n)
+        advanceUntilIdle()
+        c.send()
+        advanceUntilIdle()
+        assertTrue(rig.pending.state.value.single().underTor, "a public one too")
+    }
+
+    @Test
+    fun `a send begun in Direct and finished after turning Tor on counts as under Tor`() = runTest {
+        val rig = Rig(FakeTips(infos = mapOf(alice to enabled)))
+        rig.settings.anonymousState.value = true
+        val send = SendRig(com.monostr.nostr.net.NetworkMode.Direct)
+        val c = gated(rig, send)
+        c.open(n)
+        advanceUntilIdle()
+        val inFlight = CompletableDeferred<Unit>()
+        rig.tips.sendGate = inFlight
+        c.send()
+        send.gate.set(com.monostr.nostr.net.NetworkMode.Tor(1, 2))
+        inFlight.complete(Unit)
+        advanceUntilIdle()
+        assertTrue(rig.pending.state.value.single().underTor)
+    }
+
+    @Test
+    fun `Tor leaving during the repeats ends them, also when it is back before the next one`() = runTest {
+        val rig = Rig(FakeTips(infos = mapOf(alice to enabled), watcherAccepts = false))
+        val send = SendRig()
+        val c = gated(rig, send)
+        c.open(n)
+        runCurrent()
+        c.send()
+        runCurrent()
+        assertEquals(0, rig.tips.watcherResends.size)
+        advanceTimeBy(TipSheetController.REDELIVER_DELAYS_MS[0] + 1)
+        assertEquals(1, rig.tips.watcherResends.size, "the schedule runs while Tor is connected")
+        send.connected.value = false
+        runCurrent()
+        send.connected.value = true
+        advanceUntilIdle()
+        assertEquals(1, rig.tips.watcherResends.size, "no send later on its own")
+        assertFalse(rig.pending.state.value.single().watcherDelivered)
+    }
+
+    @Test
+    fun `an underTor tip is not repeated once the route is direct`() = runTest {
+        val rig = Rig(FakeTips(infos = mapOf(alice to enabled), relaysOk = false))
+        rig.settings.anonymousState.value = true
+        val send = SendRig()
+        val c = gated(rig, send)
+        c.open(n)
+        runCurrent()
+        c.send()
+        runCurrent()
+        assertTrue(rig.pending.state.value.single().underTor)
+        send.gate.set(com.monostr.nostr.net.NetworkMode.Direct)
+        advanceUntilIdle()
+        assertTrue(rig.tips.anonymousResends.isEmpty(), "that would link the anonymous intent to the IP")
+    }
+
+    @Test
+    fun `the wallet note comes once, with a phase that leads to the wallet, and not for a sheet that cannot pay`() = runTest {
+        var taken = 0
+        val rig = Rig(FakeTips(infos = mapOf(alice to enabled)))
+        val c = TipSheetController(rig.tips, rig.gateway, rig.settings, rig.pending, eager(), rig.authorRelays, { true }, takeWalletNote = { ++taken == 1 }, now = { 5_000 })
+        c.open(n)
+        advanceUntilIdle()
+        assertEquals(TipPhase.Ready, c.state.value.phase)
+        assertTrue(c.state.value.walletNote)
+        c.dismiss()
+        c.open(n)
+        advanceUntilIdle()
+        assertFalse(c.state.value.walletNote)
+
+        var asked = false
+        val blocked = TipSheetController(FakeTips(), rig.gateway, rig.settings, rig.pending, eager(), rig.authorRelays, { true }, sendGate = SendRig(connected = false).send, takeWalletNote = { asked = true; true }, now = { 5_000 })
+        blocked.open(n)
+        advanceUntilIdle()
+        assertEquals(TipPhase.Blocked, blocked.state.value.phase)
+        assertFalse(blocked.state.value.walletNote)
+        assertFalse(asked, "not used up by a sheet that never reaches the wallet")
+    }
+
+    @Test
+    fun `with Tor not connected and no payment info known the sheet gives the reason, not that the recipient has no Monero`() = runTest {
+        val rig = Rig(FakeTips())
+        val c = gated(rig, SendRig(connected = false))
+        c.open(n)
+        advanceUntilIdle()
+        assertEquals(TipPhase.Blocked, c.state.value.phase)
+        assertEquals(TipSheetController.ERROR_TOR, c.state.value.error)
+    }
+
+    @Test
+    fun `with Tor connected a recipient without payment info still reads as no Monero`() = runTest {
+        val c = gated(Rig(FakeTips()), SendRig())
+        c.open(n)
+        advanceUntilIdle()
+        assertEquals(TipPhase.NoMonero, c.state.value.phase)
+        assertNull(c.state.value.error)
+    }
+
+    @Test
+    fun `a late public underTor tip asks the watcher nothing once the route is direct`() = runTest {
+        val rig = Rig(FakeTips(infos = mapOf(alice to enabled), watcherAccepts = false))
+        rig.gateway.infoError = IllegalStateException("no answer")
+        val send = SendRig()
+        val c = gated(rig, send)
+        c.open(n)
+        runCurrent()
+        c.send()
+        runCurrent()
+        assertTrue(rig.pending.state.value.single().underTor)
+        assertTrue(rig.pending.state.value.single().watcherRelays.isEmpty())
+        val asked = rig.gateway.infoCalls
+        send.gate.set(com.monostr.nostr.net.NetworkMode.Direct)
+        rig.gateway.infoError = null
+        advanceUntilIdle()
+        assertEquals(asked, rig.gateway.infoCalls, "a direct HTTP call to the watcher")
+        assertTrue(rig.tips.watcherResends.isEmpty())
+    }
 }

@@ -1,5 +1,6 @@
 package com.monostr.app.media
 
+import com.monostr.app.net.SendGate
 import com.monostr.nostr.Signer
 import com.monostr.nostr.blossom.BlossomAuth
 import kotlinx.coroutines.CancellationException
@@ -36,6 +37,8 @@ data class BlobDescriptor(val url: String, val sha256: String, val size: Long, v
 class BlossomClient(
     http: OkHttpClient,
     private val signer: Signer,
+    /** A task under way when Tor goes must not reach the signer: the entry points cannot see that. Open only in tests. */
+    private val sendGate: SendGate = SendGate.OPEN,
     private val now: () -> Long = { System.currentTimeMillis() / 1000 },
 ) {
     // several megabytes over a mobile link outlast the shared client's timeouts
@@ -60,6 +63,7 @@ class BlossomClient(
         put(server, FileProgressBody(file, type.toMediaType(), onProgress), file.length(), type, sha256, videoHttp)
 
     private suspend fun put(server: String, body: RequestBody, size: Long, type: String, sha256: String, client: OkHttpClient): BlobDescriptor {
+        sendGate.requireCanSend()
         val base = server.trim().trimEnd('/')
         val request = Request.Builder().url("$base/upload")
             .header("Authorization", BlossomAuth.authorization(signer, BlossomAuth.UPLOAD, sha256, base, now()))
@@ -99,6 +103,7 @@ class BlossomClient(
      * (a deleted note, a removed profile picture) passes false and may open the signer.
      */
     suspend fun delete(server: String, sha256: String, silent: Boolean = true) {
+        sendGate.requireCanSend()
         val base = server.trim().trimEnd('/')
         val unsigned = BlossomAuth.unsigned(BlossomAuth.DELETE, sha256, base, now())
         val auth = BlossomAuth.header(if (silent) signer.signEventSilent(unsigned) else signer.sign(unsigned))

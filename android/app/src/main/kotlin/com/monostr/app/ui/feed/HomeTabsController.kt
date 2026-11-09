@@ -1,5 +1,6 @@
 package com.monostr.app.ui.feed
 
+import com.monostr.app.net.SendGate
 import com.monostr.nostr.StartupGate
 import com.monostr.app.R
 import com.monostr.app.data.FeedSnapshot
@@ -72,6 +73,8 @@ class HomeTabsController(
     private val snapshots: ListSnapshots? = null,
     /** Spec perf2 A3: a foreign pinned list is read from the database at once, from the relays after the home feed's first page. */
     private val gate: StartupGate = StartupGate.OPEN,
+    /** Whether anything may leave now; open only in tests. */
+    private val sendGate: SendGate = SendGate.OPEN,
     private val newFeed: (FeedSource.Authors, CoroutineScope, FeedSnapshot?) -> FeedController,
 ) {
     private val _state = MutableStateFlow(HomeTabsState())
@@ -200,6 +203,10 @@ class HomeTabsController(
 
     /** A pin change; the repository rolls a failure back, the snackbar offers to repeat it (spec §3.3). */
     private fun write(op: suspend () -> SaveResult) {
+        if (!sendGate.canSend.value) {
+            _state.update { it.copy(message = Message(uiText(R.string.send_blocked_tor))) }
+            return
+        }
         scope.launch {
             val r = attempt { op() } ?: SaveResult.Failed
             if (r == SaveResult.Failed) _state.update { it.copy(message = Message(uiText(R.string.list_save_failed), retry = { write(op) })) }

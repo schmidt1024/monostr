@@ -1,5 +1,6 @@
 package com.monostr.app.ui.dm
 
+import com.monostr.app.ui.common.TorBannerSlot
 import com.monostr.app.data.dm.unreadTotalExcept
 import android.Manifest
 import android.content.pm.PackageManager
@@ -122,7 +123,7 @@ fun ConversationsScreen(
     ShowBarsWhenStuck(hide, listState, hasList = !state.loading)
     Scaffold(
         modifier = Modifier.nestedScroll(hide.connection),
-        topBar = { TopAppBar(title = { Text(stringResource(R.string.messages_title)) }) },
+        topBar = { Column { TopAppBar(title = { Text(stringResource(R.string.messages_title)) }); TorBannerSlot() } },
         bottomBar = { HideOnScrollFooter(hide) { MonostrBottomBar(BottomTab.MESSAGES, unread = 0, dmUnread = dmUnread, onFeed = onFeed, onSearch = onSearch, onBookmarks = onBookmarks, onMessages = hide::show, onNotifications = onNotifications, windowInsets = WindowInsets(0)) } },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->

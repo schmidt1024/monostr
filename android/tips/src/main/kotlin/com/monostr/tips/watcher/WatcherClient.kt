@@ -21,7 +21,7 @@ import java.io.IOException
 class WatcherClient(
     baseUrl: String,
     private val signer: EventSigner,
-    http: OkHttpClient = OkHttpClient(),
+    http: OkHttpClient,
     private val clock: () -> Long = { System.currentTimeMillis() / 1000 },
     private val allowCleartext: Boolean = false,
 ) {

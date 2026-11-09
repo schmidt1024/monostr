@@ -4,6 +4,8 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -31,10 +33,15 @@ interface StartupGate {
     }
 }
 
-/** One per session, on the engine's background scope: opens itself after [timeoutMs]; closing the scope (logout) ends every waiter. */
-class TimedStartupGate(scope: CoroutineScope, val timeoutMs: Long = TIMEOUT_MS) : StartupGate {
+/**
+ * One per session, on the engine's background scope: opens itself after [timeoutMs]; closing the scope (logout) ends every waiter.
+ * [route] (an engine that starts held, Tor plan Task 6): the wait counts from its first `true`, and an [open] before that takes
+ * effect then, so the session's one-shot work does not ask relays it cannot reach yet.
+ */
+class TimedStartupGate(private val scope: CoroutineScope, val timeoutMs: Long = TIMEOUT_MS, private val route: StateFlow<Boolean>? = null) : StartupGate {
     private val opened = CompletableDeferred<Unit>()
     private val timer: Job = scope.launch {
+        route?.first { it }
         delay(timeoutMs)
         open("timeout")
     }
@@ -49,6 +56,10 @@ class TimedStartupGate(scope: CoroutineScope, val timeoutMs: Long = TIMEOUT_MS) 
     override suspend fun await() = opened.await()
 
     override fun open(reason: String) {
+        if (route != null && !route.value) {
+            scope.launch { route.first { it }; open(reason) }
+            return
+        }
         if (opened.complete(Unit)) {
             timer.cancel()
             PerfTrace.mark("startup gate open ($reason)")

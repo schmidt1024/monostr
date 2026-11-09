@@ -13,7 +13,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -198,7 +197,7 @@ fun NoteTranslateRow(state: TranslationState, noteId: String, modifier: Modifier
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TranslateConsentSheet(host: String, onTranslate: () -> Unit, onSettings: () -> Unit, onDismiss: () -> Unit, article: Boolean = false) {
-    ModalBottomSheet(onDismissRequest = onDismiss, modifier = Modifier.testTag("translate-consent")) {
+    GuardedModalBottomSheet(onDismissRequest = onDismiss, modifier = Modifier.testTag("translate-consent")) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
             Text(stringResource(R.string.translate_consent_title), style = MaterialTheme.typography.titleLarge)
             Spacer(Modifier.height(12.dp))

@@ -1,5 +1,6 @@
 package com.monostr.app.ui.monero
 
+import com.monostr.app.ui.common.TorBannerSlot
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
@@ -88,6 +89,7 @@ class MoneroSetupViewModel @Inject constructor(session: NostrSession, settings: 
             relays = { session.ensureRelays(it) }, scope = viewModelScope, selfPubkey = ready.pubkey,
             // spec §12: where the wait of the first /v1/info after login comes from
             log = { if (BuildConfig.DEBUG) Log.d("monostr.setup", it) },
+            sendGate = ready.sendGate,
         )
         controller.start()
     }
@@ -102,10 +104,14 @@ fun MoneroSetupScreen(onDone: () -> Unit, vm: MoneroSetupViewModel = hiltViewMod
     val c = vm.controller
     LaunchedEffect(state.finished) { if (state.finished) onDone() }
     Scaffold(topBar = {
-        TopAppBar(
-            title = { Text(stringResource(if (state.intro) R.string.setup_title_intro else R.string.setup_title)) },
-            navigationIcon = { if (!state.intro) IconButton(onClick = onDone) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back)) } },
-        )
+        Column {
+            TopAppBar(
+                title = { Text(stringResource(if (state.intro) R.string.setup_title_intro else R.string.setup_title)) },
+                navigationIcon = { if (!state.intro) IconButton(onClick = onDone) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back)) } },
+            )
+            // the intro is the first screen after a login (spec 5.2)
+            if (state.intro) TorBannerSlot()
+        }
     }) { padding ->
         Column(Modifier.padding(padding).padding(16.dp).fillMaxSize().verticalScroll(rememberScrollState())) {
             // spec 6.1: leaving the intro with the system back gesture counts as "later"

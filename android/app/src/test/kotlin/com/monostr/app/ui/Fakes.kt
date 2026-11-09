@@ -474,16 +474,20 @@ class FakeTips(
     val anonymousRelays = ArrayList<List<String>>()
     /** (event json, relays) of every resend over the anonymous path. */
     val anonymousResends = ArrayList<Pair<String, List<String>>>()
-    override suspend fun sendAnonymousIntent(prepared: PreparedTip, watcherRelays: List<String>): AnonymousIntent {
+    /** The torOnly of every send and resend over the anonymous path, in order. */
+    val anonymousTorOnly = ArrayList<Boolean>()
+    override suspend fun sendAnonymousIntent(prepared: PreparedTip, watcherRelays: List<String>, torOnly: Boolean): AnonymousIntent {
         sendGate?.await()
         if (failSend) throw IllegalStateException("boom")
         require(watcherRelays.isNotEmpty())
+        anonymousTorOnly += torOnly
         anonymousIntents += prepared; anonymousRelays += watcherRelays
         val id = (++counter).toString().padStart(64, '0')
         return AnonymousIntent(PublishResult(id, 9738, if (relaysOk) watcherRelays else emptyList(), emptyMap()), "{\"id\":\"$id\"}")
     }
-    override suspend fun resendAnonymousIntent(eventJson: String, relays: List<String>): PublishResult {
+    override suspend fun resendAnonymousIntent(eventJson: String, relays: List<String>, torOnly: Boolean): PublishResult {
         if (failSend) throw IllegalStateException("boom")
+        anonymousTorOnly += torOnly
         anonymousResends += eventJson to relays
         return PublishResult("0".repeat(64), 9738, if (relaysOk) relays else emptyList(), emptyMap())
     }
@@ -665,6 +669,21 @@ class FakePendingTips : PendingTipStore {
     override suspend fun markDelivered(intentId: String) { state.value = state.value.map { if (it.intentId == intentId) PendingTips.delivered(it) else it } }
     override suspend fun setWatcherRelays(intentId: String, relays: List<String>) { state.value = state.value.map { if (it.intentId == intentId) it.copy(watcherRelays = relays) else it } }
     override suspend fun clear() { state.value = emptyList() }
+    /** When set, `dropUnderTor` throws it. */
+    var dropError: Exception? = null
+    override suspend fun dropUnderTor(): Int {
+        dropError?.let { throw it }
+        val before = state.value.size
+        state.value = state.value.filterNot { it.underTor }
+        return before - state.value.size
+    }
+}
+
+/** A [SendGate] whose mode and Tor state the test sets; starts in Tor, connected or not. */
+class SendRig(mode: com.monostr.nostr.net.NetworkMode = com.monostr.nostr.net.NetworkMode.Tor(1, 2), connected: Boolean = true) {
+    val gate = com.monostr.nostr.net.NetworkGate().apply { set(mode) }
+    val connected = MutableStateFlow(connected)
+    val send = com.monostr.app.net.SendGate(gate, { this.connected.value }, this.connected)
 }
 
 class FakeWatcherGateway(
@@ -728,6 +747,9 @@ class FakeUiSettings : UiSettingsStore {
     override val linkPreviews: Flow<Boolean> = linkPreviewsState
     override suspend fun setLinkPreviews(on: Boolean) { linkPreviewsState.value = on }
     override suspend fun setAuthorRelays(on: Boolean) { authorRelaysState.value = on }
+    val linkAlwaysOpenState = MutableStateFlow(false)
+    override val linkAlwaysOpen: Flow<Boolean> = linkAlwaysOpenState
+    override suspend fun setLinkAlwaysOpen(value: Boolean) { linkAlwaysOpenState.value = value }
     val clientTagState = MutableStateFlow(false)
     override val clientTag: Flow<Boolean> = clientTagState
     override suspend fun setClientTag(on: Boolean) { clientTagState.value = on }

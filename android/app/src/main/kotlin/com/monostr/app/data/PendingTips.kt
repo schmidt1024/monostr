@@ -36,6 +36,8 @@ data class PendingTip(
     val watcherRelays: List<String> = emptyList(),
     /** Public tips only: one of [watcherRelays] accepted the intent, so it is not sent to them again. */
     val watcherDelivered: Boolean = false,
+    /** Sent while the route was Tor: it never goes out on the direct route, see `SendGate.mayResend`. False in entries written before Tor. */
+    val underTor: Boolean = false,
 ) {
     /** A watcher relay has the intent, as far as this device knows. */
     val isDelivered: Boolean get() = if (anonEvent != null) anonDelivered else watcherDelivered
@@ -81,6 +83,8 @@ interface PendingTipStore {
     suspend fun setWatcherRelays(intentId: String, relays: List<String>)
     /** Drops every pending tip (logout). */
     suspend fun clear()
+    /** Drops the tips sent under Tor, delivered or not: the route is about to be direct (spec 2026-11-06 5.4; a receipt still arrives on its own). Returns how many. */
+    suspend fun dropUnderTor(): Int
 }
 
 class PrefsPendingTipStore(private val store: DataStore<Preferences>) : PendingTipStore {
@@ -102,6 +106,17 @@ class PrefsPendingTipStore(private val store: DataStore<Preferences>) : PendingT
         update { list -> list.map { if (it.intentId == intentId) it.copy(watcherRelays = relays) else it } }
 
     override suspend fun clear() { store.edit { it.remove(PENDING) } }
+
+    override suspend fun dropUnderTor(): Int {
+        var dropped = 0
+        store.edit { p ->
+            val all = PendingTips.decode(p[PENDING] ?: "")
+            val kept = all.filterNot { it.underTor }
+            dropped = all.size - kept.size
+            if (dropped > 0) p[PENDING] = PendingTips.encode(kept)
+        }
+        return dropped
+    }
 
     private suspend fun update(f: (List<PendingTip>) -> List<PendingTip>) {
         store.edit { p -> p[PENDING] = PendingTips.encode(f(PendingTips.decode(p[PENDING] ?: ""))) }

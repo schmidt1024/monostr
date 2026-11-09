@@ -1,5 +1,6 @@
 package com.monostr.app.ui.tips
 
+import com.monostr.app.net.SendGate
 import com.monostr.nostr.StartupGate
 import com.monostr.app.data.PendingTip
 import com.monostr.app.data.PendingTipStore
@@ -34,13 +35,16 @@ import kotlinx.coroutines.launch
 /**
  * Sends the intent of [tip] to the watcher's relays unless one has it, and notes it when one takes it; true once one
  * has it. An anonymous intent travels over its own connection, and only until accepted: every send is another
- * connection from this device. A public one is sent to relays the user's own list may not contain.
+ * connection from this device. A public one is sent to relays the user's own list may not contain. Nothing goes out unless
+ * [send] allows it; a tip sent under Tor travels Tor only, even when the mode changes right after this look (a public one goes over
+ * its session's engine, whose route never changes).
  */
-internal suspend fun deliverToWatcher(tips: TipsRepository, pending: PendingTipStore, tip: PendingTip): Boolean {
+internal suspend fun deliverToWatcher(tips: TipsRepository, pending: PendingTipStore, tip: PendingTip, send: SendGate): Boolean {
     if (tip.isDelivered) return true
+    if (!send.mayResend(tip)) return false
     val anonymous = tip.anonEvent
     val accepted = when {
-        anonymous != null -> tips.resendAnonymousIntent(anonymous, tip.anonRelays).sentToAny
+        anonymous != null -> tips.resendAnonymousIntent(anonymous, tip.anonRelays, torOnly = tip.underTor).sentToAny
         tip.watcherRelays.isEmpty() -> false
         else -> tips.resendIntentToWatcher(tip.intentId, tip.watcherRelays).reached(tip.watcherRelays)
     }
@@ -68,6 +72,8 @@ class TipDecorations(
     private val selfPubkey: String? = null,
     /** Spec perf2 A3: stored intents are re-sent after the home feed's first page is in. */
     private val gate: StartupGate = StartupGate.OPEN,
+    /** Whether anything may leave now; open only in tests. */
+    private val sendGate: SendGate = SendGate.OPEN,
     private val now: () -> Long = { System.currentTimeMillis() / 1000 },
 ) {
     private val tracked = MutableStateFlow<Map<String, String>>(emptyMap())
@@ -205,8 +211,13 @@ class TipDecorations(
         }
     }
 
-    /** Re-publishes the still active pending intents to the user's relays; an intent sent while offline would otherwise never reach the watcher. */
+    /**
+     * Re-publishes the still active pending intents to the user's relays; an intent sent while offline would otherwise never reach the
+     * watcher. Once per [start], and every screen with notes starts its own decorations: with Tor not connected nothing goes out, and
+     * the next screen opened with Tor connected sends them, through Tor, as it does today. Nothing here waits for Tor.
+     */
     private suspend fun resendPending() {
+        dropLeftBehind()
         gate.await()
         val active = try {
             PendingTips.active(pending.pending.first(), now())
@@ -216,15 +227,27 @@ class TipDecorations(
             return
         }
         for (tip in active) {
+            if (!sendGate.mayResend(tip)) continue
             try {
                 // an anonymous intent never goes to the user's relays
                 if (tip.anonEvent == null) publish.resend(tip.intentId)
-                deliverToWatcher(tips, pending, tip)
+                deliverToWatcher(tips, pending, tip, sendGate)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 // still offline or the event is gone locally; the next start tries again
             }
+        }
+    }
+
+    /** In Direct, tips sent under Tor that are still stored (a crash in the middle of turning Tor off, a send that ended after it) leave without going anywhere. Needs no network, so it does not wait for the first page. */
+    private suspend fun dropLeftBehind() {
+        try {
+            if (sendGate.direct && pending.pending.first().any { it.underTor }) pending.dropUnderTor()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // they stay stored, and every sender holds them back; the next start tries again
         }
     }
 

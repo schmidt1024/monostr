@@ -1,10 +1,14 @@
 package com.monostr.app.ui.bookmarks
 
+import com.monostr.app.ui.common.TorBannerSlot
+import com.monostr.app.ui.common.LocalCanSend
+import com.monostr.app.net.SendGate
 import com.monostr.nostr.repo.OwnReactions
 import com.monostr.nostr.repo.MemoryOwnReactions
 import kotlinx.coroutines.Dispatchers
 import com.monostr.app.ui.common.MentionResolver
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -127,12 +131,14 @@ class BookmarksController(
     mute: MuteRepository? = null,
     /** The scope mute writes run on, so they survive the screen that started them (session: the engine's background scope); null (tests) = [scope]. */
     muteScope: CoroutineScope? = null,
+    /** Whether anything may leave now; open only in tests. */
+    private val sendGate: SendGate = SendGate.OPEN,
 ) {
     val names: StateFlow<Map<String, String>> get() = mentions.names
     private val _state = MutableStateFlow(BookmarksUiState())
     val state: StateFlow<BookmarksUiState> = _state.asStateFlow()
-    private val noteActions = NoteActions(publish, scope, counts, deletions, afterDelete, own)
-    private val muteActions = mute?.let { MuteActions(it, scope, profiles, background = muteScope) }
+    private val noteActions = NoteActions(publish, scope, counts, deletions, afterDelete, own, sendGate = sendGate)
+    private val muteActions = mute?.let { MuteActions(it, scope, profiles, background = muteScope, sendGate = sendGate) }
     /** Ids whose removal is in flight: their rows stay until the outcome. */
     private val pendingRemoval = MutableStateFlow<Set<String>>(emptySet())
 
@@ -267,7 +273,7 @@ class BookmarksController(
 class BookmarksViewModel @Inject constructor(session: NostrSession, factory: TipSheetFactory) : ViewModel() {
     private val ready = session.requireReady()
     val decorations = factory.decorations(viewModelScope)
-    val controller = BookmarksController(ready.bookmarks, BookmarkActions(ready.bookmarks, viewModelScope, background = ready.engine.backgroundScope), ready.profiles, ready.publish, decorations, ready.counts, viewModelScope, mentions = MentionResolver(ready.profiles, viewModelScope, Dispatchers.Default), deletions = ready.deletions, visibility = ready.visibility, afterDelete = ready.afterNoteDelete, own = ready.ownReactions, mute = ready.mute, muteScope = ready.engine.backgroundScope)
+    val controller = BookmarksController(ready.bookmarks, BookmarkActions(ready.bookmarks, viewModelScope, background = ready.engine.backgroundScope, sendGate = ready.sendGate), ready.profiles, ready.publish, decorations, ready.counts, viewModelScope, mentions = MentionResolver(ready.profiles, viewModelScope, Dispatchers.Default), deletions = ready.deletions, visibility = ready.visibility, afterDelete = ready.afterNoteDelete, own = ready.ownReactions, mute = ready.mute, muteScope = ready.engine.backgroundScope, sendGate = ready.sendGate)
     val deletions = ready.deletions
     val menu = ready.noteMenu(delete = controller::delete, mute = controller::mute)
     val tipSheet = factory.tipSheet(viewModelScope)
@@ -303,7 +309,7 @@ fun BookmarksScreen(
     ShowBarsWhenStuck(hide, listState, hasList = !state.loading && state.entries.isNotEmpty())
     Scaffold(
         modifier = Modifier.nestedScroll(hide.connection),
-        topBar = { TopAppBar(title = { Text(stringResource(R.string.bookmarks_title)) }) },
+        topBar = { Column { TopAppBar(title = { Text(stringResource(R.string.bookmarks_title)) }); TorBannerSlot() } },
         // spec 11.1: a tab like search and notifications, not a sub-screen with a back arrow
         bottomBar = { HideOnScrollFooter(hide) { MonostrBottomBar(BottomTab.BOOKMARKS, unread = 0, dmUnread = dmUnread, onFeed = onFeed, onSearch = onSearch, onBookmarks = hide::show, onMessages = onMessages, onNotifications = onNotifications, windowInsets = WindowInsets(0)) } },
         snackbarHost = { SnackbarHost(snackbar, Modifier.muteUndoTag(state.message)) },
@@ -320,12 +326,12 @@ fun BookmarksScreen(
                                 AddressCard(ref = e.article, names = names, onOpenProfile = onOpenProfile, modifier = Modifier.weight(1f))
                                 // the row stays until the outcome; its icon shows "not bookmarked" while the removal is in flight
                                 val pending = e.id in state.pending
-                                IconButton(onClick = { vm.controller.removeArticle(e.id) }, enabled = !pending, modifier = Modifier.testTag("bookmark-remove-${e.id.take(8)}")) { Icon(if (pending) Icons.Outlined.BookmarkBorder else Icons.Filled.Bookmark, contentDescription = stringResource(R.string.note_bookmark)) }
+                                IconButton(onClick = { vm.controller.removeArticle(e.id) }, enabled = !pending && LocalCanSend.current, modifier = Modifier.testTag("bookmark-remove-${e.id.take(8)}")) { Icon(if (pending) Icons.Outlined.BookmarkBorder else Icons.Filled.Bookmark, contentDescription = stringResource(R.string.note_bookmark)) }
                             }
                         } else if (n == null) {
                             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Text(stringResource(R.string.bookmarks_missing, Profile.shortPubkey(e.id)), style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-                                IconButton(onClick = { vm.controller.remove(Note(e.id, "", "", 0, 1, null, null, null, emptyList())) }, modifier = Modifier.testTag("bookmark-remove-${e.id.take(8)}")) { Icon(Icons.Filled.Bookmark, contentDescription = stringResource(R.string.note_bookmark)) }
+                                IconButton(onClick = { vm.controller.remove(Note(e.id, "", "", 0, 1, null, null, null, emptyList())) }, enabled = LocalCanSend.current, modifier = Modifier.testTag("bookmark-remove-${e.id.take(8)}")) { Icon(Icons.Filled.Bookmark, contentDescription = stringResource(R.string.note_bookmark)) }
                             }
                         } else {
                             NoteCard(
