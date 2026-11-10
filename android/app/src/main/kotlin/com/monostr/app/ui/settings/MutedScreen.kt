@@ -39,6 +39,7 @@ import com.monostr.app.ui.common.MuteActions
 import com.monostr.app.ui.common.UiText
 import com.monostr.app.ui.common.asString
 import com.monostr.app.ui.common.userMessage
+import com.monostr.app.ui.theme.Spacing
 import com.monostr.nostr.model.Profile
 import com.monostr.nostr.repo.MuteRepository
 import com.monostr.nostr.repo.ProfileRepository
@@ -150,7 +151,7 @@ fun MutedScreen(onBack: () -> Unit, onOpenProfile: (String) -> Unit, vm: MutedVi
                 item {
                     Text(
                         stringResource(R.string.mute_read_only), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(16.dp).testTag("muted-read-only"),
+                        modifier = Modifier.padding(Spacing.l).testTag("muted-read-only"),
                     )
                 }
             }
@@ -158,7 +159,7 @@ fun MutedScreen(onBack: () -> Unit, onOpenProfile: (String) -> Unit, vm: MutedVi
                 item {
                     Text(
                         stringResource(R.string.mute_settings_empty), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(16.dp).testTag("muted-empty"),
+                        modifier = Modifier.padding(Spacing.l).testTag("muted-empty"),
                     )
                 }
             }

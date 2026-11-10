@@ -1,0 +1,2 @@
+- Uygulama genelinde boşluklar ve köşeler düzenlendi
+- Düzeltmeler

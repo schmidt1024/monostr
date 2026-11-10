@@ -101,6 +101,7 @@ import com.monostr.app.data.SearchRelayStore
 import com.monostr.app.data.SecretStore
 import com.monostr.app.data.ThemeMode
 import com.monostr.app.ui.theme.AccentSeed
+import com.monostr.app.ui.theme.Spacing
 import com.monostr.app.data.TipSettingsStore
 import com.monostr.app.data.UiSettingsStore
 import com.monostr.app.data.isValidRelayUrl
@@ -454,7 +455,7 @@ fun SettingsScreen(section: String? = null, onBack: () -> Unit, onMoneroSetup: (
             val top = sectionTop ?: return@LaunchedEffect
             if (!scrolledToSection) { scrolledToSection = true; scroll.scrollTo(top) }
         }
-        Column(Modifier.padding(padding).padding(16.dp).fillMaxSize().verticalScroll(scroll)) {
+        Column(Modifier.padding(padding).padding(Spacing.l).fillMaxSize().verticalScroll(scroll)) {
             Text(stringResource(R.string.settings_logged_in_as), style = MaterialTheme.typography.labelLarge)
             Text(Profile.shortPubkey(vm.pubkey), style = MaterialTheme.typography.bodyMedium)
             if (vm.isAmber) {
@@ -462,22 +463,22 @@ fun SettingsScreen(section: String? = null, onBack: () -> Unit, onMoneroSetup: (
                 OutlinedButton(onClick = vm::renewAmber, enabled = !renewBusy, modifier = Modifier.fillMaxWidth().testTag("settings-amber-renew")) { Text(stringResource(R.string.settings_amber_renew)) }
             }
             if (!vm.isAmber) ShowKeyButton(onShowKey)
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(Spacing.l))
             val mode by vm.themeMode.collectAsStateWithLifecycle()
             val accent by vm.accent.collectAsStateWithLifecycle()
             val customHue by vm.customHue.collectAsStateWithLifecycle()
             AppearanceSection(mode, accent, customHue, vm::setThemeMode, vm::setAccent, vm::setCustomHue)
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(Spacing.xl))
             val quick by vm.quickReactions.collectAsStateWithLifecycle()
             QuickReactionsSection(quick, onChange = vm::setQuickReactions)
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(Spacing.xl))
             Text(stringResource(R.string.settings_media), style = MaterialTheme.typography.titleMedium)
             val blur by vm.blurSensitive.collectAsStateWithLifecycle()
             val onTap by vm.mediaOnTap.collectAsStateWithLifecycle()
             SettingSwitch(stringResource(R.string.settings_media_blur), stringResource(R.string.settings_media_blur_hint), blur, vm::setBlurSensitive, "settings-media-blur")
             SettingSwitch(stringResource(R.string.settings_media_on_tap), stringResource(R.string.settings_media_on_tap_hint), onTap, vm::setMediaOnTap, "settings-media-on-tap")
             val gifMode by vm.gifMode.collectAsStateWithLifecycle()
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Spacing.s))
             Text(stringResource(R.string.settings_gif), style = MaterialTheme.typography.bodyLarge)
             Text(stringResource(R.string.settings_gif_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().testTag("settings-gif")) {
@@ -490,13 +491,13 @@ fun SettingsScreen(section: String? = null, onBack: () -> Unit, onMoneroSetup: (
                     }
                 }
             }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Spacing.s))
             val previews by vm.linkPreviews.collectAsStateWithLifecycle()
             SettingSwitch(stringResource(R.string.settings_link_previews), stringResource(R.string.settings_link_previews_hint), previews, vm::setLinkPreviews, "settings-link-previews")
             val mediaServer by vm.mediaServer.collectAsStateWithLifecycle()
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Spacing.s))
             MediaServerSetting(mediaServer, onSave = vm::setMediaServer, onReset = { vm.resetMediaServer() })
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(Spacing.xl))
             // Privacy: switches about what the app tells other parties.
             Text(
                 stringResource(R.string.settings_privacy), style = MaterialTheme.typography.titleMedium,
@@ -505,14 +506,14 @@ fun SettingsScreen(section: String? = null, onBack: () -> Unit, onMoneroSetup: (
             val askLinks by vm.askLinks.collectAsStateWithLifecycle()
             SettingSwitch(stringResource(R.string.settings_ask_links), stringResource(R.string.settings_ask_links_hint), askLinks, vm::setAskLinks, "settings-ask-links")
             TorSettingsRow()
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(Spacing.xl))
             val translateMode by vm.translateMode.collectAsStateWithLifecycle()
             val translateUrl by vm.translateUrl.collectAsStateWithLifecycle()
             TranslationSection(
                 translateMode, translateUrl, onMode = { vm.setTranslateMode(it) }, onSaveUrl = vm::setTranslateUrl,
                 modifier = if (section == SettingsSection.TRANSLATION) Modifier.onPlaced { sectionTop = it.positionInParent().y.toInt() } else Modifier,
             )
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(Spacing.xl))
             val relaySeen by vm.relaySeen.collectAsStateWithLifecycle()
             val relayModes by vm.relayModes.collectAsStateWithLifecycle()
             RelayListEditor(
@@ -533,7 +534,7 @@ fun SettingsScreen(section: String? = null, onBack: () -> Unit, onMoneroSetup: (
             val clientTag by vm.clientTag.collectAsStateWithLifecycle()
             SettingSwitch(stringResource(R.string.settings_client_tag), stringResource(R.string.settings_client_tag_hint), clientTag, vm::setClientTag, "settings-client-tag")
             val pow by vm.powBits.collectAsStateWithLifecycle()
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Spacing.s))
             Text(stringResource(R.string.settings_pow), style = MaterialTheme.typography.bodyLarge)
             Text(stringResource(R.string.settings_pow_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().testTag("settings-pow")) {
@@ -545,7 +546,7 @@ fun SettingsScreen(section: String? = null, onBack: () -> Unit, onMoneroSetup: (
                 }
             }
             val powFilter by vm.powFilterBits.collectAsStateWithLifecycle()
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(Spacing.l))
             Text(stringResource(R.string.settings_pow_filter), style = MaterialTheme.typography.bodyLarge)
             Text(stringResource(R.string.settings_pow_filter_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().testTag("settings-pow-filter")) {
@@ -556,7 +557,7 @@ fun SettingsScreen(section: String? = null, onBack: () -> Unit, onMoneroSetup: (
                     ) { Text(if (bits == 0) stringResource(R.string.settings_pow_off) else stringResource(R.string.settings_pow_bits, bits)) }
                 }
             }
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(Spacing.xl))
             val dmState by vm.dm.state.collectAsStateWithLifecycle()
             val dmPreviewName by vm.dmPreviewName.collectAsStateWithLifecycle()
             val dmPreviewText by vm.dmPreviewText.collectAsStateWithLifecycle()
@@ -570,7 +571,7 @@ fun SettingsScreen(section: String? = null, onBack: () -> Unit, onMoneroSetup: (
                 showSecond = !dmSecondDismissed && DmInboxHints.needsSecond(dmState.relays),
                 onReplace = vm.dm::replace, onDismissHint = vm::dismissDmHint,
             )
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(Spacing.xl))
             val searchState by vm.search.state.collectAsStateWithLifecycle()
             RelayListEditor(
                 title = stringResource(R.string.settings_search_relays), relays = searchState.relays, live = null, error = searchState.error,
@@ -578,7 +579,7 @@ fun SettingsScreen(section: String? = null, onBack: () -> Unit, onMoneroSetup: (
                 hint = stringResource(R.string.settings_search_relays_hint),
                 footer = { TextButton(onClick = vm::resetSearchRelays, modifier = Modifier.testTag("settings-search-relays-reset")) { Text(stringResource(R.string.settings_search_relays_reset)) } },
             )
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(Spacing.xl))
             Text(stringResource(R.string.settings_monero), style = MaterialTheme.typography.titleMedium)
             val setup = monero.setup
             val payto = monero.paytoOnly
@@ -589,12 +590,12 @@ fun SettingsScreen(section: String? = null, onBack: () -> Unit, onMoneroSetup: (
                     Text(stringResource(R.string.settings_monero_payto, payto.take(8), payto.takeLast(6)), style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f, fill = false).testTag("settings-monero-payto"))
                     TextButton(onClick = { copyToClipboard(context, payto, copied) }, modifier = Modifier.testTag("settings-monero-copy-payto")) { Text(stringResource(R.string.action_copy_address)) }
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.s)) {
                     OutlinedButton(onClick = onMoneroSetup, modifier = Modifier.testTag("settings-monero-payto-change")) { Text(stringResource(R.string.settings_monero_payto_change)) }
                     OutlinedButton(onClick = vm.monero::removePayto, enabled = !monero.busy, modifier = Modifier.testTag("settings-monero-payto-remove")) { Text(stringResource(R.string.settings_monero_payto_remove)) }
                 }
                 Card(Modifier.fillMaxWidth().testTag("settings-monero-upgrade")) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Column(Modifier.padding(Spacing.m), verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
                         Text(stringResource(R.string.setup_upgrade_title), style = MaterialTheme.typography.titleSmall)
                         Text(stringResource(R.string.setup_upgrade_text), style = MaterialTheme.typography.bodySmall)
                         OutlinedButton(onClick = onMoneroUpgrade, modifier = Modifier.fillMaxWidth().testTag("settings-monero-upgrade-action")) { Text(stringResource(R.string.setup_upgrade_action)) }
@@ -625,7 +626,7 @@ fun SettingsScreen(section: String? = null, onBack: () -> Unit, onMoneroSetup: (
                     }
                     Text(line, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("settings-monero-watcher"))
                 } else Text(stringResource(R.string.settings_monero_watcher, setup.watcherUrl), style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("settings-monero-watcher"))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.s)) {
                     OutlinedButton(onClick = onMoneroSetup, modifier = Modifier.testTag("settings-monero-setup")) { Text(stringResource(R.string.settings_monero_switch_watcher)) }
                     OutlinedButton(onClick = vm.monero::disable, enabled = !monero.busy, modifier = Modifier.testTag("settings-monero-disable")) { Text(stringResource(R.string.settings_monero_disable)) }
                 }
@@ -647,7 +648,7 @@ fun SettingsScreen(section: String? = null, onBack: () -> Unit, onMoneroSetup: (
             if (monero.hasViewKey) {
                 TextButton(onClick = vm.monero::deleteViewKey) { Text(stringResource(R.string.settings_monero_delete_view_key)) }
             }
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(Spacing.l))
             Text(stringResource(R.string.settings_amount_unit), style = MaterialTheme.typography.titleMedium)
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().testTag("settings-amount-unit")) {
                 AmountUnit.entries.forEachIndexed { i, u ->
@@ -658,7 +659,7 @@ fun SettingsScreen(section: String? = null, onBack: () -> Unit, onMoneroSetup: (
                 }
             }
             Text(stringResource(R.string.settings_amount_unit_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(Spacing.l))
             Text(stringResource(R.string.settings_presets, monero.unit.label), style = MaterialTheme.typography.titleMedium)
             monero.presets.forEachIndexed { i, v ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -674,18 +675,18 @@ fun SettingsScreen(section: String? = null, onBack: () -> Unit, onMoneroSetup: (
             TextButton(onClick = vm.monero::addPreset, enabled = monero.canAddPreset, modifier = Modifier.testTag("settings-preset-add")) { Text(stringResource(R.string.settings_preset_add)) }
             monero.error?.let { Text(it.asString(), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
             OutlinedButton(onClick = { vm.monero.savePresets() }, modifier = Modifier.fillMaxWidth().testTag("settings-presets-save")) { Text(stringResource(R.string.settings_presets_save)) }
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(Spacing.xl))
             OutlinedButton(onClick = onMuted, modifier = Modifier.fillMaxWidth().testTag("settings-muted")) { Text(stringResource(R.string.mute_settings_title)) }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Spacing.s))
             OutlinedButton(onClick = onSupport, modifier = Modifier.fillMaxWidth().testTag("settings-support")) { Text(stringResource(R.string.support_title)) }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Spacing.s))
             OutlinedButton(onClick = onAbout, modifier = Modifier.fillMaxWidth().testTag("settings-about")) { Text(stringResource(R.string.about_title)) }
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(Spacing.xl))
             val logoutBusy by vm.logoutBusy.collectAsStateWithLifecycle()
             OutlinedButton(onClick = { vm.logout(onBack) }, enabled = !logoutBusy, modifier = Modifier.fillMaxWidth().testTag("settings-logout")) {
                 if (logoutBusy) {
                     CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(Spacing.s))
                 }
                 Text(stringResource(R.string.settings_logout))
             }
@@ -701,9 +702,9 @@ fun RelayListDiffHint(diff: RelayListDiff) {
         if (diff.unpublished > 0) add(pluralStringResource(R.plurals.relays_unpublished, diff.unpublished, diff.unpublished))
         if (diff.missing > 0) add(pluralStringResource(R.plurals.relays_missing_here, diff.missing, diff.missing))
     }
-    Spacer(Modifier.height(8.dp))
+    Spacer(Modifier.height(Spacing.s))
     Text(lines.joinToString(" "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("settings-relay-diff"))
-    Spacer(Modifier.height(4.dp))
+    Spacer(Modifier.height(Spacing.xs))
 }
 
 /** The name of a relay's mode. */
@@ -725,7 +726,7 @@ private fun RelayModeMenu(url: String, mode: RelayMode, onMode: (String, RelayMo
             // the row may shorten the address: here it reads in full
             Text(
                 url, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp).testTag("relay-mode-$url-address"),
+                modifier = Modifier.padding(horizontal = Spacing.m, vertical = Spacing.s).testTag("relay-mode-$url-address"),
             )
             RelayMode.entries.forEach { m ->
                 DropdownMenuItem(
@@ -804,13 +805,13 @@ private fun RelayListEditor(
         }
         HorizontalDivider()
     }
-    Spacer(Modifier.height(8.dp))
+    Spacer(Modifier.height(Spacing.s))
     Row(verticalAlignment = Alignment.CenterVertically) {
         OutlinedTextField(
             value = newRelay, onValueChange = { newRelay = it }, modifier = Modifier.weight(1f).testTag("$tagPrefix-input"), singleLine = true,
             label = { Text(stringResource(R.string.settings_relay_placeholder)) }, isError = error != null, supportingText = { error?.let { Text(it.asString()) } },
         )
-        Spacer(Modifier.width(8.dp))
+        Spacer(Modifier.width(Spacing.s))
         OutlinedButton(onClick = { if (onAdd(newRelay)) newRelay = "" }, enabled = newRelay.isNotBlank(), modifier = Modifier.testTag("$tagPrefix-add")) { Text(stringResource(R.string.action_add)) }
     }
     footer()
@@ -881,12 +882,12 @@ private fun MessagesSection(
 /** A titled switch row; the row itself (not just the thumb) toggles the value. */
 @Composable
 private fun SettingSwitch(title: String, hint: String, checked: Boolean, onChange: (Boolean) -> Unit, tag: String, enabled: Boolean = true) {
-    Row(Modifier.fillMaxWidth().toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onChange).padding(vertical = 8.dp).testTag(tag), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onChange).padding(vertical = Spacing.s).testTag(tag), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.bodyLarge)
             if (hint.isNotEmpty()) Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Spacer(Modifier.width(16.dp))
+        Spacer(Modifier.width(Spacing.l))
         Switch(checked = checked, onCheckedChange = null, enabled = enabled)
     }
 }
@@ -905,7 +906,7 @@ private fun RelaySignupButton(url: String) {
 @Composable
 private fun SuggestedRelays(suggestions: List<RelaySuggestion>, onAdd: (String) -> Unit) {
     if (suggestions.isEmpty()) return
-    Spacer(Modifier.height(16.dp))
+    Spacer(Modifier.height(Spacing.l))
     Text(stringResource(R.string.settings_suggested_relays), style = MaterialTheme.typography.titleSmall)
     Text(stringResource(R.string.settings_suggested_relays_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     suggestions.forEach { s ->
@@ -925,8 +926,8 @@ private fun SuggestedRelays(suggestions: List<RelaySuggestion>, onAdd: (String) 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun InboxHintCard(text: String, tag: String, onDismiss: () -> Unit, dismissTag: String, actions: @Composable () -> Unit) {
-    Card(Modifier.fillMaxWidth().padding(vertical = 8.dp).testTag(tag)) {
-        Column(Modifier.padding(12.dp)) {
+    Card(Modifier.fillMaxWidth().padding(vertical = Spacing.s).testTag(tag)) {
+        Column(Modifier.padding(Spacing.m)) {
             Text(text, style = MaterialTheme.typography.bodyMedium)
             FlowRow(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
                 actions()

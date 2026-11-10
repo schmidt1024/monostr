@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import com.monostr.app.R
 import com.monostr.app.ui.feed.NoteUi
 import com.monostr.app.ui.feed.target
+import com.monostr.app.ui.theme.Spacing
 import com.monostr.nostr.model.Note
 import com.monostr.nostr.Npub
 import kotlinx.coroutines.launch
@@ -60,7 +61,7 @@ fun NoteDetailHeader(note: NoteUi, onOpenProfile: (String) -> Unit, menu: NoteMe
         IconButton(onClick = { onOpenProfile(shown.author) }, modifier = Modifier.size(48.dp).then(avatarModifier).semantics { contentDescription = openProfile }.testTag("note-avatar-${shown.id.take(8)}")) {
             Avatar(author.picture, size = 48.dp)
         }
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(Spacing.m))
         Column(Modifier.weight(1f).clickable { onOpenProfile(shown.author) }) {
             Text(author.shownName, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             // the handle: the kind-0 nip05 claim (not verified here, shown as SearchScreen shows it), else the short npub
@@ -79,7 +80,7 @@ fun NoteHeaderLine(note: NoteUi, onOpen: () -> Unit, onOpenProfile: (String) -> 
         Row(Modifier.weight(1f).clickable(onClick = onOpen), verticalAlignment = Alignment.CenterVertically) {
             // like X: the name leads to the author, the time and the free space to the note (0.11.9)
             Text(shownAuthor.shownName, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false).clickable { onOpenProfile(shown.author) }.testTag("note-name-${shown.id.take(8)}"))
-            Spacer(Modifier.width(6.dp))
+            Spacer(Modifier.width(Spacing.s))
             Text(relativeTime(shown.createdAt).asString(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, modifier = Modifier.testTag("note-reltime-${shown.id.take(8)}"))
         }
         if (menu != null) NoteMenuButton(note, shown, shownAuthor.shownName, menu)
@@ -137,7 +138,7 @@ private fun NoteMenuButton(note: NoteUi, shown: Note, authorName: String, menu: 
                 Column {
                     Text(stringResource(R.string.note_delete_text))
                     if (menu.hasServerPictures(shown)) {
-                        Spacer(Modifier.size(8.dp))
+                        Spacer(Modifier.size(Spacing.s))
                         Text(stringResource(R.string.note_delete_pictures))
                     }
                 }

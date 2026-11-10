@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -24,10 +23,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.monostr.app.R
+import com.monostr.app.ui.theme.Spacing
 
 // the thread line runs through the middle of the list card's avatar column: 16 dp card padding + half of the 44 dp avatar
-private val LINE_X = 16.dp + 22.dp
+private val LINE_X = Spacing.l + LIST_AVATAR / 2
 private val LINE_WIDTH = 2.dp
+// vertical padding of the placeholder and chain-card rows; the line stubs above/below the card are exactly this long
+private val ROW_VPAD = Spacing.m
 
 /** X's "Show replies" between the root and the direct parent of a long chain (spec 2026-10-16 §3); the thread line runs through it, dashed. */
 @Composable
@@ -40,7 +42,7 @@ fun ShowRepliesRow(onClick: () -> Unit, modifier: Modifier = Modifier) {
                 val dash = 4.dp.toPx()
                 drawLine(lineColor, Offset(x, 0f), Offset(x, size.height), LINE_WIDTH.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(dash, dash)))
             }
-            .padding(start = 16.dp + 44.dp + 12.dp, top = 8.dp, bottom = 8.dp)
+            .padding(start = Spacing.l + LIST_AVATAR + Spacing.m, top = Spacing.s, bottom = Spacing.s)
             .testTag("show-replies"),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -70,9 +72,9 @@ fun ChainCardRow(lineBelow: Boolean, modifier: Modifier = Modifier, content: @Co
     Box(
         modifier.fillMaxWidth()
             .drawBehind {
-                if (lineBelow) drawLine(lineColor, Offset(LINE_X.toPx(), size.height - 10.dp.toPx()), Offset(LINE_X.toPx(), size.height), LINE_WIDTH.toPx())
+                if (lineBelow) drawLine(lineColor, Offset(LINE_X.toPx(), size.height - ROW_VPAD.toPx()), Offset(LINE_X.toPx(), size.height), LINE_WIDTH.toPx())
             }
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(horizontal = Spacing.l, vertical = ROW_VPAD),
     ) { content() }
 }
 
@@ -85,22 +87,22 @@ private fun PlaceholderRow(text: String, tag: String, lineAbove: Boolean, lineBe
             .drawBehind {
                 val x = LINE_X.toPx()
                 val w = LINE_WIDTH.toPx()
-                if (lineAbove) drawLine(lineColor, Offset(x, 0f), Offset(x, 10.dp.toPx()), w)
-                if (lineBelow) drawLine(lineColor, Offset(x, size.height - 10.dp.toPx()), Offset(x, size.height), w)
+                if (lineAbove) drawLine(lineColor, Offset(x, 0f), Offset(x, ROW_VPAD.toPx()), w)
+                if (lineBelow) drawLine(lineColor, Offset(x, size.height - ROW_VPAD.toPx()), Offset(x, size.height), w)
             }
-            .padding(horizontal = 16.dp, vertical = 10.dp)
+            .padding(horizontal = Spacing.l, vertical = ROW_VPAD)
             .testTag(tag),
     ) {
-        val card = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
+        val card = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.shapes.small)
         if (action == null) {
-            Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = card.padding(12.dp))
+            Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = card.padding(Spacing.m))
         } else {
             Row(
-                card.clip(RoundedCornerShape(8.dp)).clickable(role = Role.Button, onClick = action.second).padding(12.dp),
+                card.clip(MaterialTheme.shapes.small).clickable(role = Role.Button, onClick = action.second).padding(Spacing.m),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-                Spacer(Modifier.width(16.dp))
+                Spacer(Modifier.width(Spacing.l))
                 Text(action.first, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
             }
         }

@@ -37,6 +37,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.monostr.app.R
 import com.monostr.app.ui.common.Avatar
+import com.monostr.app.ui.theme.Spacing
 import com.monostr.nostr.model.ListAddress
 
 /**
@@ -55,7 +56,7 @@ fun LazyListScope.discoverItems(
     onRetry: () -> Unit,
 ) {
     if (showHint) item(key = "discover-hint") {
-        Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(start = Spacing.l, end = Spacing.xs, top = Spacing.s), verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(R.string.discover_hint), Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
             IconButton(onClick = onDismiss, modifier = Modifier.testTag("discover-hint-dismiss")) {
                 Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.discover_dismiss))
@@ -64,10 +65,10 @@ fun LazyListScope.discoverItems(
     }
     when (ui.status) {
         DiscoverStatus.Loading -> item(key = "discover-loading") {
-            Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.Center) { CircularProgressIndicator(Modifier.size(24.dp)) }
+            Row(Modifier.fillMaxWidth().padding(Spacing.l), horizontalArrangement = Arrangement.Center) { CircularProgressIndicator(Modifier.size(24.dp)) }
         }
         DiscoverStatus.Failed -> item(key = "discover-failed") {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = Spacing.l, vertical = Spacing.s), verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(R.string.discover_failed), Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 TextButton(onClick = onRetry, modifier = Modifier.testTag("discover-retry")) { Text(stringResource(R.string.discover_retry)) }
             }
@@ -75,7 +76,7 @@ fun LazyListScope.discoverItems(
         DiscoverStatus.Ready -> for (section in ui.sections) {
             val d = section.address.d
             item(key = "discover-$d-title") {
-                Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().padding(start = Spacing.l, end = Spacing.s, top = Spacing.m), verticalAlignment = Alignment.CenterVertically) {
                     Text(section.title, Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     TextButton(onClick = { onFollowAll(section.address) }, enabled = LocalCanSend.current && !section.allFollowed, modifier = Modifier.testTag("discover-follow-all-$d")) {
                         Text(stringResource(if (section.allFollowed) R.string.discover_all_followed else R.string.discover_follow_all))
@@ -84,23 +85,23 @@ fun LazyListScope.discoverItems(
             }
             for (row in section.rows) item(key = "discover-$d-${row.profile.pubkey}") {
                 Row(
-                    Modifier.fillMaxWidth().clickable { onOpenProfile(row.profile.pubkey) }.padding(horizontal = 16.dp, vertical = 8.dp),
+                    Modifier.fillMaxWidth().clickable { onOpenProfile(row.profile.pubkey) }.padding(horizontal = Spacing.l, vertical = Spacing.s),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Avatar(row.profile.picture)
-                    Spacer(Modifier.width(12.dp))
+                    Spacer(Modifier.width(Spacing.m))
                     Column(Modifier.weight(1f)) {
                         Text(row.profile.shownName, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         row.profile.about?.takeIf { it.isNotBlank() }?.let {
                             Text(it.replace('\n', ' '), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(Spacing.s))
                     FollowPill(row.following, onClick = { onFollow(row.profile.pubkey) }, tag = "discover-follow-${row.profile.pubkey}")
                 }
             }
             item(key = "discover-$d-all") {
-                TextButton(onClick = { onShowAll(section.address) }, modifier = Modifier.padding(start = 4.dp).testTag("discover-show-all-$d")) {
+                TextButton(onClick = { onShowAll(section.address) }, modifier = Modifier.padding(start = Spacing.xs).testTag("discover-show-all-$d")) {
                     Text(stringResource(R.string.discover_show_all))
                 }
             }

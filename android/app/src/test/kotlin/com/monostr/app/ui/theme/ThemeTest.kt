@@ -1,5 +1,7 @@
 package com.monostr.app.ui.theme
 
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.unit.dp
 import com.monostr.app.data.Accent
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -88,5 +90,19 @@ class ThemeTest {
         assertTrue(AccentPalette.blend(0xFF000000, 0xFFFFFFFF, 0.5) in setOf(0xFF7F7F7F, 0xFF808080))
         assertEquals(0xFF000000, AccentPalette.blend(0xFF000000, 0xFFFFFFFF, 1.0))
         assertEquals(0xFFFFFFFF, AccentPalette.blend(0xFF000000, 0xFFFFFFFF, 0.0))
+    }
+
+    @Test
+    fun `shapes follow the spec radii`() {
+        assertEquals(RoundedCornerShape(4.dp), MonostrShapes.extraSmall)
+        assertEquals(RoundedCornerShape(8.dp), MonostrShapes.small)
+        assertEquals(RoundedCornerShape(12.dp), MonostrShapes.medium)
+        assertEquals(RoundedCornerShape(16.dp), MonostrShapes.large)
+        assertEquals(RoundedCornerShape(24.dp), MonostrShapes.extraLarge)
+    }
+
+    @Test
+    fun `live badge colour keeps its value`() {
+        assertEquals(0xFFD32F2F, MonoColors.Live)
     }
 }

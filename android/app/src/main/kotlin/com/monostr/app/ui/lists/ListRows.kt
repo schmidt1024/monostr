@@ -27,6 +27,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.monostr.app.R
+import com.monostr.app.ui.theme.Spacing
 import com.monostr.nostr.model.FollowSet
 
 /** Spec 2026-10-18 §2.2: title (lock when private), member count, pin toggle; a tap opens the list. A locked list is shown disabled. */
@@ -36,14 +37,14 @@ internal fun ListRow(set: FollowSet, pinned: Boolean, onOpen: () -> Unit, onPin:
     Row(
         Modifier.fillMaxWidth()
             .then(if (enabled) Modifier.clickable(onClick = onOpen) else Modifier.alpha(0.5f))
-            .padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp).testTag("list-row"),
+            .padding(start = Spacing.l, end = Spacing.xs, top = Spacing.s, bottom = Spacing.s).testTag("list-row"),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(set.title.ifBlank { stringResource(R.string.list_untitled) }, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (set.private || set.locked) {
-                    Spacer(Modifier.width(6.dp))
+                    Spacer(Modifier.width(Spacing.s))
                     Icon(Icons.Outlined.Lock, contentDescription = stringResource(R.string.list_private), modifier = Modifier.size(16.dp))
                 }
             }

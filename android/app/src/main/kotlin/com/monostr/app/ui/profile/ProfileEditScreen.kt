@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -56,6 +55,7 @@ import com.monostr.app.ui.common.Avatar
 import com.monostr.app.ui.common.LoadingScreen
 import com.monostr.app.ui.common.UiText
 import com.monostr.app.ui.common.asString
+import com.monostr.app.ui.theme.Spacing
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 
@@ -100,8 +100,8 @@ fun ProfileEditScreen(onDone: () -> Unit, vm: ProfileEditViewModel = hiltViewMod
         } else {
             val f = state.form
             Column(
-                Modifier.padding(padding).fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                Modifier.padding(padding).fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(Spacing.l),
+                verticalArrangement = Arrangement.spacedBy(Spacing.m),
             ) {
                 if (state.noProfileFound) {
                     Text(stringResource(R.string.profile_edit_no_profile), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("edit-no-profile"))
@@ -111,7 +111,7 @@ fun ProfileEditScreen(onDone: () -> Unit, vm: ProfileEditViewModel = hiltViewMod
                 if (f.banner.isNotBlank() && !state.bannerInvalid) {
                     AsyncImage(
                         model = f.banner.trim(), contentDescription = null, contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant),
+                        modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(MaterialTheme.shapes.medium).background(MaterialTheme.colorScheme.surfaceVariant),
                     )
                 }
                 EditField(f.picture, R.string.profile_edit_picture, "edit-picture", invalid = state.pictureInvalid) { v -> vm.controller.update { it.copy(picture = v) } }
@@ -160,7 +160,7 @@ private fun PickRow(
             if (filled) {
                 TextButton(onClick = onRemove, enabled = state.uploading == null && !state.saving, modifier = Modifier.testTag(removeTag)) {
                     Icon(Icons.Filled.Close, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
+                    Spacer(Modifier.width(Spacing.xs))
                     Text(stringResource(removeLabel))
                 }
             }

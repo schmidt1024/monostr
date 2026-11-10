@@ -69,6 +69,7 @@ import com.monostr.app.ui.feed.FeedController
 import com.monostr.app.ui.feed.FeedList
 import com.monostr.app.ui.feed.NoteNav
 import com.monostr.app.ui.feed.listFeed
+import com.monostr.app.ui.theme.Spacing
 import com.monostr.app.ui.tips.TipSheetFactory
 import com.monostr.app.ui.tips.TipSheetHost
 import com.monostr.app.ui.tips.TippersDialog
@@ -157,10 +158,10 @@ fun ListScreen(
             val feed = state.feed
             when {
                 state.loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
-                state.unavailable || set == null -> Text(stringResource(R.string.list_unavailable), Modifier.align(Alignment.Center).padding(32.dp).testTag("list-unavailable"), textAlign = TextAlign.Center)
-                set.locked -> Text(stringResource(R.string.list_locked), Modifier.align(Alignment.Center).clickable(onClick = vm.controller::unlock).padding(32.dp).testTag("list-locked"))
+                state.unavailable || set == null -> Text(stringResource(R.string.list_unavailable), Modifier.align(Alignment.Center).padding(Spacing.xxl).testTag("list-unavailable"), textAlign = TextAlign.Center)
+                set.locked -> Text(stringResource(R.string.list_locked), Modifier.align(Alignment.Center).clickable(onClick = vm.controller::unlock).padding(Spacing.xxl).testTag("list-locked"))
                 state.tab == ListTab.MEMBERS -> MemberList(state.members, memberState, own = state.isOwn, onOpenProfile = onOpenProfile, onRemove = vm.controller::removeMember, followed = state.followed.takeIf { state.canFollow }, notFollowable = state.notFollowable, allFollowed = state.allFollowed, onFollow = vm.controller::follow, onFollowAll = vm.controller::followAll)
-                feed == null -> Text(stringResource(R.string.list_no_members), Modifier.align(Alignment.Center).padding(32.dp))
+                feed == null -> Text(stringResource(R.string.list_no_members), Modifier.align(Alignment.Center).padding(Spacing.xxl))
                 else -> {
                     val menu = remember(feed) { vm.menuFor(feed) }
                     FeedList(feed, listState, menu, nav, stringResource(R.string.list_feed_empty), snackbar, hide)
@@ -175,15 +176,15 @@ fun ListScreen(
 
 @Composable
 private fun ListHeader(set: FollowSet, author: Profile?, onOpenProfile: (String) -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = Spacing.l, vertical = Spacing.s)) {
         set.description?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
         val name = author?.shownName ?: Profile.shortPubkey(set.author)
-        Row(Modifier.clickable { onOpenProfile(set.author) }.padding(vertical = 6.dp).testTag("list-author"), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.clickable { onOpenProfile(set.author) }.padding(vertical = Spacing.s).testTag("list-author"), verticalAlignment = Alignment.CenterVertically) {
             Avatar(author?.picture, size = 24.dp)
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(Spacing.s))
             Text(stringResource(R.string.list_by, name), style = MaterialTheme.typography.labelLarge)
             if (set.private) {
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(Spacing.s))
                 Icon(Icons.Outlined.Lock, contentDescription = stringResource(R.string.list_private), modifier = Modifier.size(16.dp))
             }
         }
@@ -200,16 +201,16 @@ private fun MemberList(
 ) {
     LazyColumn(Modifier.fillMaxSize().testTag("list-members"), state = listState) {
         if (followed != null) item(key = "follow-all") {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.End) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = Spacing.s), horizontalArrangement = Arrangement.End) {
                 TextButton(onClick = onFollowAll, enabled = !allFollowed && LocalCanSend.current, modifier = Modifier.testTag("list-follow-all")) {
                     Text(stringResource(if (allFollowed) R.string.discover_all_followed else R.string.discover_follow_all))
                 }
             }
         }
         items(members, key = { it.pubkey }) { p ->
-            Row(Modifier.fillMaxWidth().clickable { onOpenProfile(p.pubkey) }.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().clickable { onOpenProfile(p.pubkey) }.padding(horizontal = Spacing.l, vertical = Spacing.m), verticalAlignment = Alignment.CenterVertically) {
                 Avatar(p.picture)
-                Spacer(Modifier.width(12.dp))
+                Spacer(Modifier.width(Spacing.m))
                 Text(p.shownName, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (followed != null && p.pubkey !in notFollowable) FollowPill(p.pubkey in followed, onClick = { onFollow(p.pubkey) }, tag = "list-member-follow-${p.pubkey.take(8)}")
                 if (own) {

@@ -23,6 +23,7 @@ import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.zIndex
+import com.monostr.app.ui.theme.Spacing
 
 /**
  * Backlog 38: drag to reorder rows of a LazyColumn. A long press lifts the row, it follows the finger and swaps
@@ -140,7 +141,7 @@ fun <T> DragHandle(state: ListReorderState<T>, item: T, items: List<T>, onDrop: 
         tint = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = modifier
             .size(48.dp)
-            .padding(12.dp)
+            .padding(Spacing.m)
             .pointerInput(item, items) {
                 detectDragGestures(
                     onDragStart = { state.start(item, items) },

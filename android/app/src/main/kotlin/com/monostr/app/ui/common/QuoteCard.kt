@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -48,6 +47,7 @@ import com.monostr.app.ui.media.rememberBlurhash
 import com.monostr.app.ui.media.MediaCoverBadge
 import com.monostr.app.ui.media.rememberMediaCover
 import com.monostr.app.ui.media.MediaReveals
+import com.monostr.app.ui.theme.Spacing
 import com.monostr.nostr.model.Note
 import com.monostr.nostr.model.NoteMedia
 import com.monostr.nostr.model.Profile
@@ -162,7 +162,7 @@ fun QuoteCard(
     LaunchedEffect(quotedId, loader) {
         if (loader != null && ui == QuoteUi.Loading) ui = loader.load(quotedId, hints, author)
     }
-    val shape = RoundedCornerShape(12.dp)
+    val shape = MaterialTheme.shapes.medium
     Column(
         modifier
             .fillMaxWidth()
@@ -170,7 +170,7 @@ fun QuoteCard(
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
             .clickable { onOpenNote(quotedId) }
             .testTag("quote-${quotedId.take(8)}")
-            .padding(10.dp),
+            .padding(Spacing.m),
     ) {
         when (val q = ui) {
             QuoteUi.Loading -> Box(Modifier.fillMaxWidth().height(48.dp), contentAlignment = Alignment.Center) {
@@ -191,13 +191,13 @@ fun QuoteCard(
                 val author by remember(q, loader) { loader?.author(q) ?: flowOf(q.author) }.collectAsState(q.author)
                 Row(Modifier.clickable { onOpenProfile(q.note.author) }, verticalAlignment = Alignment.CenterVertically) {
                     Avatar(author.picture, Modifier.size(24.dp))
-                    Spacer(Modifier.width(6.dp))
+                    Spacer(Modifier.width(Spacing.s))
                     Text(author.shownName, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-                    Spacer(Modifier.width(6.dp))
+                    Spacer(Modifier.width(Spacing.s))
                     Text(relativeTime(q.note.createdAt).asString(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 if (q.note.displayContent.isNotBlank()) {
-                    Spacer(Modifier.height(4.dp))
+                    Spacer(Modifier.height(Spacing.xs))
                     NoteText(
                         q.note.displayContent, onOpen = { onOpenNote(quotedId) }, onHashtag = onHashtag, onOpenProfile = onOpenProfile,
                         onOpenNote = onOpenNote, names = names + q.names, maxLines = 6,
@@ -219,13 +219,13 @@ private fun QuoteImage(note: Note, media: NoteMedia, onOpen: () -> Unit) {
     val (covered, waiting) = rememberMediaCover(note, hasImages = true)
     val placeholder = rememberBlurhash(media.blurhash)
     var learned by remember(media.url) { mutableStateOf(MediaRatios[media.url]) }
-    BoxWithConstraints(Modifier.padding(top = 8.dp).fillMaxWidth()) {
+    BoxWithConstraints(Modifier.padding(top = Spacing.s).fillMaxWidth()) {
         val box = MediaBoxes.single(media.dim ?: learned, widthDp = maxWidth.value, maxHeightDp = QUOTE_MAX_HEIGHT_DP)
         Box(
             Modifier
                 .fillMaxWidth()
                 .aspectRatio(box.ratio)
-                .clip(RoundedCornerShape(8.dp))
+                .clip(MaterialTheme.shapes.small)
                 .background(MaterialTheme.colorScheme.surfaceVariant)
                 .clickable { if (covered || waiting) MediaReveals.reveal(note.id) else onOpen() }
                 .testTag("quote-media-${note.id.take(8)}"),

@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -74,6 +73,7 @@ import com.monostr.app.ui.common.QuoteCard
 import com.monostr.app.ui.common.asString
 import com.monostr.app.ui.common.relativeTime
 import com.monostr.app.ui.media.NoteMediaRow
+import com.monostr.app.ui.theme.Spacing
 import com.monostr.nostr.model.NoteMedia
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -164,7 +164,7 @@ private fun ChatScreenContent(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Avatar(state.peer.picture)
-                        Spacer(Modifier.width(12.dp))
+                        Spacer(Modifier.width(Spacing.m))
                         Text(state.peer.shownName, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 },
@@ -182,7 +182,7 @@ private fun ChatScreenContent(
                         state = listState, reverseLayout = true,
                         modifier = Modifier.fillMaxSize().testTag("chat-list"),
                         // bottom-aligned: a short chat sits right above the input like in common messengers
-                        verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.Bottom),
+                        verticalArrangement = Arrangement.spacedBy(Spacing.s, Alignment.Bottom),
                     ) {
                         items(shown, key = { it.message.rumorId }) { item ->
                             Bubble(item, names, onOpenProfile, onOpenThread, onHashtag, onOpenMedia, onOpenVideo, onRetry = vm.controller::retry)
@@ -190,7 +190,7 @@ private fun ChatScreenContent(
                     }
                 }
             }
-            Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().padding(Spacing.s), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
                     value = text, onValueChange = { text = it }, maxLines = 5,
                     placeholder = { Text(stringResource(R.string.chat_input_hint)) },
@@ -221,30 +221,30 @@ private fun Bubble(
     val note = item.note
     val own = m.outgoing
     Column(
-        Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+        Modifier.fillMaxWidth().padding(horizontal = Spacing.m),
         horizontalAlignment = if (own) Alignment.End else Alignment.Start,
     ) {
         Surface(
             color = if (own) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-            shape = RoundedCornerShape(16.dp),
+            shape = MaterialTheme.shapes.large,
             modifier = Modifier.widthIn(max = 320.dp),
         ) {
-            Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+            Column(Modifier.padding(horizontal = Spacing.m, vertical = Spacing.s)) {
                 if (note.displayContent.isNotBlank()) {
                     NoteText(note.displayContent, onOpen = {}, onHashtag = onHashtag, onOpenProfile = onOpenProfile, onOpenNote = onOpenThread, names = names)
                 }
                 note.quotedId?.let { qid ->
                     // spec 8: no hint relays from a DM (they would connect to relays the sender chose); DB and own relays only
-                    QuoteCard(qid, emptyList(), names, onOpenNote = onOpenThread, onOpenProfile = onOpenProfile, onHashtag = onHashtag, modifier = Modifier.padding(top = 6.dp))
+                    QuoteCard(qid, emptyList(), names, onOpenNote = onOpenThread, onOpenProfile = onOpenProfile, onHashtag = onHashtag, modifier = Modifier.padding(top = Spacing.s))
                 }
                 // spec 8: no hint relays from a DM, as for the quote above
-                note.addressRef?.let { AddressCard(dmAddressRef(it), names, onOpenProfile = onOpenProfile, modifier = Modifier.padding(top = 6.dp), sensitive = note.isSensitive, allowForeign = false) }
-                note.invoice?.let { com.monostr.app.ui.common.InvoiceCard(it, Modifier.padding(top = 6.dp)) }
+                note.addressRef?.let { AddressCard(dmAddressRef(it), names, onOpenProfile = onOpenProfile, modifier = Modifier.padding(top = Spacing.s), sensitive = note.isSensitive, allowForeign = false) }
+                note.invoice?.let { com.monostr.app.ui.common.InvoiceCard(it, Modifier.padding(top = Spacing.s)) }
                 NoteMediaRow(note, onOpenMedia = { i -> openPictures(note.media, i, onOpenMedia) }, onOpenVideo = onOpenVideo)
                 Row(Modifier.align(Alignment.End).testTag("chat-status-${m.rumorId.take(8)}"), verticalAlignment = Alignment.CenterVertically) {
                     Text(relativeTime(m.createdAt).asString(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (own) {
-                        Spacer(Modifier.width(4.dp))
+                        Spacer(Modifier.width(Spacing.xs))
                         StatusIcon(m.status)
                     }
                 }

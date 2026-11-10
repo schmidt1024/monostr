@@ -1,0 +1,2 @@
+- Abstände und Ecken in der ganzen App vereinheitlicht
+- Korrekturen

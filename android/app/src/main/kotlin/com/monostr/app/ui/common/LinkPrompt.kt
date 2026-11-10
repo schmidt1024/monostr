@@ -34,6 +34,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.monostr.app.R
+import com.monostr.app.ui.theme.Spacing
 import android.widget.Toast
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -105,9 +106,9 @@ fun LinkPromptHost(alwaysOpen: Boolean, onAlwaysOpen: () -> Unit, torOn: () -> B
         onDismissRequest = { asked = null }, modifier = Modifier.testTag("link-prompt"),
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
-        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = Spacing.l, vertical = Spacing.s), verticalArrangement = Arrangement.spacedBy(Spacing.s)) {
             // the text scrolls, the buttons stay below it on every screen size
-            Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(Spacing.s)) {
                 Text(stringResource(R.string.link_prompt_title), style = MaterialTheme.typography.titleMedium)
                 // the whole host, wrapped: the registrable domain sits at its right end
                 if (web) Text(LinkHost.of(url) ?: stringResource(R.string.link_prompt_unknown_host), style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("link-host"))
@@ -115,7 +116,7 @@ fun LinkPromptHost(alwaysOpen: Boolean, onAlwaysOpen: () -> Unit, torOn: () -> B
                 if (web) Text(stringResource(R.string.link_prompt_reason), style = MaterialTheme.typography.bodyMedium)
                 if (web && viaTor) Text(stringResource(R.string.link_prompt_tor), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("link-tor-note"))
             }
-            FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.s)) {
                 OutlinedButton({ answer(false) }, Modifier.testTag("link-cancel")) { Text(stringResource(R.string.link_prompt_cancel)) }
                 if (torChoices) OutlinedButton({ copyLink() }, Modifier.testTag("link-copy")) { Text(stringResource(R.string.link_prompt_copy)) }
                 val pkg = torBrowserPkg.takeIf { torChoices }

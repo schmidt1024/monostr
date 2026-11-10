@@ -44,6 +44,7 @@ import com.monostr.app.R
 import com.monostr.app.session.NostrSession
 import com.monostr.app.session.SessionState
 import com.monostr.app.ui.common.asString
+import com.monostr.app.ui.theme.Spacing
 import com.monostr.nostr.LocalSigner
 import com.monostr.nostr.Nip49
 import com.monostr.nostr.nip55.AmberSigner
@@ -80,35 +81,35 @@ fun LoginScreen(onCreate: () -> Unit = {}, vm: LoginViewModel = hiltViewModel())
     LaunchedEffect(state.passwordError) { if (state.passwordError != null) password = "" }
     // scrolls once it no longer fits, as with a large font: the Tor row must stay reachable
     BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding()) {
-      Column(Modifier.verticalScroll(rememberScrollState()).fillMaxWidth().heightIn(min = maxHeight).padding(24.dp), verticalArrangement = Arrangement.Center) {
+      Column(Modifier.verticalScroll(rememberScrollState()).fillMaxWidth().heightIn(min = maxHeight).padding(Spacing.xl), verticalArrangement = Arrangement.Center) {
         Image(
             painter = painterResource(R.drawable.ic_logo_mark),
             contentDescription = null, // decorative; the wordmark below carries the name
             colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onBackground),
             modifier = Modifier.height(52.dp), // the coin is square, larger than the old M to hold its weight
         )
-        Spacer(Modifier.height(32.dp)) // gap = mark height / φ
+        Spacer(Modifier.height(Spacing.xxl)) // gap = mark height / φ
         Image(
             painter = painterResource(R.drawable.ic_wordmark),
             contentDescription = stringResource(R.string.app_name),
             colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onBackground),
             modifier = Modifier.height(40.dp),
         )
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(Spacing.s))
         Text(stringResource(R.string.login_tagline), style = MaterialTheme.typography.bodyMedium)
         state.notice?.let {
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Spacing.s))
             Text(it.asString(), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
         }
-        Spacer(Modifier.height(32.dp))
+        Spacer(Modifier.height(Spacing.xxl))
         if (state.amberAvailable) {
             Button(onClick = vm::loginWithAmber, enabled = !state.busy, modifier = Modifier.fillMaxWidth().testTag("login-amber")) { Text(stringResource(R.string.login_amber)) }
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(Spacing.xl))
             Text(stringResource(R.string.login_or_key), style = MaterialTheme.typography.labelLarge)
         } else {
             Text(stringResource(R.string.login_no_signer), style = MaterialTheme.typography.bodySmall)
         }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(Spacing.s))
         OutlinedTextField(
             value = secret, onValueChange = { secret = it }, singleLine = true,
             label = { Text(stringResource(R.string.login_secret_label)) }, visualTransformation = PasswordVisualTransformation(),
@@ -117,7 +118,7 @@ fun LoginScreen(onCreate: () -> Unit = {}, vm: LoginViewModel = hiltViewModel())
             modifier = Modifier.fillMaxWidth().testTag("login-secret"),
         )
         if (needsPassword) {
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Spacing.s))
             OutlinedTextField(
                 value = password, onValueChange = { password = it }, singleLine = true,
                 label = { Text(stringResource(R.string.login_password_label)) }, visualTransformation = PasswordVisualTransformation(),
@@ -126,9 +127,9 @@ fun LoginScreen(onCreate: () -> Unit = {}, vm: LoginViewModel = hiltViewModel())
                 modifier = Modifier.fillMaxWidth().testTag("login-password"),
             )
         }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(Spacing.s))
         OutlinedButton(onClick = { vm.loginWithSecret(secret, password) }, enabled = !state.busy && secret.isNotBlank() && (!needsPassword || password.isNotEmpty()), modifier = Modifier.fillMaxWidth().testTag("login-secret-button")) { Text(stringResource(R.string.login_button)) }
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(Spacing.l))
         // spec 2026-10-17 §2: the way in for someone without a key
         TextButton(onClick = onCreate, enabled = !state.busy, modifier = Modifier.fillMaxWidth().testTag("login-create")) { Text(stringResource(R.string.login_create)) }
         TorLoginRow()

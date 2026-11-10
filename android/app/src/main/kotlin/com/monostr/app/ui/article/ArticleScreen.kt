@@ -24,7 +24,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BrokenImage
@@ -66,6 +65,7 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.widthIn
 import com.monostr.app.ui.theme.MonostrFonts
+import com.monostr.app.ui.theme.Spacing
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -220,20 +220,20 @@ fun ArticleScreen(
         Box(Modifier.padding(padding).fillMaxSize()) {
             when (val s = state) {
                 ArticleUi.Loading -> LoadingScreen()
-                ArticleUi.Missing -> Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                ArticleUi.Missing -> Column(Modifier.fillMaxSize().padding(Spacing.xl), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                     Text(stringResource(R.string.article_missing), style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("article-missing"))
                     // a link that does not decode has nothing to open
                     if (vm.ref.kind == Article.KIND) {
-                        Spacer(Modifier.height(16.dp))
+                        Spacer(Modifier.height(Spacing.l))
                         Button(onClick = { runCatching { uriHandler.openUri(AddressLinks.web(vm.ref)) } }, modifier = Modifier.testTag("article-open-browser")) {
                             Text(stringResource(R.string.article_open_browser))
                         }
                     }
                 }
-                ArticleUi.Muted -> Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+                ArticleUi.Muted -> Box(Modifier.fillMaxSize().padding(Spacing.xl), contentAlignment = Alignment.Center) {
                     Text(stringResource(R.string.mute_quote_placeholder), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("article-muted"))
                 }
-                ArticleUi.Deleted -> Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+                ArticleUi.Deleted -> Box(Modifier.fillMaxSize().padding(Spacing.xl), contentAlignment = Alignment.Center) {
                     Text(stringResource(R.string.article_deleted), style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("article-deleted"))
                 }
                 is ArticleUi.Shown -> Reader(
@@ -336,11 +336,11 @@ private fun Reader(
         val blocks = translation.blocks?.takeIf { it.size == s.blocks.size && translation.row !is TranslationState.Original } ?: s.blocks
         item(key = "header") { Header(s, ctx, onOpenProfile, translation, translator) }
         items(blocks.size, key = { "b$it" }) { i ->
-            ReaderColumn(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) { BlockView(blocks[i], ctx) }
+            ReaderColumn(Modifier.padding(horizontal = Spacing.l, vertical = Spacing.s)) { BlockView(blocks[i], ctx) }
         }
         item(key = "actions") {
-            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                HorizontalDivider(Modifier.padding(bottom = 4.dp))
+            Column(Modifier.padding(horizontal = Spacing.l, vertical = Spacing.s)) {
+                HorizontalDivider(Modifier.padding(bottom = Spacing.xs))
                 NoteActionRow(
                     note = s.note, shown = s.note.note,
                     onReply = onReply, onRepost = onRepost, onQuote = onQuote,
@@ -352,7 +352,7 @@ private fun Reader(
         }
         // the replies: the thread screen's rows, after the text; a spinner until they loaded, nothing when there are none
         if (!replies.loaded) item(key = "replies-loading") {
-            Box(Modifier.fillMaxWidth().padding(16.dp).testTag("article-replies-loading"), contentAlignment = Alignment.Center) {
+            Box(Modifier.fillMaxWidth().padding(Spacing.l).testTag("article-replies-loading"), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
             }
         }
@@ -407,12 +407,12 @@ private fun Header(s: ArticleUi.Shown, ctx: RenderContext, onOpenProfile: (Strin
     val title = translation.title?.takeIf { translation.row !is TranslationState.Original } ?: article.title
     Column {
         article.image?.let { ArticlePicture(it, ctx, 0, Modifier.fillMaxWidth().testTag("article-cover"), cover = true) }
-        ReaderColumn(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+        ReaderColumn(Modifier.padding(horizontal = Spacing.l, vertical = Spacing.m)) {
           Column {
             Text(title, style = ReaderType.title(), modifier = Modifier.testTag("article-title"))
-            Row(Modifier.padding(top = 12.dp).clickable { onOpenProfile(article.event.pubkey) }.testTag("article-author"), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.padding(top = Spacing.m).clickable { onOpenProfile(article.event.pubkey) }.testTag("article-author"), verticalAlignment = Alignment.CenterVertically) {
                 Avatar(author.picture, size = 40.dp)
-                Spacer(Modifier.width(12.dp))
+                Spacer(Modifier.width(Spacing.m))
                 Column {
                     // the byline in spaced capitals, like a newspaper (2026-10-30)
                     Text(author.shownName.uppercase(), style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 0.08.em), maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -455,21 +455,21 @@ private fun ReaderColumn(modifier: Modifier = Modifier, content: @Composable () 
 @Composable
 private fun BlockView(block: MdBlock, ctx: RenderContext, quote: Boolean = false) {
     when (block) {
-        is MdBlock.Heading -> Text(richText(block.text, ctx), style = ReaderType.heading(block.level), modifier = Modifier.padding(top = 8.dp))
+        is MdBlock.Heading -> Text(richText(block.text, ctx), style = ReaderType.heading(block.level), modifier = Modifier.padding(top = Spacing.s))
         is MdBlock.Paragraph -> ParagraphView(block, ctx, quote)
         is MdBlock.Quote -> Row(Modifier.height(IntrinsicSize.Min)) {
             Box(Modifier.width(2.dp).fillMaxHeight().background(MaterialTheme.colorScheme.primary))
-            Column(Modifier.padding(start = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { block.blocks.forEach { BlockView(it, ctx, quote = true) } }
+            Column(Modifier.padding(start = Spacing.m), verticalArrangement = Arrangement.spacedBy(Spacing.s)) { block.blocks.forEach { BlockView(it, ctx, quote = true) } }
         }
-        is MdBlock.ListBlock -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        is MdBlock.ListBlock -> Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
             block.items.forEachIndexed { i, item ->
                 Row {
                     Text(if (block.ordered) "${block.start + i}." else "•", style = if (quote) ReaderType.quote() else ReaderType.body(), modifier = Modifier.width(28.dp))
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) { item.forEach { BlockView(it, ctx, quote) } }
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Spacing.xs)) { item.forEach { BlockView(it, ctx, quote) } }
                 }
             }
         }
-        is MdBlock.Code -> Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceVariant).horizontalScroll(rememberScrollState()).padding(12.dp)) {
+        is MdBlock.Code -> Box(Modifier.fillMaxWidth().clip(MaterialTheme.shapes.small).background(MaterialTheme.colorScheme.surfaceVariant).horizontalScroll(rememberScrollState()).padding(Spacing.m)) {
             Text(block.text, style = MaterialTheme.typography.bodyMedium, fontFamily = FontFamily.Monospace, softWrap = false)
         }
         is MdBlock.Picture -> {
@@ -477,7 +477,7 @@ private fun BlockView(block: MdBlock, ctx: RenderContext, quote: Boolean = false
             ArticlePicture(block.url, ctx, index, Modifier.fillMaxWidth(), alt = block.alt)
         }
         is MdBlock.Table -> TableView(block, ctx)
-        MdBlock.Rule -> HorizontalDivider(Modifier.padding(vertical = 8.dp))
+        MdBlock.Rule -> HorizontalDivider(Modifier.padding(vertical = Spacing.s))
     }
 }
 
@@ -508,7 +508,7 @@ private fun TableView(block: MdBlock.Table, ctx: RenderContext) {
                 row.forEach { cell ->
                     Text(
                         richText(cell, ctx), style = MaterialTheme.typography.bodyMedium.copy(fontWeight = if (r == 0) FontWeight.Bold else FontWeight.Normal),
-                        modifier = Modifier.width(150.dp).fillMaxHeight().border(0.5.dp, border).padding(8.dp),
+                        modifier = Modifier.width(150.dp).fillMaxHeight().border(0.5.dp, border).padding(Spacing.s),
                     )
                 }
             }
@@ -532,7 +532,7 @@ private fun ArticlePicture(url: String, ctx: RenderContext, index: Int, modifier
         val box = MediaBoxes.single(learned, widthDp = maxWidth.value)
         val ratio = if (cover) box.ratio.coerceIn(1f, 2f) else box.ratio
         Box(
-            Modifier.fillMaxWidth().aspectRatio(ratio).then(if (cover) Modifier else Modifier.clip(RoundedCornerShape(12.dp)))
+            Modifier.fillMaxWidth().aspectRatio(ratio).then(if (cover) Modifier else Modifier.clip(MaterialTheme.shapes.medium))
                 .background(MaterialTheme.colorScheme.surfaceVariant)
                 .clickable {
                     when {
@@ -571,11 +571,11 @@ private fun ArticleTranslateRows(translation: ArticleTranslationUi, translator: 
     val consent = LocalNoteTranslator.current ?: return
     if (translation.row == TranslationState.None) return
     val onTranslate = { consent.withConsent(translator::translate) }
-    Column(Modifier.padding(top = 8.dp)) {
+    Column(Modifier.padding(top = Spacing.s)) {
         TranslateRow(translation.row, id8, onTranslate = onTranslate, onOriginal = translator::showOriginal, onTranslation = translator::showTranslation)
         TranslateRow(translation.row, id8, onTranslate = onTranslate, onOriginal = translator::showOriginal, onTranslation = translator::showTranslation, belowText = true)
         if (translation.partial && translation.row is TranslationState.Shown) {
-            Row(Modifier.padding(top = 4.dp).testTag("translate-partial-$id8"), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.padding(top = Spacing.xs).testTag("translate-partial-$id8"), verticalAlignment = Alignment.CenterVertically) {
                 val style = MaterialTheme.typography.labelMedium
                 Text(stringResource(R.string.translate_partial), style = style, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f, fill = false))
                 if (translation.canRetry) {

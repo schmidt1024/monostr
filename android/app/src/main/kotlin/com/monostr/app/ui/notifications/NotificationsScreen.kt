@@ -54,6 +54,7 @@ import com.monostr.app.ui.common.rememberHideOnScroll
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import com.monostr.app.ui.common.asString
+import com.monostr.app.ui.theme.Spacing
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -102,7 +103,7 @@ fun NotificationsScreen(onFeed: () -> Unit, onSearch: () -> Unit, onBookmarks: (
         else PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = vm.store::pull, modifier = Modifier.padding(padding).fillMaxSize().testTag("notifications-refresh")) {
             if (state.rows.isEmpty()) {
                 // scrollable so the pull works on the empty state too; spec perf 3.6: shown at once, the relays asked behind it
-                Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(32.dp), contentAlignment = Alignment.Center) {
+                Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(Spacing.xxl), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(stringResource(R.string.notifications_empty), textAlign = TextAlign.Center)
                         if (state.syncing) {
@@ -111,7 +112,7 @@ fun NotificationsScreen(onFeed: () -> Unit, onSearch: () -> Unit, onBookmarks: (
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center,
-                                modifier = Modifier.padding(top = 8.dp).testTag("notifications-checking"),
+                                modifier = Modifier.padding(top = Spacing.s).testTag("notifications-checking"),
                             )
                         }
                     }

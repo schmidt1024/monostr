@@ -21,6 +21,7 @@ import com.monostr.app.R
 import com.monostr.app.data.Presets
 import com.monostr.app.ui.common.asString
 import com.monostr.app.ui.common.relativeTime
+import com.monostr.app.ui.theme.Spacing
 import com.monostr.nostr.model.Note
 import kotlinx.coroutines.CancellationException
 
@@ -45,7 +46,7 @@ fun TippersDialog(note: Note, load: suspend (Note) -> List<TipperUi>, onDismiss:
                 null -> CircularProgressIndicator()
                 else -> if (list.isEmpty()) Text(stringResource(R.string.tippers_empty)) else LazyColumn {
                     items(list) { t ->
-                        Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                        Column(Modifier.fillMaxWidth().padding(vertical = Spacing.s)) {
                             Row {
                                 Text(t.name ?: stringResource(R.string.tip_anonymous), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
                                 t.amount?.let { Text(stringResource(R.string.tip_xmr_amount, Presets.format(it, LocalAmountUnit.current), LocalAmountUnit.current.label), style = MaterialTheme.typography.titleSmall) }

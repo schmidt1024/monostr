@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -29,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.monostr.app.R
+import com.monostr.app.ui.theme.Spacing
 import com.monostr.nostr.model.LightningInvoice
 import java.text.NumberFormat
 
@@ -43,20 +43,20 @@ fun InvoiceCard(invoice: LightningInvoice, modifier: Modifier = Modifier, now: (
     val context = LocalContext.current
     val copied = stringResource(R.string.invoice_copied)
     val expired = remember(invoice.raw) { invoice.expired(now()) }
-    val shape = RoundedCornerShape(12.dp)
+    val shape = MaterialTheme.shapes.medium
     Column(
         modifier
             .fillMaxWidth()
             .clip(shape)
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
             .combinedClickable(onClick = {}, onLongClick = { copyToClipboard(context, invoice.raw, copied) })
-            .padding(12.dp)
+            .padding(Spacing.m)
             .testTag("invoice-card"),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("⚡ " + stringResource(R.string.invoice_title), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (invoice.network != LightningInvoice.Network.MAINNET) {
-                Spacer(Modifier.width(6.dp))
+                Spacer(Modifier.width(Spacing.s))
                 Text(stringResource(R.string.invoice_testnet), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
             }
         }
@@ -67,14 +67,14 @@ fun InvoiceCard(invoice: LightningInvoice, modifier: Modifier = Modifier, now: (
                 Text(
                     if (sats == null) stringResource(R.string.invoice_any_amount) else stringResource(R.string.invoice_sats, NumberFormat.getIntegerInstance().format(sats)),
                     style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(top = 2.dp).testTag("invoice-amount"),
+                    modifier = Modifier.padding(top = Spacing.xxs).testTag("invoice-amount"),
                 )
                 // the payee's free text: shown as it is, never parsed for links or mentions (spec, answered 2026-11-01)
                 invoice.description?.let {
                     Text(it, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.testTag("invoice-description"))
                 }
             }
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(Spacing.s))
             if (expired) {
                 Text(stringResource(R.string.invoice_expired), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("invoice-expired"))
             } else {

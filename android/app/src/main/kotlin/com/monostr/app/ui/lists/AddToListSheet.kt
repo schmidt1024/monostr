@@ -1,6 +1,7 @@
 package com.monostr.app.ui.lists
 
 import com.monostr.app.ui.common.GuardedModalBottomSheet
+import com.monostr.app.ui.theme.Spacing
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -39,10 +40,10 @@ import com.monostr.app.R
 fun AddToListSheet(controller: AddToListController, onNewList: () -> Unit, onDismiss: () -> Unit) {
     val state by controller.state.collectAsStateWithLifecycle()
     GuardedModalBottomSheet(onDismissRequest = onDismiss, modifier = Modifier.testTag("add-to-list-sheet")) {
-        Text(stringResource(R.string.profile_menu_lists), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+        Text(stringResource(R.string.profile_menu_lists), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = Spacing.l, vertical = Spacing.s))
         val rows = state.rows
         if (rows == null) {
-            Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            Box(Modifier.fillMaxWidth().padding(Spacing.xl), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         } else {
             LazyColumn(Modifier.fillMaxWidth()) {
                 items(rows, key = { it.set.address.toString() }) { row ->
@@ -50,23 +51,23 @@ fun AddToListSheet(controller: AddToListController, onNewList: () -> Unit, onDis
                         Modifier
                             .fillMaxWidth()
                             .toggleable(value = row.checked, enabled = !row.set.locked, role = Role.Checkbox, onValueChange = { controller.toggle(row) })
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                            .padding(horizontal = Spacing.l, vertical = Spacing.s)
                             .testTag("add-to-list-${row.set.address.d}"),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Checkbox(checked = row.checked, onCheckedChange = null, enabled = !row.set.locked)
-                        Spacer(Modifier.width(12.dp))
+                        Spacer(Modifier.width(Spacing.m))
                         Text(row.set.title.ifBlank { stringResource(R.string.list_untitled) }, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                         if (row.set.private) Icon(Icons.Outlined.Lock, contentDescription = stringResource(R.string.list_private), modifier = Modifier.size(16.dp))
                     }
                 }
                 item(key = "add-to-list-create") {
                     Row(
-                        Modifier.fillMaxWidth().clickable(onClick = onNewList).padding(horizontal = 16.dp, vertical = 14.dp).testTag("add-to-list-create"),
+                        Modifier.fillMaxWidth().clickable(onClick = onNewList).padding(horizontal = Spacing.l, vertical = Spacing.l).testTag("add-to-list-create"),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Icon(Icons.Filled.Add, contentDescription = null)
-                        Spacer(Modifier.width(12.dp))
+                        Spacer(Modifier.width(Spacing.m))
                         Text(stringResource(R.string.add_to_list_new))
                     }
                 }

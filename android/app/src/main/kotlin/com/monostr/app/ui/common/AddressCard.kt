@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.Image
@@ -51,6 +50,8 @@ import com.monostr.app.R
 import com.monostr.app.ui.media.LocalMediaSettings
 import com.monostr.app.ui.media.MediaCoverBadge
 import com.monostr.app.ui.media.MediaReveals
+import com.monostr.app.ui.theme.MonoColors
+import com.monostr.app.ui.theme.Spacing
 import com.monostr.nostr.PerfTrace
 import com.monostr.nostr.model.AddressLinks
 import com.monostr.nostr.model.ListAddress
@@ -192,7 +193,7 @@ fun AddressCard(
     val uriHandler = LocalUriHandler.current
     val openArticle = LocalOpenArticle.current
     val openList = LocalOpenList.current
-    val shape = RoundedCornerShape(12.dp)
+    val shape = MaterialTheme.shapes.medium
     Column(
         modifier
             .fillMaxWidth()
@@ -208,19 +209,19 @@ fun AddressCard(
             .testTag("address-card-${ref.identifier.take(8)}"),
     ) {
         when (val q = resolved) {
-            AddressUi.Loading -> Box(Modifier.fillMaxWidth().height(48.dp).padding(10.dp).testTag("address-card-loading"), contentAlignment = Alignment.Center) {
+            AddressUi.Loading -> Box(Modifier.fillMaxWidth().height(48.dp).padding(Spacing.m).testTag("address-card-loading"), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
             }
             AddressUi.Muted -> Text(
                 stringResource(R.string.mute_quote_placeholder),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(10.dp).testTag("address-card-muted"),
+                modifier = Modifier.padding(Spacing.m).testTag("address-card-muted"),
             )
             AddressUi.Missing, AddressUi.Deleted -> Text(
                 stringResource(if (q == AddressUi.Deleted) R.string.address_deleted else R.string.address_missing),
                 style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(10.dp).testTag("address-card-missing"),
+                modifier = Modifier.padding(Spacing.m).testTag("address-card-missing"),
             )
             is AddressUi.Found -> FoundBody(q.event, loader, names, onOpenProfile, sensitive)
         }
@@ -233,30 +234,30 @@ private fun FoundBody(event: AddressableEvent, loader: AddressLoader?, names: Ma
     val model = remember(event.id) { AddressCardModel.from(event, now) }
     Column(Modifier.testTag(if (model.live) "address-card-live" else "address-card-generic")) {
         model.image?.let { PictureBox(it, event.id, model.covered || sensitive) }
-        Column(Modifier.padding(10.dp)) {
+        Column(Modifier.padding(Spacing.m)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(model.typeLabel), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 model.badge?.let { badge ->
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(Spacing.s))
                     StatusBadge(badge, model.startsAt)
                 }
             }
-            Text(model.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
+            Text(model.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = Spacing.xxs))
             model.summary?.let {
-                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = Spacing.xxs))
             }
             val fallback = remember(model.personPubkey) { Profile.empty(model.personPubkey) }
             val person by remember(model.personPubkey, loader) { loader?.profile(model.personPubkey) ?: flowOf(fallback) }.collectAsState(fallback)
             LaunchedEffect(model.personPubkey, loader) { loader?.prefetch(model.personPubkey) }
-            Row(Modifier.padding(top = 6.dp).clickable { onOpenProfile(model.personPubkey) }, verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.padding(top = Spacing.s).clickable { onOpenProfile(model.personPubkey) }, verticalAlignment = Alignment.CenterVertically) {
                 Avatar(person.picture, Modifier.size(20.dp))
-                Spacer(Modifier.width(6.dp))
+                Spacer(Modifier.width(Spacing.s))
                 Text(
                     names[model.personPubkey] ?: person.shownName, style = MaterialTheme.typography.labelLarge, maxLines = 1,
                     overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
                 )
                 model.participants?.let {
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(Spacing.s))
                     Text(pluralStringResource(R.plurals.address_watching, it, it), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
@@ -268,7 +269,7 @@ private fun FoundBody(event: AddressableEvent, loader: AddressLoader?, names: Ma
 private fun StatusBadge(badge: AddressCardModel.Badge, startsAt: Long?) {
     val context = LocalContext.current
     val (text, bg, fg) = when (badge) {
-        AddressCardModel.Badge.LIVE -> Triple(stringResource(R.string.address_live), Color(0xFFD32F2F), Color.White)
+        AddressCardModel.Badge.LIVE -> Triple(stringResource(R.string.address_live), Color(MonoColors.Live), Color.White)
         AddressCardModel.Badge.ENDED -> Triple(stringResource(R.string.address_ended), MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant)
         AddressCardModel.Badge.PLANNED -> {
             val starts = startsAt?.let { DateUtils.formatDateTime(context, it * 1000, DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_SHOW_TIME or DateUtils.FORMAT_ABBREV_MONTH) }
@@ -278,7 +279,7 @@ private fun StatusBadge(badge: AddressCardModel.Badge, startsAt: Long?) {
     }
     Text(
         text, color = fg, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold,
-        modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(bg).padding(horizontal = 6.dp, vertical = 2.dp).testTag("address-card-status"),
+        modifier = Modifier.clip(MaterialTheme.shapes.extraSmall).background(bg).padding(horizontal = Spacing.s, vertical = Spacing.xxs).testTag("address-card-status"),
     )
 }
 

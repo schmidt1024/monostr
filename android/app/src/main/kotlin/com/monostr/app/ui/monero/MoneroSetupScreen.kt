@@ -74,6 +74,7 @@ import com.monostr.app.session.NostrSession
 import com.monostr.app.ui.common.QrCode
 import com.monostr.app.ui.common.asString
 import com.monostr.app.ui.theme.MonostrFonts
+import com.monostr.app.ui.theme.Spacing
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 
@@ -113,7 +114,7 @@ fun MoneroSetupScreen(onDone: () -> Unit, vm: MoneroSetupViewModel = hiltViewMod
             if (state.intro) TorBannerSlot()
         }
     }) { padding ->
-        Column(Modifier.padding(padding).padding(16.dp).fillMaxSize().verticalScroll(rememberScrollState())) {
+        Column(Modifier.padding(padding).padding(Spacing.l).fillMaxSize().verticalScroll(rememberScrollState())) {
             // spec 6.1: leaving the intro with the system back gesture counts as "later"
             if (state.intro) BackHandler { c.skip() }
             val announced = state.announced
@@ -151,7 +152,7 @@ private fun CheckProgress(slow: Boolean, onCancel: (() -> Unit)?, progressTag: S
 /** The button content while busy: a small spinner and [text]. */
 @Composable
 private fun BusyLabel(text: String) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Spacing.s)) {
         CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
         Text(text)
     }
@@ -161,14 +162,14 @@ private fun BusyLabel(text: String) {
 @Composable
 internal fun AnnouncedNotice(address: String, onKeep: () -> Unit) {
     Card(Modifier.fillMaxWidth().testTag("setup-announced-notice")) {
-        Column(Modifier.padding(16.dp)) {
+        Column(Modifier.padding(Spacing.l)) {
             Text(stringResource(R.string.setup_announced_notice, address.take(8), address.takeLast(6)), style = MaterialTheme.typography.bodyMedium)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 TextButton(onClick = onKeep, modifier = Modifier.testTag("setup-keep-existing")) { Text(stringResource(R.string.setup_keep_existing)) }
             }
         }
     }
-    Spacer(Modifier.height(16.dp))
+    Spacer(Modifier.height(Spacing.l))
 }
 
 /** Spec payto §4: one address, published as payto; "No wallet yet?" leads to the watcher path. */
@@ -179,7 +180,7 @@ internal fun ColumnScope.AddressStep(
 ) {
     if (intro) {
         Text(stringResource(R.string.setup_intro_text), style = MaterialTheme.typography.bodyMedium)
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(Spacing.l))
     }
     Text(stringResource(R.string.setup_address_title), style = MaterialTheme.typography.titleMedium)
     OutlinedTextField(
@@ -187,7 +188,7 @@ internal fun ColumnScope.AddressStep(
         isError = error != null, supportingText = { Text(error ?: stringResource(R.string.setup_address_hint)) }, enabled = !step.loading,
         modifier = Modifier.fillMaxWidth().testTag("setup-payto-address"),
     )
-    Spacer(Modifier.height(8.dp))
+    Spacer(Modifier.height(Spacing.s))
     Button(onClick = onPublish, enabled = !step.loading && step.input.isNotBlank(), modifier = Modifier.fillMaxWidth().testTag("setup-payto-publish")) {
         if (step.loading) BusyLabel(stringResource(R.string.setup_address_publish)) else Text(stringResource(R.string.setup_address_publish))
     }
@@ -200,18 +201,18 @@ internal fun ColumnScope.AddressStep(
 internal fun AddressDoneStep(step: SetupStep.AddressDone, onUpgrade: () -> Unit, onDone: () -> Unit) {
     Text(stringResource(R.string.setup_done_title), style = MaterialTheme.typography.titleMedium)
     Text(stringResource(R.string.setup_address_done), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("setup-address-done"))
-    Spacer(Modifier.height(8.dp))
+    Spacer(Modifier.height(Spacing.s))
     Text(step.address, fontFamily = MonostrFonts.mono, style = MaterialTheme.typography.bodySmall)
-    Spacer(Modifier.height(16.dp))
+    Spacer(Modifier.height(Spacing.l))
     Card(Modifier.fillMaxWidth().testTag("setup-upgrade")) {
-        Column(Modifier.padding(16.dp)) {
+        Column(Modifier.padding(Spacing.l)) {
             Text(stringResource(R.string.setup_upgrade_title), style = MaterialTheme.typography.titleSmall)
             Text(stringResource(R.string.setup_upgrade_text), style = MaterialTheme.typography.bodySmall)
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Spacing.s))
             OutlinedButton(onClick = onUpgrade, modifier = Modifier.fillMaxWidth().testTag("setup-upgrade-action")) { Text(stringResource(R.string.setup_upgrade_action)) }
         }
     }
-    Spacer(Modifier.height(16.dp))
+    Spacer(Modifier.height(Spacing.l))
     Button(onClick = onDone, modifier = Modifier.fillMaxWidth().testTag("setup-done")) { Text(stringResource(R.string.action_done)) }
 }
 
@@ -223,7 +224,7 @@ internal fun ColumnScope.WatcherStep(
     if (intro) {
         Text(stringResource(R.string.setup_intro_text), style = MaterialTheme.typography.bodyMedium)
         Text(stringResource(R.string.setup_intro_wallet_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(Spacing.l))
     }
     Text(stringResource(R.string.setup_watcher_heading), style = MaterialTheme.typography.titleMedium)
     Text(stringResource(R.string.setup_watcher_text), style = MaterialTheme.typography.bodySmall)
@@ -234,7 +235,7 @@ internal fun ColumnScope.WatcherStep(
     )
     // the short read of the stored settings shows progress too, but "Loading…" and no Cancel
     if (step.loading) CheckProgress(step.slow, onCancel.takeIf { step.checking }, "setup-progress", "setup-slow-hint", "setup-cancel-check")
-    Spacer(Modifier.height(8.dp))
+    Spacer(Modifier.height(Spacing.s))
     Button(onClick = onLoad, enabled = !step.loading, modifier = Modifier.fillMaxWidth().testTag("setup-load")) {
         when {
             step.checking -> BusyLabel(stringResource(R.string.setup_checking))
@@ -242,7 +243,7 @@ internal fun ColumnScope.WatcherStep(
             else -> Text(stringResource(if (step.retry) R.string.setup_try_again else R.string.setup_load_watcher))
         }
     }
-    Spacer(Modifier.height(8.dp))
+    Spacer(Modifier.height(Spacing.s))
     OutlinedButton(onClick = onPersonal, enabled = !step.loading, modifier = Modifier.fillMaxWidth().testTag("setup-personal")) { Text(stringResource(R.string.setup_personal_watcher)) }
     Text(stringResource(R.string.setup_personal_watcher_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     if (intro) TextButton(onClick = onSkip, modifier = Modifier.align(Alignment.End).testTag("setup-skip")) { Text(stringResource(R.string.setup_skip)) }
@@ -263,7 +264,7 @@ internal fun PersonalStep(step: SetupStep.Personal, error: String?, onInput: (St
         modifier = Modifier.fillMaxWidth().testTag("setup-personal-relay"),
     )
     if (step.loading) CheckProgress(step.slow, onCancel, "setup-personal-progress", "setup-personal-slow-hint", "setup-personal-cancel-check")
-    Spacer(Modifier.height(8.dp))
+    Spacer(Modifier.height(Spacing.s))
     Button(onClick = onLoad, enabled = !step.loading, modifier = Modifier.fillMaxWidth().testTag("setup-personal-load")) {
         if (step.loading) BusyLabel(stringResource(R.string.setup_checking))
         else Text(stringResource(if (step.retry) R.string.setup_try_again else R.string.setup_personal_load))
@@ -280,12 +281,12 @@ internal fun PersonalConfirmStep(step: SetupStep.PersonalConfirm, error: String?
         stringResource(R.string.setup_personal_info, Npub.short(status.watcherPubkey), NetworkTag.toTag(status.network!!), height, address.take(8), address.takeLast(6)),
         style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("setup-personal-info"),
     )
-    Spacer(Modifier.height(16.dp))
+    Spacer(Modifier.height(Spacing.l))
     Text(stringResource(R.string.setup_personal_privacy), style = MaterialTheme.typography.bodyMedium)
     if (ProtocolVersion.supportsHiddenAmounts(status.protocol)) AmountsPrivateText()
     PaytoQuestion(step.paytoConflict, step.paytoPending, step.replacePayto, onReplacePayto)
     error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
-    Spacer(Modifier.height(12.dp))
+    Spacer(Modifier.height(Spacing.m))
     Button(onClick = onConfirm, enabled = !step.paytoPending, modifier = Modifier.fillMaxWidth().testTag("setup-personal-confirm")) { Text(stringResource(R.string.setup_personal_confirm)) }
     TextButton(onClick = onBack, modifier = Modifier.testTag("setup-personal-back")) { Text(stringResource(R.string.action_back)) }
 }
@@ -293,22 +294,22 @@ internal fun PersonalConfirmStep(step: SetupStep.PersonalConfirm, error: String?
 @Composable
 private fun ChooseStep(step: SetupStep.Choose, announced: String?, c: MoneroSetupController) {
     Text(stringResource(R.string.setup_watcher_info, Npub.short(step.info.pubkey), step.info.network, step.info.height), style = MaterialTheme.typography.bodySmall)
-    Spacer(Modifier.height(16.dp))
+    Spacer(Modifier.height(Spacing.l))
     if (announced != null) {
         Text(stringResource(R.string.setup_announced_warning, announced.take(8), announced.takeLast(6)), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("setup-announced"))
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(Spacing.l))
     }
     Text(stringResource(R.string.setup_privacy), style = MaterialTheme.typography.bodyMedium)
-    Spacer(Modifier.height(8.dp))
+    Spacer(Modifier.height(Spacing.s))
     Text(stringResource(R.string.setup_watcher_privacy), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    Spacer(Modifier.height(16.dp))
+    Spacer(Modifier.height(Spacing.l))
     Button(onClick = c::startNew, modifier = Modifier.fillMaxWidth().testTag("setup-new")) { Text(stringResource(R.string.setup_new_wallet)) }
     Text(stringResource(R.string.setup_path_new_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    Spacer(Modifier.height(8.dp))
+    Spacer(Modifier.height(Spacing.s))
     OutlinedButton(onClick = c::startExisting, modifier = Modifier.fillMaxWidth().testTag("setup-existing")) { Text(stringResource(R.string.setup_existing_wallet)) }
     Text(stringResource(R.string.setup_path_existing_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     if (step.canReuse) {
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(Spacing.s))
         OutlinedButton(onClick = c::reuseStored, modifier = Modifier.fillMaxWidth().testTag("setup-reuse")) { Text(stringResource(R.string.setup_reuse_wallet)) }
     }
 }
@@ -318,16 +319,16 @@ private fun SeedStep(step: SetupStep.Seed, c: MoneroSetupController) {
     SecureWindow()
     Text(stringResource(R.string.setup_seed_title), style = MaterialTheme.typography.titleMedium)
     Text(stringResource(R.string.setup_seed_text), style = MaterialTheme.typography.bodySmall)
-    Spacer(Modifier.height(12.dp))
+    Spacer(Modifier.height(Spacing.m))
     step.words.chunked(3).forEachIndexed { row, words ->
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             words.forEachIndexed { col, w -> Text("${row * 3 + col + 1}. $w", fontFamily = MonostrFonts.mono, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)) }
         }
     }
-    Spacer(Modifier.height(12.dp))
+    Spacer(Modifier.height(Spacing.m))
     Text(stringResource(R.string.setup_restore_height, step.restoreHeight), fontFamily = MonostrFonts.mono)
     SeedClipboard(step.words.joinToString(" "))
-    Spacer(Modifier.height(16.dp))
+    Spacer(Modifier.height(Spacing.l))
     Button(onClick = c::seedWritten, modifier = Modifier.fillMaxWidth().testTag("setup-seed-written")) { Text(stringResource(R.string.setup_seed_written)) }
 }
 
@@ -344,7 +345,7 @@ private fun VerifyStep(step: SetupStep.Verify, c: MoneroSetupController) {
         )
     }
     if (step.wrong) Text(stringResource(R.string.setup_verify_wrong), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-    Spacer(Modifier.height(12.dp))
+    Spacer(Modifier.height(Spacing.m))
     Button(onClick = { c.verify(answers.value) }, enabled = answers.value.all { it.isNotBlank() }, modifier = Modifier.fillMaxWidth().testTag("setup-verify")) { Text(stringResource(R.string.action_check)) }
     TextButton(onClick = c::backToSeed) { Text(stringResource(R.string.setup_back_to_seed)) }
 }
@@ -358,7 +359,7 @@ private fun ExistingStep(step: SetupStep.Existing, error: String?, c: MoneroSetu
         visualTransformation = PasswordVisualTransformation(), isError = error != null, supportingText = { error?.let { Text(it) } },
         modifier = Modifier.fillMaxWidth().testTag("setup-view-key"),
     )
-    Spacer(Modifier.height(12.dp))
+    Spacer(Modifier.height(Spacing.m))
     Button(onClick = c::checkExisting, enabled = step.address.isNotBlank() && step.viewKey.isNotBlank(), modifier = Modifier.fillMaxWidth().testTag("setup-check")) { Text(stringResource(R.string.action_check)) }
 }
 
@@ -368,7 +369,7 @@ private fun ConfirmStep(step: SetupStep.Confirm, error: String?, c: MoneroSetupC
     Text(stringResource(R.string.setup_confirm_title), style = MaterialTheme.typography.titleMedium)
     Text(stringResource(R.string.setup_confirm_text), style = MaterialTheme.typography.bodyMedium)
     if (step.amountsHidden) AmountsPrivateText()
-    Spacer(Modifier.height(8.dp))
+    Spacer(Modifier.height(Spacing.s))
     Text(step.address, fontFamily = MonostrFonts.mono, style = MaterialTheme.typography.bodySmall)
     Row(verticalAlignment = Alignment.CenterVertically) {
         Checkbox(checked = understood, onCheckedChange = { understood = it }, modifier = Modifier.testTag("setup-understood"))
@@ -376,7 +377,7 @@ private fun ConfirmStep(step: SetupStep.Confirm, error: String?, c: MoneroSetupC
     }
     PaytoQuestion(step.paytoConflict, step.paytoPending, step.replacePayto, c::setReplacePayto)
     error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
-    Spacer(Modifier.height(12.dp))
+    Spacer(Modifier.height(Spacing.m))
     Button(onClick = c::confirm, enabled = understood && !step.paytoPending, modifier = Modifier.fillMaxWidth().testTag("setup-confirm")) { Text(stringResource(R.string.setup_register)) }
 }
 
@@ -385,12 +386,12 @@ private fun ConfirmStep(step: SetupStep.Confirm, error: String?, c: MoneroSetupC
 private fun PaytoQuestion(current: String?, pending: Boolean, replace: Boolean, onReplace: (Boolean) -> Unit) {
     if (pending) {
         // the own payto is still being read: the question may follow, confirming waits
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(Spacing.s))
         LinearProgressIndicator(Modifier.fillMaxWidth().testTag("setup-payto-pending"))
         return
     }
     if (current == null) return
-    Spacer(Modifier.height(8.dp))
+    Spacer(Modifier.height(Spacing.s))
     Text(stringResource(R.string.setup_payto_replace, current.take(8), current.takeLast(6)), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("setup-payto-question"))
     listOf(true to R.string.setup_payto_replace_yes, false to R.string.setup_payto_replace_keep).forEach { (value, label) ->
         Row(
@@ -399,7 +400,7 @@ private fun PaytoQuestion(current: String?, pending: Boolean, replace: Boolean, 
             verticalAlignment = Alignment.CenterVertically,
         ) {
             RadioButton(selected = replace == value, onClick = null)
-            Text(stringResource(label), modifier = Modifier.padding(start = 8.dp))
+            Text(stringResource(label), modifier = Modifier.padding(start = Spacing.s))
         }
     }
 }
@@ -407,7 +408,7 @@ private fun PaytoQuestion(current: String?, pending: Boolean, replace: Boolean, 
 /** Protocol 0.5: the new payment info hides tip amounts. */
 @Composable
 private fun AmountsPrivateText() {
-    Spacer(Modifier.height(8.dp))
+    Spacer(Modifier.height(Spacing.s))
     Text(stringResource(R.string.setup_amounts_private), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("setup-amounts-private"))
 }
 
@@ -426,20 +427,20 @@ private fun ColumnScope.DoneStep(step: SetupStep.Done, c: MoneroSetupController)
     Text(stringResource(R.string.setup_done_text), style = MaterialTheme.typography.bodyMedium)
     if (step.amountsHidden) AmountsPrivateText()
     if (step.paytoFailed) {
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(Spacing.s))
         Text(stringResource(R.string.setup_payto_failed), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("setup-payto-failed"))
         OutlinedButton(onClick = c::retryPayto, modifier = Modifier.testTag("setup-payto-retry")) { Text(stringResource(R.string.setup_payto_retry)) }
     }
-    Spacer(Modifier.height(12.dp))
+    Spacer(Modifier.height(Spacing.m))
     QrCode(step.address, Modifier.size(220.dp).align(Alignment.CenterHorizontally))
-    Spacer(Modifier.height(8.dp))
+    Spacer(Modifier.height(Spacing.s))
     Text(step.address, fontFamily = MonostrFonts.mono, style = MaterialTheme.typography.bodySmall)
     OutlinedButton(onClick = { clipboard.setText(AnnotatedString(step.address)) }) { Text(stringResource(R.string.action_copy_address)) }
     Text(stringResource(R.string.settings_monero_wallet_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     step.restoreHeight?.let {
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(Spacing.m))
         Text(stringResource(R.string.setup_done_import, it), style = MaterialTheme.typography.bodySmall)
     }
-    Spacer(Modifier.height(16.dp))
+    Spacer(Modifier.height(Spacing.l))
     Button(onClick = c::finish, modifier = Modifier.fillMaxWidth().testTag("setup-done")) { Text(stringResource(R.string.action_done)) }
 }

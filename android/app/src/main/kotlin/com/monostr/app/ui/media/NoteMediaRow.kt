@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.monostr.app.R
+import com.monostr.app.ui.theme.Spacing
 import com.monostr.nostr.model.Note
 import com.monostr.nostr.model.NoteMedia
 
@@ -92,7 +93,7 @@ fun NoteMediaRow(
     val tag = note.id.take(8)
     // A video poster is an image download too, so it waits like a picture.
     val (covered, waiting) = rememberMediaCover(note, hasImages = note.media.any { it.kind == NoteMedia.Kind.IMAGE || it.poster != null })
-    Box(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+    Box(Modifier.fillMaxWidth().padding(top = Spacing.s)) {
         // Covered or waiting media is never fetched: only the blurhash placeholder (or a grey box) shows.
         // backlog 62: a single picture as tall as the screen allows (header, actions and bars still in view), never below the old cap
         val screenShare = if (detail) MediaBoxes.DETAIL_SCREEN_SHARE else MediaBoxes.FEED_SCREEN_SHARE
@@ -110,7 +111,7 @@ fun NoteMediaRow(
 @Composable
 private fun BoxScope.Cover(tag: String, icon: ImageVector, title: String, subtitle: String?, onTap: () -> Unit) {
     Box(
-        Modifier.matchParentSize().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.35f)).clickable(onClick = onTap, onClickLabel = title).testTag(tag),
+        Modifier.matchParentSize().clip(MaterialTheme.shapes.medium).background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.35f)).clickable(onClick = onTap, onClickLabel = title).testTag(tag),
         contentAlignment = Alignment.Center,
     ) {
         MediaCoverBadge(icon, title, subtitle, Modifier.testTag("media-cover-badge-${tag.substringAfterLast('-')}"))
@@ -124,7 +125,7 @@ private fun BoxScope.Cover(tag: String, icon: ImageVector, title: String, subtit
 @Composable
 fun MediaCoverBadge(icon: ImageVector, title: String?, subtitle: String? = null, modifier: Modifier = Modifier) {
     Column(
-        modifier.clip(RoundedCornerShape(16.dp)).background(Color.Black.copy(alpha = 0.6f)).padding(horizontal = 14.dp, vertical = 8.dp),
+        modifier.clip(MaterialTheme.shapes.large).background(Color.Black.copy(alpha = 0.6f)).padding(horizontal = Spacing.l, vertical = Spacing.s),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Icon(icon, contentDescription = null, tint = Color.White)
@@ -135,7 +136,7 @@ fun MediaCoverBadge(icon: ImageVector, title: String?, subtitle: String? = null,
 
 @Composable
 private fun MediaGrid(media: List<NoteMedia>, tag: String, blurred: Boolean, placeholderOnly: Boolean, enabled: Boolean, onOpenMedia: (Int) -> Unit, onOpenVideo: (String) -> Unit, maxHeightDp: Float = MediaBoxes.MAX_HEIGHT_DP) {
-    val shape = RoundedCornerShape(12.dp)
+    val shape = MaterialTheme.shapes.medium
     if (media.size == 1) {
         val m = media[0]
         val video = m.kind == NoteMedia.Kind.VIDEO
@@ -157,7 +158,7 @@ private fun MediaGrid(media: List<NoteMedia>, tag: String, blurred: Boolean, pla
     }
     // backlog 39: X's arrangement; every cell opens the viewer at its own index (the viewer holds all pictures)
     val layout = MediaGridLayout.of(media.size)
-    val gap = 4.dp
+    val gap = Spacing.xs
     @Composable
     fun cell(i: Int, modifier: Modifier) = MediaCell(media[i], i, tag, modifier.clip(shape), blurred, placeholderOnly, enabled, onOpenMedia, onOpenVideo)
     when (layout.kind) {
@@ -240,6 +241,6 @@ private fun MediaCell(
             )
         }
         if (failed && !placeholderOnly && source != null) Icon(Icons.Filled.BrokenImage, contentDescription = stringResource(R.string.media_failed), tint = MaterialTheme.colorScheme.outline)
-        if (m.kind == NoteMedia.Kind.VIDEO) Icon(Icons.Filled.PlayArrow, contentDescription = videoLabel, tint = Color.White, modifier = Modifier.background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.5f), RoundedCornerShape(50)).padding(12.dp))
+        if (m.kind == NoteMedia.Kind.VIDEO) Icon(Icons.Filled.PlayArrow, contentDescription = videoLabel, tint = Color.White, modifier = Modifier.background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.5f), RoundedCornerShape(50)).padding(Spacing.m))
     }
 }

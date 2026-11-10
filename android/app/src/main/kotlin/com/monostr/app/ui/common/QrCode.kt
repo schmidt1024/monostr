@@ -16,6 +16,7 @@ import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.qrcode.QRCodeWriter
 import com.monostr.app.R
+import com.monostr.app.ui.theme.Spacing
 
 /**
  * QR code rendered locally with ZXing; used for addresses and `monero:` URIs (spec 5.5, 6.2).
@@ -24,7 +25,7 @@ import com.monostr.app.R
 @Composable
 fun QrCode(text: String, modifier: Modifier = Modifier, size: Int = 512) {
     val bitmap = remember(text, size) { qrBitmap(text, size) }
-    Box(modifier.background(androidx.compose.ui.graphics.Color.White).padding(8.dp)) {
+    Box(modifier.background(androidx.compose.ui.graphics.Color.White).padding(Spacing.s)) {
         Image(bitmap = bitmap.asImageBitmap(), contentDescription = stringResource(R.string.qr_content_description))
     }
 }

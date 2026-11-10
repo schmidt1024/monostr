@@ -26,6 +26,15 @@ fun isDark(mode: ThemeMode): Boolean = when (mode) {
 
 private fun c(argb: Long) = Color(argb)
 
+/** Corner radii (spec 2026-11-10 §5): call sites use MaterialTheme.shapes, never a hand-built radius. */
+val MonostrShapes = Shapes(
+    extraSmall = RoundedCornerShape(4.dp),
+    small = RoundedCornerShape(8.dp),
+    medium = RoundedCornerShape(12.dp),
+    large = RoundedCornerShape(16.dp),
+    extraLarge = RoundedCornerShape(24.dp),
+)
+
 /** Spec 4: monochrome base, accent only on the primary tokens, flat shapes, Inter/JetBrains Mono. */
 @Composable
 fun MonostrTheme(mode: ThemeMode, accent: Accent, customHue: Float = AccentSeed.DEFAULT_HUE, content: @Composable () -> Unit) {
@@ -92,7 +101,7 @@ fun MonostrTheme(mode: ThemeMode, accent: Accent, customHue: Float = AccentSeed.
     MaterialTheme(
         colorScheme = scheme,
         typography = MonostrTypography,
-        shapes = Shapes(extraSmall = RoundedCornerShape(8.dp), small = RoundedCornerShape(8.dp), medium = RoundedCornerShape(12.dp), large = RoundedCornerShape(16.dp), extraLarge = RoundedCornerShape(20.dp)),
+        shapes = MonostrShapes,
         content = content,
     )
 }

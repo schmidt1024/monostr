@@ -70,6 +70,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import com.monostr.app.ui.common.asString
 import com.monostr.app.ui.common.relativeTime
+import com.monostr.app.ui.theme.Spacing
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -136,39 +137,39 @@ fun ConversationsScreen(
                     items(state.authFailed.sorted(), key = { "auth-$it" }) { relay ->
                         Text(
                             stringResource(R.string.messages_auth_failed, relay), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).testTag("messages-auth-hint"),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.l, vertical = Spacing.s).testTag("messages-auth-hint"),
                         )
                     }
                     items(state.authRejected.toList().sortedBy { it.first }, key = { "auth-rejected-${it.first}" }) { (relay, reason) ->
                         Text(
                             stringResource(R.string.messages_auth_rejected, relay, reason), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).testTag("messages-auth-rejected"),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.l, vertical = Spacing.s).testTag("messages-auth-rejected"),
                         )
                     }
                     if (state.pending > 0) {
                         item(key = "pending") {
                             Text(
                                 pluralStringResource(R.plurals.messages_pending, state.pending, state.pending), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.fillMaxWidth().clickable(onClick = vm.controller::unlockPending).padding(horizontal = 16.dp, vertical = 12.dp).testTag("messages-pending"),
+                                modifier = Modifier.fillMaxWidth().clickable(onClick = vm.controller::unlockPending).padding(horizontal = Spacing.l, vertical = Spacing.m).testTag("messages-pending"),
                             )
                             HorizontalDivider()
                         }
                     }
                     if (state.items.isEmpty() && state.requests.isEmpty()) {
                         item(key = "empty") {
-                            Box(Modifier.fillParentMaxSize().padding(24.dp), contentAlignment = Alignment.Center) { Text(stringResource(R.string.messages_empty), textAlign = TextAlign.Center) }
+                            Box(Modifier.fillParentMaxSize().padding(Spacing.xl), contentAlignment = Alignment.Center) { Text(stringResource(R.string.messages_empty), textAlign = TextAlign.Center) }
                         }
                     }
                     conversationRows(state.items, onOpenChat)
                     if (state.requests.isNotEmpty()) {
                         item(key = "requests") {
                             Row(
-                                Modifier.fillMaxWidth().clickable { requestsOpen = !requestsOpen }.padding(horizontal = 16.dp, vertical = 12.dp).testTag("messages-requests"),
+                                Modifier.fillMaxWidth().clickable { requestsOpen = !requestsOpen }.padding(horizontal = Spacing.l, vertical = Spacing.m).testTag("messages-requests"),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Text(pluralStringResource(R.plurals.messages_requests, state.requests.size, state.requests.size), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
                                 // closed, the section would hide unread messages the bottom badge counts
-                                CountBadge(state.requests.sumOf { it.conversation.unread }, Modifier.padding(end = 8.dp).testTag("messages-requests-unread"))
+                                CountBadge(state.requests.sumOf { it.conversation.unread }, Modifier.padding(end = Spacing.s).testTag("messages-requests-unread"))
                                 Icon(if (requestsOpen) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, contentDescription = null)
                             }
                             HorizontalDivider()
@@ -189,11 +190,11 @@ private fun LazyListScope.conversationRows(rows: List<ConversationUi>, onOpenCha
 private fun ConversationRow(row: ConversationUi, onOpenChat: (String) -> Unit) {
     val c = row.conversation
     Row(
-        Modifier.fillMaxWidth().clickable { onOpenChat(c.peer) }.padding(horizontal = 16.dp, vertical = 12.dp).testTag("conversation-${c.peer.take(8)}"),
+        Modifier.fillMaxWidth().clickable { onOpenChat(c.peer) }.padding(horizontal = Spacing.l, vertical = Spacing.m).testTag("conversation-${c.peer.take(8)}"),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Avatar(row.profile.picture)
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(Spacing.m))
         Column(Modifier.weight(1f)) {
             Text(
                 row.profile.shownName, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -201,12 +202,12 @@ private fun ConversationRow(row: ConversationUi, onOpenChat: (String) -> Unit) {
             )
             Text(c.lastText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Spacer(Modifier.width(8.dp))
+        Spacer(Modifier.width(Spacing.s))
         // the count under the time, so the badge's total can be found in the list
         Column(horizontalAlignment = Alignment.End) {
             Text(relativeTime(c.lastAt).asString(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (c.unread > 0) {
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(Spacing.xs))
                 CountBadge(c.unread, Modifier.testTag("conversation-unread-${c.peer.take(8)}"))
             }
         }

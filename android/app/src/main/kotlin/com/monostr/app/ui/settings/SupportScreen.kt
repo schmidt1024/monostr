@@ -47,6 +47,7 @@ import com.monostr.app.BuildConfig
 import com.monostr.app.R
 import com.monostr.app.ui.common.QrCode
 import com.monostr.app.ui.theme.MonostrFonts
+import com.monostr.app.ui.theme.Spacing
 import com.monostr.app.ui.tips.WalletOpener
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -104,22 +105,22 @@ fun SupportScreen(onBack: () -> Unit, vm: SupportViewModel = hiltViewModel()) {
 
 @Composable
 fun SupportContent(address: String, repoUrl: String, contributors: List<String>, onDonate: () -> Unit, onOpenRepo: () -> Unit, modifier: Modifier = Modifier) {
-    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(Spacing.l)) {
         Text(stringResource(R.string.support_text), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("support-text"))
         if (address.isNotBlank()) {
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(Spacing.l))
             Button(onClick = onDonate, modifier = Modifier.fillMaxWidth().testTag("support-donate")) { Text(stringResource(R.string.support_button)) }
         }
         if (contributors.isNotEmpty()) {
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(Spacing.xl))
             Text(stringResource(R.string.support_contributors), style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("support-contributors"))
-            Spacer(Modifier.height(4.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Spacer(Modifier.height(Spacing.xs))
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.xxs)) {
                 contributors.forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
             }
         }
         if (repoUrl.isNotBlank()) {
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(Spacing.xl))
             TextButton(onClick = onOpenRepo, modifier = Modifier.testTag("support-repo")) { Text(stringResource(R.string.support_repo)) }
         }
     }
@@ -135,7 +136,7 @@ fun SupportFallbackDialog(address: String, onDismiss: () -> Unit) {
         text = {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 QrCode(SupportLinks.moneroUri(address), Modifier.size(200.dp))
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(Spacing.s))
                 Text(address, style = MaterialTheme.typography.bodySmall, fontFamily = MonostrFonts.mono, modifier = Modifier.testTag("support-fallback-address"))
             }
         },

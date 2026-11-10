@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import com.monostr.app.BuildConfig
 import com.monostr.app.R
 import com.monostr.app.data.MediaServer
+import com.monostr.app.ui.theme.Spacing
 import com.monostr.nostr.Npub
 import com.monostr.nostr.blossom.BlossomAuth
 
@@ -74,21 +75,21 @@ fun AboutContent(
     modifier: Modifier = Modifier,
 ) {
     val ink = ColorFilter.tint(MaterialTheme.colorScheme.onBackground)
-    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(Spacing.l)) {
         // the coin is square: larger than the old M to hold its weight next to the wordmark; gap = coin height / φ
         Image(painterResource(R.drawable.ic_logo_mark), contentDescription = null, colorFilter = ink, modifier = Modifier.height(40.dp))
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(Spacing.xl))
         Image(painterResource(R.drawable.ic_wordmark), contentDescription = stringResource(R.string.app_name), colorFilter = ink, modifier = Modifier.height(28.dp))
-        Spacer(Modifier.height(16.dp))
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Spacer(Modifier.height(Spacing.l))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Spacing.s)) {
             Text(stringResource(R.string.about_version, versionName, versionCode), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("about-version"))
             if (beta) {
                 Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.testTag("about-beta")) {
-                    Text(stringResource(R.string.about_beta), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
+                    Text(stringResource(R.string.about_beta), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.padding(horizontal = Spacing.s, vertical = Spacing.xxs))
                 }
             }
         }
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(Spacing.l))
         if (feedbackPubkey != null) {
             TextButton(onClick = { onFeedback(feedbackPubkey) }, contentPadding = PaddingValues(0.dp), modifier = Modifier.testTag("about-feedback")) { Text(stringResource(R.string.about_feedback)) }
         }
@@ -96,11 +97,11 @@ fun AboutContent(
             TextButton(onClick = onIssues, contentPadding = PaddingValues(0.dp), modifier = Modifier.testTag("about-issues")) { Text(stringResource(R.string.about_issues)) }
         }
         if (mediaHost.isNotBlank()) {
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Spacing.s))
             Text(stringResource(R.string.about_media, mediaHost), style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("about-media"))
         }
         if (license.isNotBlank()) {
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Spacing.s))
             Text(stringResource(R.string.about_license, license), style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("about-license"))
         }
     }

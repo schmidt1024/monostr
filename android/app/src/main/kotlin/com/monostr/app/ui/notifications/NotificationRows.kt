@@ -37,6 +37,7 @@ import com.monostr.app.ui.common.Avatar
 import com.monostr.app.ui.common.MentionNames
 import com.monostr.app.ui.common.asString
 import com.monostr.app.ui.common.relativeTime
+import com.monostr.app.ui.theme.Spacing
 import com.monostr.app.ui.theme.TipCoinFilled
 import com.monostr.nostr.model.NoteMedia
 import com.monostr.nostr.repo.AboutNote
@@ -89,7 +90,7 @@ private fun GroupRow(group: NotificationRow.Group, row: NotificationRowUi, names
     Row(
         Modifier.fillMaxWidth()
             .clickable(enabled = opensThread(row.about)) { onOpenThread(group.aboutId) }
-            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .padding(horizontal = Spacing.l, vertical = Spacing.m)
             .testTag("notification-${group.key}"),
         verticalAlignment = Alignment.Top,
     ) {
@@ -101,7 +102,7 @@ private fun GroupRow(group: NotificationRow.Group, row: NotificationRowUi, names
                 Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(LEADING_ICON))
             }
         }
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(Spacing.m))
         Column(Modifier.weight(1f)) {
             // the newest faces fill one line, at most 7 (fewer on a narrow screen), like X; never a second line
             BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -112,7 +113,7 @@ private fun GroupRow(group: NotificationRow.Group, row: NotificationRowUi, names
                     }
                 }
             }
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(Spacing.s))
             Text(groupSentence(group, row.names), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
             Text(aboutText(row.about, names), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.testTag("notification-about-${group.key}"))
             Text(relativeTime(group.createdAt).asString(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -149,17 +150,17 @@ private fun EventCard(single: NotificationRow.Single, row: NotificationRowUi, na
     Row(
         Modifier.fillMaxWidth()
             .clickable(enabled = item.noteId != null) { item.noteId?.let(onOpenThread) }
-            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .padding(horizontal = Spacing.l, vertical = Spacing.m)
             .testTag("notification-${item.id}"),
         verticalAlignment = Alignment.Top,
     ) {
         Avatar(from?.let { row.pictures[it] }, size = LEADING_WIDTH, modifier = Modifier.clickable(enabled = from != null) { from?.let(onOpenProfile) }.testTag("notification-avatar-${from.orEmpty().take(8)}"), contentDescription = from?.let { stringResource(R.string.avatar_of, row.names[it] ?: it.take(8)) })
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(Spacing.m))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(from?.let { row.names[it] } ?: "", style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                 if (item.kind == NotificationKind.MENTION) Text(" " + stringResource(R.string.notif_mentioned), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-                Spacer(Modifier.width(6.dp))
+                Spacer(Modifier.width(Spacing.s))
                 Text(relativeTime(item.createdAt).asString(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             // spec §5.4: no about line until the note is known
@@ -190,12 +191,12 @@ private fun TipRow(single: NotificationRow.Single, row: NotificationRowUi, names
                     NotificationTarget.None -> Unit
                 }
             }
-            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .padding(horizontal = Spacing.l, vertical = Spacing.m)
             .testTag("notification-${item.id}"),
         verticalAlignment = Alignment.Top,
     ) {
         LeadingSlot { Icon(TipCoinFilled, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(LEADING_ICON)) }
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(Spacing.m))
         Column(Modifier.weight(1f)) {
             val name = item.from?.let { row.names[it] } ?: stringResource(R.string.tip_anonymous)
             Text("$name ${item.amount?.let { stringResource(R.string.notif_tipped, Presets.format(it, LocalAmountUnit.current), LocalAmountUnit.current.label) } ?: stringResource(R.string.notif_tipped_plain)}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
@@ -219,11 +220,11 @@ private fun LeadingSlot(content: @Composable () -> Unit) {
 @Composable
 private fun Thumbnail(about: AboutNote?) {
     val note = (about as? AboutNote.Found)?.note ?: return
-    Spacer(Modifier.width(12.dp))
+    Spacer(Modifier.width(Spacing.m))
     NoteThumbnail(note.repostOf ?: note)
 }
 
 /** The faces of a grouped notification: up to [MAX_FACES] in one line. */
 private val FACE = 28.dp
-private val FACE_GAP = 6.dp
+private val FACE_GAP = Spacing.s
 private const val MAX_FACES = 7

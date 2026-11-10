@@ -25,7 +25,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
@@ -70,6 +69,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.monostr.app.R
 import com.monostr.app.ui.common.BottomTab
 import com.monostr.app.ui.theme.FeatherGlyph
+import com.monostr.app.ui.theme.Spacing
 import com.monostr.app.ui.common.DeletionMessages
 import com.monostr.app.ui.common.MessageSnackbar
 import com.monostr.app.ui.common.MonostrBottomBar
@@ -231,7 +231,7 @@ fun FeedScreen(
                     if (amountsPrompt.failed) {
                         Text(
                             stringResource(if (LocalCanSend.current) R.string.setup_err_not_published else R.string.send_blocked_tor), color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.padding(top = 8.dp).testTag("amounts-prompt-error"),
+                            modifier = Modifier.padding(top = Spacing.s).testTag("amounts-prompt-error"),
                         )
                     }
                 }
@@ -263,11 +263,11 @@ internal fun FeedTopBar(relayStates: List<RelayState>, picture: String?, onToTop
             Box(
                 Modifier
                     .heightIn(min = 48.dp)
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(MaterialTheme.shapes.small)
                     .clickable(role = Role.Button, onClickLabel = toTopLabel, onClick = onToTop)
                     .semantics { contentDescription = toTopLabel }
                     .testTag("feed-wordmark")
-                    .padding(horizontal = 4.dp),
+                    .padding(horizontal = Spacing.xs),
                 contentAlignment = Alignment.Center,
             ) {
                 // the wordmark, not the app name as text: the brand is always the "Monostr" glyphs
@@ -299,8 +299,8 @@ internal fun FeedTopBar(relayStates: List<RelayState>, picture: String?, onToTop
 /** Spec 4: "Enjoying Monostr?" with Support and Hide; both end it for good. */
 @Composable
 private fun SupportHintCard(onSupport: () -> Unit, onDismiss: () -> Unit) {
-    Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).testTag("support-hint")) {
-        Column(Modifier.padding(16.dp)) {
+    Card(Modifier.fillMaxWidth().padding(horizontal = Spacing.l, vertical = Spacing.s).testTag("support-hint")) {
+        Column(Modifier.padding(Spacing.l)) {
             Text(stringResource(R.string.support_hint_title), style = MaterialTheme.typography.titleSmall)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 TextButton(onClick = onDismiss, modifier = Modifier.testTag("support-hint-dismiss")) { Text(stringResource(R.string.support_hint_dismiss)) }

@@ -34,6 +34,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
 import com.monostr.app.R
+import com.monostr.app.ui.theme.Spacing
 import dagger.hilt.android.lifecycle.HiltViewModel
 import okhttp3.OkHttpClient
 import javax.inject.Inject
@@ -82,7 +83,7 @@ fun VideoPlayerScreen(url: String, onBack: () -> Unit, http: OkHttpClient = hilt
             update = { it.player = player },
             modifier = Modifier.fillMaxSize(),
         )
-        IconButton(onClick = onBack, modifier = Modifier.align(Alignment.TopStart).statusBarsPadding().padding(8.dp).testTag("video-close")) {
+        IconButton(onClick = onBack, modifier = Modifier.align(Alignment.TopStart).statusBarsPadding().padding(Spacing.s).testTag("video-close")) {
             Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.media_viewer_close), tint = Color.White)
         }
     }

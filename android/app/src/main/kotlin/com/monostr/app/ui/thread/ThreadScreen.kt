@@ -68,6 +68,7 @@ import com.monostr.app.ui.common.uiText
 import com.monostr.app.ui.feed.NoteUi
 import com.monostr.app.ui.feed.target
 import com.monostr.app.ui.feed.withProfiles
+import com.monostr.app.ui.theme.Spacing
 import com.monostr.app.ui.tips.TipDecorations
 import com.monostr.app.ui.tips.TipSheetFactory
 import com.monostr.app.ui.tips.TipSheetHost
@@ -358,7 +359,7 @@ fun ThreadScreen(
     }, snackbarHost = { SnackbarHost(snackbar, Modifier.muteUndoTag(state.message)) }) { padding ->
         when {
             state.loading -> LoadingScreen()
-            state.notFound -> Text(stringResource(R.string.thread_not_found), Modifier.padding(padding).padding(16.dp))
+            state.notFound -> Text(stringResource(R.string.thread_not_found), Modifier.padding(padding).padding(Spacing.l))
             else -> Box(Modifier.padding(padding).fillMaxSize()) {
                 val listState = rememberLazyListState()
                 // backlog 28: muted notes the user tapped open, for this screen only (the account stays muted)

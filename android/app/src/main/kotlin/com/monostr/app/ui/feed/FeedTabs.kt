@@ -1,6 +1,7 @@
 package com.monostr.app.ui.feed
 
 import com.monostr.app.ui.common.GuardedDropdownMenu
+import com.monostr.app.ui.theme.Spacing
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -89,7 +90,7 @@ internal fun FeedTabRow(
                     .combinedClickable(onClick = { onSelect(i) }, onLongClick = if (tab is HomeTab.Pinned) ({ menu = true }) else null)
                     .semantics { role = Role.Tab; selected = isSelected }
                     .heightIn(min = 48.dp)
-                    .padding(horizontal = 16.dp)
+                    .padding(horizontal = Spacing.l)
                     .testTag("feed-tab-$i"),
                 contentAlignment = Alignment.Center,
             ) {
@@ -120,12 +121,12 @@ internal fun FeedTabRow(
 @Composable
 internal fun UnavailableTab(onUnpin: () -> Unit) {
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(32.dp).testTag("feed-tab-unavailable"),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(Spacing.xxl).testTag("feed-tab-unavailable"),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
         Text(stringResource(R.string.list_unavailable), textAlign = TextAlign.Center)
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(Spacing.m))
         OutlinedButton(onClick = onUnpin, modifier = Modifier.testTag("feed-tab-unpin")) { Text(stringResource(R.string.list_unpin)) }
     }
 }
@@ -133,10 +134,10 @@ internal fun UnavailableTab(onUnpin: () -> Unit) {
 /** Spec §2.1: an own private list that could not be decrypted; a tap retries. */
 @Composable
 internal fun LockedTab(onUnlock: () -> Unit) {
-    Box(Modifier.fillMaxSize().clickable(role = Role.Button, onClick = onUnlock).padding(32.dp).testTag("feed-tab-locked"), contentAlignment = Alignment.Center) {
+    Box(Modifier.fillMaxSize().clickable(role = Role.Button, onClick = onUnlock).padding(Spacing.xxl).testTag("feed-tab-locked"), contentAlignment = Alignment.Center) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Outlined.Lock, contentDescription = null)
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(Spacing.s))
             Text(stringResource(R.string.list_locked))
         }
     }
@@ -144,5 +145,5 @@ internal fun LockedTab(onUnlock: () -> Unit) {
 
 @Composable
 internal fun CenteredText(text: String, modifier: Modifier = Modifier) {
-    Box(modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) { Text(text, textAlign = TextAlign.Center) }
+    Box(modifier.fillMaxSize().padding(Spacing.xxl), contentAlignment = Alignment.Center) { Text(text, textAlign = TextAlign.Center) }
 }

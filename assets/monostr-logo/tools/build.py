@@ -102,9 +102,9 @@ def main():
 def icon_jobs(tmp):
     """Coin exports: logo PNGs, site icons, profile picture, store icon (spec 2026-11-09 coin logo)."""
     coin.write_svgs()
-    small = os.path.join(tmp, "coin-small.svg")
+    small = os.path.join(tmp, "coin-small.svg")   # favicons: dark disc, light coin (coin.favicon_svg)
     with open(small, "w") as f:
-        f.write(coin.svg100(coin.coin_body(coin.DARK, coin.LIGHT, small=True)))
+        f.write(coin.favicon_svg())
     square = os.path.join(tmp, "coin-square-dark.svg")
     with open(square, "w") as f:
         f.write(coin.app_icon(coin.DARK, coin.WHITE, "quadrat").replace('rx="120"', 'rx="0"'))
@@ -134,11 +134,8 @@ def icon_jobs(tmp):
     jobs.append({"svg": os.path.join(android, "play-store-icon.svg"), "out": os.path.join(android, "play-store-icon-512.png"), "width": 512, "height": 512})
     for px in (16, 32, 48):
         jobs.append({"svg": small, "out": os.path.join(LOGO, "favicon", f"favicon-{px}.png"), "width": px, "height": px})
-    # the favicon follows the browser's colour scheme
     with open(os.path.join(SITE_ROOT, "favicon.svg"), "w") as f:
-        body = coin.coin_body("currentColor", "none", small=True)
-        f.write('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><style>svg{color:#16161A}'
-                '@media (prefers-color-scheme:dark){svg{color:#F2F1ED}}</style>' + body + "</svg>\n")
+        f.write(coin.favicon_svg() + "\n")
     return jobs
 
 

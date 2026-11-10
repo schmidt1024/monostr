@@ -1,0 +1,2 @@
+- Espaçamentos e cantos padronizados em todo o app
+- Correções

@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.monostr.app.R
 import com.monostr.app.ui.common.Reactions
+import com.monostr.app.ui.theme.Spacing
 
 /** Settings → Reactions: the quick emojis of the long press on the heart, in the user's order. */
 @Composable
@@ -58,7 +59,7 @@ fun QuickReactionsSection(list: List<String>, onChange: (List<String>) -> Unit) 
                 label = { Text(stringResource(R.string.settings_reactions_add)) },
                 modifier = Modifier.weight(1f).testTag("settings-reaction-input"),
             )
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(Spacing.s))
             val next = Reactions.add(list, input)
             TextButton(onClick = { onChange(next); input = "" }, enabled = next != list, modifier = Modifier.testTag("settings-reaction-add")) {
                 Text(stringResource(R.string.settings_reactions_add_button))

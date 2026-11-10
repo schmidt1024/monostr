@@ -30,6 +30,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.monostr.app.R
 import com.monostr.app.translate.TranslationMode
+import com.monostr.app.ui.theme.Spacing
 
 /** Sections [SettingsScreen] can be opened at (the route's `section` argument). */
 object SettingsSection {
@@ -69,7 +70,7 @@ fun TranslationSection(mode: TranslationMode, customUrl: String, onMode: (Transl
                 Text(stringResource(R.string.profile_edit_save))
             }
         }
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(Spacing.xs))
         Text(stringResource(R.string.settings_translate_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
@@ -77,10 +78,10 @@ fun TranslationSection(mode: TranslationMode, customUrl: String, onMode: (Transl
 @Composable
 private fun ModeRow(label: String, selected: Boolean, tag: String, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().selectable(selected = selected, role = Role.RadioButton, onClick = onClick).padding(vertical = 8.dp).testTag(tag),
+        Modifier.fillMaxWidth().selectable(selected = selected, role = Role.RadioButton, onClick = onClick).padding(vertical = Spacing.s).testTag(tag),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         RadioButton(selected = selected, onClick = null)
-        Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = 12.dp))
+        Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = Spacing.m))
     }
 }

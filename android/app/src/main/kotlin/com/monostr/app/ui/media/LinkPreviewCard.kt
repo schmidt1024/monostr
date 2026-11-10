@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -48,6 +47,7 @@ import com.monostr.app.data.linkpreview.LinkPreview
 import com.monostr.app.data.linkpreview.LinkPreviews
 import com.monostr.app.ui.common.NoteLinks
 import com.monostr.app.ui.common.NoteSpan
+import com.monostr.app.ui.theme.Spacing
 import com.monostr.nostr.model.Note
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
@@ -168,32 +168,32 @@ fun LinkPreviewCard(note: Note, url: String, preview: LinkPreview, onDismiss: ((
     val (covered, waiting) = rememberMediaCover(note, hasImages = image != null)
     val cd = stringResource(R.string.link_preview_cd, preview.title, domain)
     val open: () -> Unit = { runCatching { uriHandler.openUri(url) } }
-    val shape = RoundedCornerShape(12.dp)
-    val textPart = Modifier.clickable(onClickLabel = cd, onClick = open).semantics { contentDescription = cd }.padding(12.dp)
+    val shape = MaterialTheme.shapes.medium
+    val textPart = Modifier.clickable(onClickLabel = cd, onClick = open).semantics { contentDescription = cd }.padding(Spacing.m)
     if (preview.large && image != null) {
         // like X (2026-10-30): the title on one line in a small dark label on the picture, the domain under the card
-        Column(Modifier.fillMaxWidth().padding(top = 8.dp).testTag("link-preview-$id8")) {
+        Column(Modifier.fillMaxWidth().padding(top = Spacing.s).testTag("link-preview-$id8")) {
             Box(Modifier.fillMaxWidth().aspectRatio(1.91f).clip(shape).border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)) {
                 PreviewImage(image, note, covered, waiting, open, onFailed = { imageFailed = true }, Modifier.fillMaxSize())
                 onDismiss?.let { DismissButton(it, Modifier.align(Alignment.TopStart)) }
                 Text(
                     preview.title, style = MaterialTheme.typography.labelMedium, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.align(Alignment.BottomStart).padding(8.dp)
-                        .clip(RoundedCornerShape(4.dp)).background(Color.Black.copy(alpha = 0.75f))
+                    modifier = Modifier.align(Alignment.BottomStart).padding(Spacing.s)
+                        .clip(MaterialTheme.shapes.extraSmall).background(Color.Black.copy(alpha = 0.75f))
                         .clickable(onClickLabel = cd, onClick = open).semantics { contentDescription = cd }
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                        .padding(horizontal = Spacing.s, vertical = Spacing.xxs)
                         .testTag("link-preview-overlay-$id8"),
                 )
             }
             Text(
                 // small and light: the domain is a quiet note under the picture, not a heading (user 2026-10-30)
                 domain, style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Normal, letterSpacing = 0.02.em), color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 4.dp).clickable(onClickLabel = cd, onClick = open),
+                modifier = Modifier.padding(top = Spacing.xs).clickable(onClickLabel = cd, onClick = open),
             )
         }
     } else {
         Row(
-            Modifier.fillMaxWidth().padding(top = 8.dp).clip(shape).border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape).testTag("link-preview-$id8"),
+            Modifier.fillMaxWidth().padding(top = Spacing.s).clip(shape).border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape).testTag("link-preview-$id8"),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             image?.let { PreviewImage(it, note, covered, waiting, open, onFailed = { imageFailed = true }, Modifier.size(72.dp)) }
@@ -207,7 +207,7 @@ fun LinkPreviewCard(note: Note, url: String, preview: LinkPreview, onDismiss: ((
 @Composable
 private fun DismissButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
     Box(
-        modifier.padding(8.dp).size(28.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.75f))
+        modifier.padding(Spacing.s).size(28.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.75f))
             .clickable(onClickLabel = stringResource(R.string.link_preview_remove), onClick = onClick)
             .testTag("link-preview-dismiss"),
         contentAlignment = Alignment.Center,

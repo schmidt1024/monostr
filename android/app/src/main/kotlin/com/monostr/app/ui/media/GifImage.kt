@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -49,6 +48,7 @@ import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import com.monostr.app.R
 import com.monostr.app.data.GifMode
+import com.monostr.app.ui.theme.Spacing
 import com.monostr.nostr.PerfTrace
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -153,7 +153,7 @@ fun GifImage(
         if (a != null && moves) {
             val label = stringResource(if (playing) R.string.media_gif_pause else R.string.media_gif_play)
             Row(
-                Modifier.align(Alignment.BottomStart).padding(8.dp).background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+                Modifier.align(Alignment.BottomStart).padding(Spacing.s).background(Color.Black.copy(alpha = 0.6f), MaterialTheme.shapes.small)
                     .clickable(onClickLabel = label) {
                         if (playing) {
                             tapped = false
@@ -165,10 +165,10 @@ fun GifImage(
                             tapped = true
                         }
                     }
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                    .padding(horizontal = Spacing.s, vertical = Spacing.xs)
                     .testTag(if (playing) "gif-pause-$key" else "gif-play-$key"),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
             ) {
                 Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, contentDescription = label, tint = Color.White, modifier = Modifier.size(16.dp))
                 Text("GIF", style = MaterialTheme.typography.labelSmall, color = Color.White)

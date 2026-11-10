@@ -2,6 +2,8 @@ package com.monostr.app.ui.theme
 
 /** Spec 4.3 monochrome tokens as packed ARGB. */
 object MonoColors {
+    /** the red LIVE badge on address cards (live events) */
+    const val Live = 0xFFD32F2F
     const val LightSurface = 0xFFFFFFFF
     const val LightSurfaceContainer = 0xFFF4F4F4
     const val LightOnSurface = 0xFF111111

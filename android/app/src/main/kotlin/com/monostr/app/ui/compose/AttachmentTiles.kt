@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.filled.PlayArrow
@@ -34,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.monostr.app.R
 import com.monostr.app.ui.common.asString
+import com.monostr.app.ui.theme.Spacing
 
 /**
  * Spec 5.2: one tile per attached picture, in the order they will appear in the note - preview,
@@ -42,11 +42,11 @@ import com.monostr.app.ui.common.asString
  */
 @Composable
 fun AttachmentTiles(attachments: List<Attachment>, enabled: Boolean, onRemove: (Long) -> Unit, onRetry: (Long) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(Spacing.s)) {
             attachments.forEachIndexed { i, a ->
                 Box(
-                    Modifier.size(84.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant).testTag("compose-attachment-$i"),
+                    Modifier.size(84.dp).clip(MaterialTheme.shapes.medium).background(MaterialTheme.colorScheme.surfaceVariant).testTag("compose-attachment-$i"),
                 ) {
                     // a video shows its poster once it is up; before that the tile stays plain (no frame is decoded here)
                     val model = a.uploaded?.posterUrl ?: a.source.takeUnless { a.video }
@@ -67,7 +67,7 @@ fun AttachmentTiles(attachments: List<Attachment>, enabled: Boolean, onRemove: (
                             if (a.preparing != null) {
                                 Text(
                                     stringResource(R.string.compose_video_preparing), style = MaterialTheme.typography.labelSmall, color = Color.White,
-                                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 4.dp).testTag("compose-attachment-preparing-$i"),
+                                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = Spacing.xs).testTag("compose-attachment-preparing-$i"),
                                 )
                             }
                         }

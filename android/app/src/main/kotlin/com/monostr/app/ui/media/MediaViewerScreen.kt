@@ -1,6 +1,7 @@
 package com.monostr.app.ui.media
 
 import com.monostr.app.ui.common.GuardedModalBottomSheet
+import com.monostr.app.ui.theme.Spacing
 import com.monostr.app.data.GifMode
 import android.Manifest
 import android.content.Context
@@ -246,7 +247,7 @@ fun MediaViewerScreen(onBack: () -> Unit, vm: MediaViewerViewModel = hiltViewMod
             ZoomableImage(state.media[page], onDismiss = onBack, onLongPress = { sheetFor = state.media[page] })
         }
         // edge-to-edge: keep the header below the status bar
-        Row(Modifier.fillMaxWidth().statusBarsPadding().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().statusBarsPadding().padding(Spacing.s), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack, modifier = Modifier.testTag("media-close")) { Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.media_viewer_close), tint = Color.White) }
             Text(stringResource(R.string.media_viewer_position, pager.currentPage + 1, state.media.size), color = Color.White, style = MaterialTheme.typography.labelLarge)
         }

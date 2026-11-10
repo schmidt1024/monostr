@@ -59,6 +59,7 @@ import androidx.lifecycle.viewModelScope
 import com.monostr.app.R
 import com.monostr.app.session.NostrSession
 import com.monostr.app.ui.common.Avatar
+import com.monostr.app.ui.theme.Spacing
 import com.monostr.nostr.Npub
 import com.monostr.nostr.model.Profile
 import com.monostr.nostr.repo.FollowListsRepository
@@ -254,9 +255,9 @@ fun FollowsScreen(onBack: () -> Unit, onOpenProfile: (String) -> Unit, vm: Follo
 /** X's row: picture, name and handle beside the follow button, the bio under them (at most three lines); a tap opens the profile. */
 @Composable
 private fun PersonRow(p: Profile, follow: FollowState?, busy: Boolean, onOpen: () -> Unit, onFollow: () -> Unit, onUnfollow: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = 16.dp, vertical = 12.dp).testTag("follows-person-${p.pubkey.take(8)}")) {
+    Row(Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = Spacing.l, vertical = Spacing.m).testTag("follows-person-${p.pubkey.take(8)}")) {
         Avatar(p.picture)
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(Spacing.m))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -264,9 +265,9 @@ private fun PersonRow(p: Profile, follow: FollowState?, busy: Boolean, onOpen: (
                     Text(p.nip05 ?: Npub.short(p.pubkey), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 if (follow != null) {
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(Spacing.s))
                     val tag = Modifier.height(32.dp).testTag("follows-follow-${p.pubkey.take(8)}")
-                    val pad = PaddingValues(horizontal = 16.dp)
+                    val pad = PaddingValues(horizontal = Spacing.l)
                     val canSend = LocalCanSend.current
                     when (follow) {
                         FollowState.Following -> OutlinedButton(onClick = onUnfollow, enabled = !busy && canSend, contentPadding = pad, modifier = tag) { Text(stringResource(R.string.profile_following), style = MaterialTheme.typography.labelMedium) }
@@ -276,7 +277,7 @@ private fun PersonRow(p: Profile, follow: FollowState?, busy: Boolean, onOpen: (
                 }
             }
             p.about?.trim()?.takeIf { it.isNotEmpty() }?.let { bio ->
-                Text(bio, style = MaterialTheme.typography.bodyMedium, maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
+                Text(bio, style = MaterialTheme.typography.bodyMedium, maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = Spacing.xs))
             }
         }
     }
@@ -289,7 +290,7 @@ private fun FollowList(column: FollowColumn, empty: Int, endHint: Int?, onMore: 
     val nearEnd by remember(list) { derivedStateOf { list.layoutInfo.visibleItemsInfo.lastOrNull()?.index?.let { it >= list.layoutInfo.totalItemsCount - 10 } ?: false } }
     LaunchedEffect(nearEnd, column.people.size) { if (nearEnd && !column.loading && !column.ended) onMore() }
     if (column.people.isEmpty() && column.ended) {
-        Box(Modifier.fillMaxSize().padding(24.dp).testTag("follows-empty"), contentAlignment = Alignment.TopCenter) {
+        Box(Modifier.fillMaxSize().padding(Spacing.xl).testTag("follows-empty"), contentAlignment = Alignment.TopCenter) {
             Text(stringResource(empty), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         return
@@ -300,12 +301,12 @@ private fun FollowList(column: FollowColumn, empty: Int, endHint: Int?, onMore: 
             HorizontalDivider()
         }
         if (column.loading) item(key = "loading") {
-            Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp) }
+            Box(Modifier.fillMaxWidth().padding(Spacing.l), contentAlignment = Alignment.Center) { CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp) }
         }
         if (column.ended && endHint != null && column.people.isNotEmpty()) item(key = "end") {
             Text(
                 stringResource(endHint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.fillMaxWidth().padding(16.dp).testTag("follows-end"),
+                modifier = Modifier.fillMaxWidth().padding(Spacing.l).testTag("follows-end"),
             )
         }
     }

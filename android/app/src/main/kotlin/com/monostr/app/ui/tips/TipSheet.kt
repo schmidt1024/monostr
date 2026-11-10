@@ -57,6 +57,7 @@ import com.monostr.app.ui.common.LocalCanSend
 import com.monostr.app.ui.common.QrCode
 import com.monostr.app.ui.common.asString
 import com.monostr.app.ui.theme.MonostrFonts
+import com.monostr.app.ui.theme.Spacing
 
 /** Opens a `monero:` URI in a wallet app. Must be called with an Activity context (spec 5.9; Espresso intercepts only these). */
 object WalletOpener {
@@ -109,19 +110,19 @@ fun TipSheetContent(
 ) {
     val clipboard = LocalClipboardManager.current
     val uriHandler = LocalUriHandler.current
-    Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 32.dp)) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = Spacing.xl).padding(bottom = Spacing.xxl)) {
         Text(stringResource(R.string.tip_title), style = MaterialTheme.typography.titleLarge)
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(Spacing.m))
         when (val phase = state.phase) {
             TipPhase.Loading -> CircularProgressIndicator(Modifier.testTag("tip-loading"))
             TipPhase.Blocked -> {
                 Text(state.error?.asString().orEmpty(), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("tip-blocked"))
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(Spacing.l))
                 TextButton(onClick = onDone, modifier = Modifier.align(Alignment.End).testTag("tip-done")) { Text(stringResource(R.string.action_close)) }
             }
             TipPhase.NoMonero -> {
                 Text(TipSheetController.NO_MONERO.asString(), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("tip-no-monero"))
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(Spacing.l))
                 TextButton(onClick = onDone, modifier = Modifier.align(Alignment.End).testTag("tip-done")) { Text(stringResource(R.string.action_close)) }
             }
             is TipPhase.PayTo -> {
@@ -131,13 +132,13 @@ fun TipSheetContent(
                     stringResource(if (state.target is TipTarget.Note) R.string.tip_payto_note else R.string.tip_payto_profile),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(Spacing.m))
                 if (phase.walletMissing == true) {
                     WalletFallback(phase.uri, phase.address, null, state.unit, uriHandler, clipboard)
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(Spacing.s))
                 }
                 Button(onClick = onPayTo, modifier = Modifier.fillMaxWidth().testTag("tip-payto-pay")) { Text(stringResource(R.string.tip_payto_pay)) }
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(Spacing.s))
                 TextButton(onClick = onDone, modifier = Modifier.align(Alignment.End).testTag("tip-done")) { Text(stringResource(R.string.action_close)) }
             }
             TipPhase.Ready, TipPhase.Sending -> {
@@ -148,7 +149,7 @@ fun TipSheetContent(
                 WalletNote(state.walletNote)
                 Text(stringResource(R.string.tip_amount, state.unit.label), style = MaterialTheme.typography.labelLarge)
                 // numbers only (the unit sits in the heading); FlowRow wraps instead of clipping at large font scales
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(Spacing.s)) {
                     state.presets.forEachIndexed { i, p ->
                         val selected = state.selected == p
                         FilterChip(
@@ -175,14 +176,14 @@ fun TipSheetContent(
                     modifier = Modifier
                         .fillMaxWidth()
                         .toggleable(value = state.anonymous, enabled = phase == TipPhase.Ready, role = Role.Switch, onValueChange = onAnonymous)
-                        .padding(vertical = 8.dp)
+                        .padding(vertical = Spacing.s)
                         .testTag("tip-anonymous"),
                 ) {
                     Column(Modifier.weight(1f)) {
                         Text(stringResource(R.string.tip_anonymous_switch), style = MaterialTheme.typography.bodyLarge)
                         Text(stringResource(R.string.tip_anonymous_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Spacer(Modifier.width(16.dp))
+                    Spacer(Modifier.width(Spacing.l))
                     Switch(checked = state.anonymous, onCheckedChange = null)
                 }
                 if (error != null && !amountError) {
@@ -192,7 +193,7 @@ fun TipSheetContent(
                 if (!canSend && error != TipSheetController.ERROR_TOR) {
                     Text(stringResource(R.string.send_blocked_tor), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("tip-blocked-reason"))
                 }
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(Spacing.m))
                 Button(onClick = onSend, enabled = phase == TipPhase.Ready && canSend, modifier = Modifier.fillMaxWidth().testTag("tip-send")) {
                     Text(stringResource(if (phase == TipPhase.Sending) R.string.state_sending else R.string.tip_pay))
                 }
@@ -202,11 +203,11 @@ fun TipSheetContent(
                     // the receipt is in: the offline notice and the pay-by-hand fallback no longer matter
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.testTag("tip-arrived")) {
                         Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.width(8.dp))
+                        Spacer(Modifier.width(Spacing.s))
                         Text(stringResource(R.string.tip_arrived), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                     }
                 } else {
-                    state.notice?.let { Text(it.asString(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error); Spacer(Modifier.height(8.dp)) }
+                    state.notice?.let { Text(it.asString(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error); Spacer(Modifier.height(Spacing.s)) }
                     if (phase.walletMissing == true) {
                         WalletFallback(phase.uri, phase.address, phase.amount, state.unit, uriHandler, clipboard)
                         Button(onClick = onRetryWallet, modifier = Modifier.fillMaxWidth().testTag("tip-open-wallet")) { Text(stringResource(R.string.tip_open_wallet_again)) }
@@ -214,7 +215,7 @@ fun TipSheetContent(
                         Text(stringResource(R.string.tip_sent), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("tip-sent"))
                     }
                 }
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(Spacing.s))
                 TextButton(onClick = onDone, modifier = Modifier.align(Alignment.End).testTag("tip-done")) { Text(stringResource(R.string.action_done)) }
             }
         }
@@ -225,7 +226,7 @@ fun TipSheetContent(
 @Composable
 private fun WalletNote(shown: Boolean) {
     if (!shown) return
-    Text(stringResource(R.string.tor_wallet_note), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 8.dp).testTag("tip-wallet-note"))
+    Text(stringResource(R.string.tor_wallet_note), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = Spacing.s).testTag("tip-wallet-note"))
 }
 
 /** Pay-by-hand block when no wallet app took the `monero:` URI: wallet links, QR, address, copy buttons. No amount line when [amount] is null (payto). */
@@ -233,18 +234,18 @@ private fun WalletNote(shown: Boolean) {
 private fun ColumnScope.WalletFallback(uri: String, address: String, amount: Long?, unit: AmountUnit, uriHandler: UriHandler, clipboard: ClipboardManager) {
                         Text(stringResource(R.string.tip_no_wallet_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("tip-fallback"))
                         Text(stringResource(R.string.tip_no_wallet_text), style = MaterialTheme.typography.bodySmall)
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.s)) {
                             TextButton(onClick = { uriHandler.openUri("https://f-droid.org/packages/io.horizontalsystems.bankwallet/") }) { Text("Unstoppable") }
                             TextButton(onClick = { uriHandler.openUri("https://cakewallet.com") }) { Text("Cake Wallet") }
                         }
                         QrCode(uri, Modifier.size(200.dp).align(Alignment.CenterHorizontally))
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(Spacing.s))
                         if (amount != null) Text(stringResource(R.string.tip_xmr_amount, Presets.format(amount, unit), unit.label), style = MaterialTheme.typography.titleMedium, fontFamily = MonostrFonts.mono, modifier = Modifier.testTag("tip-fallback-amount"))
                         Text(address, style = MaterialTheme.typography.bodySmall, fontFamily = MonostrFonts.mono, modifier = Modifier.testTag("tip-fallback-address"))
-                        Spacer(Modifier.height(8.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Spacer(Modifier.height(Spacing.s))
+                        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.s)) {
                             OutlinedButton(onClick = { clipboard.setText(AnnotatedString(address)) }, modifier = Modifier.testTag("tip-copy-address")) { Text(stringResource(R.string.action_copy_address)) }
                             OutlinedButton(onClick = { clipboard.setText(AnnotatedString(uri)) }, modifier = Modifier.testTag("tip-copy-uri")) { Text(stringResource(R.string.action_copy_uri)) }
                         }
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(Spacing.s))
 }

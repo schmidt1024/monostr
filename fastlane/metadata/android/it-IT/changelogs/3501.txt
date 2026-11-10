@@ -1,0 +1,2 @@
+- Spaziature e angoli uniformati in tutta l'app
+- Correzioni

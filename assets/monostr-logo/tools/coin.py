@@ -280,6 +280,16 @@ def avatar(bg=DARK, fg=WHITE, size=512):
             f'<g transform="translate({fmt(t)},{fmt(t)}) scale({fmt(s)})">{coin_body(fg, bg)}</g></svg>')
 
 
+def favicon_svg():
+    """Browser tab icon: a dark disc with the light small coin, readable on light and dark tab strips alike (a
+    transparent mark that follows prefers-color-scheme fails when the browser theme differs from the system)."""
+    s = 0.86 * 100 / 95
+    t = 50 - 50 * s
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><title>Monostr</title>'
+            f'<circle cx="50" cy="50" r="50" fill="{DARK}"/>'
+            f'<g transform="translate({fmt(t)},{fmt(t)}) scale({fmt(s)})">{coin_body(WHITE, DARK, small=True)}</g></svg>')
+
+
 def write(path, text):
     with open(path, "w") as f:
         f.write(text + "\n")

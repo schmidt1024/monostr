@@ -83,6 +83,7 @@ import com.monostr.app.ui.common.noteMenu
 import com.monostr.app.ui.common.asString
 import com.monostr.app.ui.common.muteUndoTag
 import com.monostr.app.ui.feed.target
+import com.monostr.app.ui.theme.Spacing
 import com.monostr.app.ui.tips.TipSheetFactory
 import com.monostr.app.ui.tips.TipSheetHost
 import com.monostr.app.ui.tips.TippersDialog
@@ -154,7 +155,7 @@ fun SearchScreen(
             // deviation from the brief: an OutlinedTextField inside TopAppBar(title = …) clips
             // against the app bar's fixed height; a plain Row keeps the same field and tags.
             Column { Row(
-                Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 8.dp, vertical = 8.dp),
+                Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = Spacing.s, vertical = Spacing.s),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 OutlinedTextField(
@@ -175,20 +176,20 @@ fun SearchScreen(
         LazyColumn(state = listState, modifier = Modifier.padding(padding).fillMaxSize().testTag("search-list")) {
             if (state.noSearchRelays && state.mode == SearchMode.TEXT) {
                 item {
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = Spacing.l, vertical = Spacing.s), verticalAlignment = Alignment.CenterVertically) {
                         Text(stringResource(R.string.search_no_relays), style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
                         TextButton(onClick = onSettings) { Text(stringResource(R.string.search_open_settings)) }
                     }
                 }
             }
-            if (state.loading) item { Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
-            state.error?.let { err -> item { Text(err.asString(), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) } }
+            if (state.loading) item { Box(Modifier.fillMaxWidth().padding(Spacing.l), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
+            state.error?.let { err -> item { Text(err.asString(), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = Spacing.l, vertical = Spacing.s)) } }
             when (state.mode) {
                 // spec 11.4 §2: the last searches, only while the field is empty; typing hides them
                 SearchMode.IDLE -> if (state.query.isBlank()) {
                   if (state.recent.isNotEmpty()) {
                     item(key = "recent-title") {
-                        Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.fillMaxWidth().padding(start = Spacing.l, end = Spacing.xs), verticalAlignment = Alignment.CenterVertically) {
                             Text(stringResource(R.string.search_recent_title), style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
                             TextButton(onClick = vm.controller::clearRecent, modifier = Modifier.testTag("search-recent-clear")) { Text(stringResource(R.string.search_recent_clear)) }
                         }
@@ -196,11 +197,11 @@ fun SearchScreen(
                     itemsIndexed(state.recent, key = { _, q -> "rq:$q" }) { i, q ->
                         val remove = stringResource(R.string.search_recent_remove)
                         Row(
-                            Modifier.fillMaxWidth().clickable { vm.controller.searchRecent(q) }.padding(start = 16.dp).testTag("search-recent-$i"),
+                            Modifier.fillMaxWidth().clickable { vm.controller.searchRecent(q) }.padding(start = Spacing.l).testTag("search-recent-$i"),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Icon(Icons.Outlined.History, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Spacer(Modifier.width(12.dp))
+                            Spacer(Modifier.width(Spacing.m))
                             Text(q, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                             IconButton(onClick = { vm.controller.removeRecent(q) }, modifier = Modifier.testTag("search-recent-remove-$i")) {
                                 Icon(Icons.Filled.Close, contentDescription = remove)
@@ -220,11 +221,11 @@ fun SearchScreen(
                         item { SectionHeader(stringResource(R.string.search_people)) }
                         items(state.people, key = { "p" + it.pubkey }) { p ->
                             Row(
-                                Modifier.fillMaxWidth().clickable { onOpenProfile(p.pubkey) }.padding(horizontal = 16.dp, vertical = 10.dp).testTag("search-person-${p.pubkey.take(8)}"),
+                                Modifier.fillMaxWidth().clickable { onOpenProfile(p.pubkey) }.padding(horizontal = Spacing.l, vertical = Spacing.m).testTag("search-person-${p.pubkey.take(8)}"),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Avatar(p.picture)
-                                Spacer(Modifier.width(12.dp))
+                                Spacer(Modifier.width(Spacing.m))
                                 Column {
                                     Text(p.shownName, style = MaterialTheme.typography.titleSmall)
                                     Text(p.nip05 ?: Npub.short(p.pubkey), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -252,12 +253,12 @@ fun SearchScreen(
 
 @Composable
 private fun SectionHeader(text: String) {
-    Text(text, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+    Text(text, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = Spacing.l, vertical = Spacing.s))
 }
 
 @Composable
 private fun EmptyHint() {
-    Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { Text(stringResource(R.string.search_empty)) }
+    Box(Modifier.fillMaxWidth().padding(Spacing.xxl), contentAlignment = Alignment.Center) { Text(stringResource(R.string.search_empty)) }
 }
 
 private fun androidx.compose.foundation.lazy.LazyListScope.noteItems(

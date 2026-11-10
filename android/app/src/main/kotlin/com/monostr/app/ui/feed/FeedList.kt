@@ -59,6 +59,7 @@ import com.monostr.app.ui.common.UnavailableRow
 import com.monostr.app.ui.common.ChainCardRow
 import com.monostr.app.ui.common.AddressCard
 import com.monostr.app.ui.common.VisibleNotes
+import com.monostr.app.ui.theme.Spacing
 import com.monostr.nostr.model.Note
 import kotlinx.coroutines.launch
 
@@ -108,7 +109,7 @@ internal fun FeedList(
             LazyColumn(state = listState, modifier = Modifier.fillMaxSize().testTag("feed-list")) { header() }
         } else if (state.entries.isEmpty()) {
             // scrollable so pull-to-refresh works on the empty state too
-            Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(32.dp), contentAlignment = Alignment.Center) { Text(emptyText, textAlign = TextAlign.Center) }
+            Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(Spacing.xxl), contentAlignment = Alignment.Center) { Text(emptyText, textAlign = TextAlign.Center) }
         } else {
             // backlog 28: muted ancestors the user tapped open, for this screen only (the account stays muted)
             var shownMuted by rememberSaveable { mutableStateOf(emptySet<String>()) }
@@ -186,7 +187,7 @@ internal fun FeedList(
                         feed.showNew()
                         scope.launch { if (listState.firstVisibleItemIndex > 30) listState.scrollToItem(0) else listState.animateScrollToItem(0) }
                     },
-                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 8.dp),
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = Spacing.s),
                 )
             }
             VisibleNotes(listState, feed::visible)
@@ -207,16 +208,16 @@ private fun NewNotesPill(waiting: List<NoteUi>, onClick: () -> Unit, modifier: M
         shadowElevation = 4.dp,
         modifier = modifier.semantics { contentDescription = label }.testTag("feed-new-notes"),
     ) {
-        Row(Modifier.padding(start = 10.dp, end = 14.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.padding(start = Spacing.m, end = Spacing.l, top = Spacing.s, bottom = Spacing.s), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Filled.ArrowUpward, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(6.dp))
+            Spacer(Modifier.width(Spacing.s))
             // the faces overlap a little, like X
             Row(horizontalArrangement = Arrangement.spacedBy((-6).dp)) {
                 waiting.map { it.author }.distinctBy { it.pubkey }.take(3).forEach { p ->
                     Avatar(p.picture, size = 24.dp, modifier = Modifier.border(2.dp, MaterialTheme.colorScheme.primary, CircleShape))
                 }
             }
-            Spacer(Modifier.width(6.dp))
+            Spacer(Modifier.width(Spacing.s))
             Text(label, style = MaterialTheme.typography.labelLarge)
         }
     }

@@ -75,6 +75,7 @@ import com.monostr.app.ui.common.uiText
 import com.monostr.app.ui.feed.NoteUi
 import com.monostr.app.ui.feed.target
 import com.monostr.app.ui.feed.withProfiles
+import com.monostr.app.ui.theme.Spacing
 import com.monostr.app.ui.tips.TipDecorations
 import com.monostr.app.ui.tips.TipSheetFactory
 import com.monostr.app.ui.tips.TipSheetHost
@@ -316,20 +317,20 @@ fun BookmarksScreen(
     ) { padding ->
         when {
             state.loading -> LoadingScreen()
-            state.entries.isEmpty() -> Box(Modifier.padding(padding).fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) { Text(stringResource(R.string.bookmarks_empty), textAlign = TextAlign.Center) }
+            state.entries.isEmpty() -> Box(Modifier.padding(padding).fillMaxSize().padding(Spacing.xxl), contentAlignment = Alignment.Center) { Text(stringResource(R.string.bookmarks_empty), textAlign = TextAlign.Center) }
             else -> {
                 LazyColumn(state = listState, modifier = Modifier.padding(padding).fillMaxSize().testTag("bookmarks-list")) {
                     items(state.entries, key = { it.id }) { e ->
                         val n = e.note
                         if (e.article != null) {
-                            Row(Modifier.fillMaxWidth().padding(start = 16.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.Top) {
+                            Row(Modifier.fillMaxWidth().padding(start = Spacing.l, top = Spacing.s, bottom = Spacing.s), verticalAlignment = Alignment.Top) {
                                 AddressCard(ref = e.article, names = names, onOpenProfile = onOpenProfile, modifier = Modifier.weight(1f))
                                 // the row stays until the outcome; its icon shows "not bookmarked" while the removal is in flight
                                 val pending = e.id in state.pending
                                 IconButton(onClick = { vm.controller.removeArticle(e.id) }, enabled = !pending && LocalCanSend.current, modifier = Modifier.testTag("bookmark-remove-${e.id.take(8)}")) { Icon(if (pending) Icons.Outlined.BookmarkBorder else Icons.Filled.Bookmark, contentDescription = stringResource(R.string.note_bookmark)) }
                             }
                         } else if (n == null) {
-                            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Row(Modifier.fillMaxWidth().padding(horizontal = Spacing.l, vertical = Spacing.m), verticalAlignment = Alignment.CenterVertically) {
                                 Text(stringResource(R.string.bookmarks_missing, Profile.shortPubkey(e.id)), style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
                                 IconButton(onClick = { vm.controller.remove(Note(e.id, "", "", 0, 1, null, null, null, emptyList())) }, enabled = LocalCanSend.current, modifier = Modifier.testTag("bookmark-remove-${e.id.take(8)}")) { Icon(Icons.Filled.Bookmark, contentDescription = stringResource(R.string.note_bookmark)) }
                             }

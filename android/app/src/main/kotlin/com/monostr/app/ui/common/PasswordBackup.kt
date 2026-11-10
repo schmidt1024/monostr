@@ -31,6 +31,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.monostr.app.R
 import com.monostr.app.ui.monero.NSEC_CLIP_LABEL
 import com.monostr.app.ui.monero.SeedClipboardClear
+import com.monostr.app.ui.theme.Spacing
 import com.monostr.nostr.Nip49
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -109,7 +110,7 @@ fun PasswordBackupDialog(secretHex: String, onDismiss: () -> Unit) {
         properties = DialogProperties(securePolicy = SecureFlagPolicy.SecureOn, dismissOnClickOutside = false),
         title = { Text(stringResource(R.string.backup_password_title)) },
         text = {
-            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Spacing.m)) {
                 when {
                     editing -> {
                         OutlinedTextField(

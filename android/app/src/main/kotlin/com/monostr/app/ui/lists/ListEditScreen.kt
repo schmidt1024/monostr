@@ -43,6 +43,7 @@ import androidx.lifecycle.viewModelScope
 import com.monostr.app.R
 import com.monostr.app.session.NostrSession
 import com.monostr.app.ui.common.MessageSnackbar
+import com.monostr.app.ui.theme.Spacing
 import com.monostr.nostr.model.ListAddress
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -78,7 +79,7 @@ fun ListEditScreen(onDone: (deleted: Boolean) -> Unit, vm: ListEditViewModel = h
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
-        Column(Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+        Column(Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(Spacing.l)) {
             if (state.loading || state.saving) LinearProgressIndicator(Modifier.fillMaxWidth())
             if (state.loading) return@Column
             OutlinedTextField(
@@ -87,23 +88,23 @@ fun ListEditScreen(onDone: (deleted: Boolean) -> Unit, vm: ListEditViewModel = h
                 supportingText = { Text("${state.title.length}/${ListEditController.MAX_TITLE}") },
                 modifier = Modifier.fillMaxWidth().testTag("list-title"),
             )
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Spacing.s))
             OutlinedTextField(
                 value = state.description, onValueChange = vm.controller::setDescription, minLines = 2,
                 label = { Text(stringResource(R.string.list_description_label)) },
                 supportingText = { Text("${state.description.length}/${ListEditController.MAX_DESCRIPTION}") },
                 modifier = Modifier.fillMaxWidth().testTag("list-description"),
             )
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Spacing.s))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f).padding(end = 16.dp)) {
+                Column(Modifier.weight(1f).padding(end = Spacing.l)) {
                     Text(stringResource(R.string.list_private), style = MaterialTheme.typography.titleSmall)
                     Text(stringResource(R.string.list_private_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Switch(checked = state.private, onCheckedChange = vm.controller::setPrivate, modifier = Modifier.testTag("list-private"))
             }
             if (!state.isNew) {
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(Spacing.xl))
                 TextButton(
                     onClick = vm.controller::askDelete, enabled = !state.saving,
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),

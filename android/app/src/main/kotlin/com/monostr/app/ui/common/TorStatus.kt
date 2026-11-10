@@ -79,6 +79,7 @@ import com.monostr.app.net.TorState
 import com.monostr.app.net.TorSwitchError
 import com.monostr.app.net.TorTurn
 import com.monostr.app.net.TorUi
+import com.monostr.app.ui.theme.Spacing
 import com.monostr.nostr.model.RelayState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -340,21 +341,21 @@ fun TorBanner(state: TorState, error: TorSwitchError?, turning: TorTurn?, onRetr
             .fillMaxWidth()
             .background(background)
             .clickable(role = Role.Button, onClickLabel = detailsLabel, onClick = onDetails)
-            .padding(horizontal = 16.dp, vertical = if (state == TorState.Failed) 4.dp else 8.dp)
+            .padding(horizontal = Spacing.l, vertical = if (state == TorState.Failed) Spacing.xs else Spacing.s)
             .testTag("tor-banner"),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(Spacing.xs),
     ) {
         if (state != TorState.Connected) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TorGlyph(state, background, rememberReducedAnimations())
-                Spacer(Modifier.width(12.dp))
+                Spacer(Modifier.width(Spacing.m))
                 Text(
                     stringResource(stateLine(state)), style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.weight(1f).testTag("tor-banner-state").semantics { liveRegion = LiveRegionMode.Polite },
                 )
                 if (state == TorState.Failed) {
                     TextButton(
-                        onClick = onRetry, enabled = turning == null, contentPadding = PaddingValues(horizontal = 8.dp),
+                        onClick = onRetry, enabled = turning == null, contentPadding = PaddingValues(horizontal = Spacing.s),
                         modifier = Modifier.testTag("tor-retry"),
                     ) { Text(stringResource(R.string.tor_try_again_short)) }
                 }
@@ -412,13 +413,13 @@ private const val TOR_PROJECT_URL = "https://$TOR_PROJECT_HOST"
 @Composable
 fun TorDetailsContent(state: TorState?, turning: TorTurn?, error: TorSwitchError?, onRetry: () -> Unit, onTurnOff: () -> Unit, onCreditLink: () -> Unit) {
     Column(
-        Modifier.fillMaxWidth().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        Modifier.fillMaxWidth().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = Spacing.xl).padding(bottom = Spacing.xl),
+        verticalArrangement = Arrangement.spacedBy(Spacing.m),
     ) {
         if (state != null) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TorGlyph(state, MaterialTheme.colorScheme.surfaceContainerLow, rememberReducedAnimations())
-                Spacer(Modifier.width(12.dp))
+                Spacer(Modifier.width(Spacing.m))
                 Text(stringResource(stateLine(state)), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
             }
         }
@@ -455,7 +456,7 @@ private fun TorExplainDialog(restarts: Boolean, onConfirm: () -> Unit, onCancel:
         onDismissRequest = onCancel,
         title = { Text(stringResource(R.string.tor_connect)) },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(Spacing.s)) {
                 Text(stringResource(R.string.tor_explanation), modifier = Modifier.testTag("tor-explain"))
                 // only when it will: the login row switches in place and the typed key stays
                 if (restarts) Text(stringResource(R.string.tor_restart_once), modifier = Modifier.testTag("tor-explain-restart"))
@@ -472,7 +473,7 @@ private fun TorOffDialog(tips: Int?, onConfirm: () -> Unit, onCancel: () -> Unit
         onDismissRequest = onCancel,
         title = { Text(stringResource(R.string.tor_off_title)) },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(Spacing.s)) {
                 Text(stringResource(R.string.tor_off_text))
                 if (tips != null && tips > 0) Text(pluralStringResource(R.plurals.tor_off_tips, tips, tips), modifier = Modifier.testTag("tor-off-count"))
             }
@@ -499,7 +500,7 @@ fun TorSettingsRow() {
         Modifier
             .fillMaxWidth()
             .toggleable(value = active, enabled = turning == null, role = Role.Switch, onValueChange = { if (it) sheets.explain = true else sheets.confirmOff = true })
-            .padding(vertical = 8.dp)
+            .padding(vertical = Spacing.s)
             .testTag("settings-tor"),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -515,7 +516,7 @@ fun TorSettingsRow() {
             }
             if (hint != null) Text(stringResource(hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Spacer(Modifier.width(16.dp))
+        Spacer(Modifier.width(Spacing.l))
         Switch(checked = active, onCheckedChange = null, enabled = turning == null)
     }
     error?.let { TorErrorLine(it) }
@@ -547,13 +548,13 @@ fun TorLoginRow() {
                 .fillMaxWidth()
                 .heightIn(min = 48.dp)
                 .clickable(enabled = turning == null, role = Role.Button) { if (active) sheets.details = true else sheets.explain = true }
-                .padding(horizontal = 12.dp),
+                .padding(horizontal = Spacing.m),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center,
         ) {
             if (now != null) {
                 TorGlyph(now, MaterialTheme.colorScheme.surface, rememberReducedAnimations())
-                Spacer(Modifier.width(12.dp))
+                Spacer(Modifier.width(Spacing.m))
             }
             val line = when {
                 turning != null -> turningLine(turning!!)
@@ -567,7 +568,7 @@ fun TorLoginRow() {
                 modifier = Modifier.weight(1f, fill = false).semantics { liveRegion = LiveRegionMode.Polite },
             )
             if (now == TorState.Failed) {
-                Spacer(Modifier.width(4.dp))
+                Spacer(Modifier.width(Spacing.xs))
                 TextButton(onClick = { sheets.retry(ui) }, enabled = turning == null, modifier = Modifier.testTag("tor-retry")) { Text(stringResource(R.string.tor_try_again_short)) }
             }
         }

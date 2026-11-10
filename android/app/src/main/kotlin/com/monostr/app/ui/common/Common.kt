@@ -69,6 +69,7 @@ import com.monostr.app.R
 import com.monostr.app.translate.TranslationState
 import com.monostr.app.ui.feed.NoteUi
 import com.monostr.app.ui.media.NoteMediaRow
+import com.monostr.app.ui.theme.Spacing
 import com.monostr.app.ui.theme.StatusColors
 import com.monostr.nostr.model.RelayState
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -101,7 +102,7 @@ fun RelayDot(states: List<RelayState>) {
     val description = stringResource(R.string.relay_status, bestState.label().asString())
     Box(
         Modifier
-            .padding(horizontal = 12.dp)
+            .padding(horizontal = Spacing.m)
             .size(10.dp)
             .testTag("relay-dot")
             .clip(CircleShape)
@@ -243,22 +244,22 @@ private fun ListNoteCard(
                 val avatar = placed.avatar?.takeIf { it.isAttached } ?: return@drawBehind
                 val avatarTop = card.localPositionOf(avatar, Offset.Zero).y
                 val avatarBottom = avatarTop + avatar.size.height
-                val x = 16.dp.toPx() + LIST_AVATAR.toPx() / 2
+                val x = Spacing.l.toPx() + LIST_AVATAR.toPx() / 2
                 val w = 2.dp.toPx()
                 val gap = 4.dp.toPx()
                 if (lineAbove) drawLine(lineColor, Offset(x, 0f), Offset(x, avatarTop - gap), w)
                 if (lineBelow) drawLine(lineColor, Offset(x, avatarBottom + gap), Offset(x, size.height), w)
             }
-            .padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = if (showActions) 4.dp else 10.dp),
+            .padding(start = Spacing.l, end = Spacing.l, top = Spacing.m, bottom = if (showActions) Spacing.xs else Spacing.m),
     ) {
         if (note.note.isRepost) {
             // X puts the repost line above the card, flush with the text column
             Row(Modifier.padding(start = LIST_AVATAR + LIST_GAP), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Outlined.Repeat, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(6.dp))
+                Spacer(Modifier.width(Spacing.s))
                 Text(stringResource(R.string.note_reposted_by, note.author.shownName), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(Spacing.xs))
         }
         // the free space of the card opens the thread, like the text does (also below the avatar, like X) — as a plain
         // tap, not a clickable: a clickable would merge the children's semantics (the pending-tip text, TalkBack stops) into one node
@@ -279,7 +280,7 @@ private fun ListNoteCard(
                     val missingLabel = stringResource(R.string.repost_original_unavailable)
                     Text(
                         missingLabel, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 2.dp).fillMaxWidth()
+                        modifier = Modifier.padding(top = Spacing.xxs).fillMaxWidth()
                             .clickable(enabled = note.note.repostedId != null) { note.note.repostedId?.let(onOpenNote) }
                             .testTag("note-repost-missing-$id8"),
                     )
@@ -288,21 +289,21 @@ private fun ListNoteCard(
                     val link = rememberNoteLink(shown)
                     val text = shownText(shown.displayContent, translation, link?.url)
                     if (text.isNotBlank()) {
-                        Spacer(Modifier.height(2.dp))
+                        Spacer(Modifier.height(Spacing.xxs))
                         NoteText(text, onOpen = onOpen, onHashtag = onHashtag, onOpenProfile = onOpenProfile, onOpenNote = onOpenNote, names = names, collapsible = collapsed, stateKey = shown.id, modifier = Modifier.fillMaxWidth().testTag("note-text-$id8"))
                     }
                     NoteTranslateRow(translation, shown.id, belowText = true)
                     shown.quotedId?.let { qid ->
-                        QuoteCard(qid, ForeignRule.quoteHints(shown.quoteRelays, foreign), names, onOpenNote = onOpenNote, onOpenProfile = onOpenProfile, onHashtag = onHashtag, modifier = Modifier.padding(top = 8.dp), author = ForeignRule.quoteAuthor(shown.quoteAuthor, foreign))
+                        QuoteCard(qid, ForeignRule.quoteHints(shown.quoteRelays, foreign), names, onOpenNote = onOpenNote, onOpenProfile = onOpenProfile, onHashtag = onHashtag, modifier = Modifier.padding(top = Spacing.s), author = ForeignRule.quoteAuthor(shown.quoteAuthor, foreign))
                     }
-                    shown.addressRef?.let { val (ref, f) = ForeignRule.address(it, foreign); AddressCard(ref, names, onOpenProfile = onOpenProfile, modifier = Modifier.padding(top = 8.dp), sensitive = shown.isSensitive, allowForeign = f) }
-                    shown.invoice?.let { InvoiceCard(it, Modifier.padding(top = 8.dp)) }
+                    shown.addressRef?.let { val (ref, f) = ForeignRule.address(it, foreign); AddressCard(ref, names, onOpenProfile = onOpenProfile, modifier = Modifier.padding(top = Spacing.s), sensitive = shown.isSensitive, allowForeign = f) }
+                    shown.invoice?.let { InvoiceCard(it, Modifier.padding(top = Spacing.s)) }
                     NoteMediaRow(shown, onOpenMedia = { i -> onOpenMedia(shown.id, i) }, onOpenVideo = onOpenVideo)
                     NoteLinkPreview(shown, link)
                 }
                 // the actions stay: a repost bookmarked by mistake (backlog 60) can still be taken out of the bookmarks
                 if (showActions) {
-                    Spacer(Modifier.height(4.dp))
+                    Spacer(Modifier.height(Spacing.xs))
                     NoteActionRow(note, shown, onReply, onRepost, onQuote, onLike, onBookmark, onTip, onShowTippers, onReact = onReact)
                 }
             }
@@ -327,8 +328,8 @@ private class ThreadLinePlacement {
 }
 
 /** Spec 11.5 §2: avatar 44 dp, 12 dp to the column (X: 40–48 dp). */
-private val LIST_AVATAR = 44.dp
-private val LIST_GAP = 12.dp
+internal val LIST_AVATAR = 44.dp
+private val LIST_GAP = Spacing.m
 
 /** Spec 11.5 §3: the focused note of a thread — avatar, name and handle on top, the text at full width and larger, the written-out time, the actions spread over the width (X's detail view). */
 @Composable
@@ -367,17 +368,17 @@ private fun DetailNoteCard(
                 val avatar = placed.avatar?.takeIf { it.isAttached } ?: return@drawBehind
                 val avatarTop = card.localPositionOf(avatar, Offset.Zero).y
                 // the list cards' x, so the line meets the one of the ancestor above without a jog
-                val x = 16.dp.toPx() + LIST_AVATAR.toPx() / 2
+                val x = Spacing.l.toPx() + LIST_AVATAR.toPx() / 2
                 drawLine(lineColor, Offset(x, 0f), Offset(x, avatarTop - 4.dp.toPx()), 2.dp.toPx())
             }
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = Spacing.l, vertical = Spacing.m),
     ) {
         NoteDetailHeader(note, onOpenProfile = onOpenProfile, menu = menu.takeIf { showActions }, avatarModifier = if (lineAbove) Modifier.onPlaced { placed.avatar = it } else Modifier)
         val missingOriginal = note.note.isRepost && note.note.repostOf == null
         // spec 2026-11-03: «Translate» right under the header, like X
         val translation = if (missingOriginal) TranslationState.None else rememberTranslation(shown.id, shown.displayContent, shown.language)
-        NoteTranslateRow(translation, shown.id, Modifier.padding(top = 8.dp))
-        Spacer(Modifier.height(12.dp))
+        NoteTranslateRow(translation, shown.id, Modifier.padding(top = Spacing.s))
+        Spacer(Modifier.height(Spacing.m))
         if (missingOriginal) {
             // backlog 60: the thread looked for the original and found none (yet)
             Text(
@@ -396,15 +397,15 @@ private fun DetailNoteCard(
         }
         NoteTranslateRow(translation, shown.id, belowText = true)
         shown.quotedId?.let { qid ->
-            QuoteCard(qid, ForeignRule.quoteHints(shown.quoteRelays, foreign), names, onOpenNote = onOpenNote, onOpenProfile = onOpenProfile, onHashtag = onHashtag, modifier = Modifier.padding(top = 8.dp), author = ForeignRule.quoteAuthor(shown.quoteAuthor, foreign))
+            QuoteCard(qid, ForeignRule.quoteHints(shown.quoteRelays, foreign), names, onOpenNote = onOpenNote, onOpenProfile = onOpenProfile, onHashtag = onHashtag, modifier = Modifier.padding(top = Spacing.s), author = ForeignRule.quoteAuthor(shown.quoteAuthor, foreign))
         }
-        shown.addressRef?.let { val (ref, f) = ForeignRule.address(it, foreign); AddressCard(ref, names, onOpenProfile = onOpenProfile, modifier = Modifier.padding(top = 8.dp), sensitive = shown.isSensitive, allowForeign = f) }
-        shown.invoice?.let { InvoiceCard(it, Modifier.padding(top = 8.dp)) }
+        shown.addressRef?.let { val (ref, f) = ForeignRule.address(it, foreign); AddressCard(ref, names, onOpenProfile = onOpenProfile, modifier = Modifier.padding(top = Spacing.s), sensitive = shown.isSensitive, allowForeign = f) }
+        shown.invoice?.let { InvoiceCard(it, Modifier.padding(top = Spacing.s)) }
         NoteMediaRow(shown, onOpenMedia = { i -> onOpenMedia(shown.id, i) }, onOpenVideo = onOpenVideo, detail = true)
         NoteLinkPreview(shown, link)
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(Spacing.m))
         Text(detailTimeLine(fullTime(shown.createdAt), shown.client, stringResource(R.string.note_via)), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("note-time-$id8"))
-        HorizontalDivider(Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
+        HorizontalDivider(Modifier.padding(vertical = Spacing.s), color = MaterialTheme.colorScheme.outlineVariant)
         if (showActions) NoteActionRow(note, shown, onReply, onRepost, onQuote, onLike, onBookmark, onTip, onShowTippers, spread = true, onReact = onReact)
     }
 }

@@ -29,7 +29,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Favorite
@@ -70,6 +69,7 @@ import com.monostr.app.data.Presets
 import com.monostr.app.ui.feed.NoteUi
 import com.monostr.app.ui.theme.tipCoin
 import com.monostr.app.ui.theme.MonostrFonts
+import com.monostr.app.ui.theme.Spacing
 import com.monostr.nostr.model.Note
 import androidx.compose.ui.unit.Dp
 
@@ -174,7 +174,7 @@ fun NoteActionRow(
                         .minimumInteractiveComponentSize()
                         .clip(CircleShape)
                         .clickable(onClick = onShowTippers, onClickLabel = openTippers)
-                        .padding(horizontal = 6.dp, vertical = 6.dp)
+                        .padding(horizontal = Spacing.s, vertical = Spacing.s)
                         .testTag("note-tips-${shown.id.take(8)}"),
                 )
             }
@@ -223,14 +223,14 @@ private fun ActionIcon(
         // moved it left by 9 dp when the count arrived). The rounded clip covers the whole box, so nothing is cut.
         Modifier
             .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
-            .clip(RoundedCornerShape(24.dp))
+            .clip(MaterialTheme.shapes.extraLarge)
             .combinedClickable(enabled = enabled, onClick = onClick, onClickLabel = description, onLongClick = onLongClick, onLongClickLabel = longClickLabel)
             .semantics {
                 this.selected = selected
                 if (stateDescription != null) this.stateDescription = stateDescription
             }
             .testTag(tag)
-            .padding(start = GLYPH_START, end = 4.dp),
+            .padding(start = GLYPH_START, end = Spacing.xs),
         contentAlignment = Alignment.CenterStart,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -242,7 +242,7 @@ private fun ActionIcon(
                 Icon(icon, contentDescription = description, tint = if (!enabled) MaterialTheme.colorScheme.outline else tint, modifier = Modifier.size(22.dp))
             }
             if (count != null && count > 0) {
-                Spacer(Modifier.width(4.dp))
+                Spacer(Modifier.width(Spacing.xs))
                 Text(formatCount(count, locale), style = MaterialTheme.typography.labelSmall, color = tint, maxLines = 1, softWrap = false, modifier = Modifier.testTag("$tag-count"))
             }
         }
@@ -264,7 +264,7 @@ private fun RepostSheet(reposted: Boolean, onRepost: () -> Unit, onQuote: () -> 
             leadingContent = { Icon(Icons.Outlined.FormatQuote, contentDescription = null) },
             modifier = Modifier.clickable(onClick = onQuote).testTag("action-quote"),
         )
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(Spacing.xl))
     }
 }
 
@@ -347,10 +347,10 @@ object Reactions {
 @Composable
 private fun ReactionSheet(onPick: (String) -> Unit, onDismiss: () -> Unit) {
     GuardedModalBottomSheet(onDismissRequest = onDismiss, modifier = Modifier.testTag("reaction-sheet")) {
-        Column(Modifier.padding(horizontal = 16.dp)) {
+        Column(Modifier.padding(horizontal = Spacing.l)) {
             Text(stringResource(R.string.note_react), style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(12.dp))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Spacer(Modifier.height(Spacing.m))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
                 LocalQuickReactions.current.forEachIndexed { i, e ->
                     Box(
                         Modifier.size(48.dp).clip(CircleShape).clickable(onClickLabel = e) { onPick(e) }.testTag("reaction-quick-$i"),
@@ -358,7 +358,7 @@ private fun ReactionSheet(onPick: (String) -> Unit, onDismiss: () -> Unit) {
                     ) { Text(e, fontSize = 26.sp) }
                 }
             }
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(Spacing.m))
             var other by remember { mutableStateOf("") }
             val cleaned = Reactions.clean(other)
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -367,12 +367,12 @@ private fun ReactionSheet(onPick: (String) -> Unit, onDismiss: () -> Unit) {
                     label = { Text(stringResource(R.string.note_react_other)) },
                     modifier = Modifier.weight(1f).testTag("reaction-other"),
                 )
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(Spacing.s))
                 TextButton(onClick = { cleaned?.let(onPick) }, enabled = cleaned != null, modifier = Modifier.testTag("reaction-other-send")) {
                     Text(stringResource(R.string.note_react_send))
                 }
             }
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(Spacing.xl))
         }
     }
 }

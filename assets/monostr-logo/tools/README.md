@@ -69,7 +69,7 @@ Two options write into the app (run them after changing the geometry, then commi
   the M as the outline of its stroke from `stroke_outline`).
 
 `build.py` also writes the coin exports (spec 2026-11-09): `png/monostr-{app-icon-*,icon-fuer-*}-{512,1024}.png`,
-`site/favicon.svg` (follows the colour scheme), `site/favicon.ico` and `favicon-32.png` (small coin),
+`site/favicon.svg`, `site/favicon.ico` and `favicon-32.png` (dark disc with the light small coin, `coin.favicon_svg`, readable on light and dark tabs),
 `site/apple-touch-icon.png`, `site/icon-{192,512}.png`, `site/monostr-icon-2.png` (handler picture, relay NIP-11 icon),
 `site/assets/monostr-avatar-3.png` (profile picture: the coin nearly filling the round crop, `coin.avatar`; `monostr-icon-2.png` likewise), fastlane `images/icon.png` (also Zapstore's icon, dark),
 the rasters of the launcher exports (`android/*-432.png`, `android/play-store-icon-512.png`) and

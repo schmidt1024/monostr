@@ -1,0 +1,2 @@
+- Espacements et coins harmonisés dans toute l'app
+- Corrections

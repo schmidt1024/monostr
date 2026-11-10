@@ -162,6 +162,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.material3.OutlinedIconButton
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import com.monostr.app.ui.theme.Spacing
 import com.monostr.app.ui.theme.TipCoinOutline
 import com.monostr.app.ui.tips.TipTarget
 import javax.inject.Inject
@@ -808,7 +809,7 @@ fun ProfileScreen(
                             )
                         } ?: Box(strip)
                         // the avatar sits half on the banner; the actions stand below it, 12 dp clear of the edge (X: no button on the picture)
-                        Box(Modifier.padding(start = 16.dp, top = bannerHeight - PROFILE_AVATAR / 2)) {
+                        Box(Modifier.padding(start = Spacing.l, top = bannerHeight - PROFILE_AVATAR / 2)) {
                             val picture = state.profile.picture?.takeIf { it.isNotBlank() }
                             val ring = Modifier.border(4.dp, MaterialTheme.colorScheme.surface, CircleShape)
                             Avatar(
@@ -822,9 +823,9 @@ fun ProfileScreen(
                         // one 48 dp row (the touch targets) with the 40 dp buttons centred: their visible lower edge is 4 dp above the
                         // row's, so the row ends 4 dp below the avatar and both end on one line
                         Row(
-                            Modifier.align(Alignment.TopEnd).padding(end = 16.dp, top = bannerHeight + PROFILE_AVATAR / 2 + 4.dp - ACTIONS_ROW)
+                            Modifier.align(Alignment.TopEnd).padding(end = Spacing.l, top = bannerHeight + PROFILE_AVATAR / 2 + Spacing.xs - ACTIONS_ROW)
                                 .height(ACTIONS_ROW),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.s), verticalAlignment = Alignment.CenterVertically,
                         ) {
                             if (state.isSelf) {
                                 OutlinedButton(onClick = onEditProfile, modifier = Modifier.testTag("profile-edit")) { Text(stringResource(R.string.profile_edit)) }
@@ -837,14 +838,14 @@ fun ProfileScreen(
                             }
                         }
                     }
-                    Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp)) {
+                    Column(Modifier.padding(start = Spacing.l, end = Spacing.l, top = Spacing.s, bottom = Spacing.l)) {
                         Text(state.profile.shownName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         // three sizes: name, then the NIP-05 address, then the npub (smaller and grey)
                         state.profile.nip05?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
                         NpubLine(state.profile.pubkey)
                         // the bio links like a note: URLs, nostr: mentions and hashtags open
                         state.profile.about?.takeIf { it.isNotBlank() }?.let {
-                            Spacer(Modifier.height(8.dp))
+                            Spacer(Modifier.height(Spacing.s))
                             // a long bio folds like a long note, earlier: the header must not push the notes off the screen
                             NoteText(
                                 it, onOpen = {}, onHashtag = onHashtag, onOpenProfile = onOpenProfile, onOpenNote = onOpenThread, names = names,
@@ -854,22 +855,22 @@ fun ProfileScreen(
                         }
                         // kind 0 website: a link that reads without the scheme, like links in notes
                         state.profile.website?.trim()?.takeIf { ProfileEditController.websiteOk(it) && it.isNotEmpty() }?.let { site ->
-                            Spacer(Modifier.height(4.dp))
+                            Spacer(Modifier.height(Spacing.xs))
                             NoteText(ProfileEditController.website(site), onOpen = {}, onHashtag = {}, onOpenProfile = {}, onOpenNote = {}, modifier = Modifier.testTag("profile-website"))
                         }
                         state.followCounts?.let {
-                            Spacer(Modifier.height(8.dp))
+                            Spacer(Modifier.height(Spacing.s))
                             FollowCountsLine(it, onFollowing = { onOpenFollows(state.profile.pubkey, false) }, onFollowers = { onOpenFollows(state.profile.pubkey, true) })
                         }
                         if (state.isMuted && !state.isSelf) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(stringResource(R.string.mute_profile_hint), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("profile-muted-hint"))
-                                Spacer(Modifier.width(4.dp))
+                                Spacer(Modifier.width(Spacing.xs))
                                 TextButton(onClick = vm.controller::unmute, modifier = Modifier.testTag("profile-unmute")) { Text(stringResource(R.string.unmute_account)) }
                             }
                         }
                         if (state.extraRelays.isNotEmpty()) {
-                            Spacer(Modifier.height(8.dp))
+                            Spacer(Modifier.height(Spacing.s))
                             Text(stringResource(R.string.profile_extra_relays, state.extraRelays.joinToString(", ") { it.removePrefix("wss://") }), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("profile-extra-relays"))
                         }
                     }
@@ -918,14 +919,14 @@ fun ProfileScreen(
                     items(articles, key = { "article-" + it.coordinate }) { a ->
                         AddressCard(
                             a.ref, names, onOpenProfile = onOpenProfile, sensitive = a.contentWarning != null,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            modifier = Modifier.padding(horizontal = Spacing.l, vertical = Spacing.s),
                         )
                     }
                     if (articles.isEmpty()) item(key = "profile-empty") {
                         Text(
                             stringResource(state.tab.empty),
                             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.fillMaxWidth().padding(24.dp).testTag("profile-empty"),
+                            modifier = Modifier.fillMaxWidth().padding(Spacing.xl).testTag("profile-empty"),
                         )
                     }
                 }
@@ -959,7 +960,7 @@ fun ProfileScreen(
                         Text(
                             stringResource(state.tab.empty),
                             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.fillMaxWidth().padding(24.dp).testTag("profile-empty"),
+                            modifier = Modifier.fillMaxWidth().padding(Spacing.xl).testTag("profile-empty"),
                         )
                     }
                     state.tab !in state.ended -> item(key = "profile-more-${state.tab}") {
@@ -971,9 +972,9 @@ fun ProfileScreen(
                 if (state.shown.size < SHORT_TAB) item(key = "profile-tab-room") { Spacer(Modifier.fillParentMaxHeight()) }
             } else {
                 if (vm.lists.isSelf) item(key = "list-create") {
-                    OutlinedButton(onClick = onCreateList, modifier = Modifier.padding(16.dp).testTag("list-create")) {
+                    OutlinedButton(onClick = onCreateList, modifier = Modifier.padding(Spacing.l).testTag("list-create")) {
                         Icon(Icons.Filled.Add, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
+                        Spacer(Modifier.width(Spacing.s))
                         Text(stringResource(R.string.list_create))
                     }
                 }
@@ -984,7 +985,7 @@ fun ProfileScreen(
                         Text(
                             stringResource(if (vm.lists.isSelf) R.string.lists_empty_own else R.string.lists_empty_other),
                             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.fillMaxWidth().padding(24.dp).testTag("lists-empty"),
+                            modifier = Modifier.fillMaxWidth().padding(Spacing.xl).testTag("lists-empty"),
                         )
                     }
                     // backlog 38: the own lists are dragged into order (long press); the pinned ones follow as home tabs
@@ -1049,7 +1050,7 @@ private fun NpubLine(pubkey: String) {
 
 @Composable
 private fun ListSpinner() {
-    Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp) }
+    Box(Modifier.fillMaxWidth().padding(Spacing.l), contentAlignment = Alignment.Center) { CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp) }
 }
 
 /** Spec 2: filled "Follow", outlined "Following" (tap asks to unfollow), disabled "Follow" while no list is known or a write runs. */

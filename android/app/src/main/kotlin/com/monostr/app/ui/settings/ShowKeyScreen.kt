@@ -44,6 +44,7 @@ import com.monostr.app.ui.common.SecureWindow
 import com.monostr.app.ui.common.copySecret
 import com.monostr.app.ui.monero.NSEC_CLIP_LABEL
 import com.monostr.app.ui.monero.SeedClipboardClear
+import com.monostr.app.ui.theme.Spacing
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -106,8 +107,8 @@ fun ShowKeyScreen(onBack: () -> Unit, vm: ShowKeyViewModel = hiltViewModel()) {
     ) { padding ->
         val key = (shown as? ShownKey.Key)?.key ?: return@Scaffold // loading, or about to close
         Column(
-            Modifier.padding(padding).padding(16.dp).fillMaxSize().verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            Modifier.padding(padding).padding(Spacing.l).fillMaxSize().verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(Spacing.l),
         ) {
             Text(key.nsec, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("show-key-nsec"))
             OutlinedButton(

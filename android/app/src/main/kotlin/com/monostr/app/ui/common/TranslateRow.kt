@@ -35,6 +35,7 @@ import com.monostr.app.translate.TranslationMode
 import com.monostr.app.translate.TranslationSettingsStore
 import com.monostr.app.translate.TranslationState
 import com.monostr.app.translate.Translations
+import com.monostr.app.ui.theme.Spacing
 import com.monostr.nostr.StartupGate
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -156,22 +157,22 @@ fun TranslateRow(
     if (!belowText) when (state) {
         is TranslationState.Offer -> Text(
             stringResource(R.string.translate_action), style = style, color = accent,
-            modifier = modifier.clickable(role = Role.Button, onClick = onTranslate).padding(vertical = 4.dp).testTag("translate-$id8"),
+            modifier = modifier.clickable(role = Role.Button, onClick = onTranslate).padding(vertical = Spacing.xs).testTag("translate-$id8"),
         )
         TranslationState.Loading -> CircularProgressIndicator(
-            strokeWidth = 2.dp, modifier = modifier.padding(vertical = 4.dp).size(14.dp).testTag("translate-loading-$id8"),
+            strokeWidth = 2.dp, modifier = modifier.padding(vertical = Spacing.xs).size(14.dp).testTag("translate-loading-$id8"),
         )
-        TranslationState.Failed -> Row(modifier.padding(vertical = 4.dp).testTag("translate-failed-$id8"), verticalAlignment = Alignment.CenterVertically) {
+        TranslationState.Failed -> Row(modifier.padding(vertical = Spacing.xs).testTag("translate-failed-$id8"), verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(R.string.translate_failed) + SEPARATOR, style = style, color = muted)
             Text(stringResource(R.string.translate_retry), style = style, color = accent, modifier = Modifier.clickable(role = Role.Button, onClick = onTranslate).testTag("translate-retry-$id8"))
         }
         else -> Unit
     } else when (state) {
-        is TranslationState.Shown -> Row(modifier.padding(top = 4.dp).testTag("translated-by-$id8"), verticalAlignment = Alignment.CenterVertically) {
+        is TranslationState.Shown -> Row(modifier.padding(top = Spacing.xs).testTag("translated-by-$id8"), verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(R.string.translate_by, state.host) + SEPARATOR, style = style, color = muted, modifier = Modifier.weight(1f, fill = false))
             Text(stringResource(R.string.translate_original), style = style, color = accent, maxLines = 1, modifier = Modifier.clickable(role = Role.Button, onClick = onOriginal).testTag("translate-original-$id8"))
         }
-        is TranslationState.Original -> Row(modifier.padding(top = 4.dp).testTag("translated-by-$id8")) {
+        is TranslationState.Original -> Row(modifier.padding(top = Spacing.xs).testTag("translated-by-$id8")) {
             Text(stringResource(R.string.translate_show_translation), style = style, color = accent, modifier = Modifier.clickable(role = Role.Button, onClick = onTranslation).testTag("translate-show-$id8"))
         }
         else -> Unit
@@ -198,16 +199,16 @@ fun NoteTranslateRow(state: TranslationState, noteId: String, modifier: Modifier
 @Composable
 fun TranslateConsentSheet(host: String, onTranslate: () -> Unit, onSettings: () -> Unit, onDismiss: () -> Unit, article: Boolean = false) {
     GuardedModalBottomSheet(onDismissRequest = onDismiss, modifier = Modifier.testTag("translate-consent")) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = Spacing.xl)) {
             Text(stringResource(R.string.translate_consent_title), style = MaterialTheme.typography.titleLarge)
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(Spacing.m))
             Text(stringResource(if (article) R.string.translate_consent_body_article else R.string.translate_consent_body, host), style = MaterialTheme.typography.bodyMedium)
-            Spacer(Modifier.height(20.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End)) {
+            Spacer(Modifier.height(Spacing.xl))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.m, Alignment.End)) {
                 OutlinedButton(onClick = onSettings, modifier = Modifier.testTag("translate-consent-settings")) { Text(stringResource(R.string.translate_consent_settings)) }
                 Button(onClick = onTranslate, modifier = Modifier.testTag("translate-consent-translate")) { Text(stringResource(R.string.translate_consent_translate)) }
             }
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(Spacing.xl))
         }
     }
 }

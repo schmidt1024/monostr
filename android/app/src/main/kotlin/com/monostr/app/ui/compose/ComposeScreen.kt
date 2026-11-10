@@ -94,6 +94,7 @@ import com.monostr.app.ui.common.asString
 import com.monostr.app.ui.common.uiText
 import com.monostr.app.ui.common.uploadMessage
 import com.monostr.app.ui.common.userMessage
+import com.monostr.app.ui.theme.Spacing
 import com.monostr.nostr.Npub
 import com.monostr.nostr.model.AddressRef
 import com.monostr.nostr.model.Article
@@ -758,8 +759,8 @@ fun ComposeScreen(onDone: () -> Unit, vm: ComposeViewModel = hiltViewModel()) {
                     Button(
                         onClick = { vm.controller.send(field.text.toString()) },
                         enabled = canSend,
-                        contentPadding = PaddingValues(horizontal = 18.dp),
-                        modifier = Modifier.padding(end = 12.dp).height(36.dp).testTag("compose-send"),
+                        contentPadding = PaddingValues(horizontal = Spacing.l),
+                        modifier = Modifier.padding(end = Spacing.m).height(36.dp).testTag("compose-send"),
                     ) {
                         Text(stringResource(when {
                             state.sending -> R.string.state_sending
@@ -771,15 +772,15 @@ fun ComposeScreen(onDone: () -> Unit, vm: ComposeViewModel = hiltViewModel()) {
             )
         },
     ) { padding ->
-        Column(Modifier.padding(padding).consumeWindowInsets(padding).imePadding().padding(horizontal = 16.dp, vertical = 8.dp).fillMaxSize().verticalScroll(rememberScrollState())) {
+        Column(Modifier.padding(padding).consumeWindowInsets(padding).imePadding().padding(horizontal = Spacing.l, vertical = Spacing.s).fillMaxSize().verticalScroll(rememberScrollState())) {
             // the comment answered, else the article commented on
             (state.replyTo?.displayContent ?: state.articleTitle)?.let {
                 Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 3, modifier = Modifier.testTag("compose-article-target"))
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(Spacing.m))
             }
             Row {
             Avatar(self.picture, size = 40.dp)
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(Spacing.m))
             Column(Modifier.weight(1f)) {
             // after an offline send the stored event is re-sent as is, so the text is frozen; no frame, the text looks as it will in the feed
             val textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface)
@@ -793,7 +794,7 @@ fun ComposeScreen(onDone: () -> Unit, vm: ComposeViewModel = hiltViewModel()) {
                 outputTransformation = mentionOutput,
                 textStyle = textStyle,
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp).padding(top = 8.dp).focusRequester(focus).contentReceiver(receiver).testTag("compose-text"),
+                modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp).padding(top = Spacing.s).focusRequester(focus).contentReceiver(receiver).testTag("compose-text"),
                 decorator = { inner ->
                     Box {
                         if (field.text.isEmpty()) Text(stringResource(R.string.compose_placeholder), style = textStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -801,7 +802,7 @@ fun ComposeScreen(onDone: () -> Unit, vm: ComposeViewModel = hiltViewModel()) {
                     }
                 },
             )
-            state.error?.let { Text(it.asString(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 4.dp)) }
+            state.error?.let { Text(it.asString(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = Spacing.xs)) }
             if (state.suggestions.isNotEmpty()) {
                 // spec 4.2: right under the field, i.e. above the keyboard (imePadding on the column)
                 LazyColumn(Modifier.fillMaxWidth().heightIn(max = 280.dp).testTag("mention-list")) {
@@ -811,11 +812,11 @@ fun ComposeScreen(onDone: () -> Unit, vm: ComposeViewModel = hiltViewModel()) {
                                 vm.controller.pick(field.text.toString(), field.selection.end, p)?.let { e ->
                                     field.edit { replace(0, length, e.text); selection = TextRange(e.cursor) }
                                 }
-                            }.padding(vertical = 8.dp).testTag("mention-${p.pubkey.take(8)}"),
+                            }.padding(vertical = Spacing.s).testTag("mention-${p.pubkey.take(8)}"),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Avatar(p.picture, Modifier.size(32.dp))
-                            Spacer(Modifier.width(10.dp))
+                            Spacer(Modifier.width(Spacing.m))
                             Column {
                                 Text(p.shownName, style = MaterialTheme.typography.titleSmall, maxLines = 1)
                                 Text(Npub.short(p.pubkey), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -833,24 +834,24 @@ fun ComposeScreen(onDone: () -> Unit, vm: ComposeViewModel = hiltViewModel()) {
                     Box(Modifier.testTag("compose-link-preview")) { LinkPreviewCard(draft, link.url, link.preview, onDismiss = { dismissedLink = link.url }) }
                 }
             vm.quoteId?.let { id ->
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(Spacing.m))
                 Text(stringResource(R.string.compose_quote_hint), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(Spacing.xs))
                 // spec 4.1: shown, not editable; taps on the card do nothing here
                 Box(Modifier.testTag("compose-quote")) { QuoteCard(id, hints = emptyList(), names = emptyMap(), onOpenNote = {}, onOpenProfile = {}) }
             }
             if (state.attachments.isNotEmpty()) {
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(Spacing.m))
                 AttachmentTiles(
                     state.attachments, enabled = !state.sending && !state.pendingResend,
                     onRemove = vm.controller::removeAttachment, onRetry = vm.controller::retry,
                 )
-                Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().padding(top = Spacing.s), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(stringResource(R.string.compose_sensitive), style = MaterialTheme.typography.bodyMedium)
                         Text(stringResource(R.string.compose_sensitive_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Spacer(Modifier.width(16.dp))
+                    Spacer(Modifier.width(Spacing.l))
                     Switch(
                         checked = state.sensitive, onCheckedChange = vm.controller::setSensitive,
                         enabled = !state.sending && !state.pendingResend, modifier = Modifier.testTag("compose-sensitive"),
@@ -858,8 +859,8 @@ fun ComposeScreen(onDone: () -> Unit, vm: ComposeViewModel = hiltViewModel()) {
                 }
             }
             // like X: the tools right under what is written, not at the screen's foot; with the keyboard open they sit on it
-            HorizontalDivider(Modifier.padding(top = 12.dp))
-            Row(Modifier.offset(x = (-12).dp).padding(vertical = 4.dp).testTag("compose-tools")) {
+            HorizontalDivider(Modifier.padding(top = Spacing.m))
+            Row(Modifier.offset(x = (-12).dp).padding(vertical = Spacing.xs).testTag("compose-tools")) {
                 IconButton(
                     onClick = {
                         val free = NoteMedia.MAX_ATTACH - state.attachments.size

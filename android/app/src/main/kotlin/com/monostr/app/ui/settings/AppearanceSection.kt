@@ -36,7 +36,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -55,6 +54,7 @@ import com.monostr.app.data.ThemeMode
 import com.monostr.app.ui.theme.isDark
 import com.monostr.app.ui.theme.AccentPalette
 import com.monostr.app.ui.theme.AccentSeed
+import com.monostr.app.ui.theme.Spacing
 
 /** Spec 5: appearance controls, as simple as possible — a segmented mode row and the accents as a list. */
 @Composable
@@ -62,7 +62,7 @@ fun AppearanceSection(mode: ThemeMode, accent: Accent, customHue: Float, onMode:
     val context = LocalContext.current
     Column(Modifier.fillMaxWidth()) {
         Text(stringResource(R.string.settings_appearance), style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(Spacing.s))
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
             val modes = listOf(ThemeMode.SYSTEM to R.string.settings_theme_system, ThemeMode.LIGHT to R.string.settings_theme_light, ThemeMode.DARK to R.string.settings_theme_dark, ThemeMode.BLACK to R.string.settings_theme_black)
             modes.forEachIndexed { i, (m, label) ->
@@ -73,9 +73,9 @@ fun AppearanceSection(mode: ThemeMode, accent: Accent, customHue: Float, onMode:
                 ) { Text(stringResource(label)) }
             }
         }
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(Spacing.l))
         Text(stringResource(R.string.settings_accent), style = MaterialTheme.typography.labelLarge)
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(Spacing.s))
         // the swatches show the accent as the active mode really paints it, not the raw seed (2026-10-08)
         val dark = isDark(mode)
         val customSeed = AccentSeed.fromHue(customHue)
@@ -90,11 +90,11 @@ fun AppearanceSection(mode: ThemeMode, accent: Accent, customHue: Float, onMode:
                     Modifier
                         .fillMaxWidth()
                         .heightIn(min = 56.dp)
-                        .clip(RoundedCornerShape(12.dp))
+                        .clip(MaterialTheme.shapes.medium)
                         .clickable(role = Role.RadioButton) { onAccent(a) }
                         .semantics(mergeDescendants = true) { contentDescription = description; this.selected = selected }
                         .testTag("appearance-accent-${a.name.lowercase()}")
-                        .padding(horizontal = 4.dp),
+                        .padding(horizontal = Spacing.xs),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Box(
@@ -104,7 +104,7 @@ fun AppearanceSection(mode: ThemeMode, accent: Accent, customHue: Float, onMode:
                             .then(if (a == Accent.MONO) Modifier.background(Brush.horizontalGradient(0f to Color.Black, 0.5f to Color.Black, 0.5f to Color.White, 1f to Color.White)) else Modifier.background(Color(tokens.primary)))
                             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape),
                     )
-                    Spacer(Modifier.width(16.dp))
+                    Spacer(Modifier.width(Spacing.l))
                     Text(name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                     if (selected) Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 }
@@ -112,17 +112,17 @@ fun AppearanceSection(mode: ThemeMode, accent: Accent, customHue: Float, onMode:
         }
         if (accent == Accent.CUSTOM) {
             // spec 11.4 §3: a hue slider, saturation and value fixed; the swatch shows the mixed colour of the active mode
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Spacing.s))
             Text(stringResource(R.string.settings_accent_hue), style = MaterialTheme.typography.labelMedium)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 // the thumb follows the finger from local state; the store is written once, on release
                 var dragging by remember(customHue) { mutableStateOf(customHue) }
                 Slider(value = dragging, onValueChange = { dragging = it }, onValueChangeFinished = { onHue(dragging) }, valueRange = 0f..359f, modifier = Modifier.weight(1f).testTag("appearance-hue"))
-                Spacer(Modifier.width(12.dp))
+                Spacer(Modifier.width(Spacing.m))
                 Box(Modifier.size(32.dp).clip(CircleShape).background(Color(AccentPalette.tokens(Accent.CUSTOM, dark, AccentSeed.fromHue(dragging)).primary)))
             }
         }
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(Spacing.l))
         Text(stringResource(R.string.settings_language), style = MaterialTheme.typography.labelLarge)
         Text(stringResource(R.string.settings_language_text), style = MaterialTheme.typography.bodySmall)
         if (Build.VERSION.SDK_INT >= 33) {

@@ -57,6 +57,7 @@ import com.monostr.app.ui.common.asString
 import com.monostr.app.ui.common.copySecret
 import com.monostr.app.ui.monero.NSEC_CLIP_LABEL
 import com.monostr.app.ui.monero.SeedClipboardClear
+import com.monostr.app.ui.theme.Spacing
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -109,7 +110,7 @@ fun CreateAccountScreen(onLeave: () -> Unit, vm: CreateAccountViewModel = hiltVi
             dismissButton = { TextButton(onClick = controller::dismissCancel) { Text(stringResource(R.string.create_cancel_no)) } },
         )
     }
-    Column(Modifier.fillMaxSize().safeDrawingPadding().padding(24.dp)) {
+    Column(Modifier.fillMaxSize().safeDrawingPadding().padding(Spacing.xl)) {
         when (state.step) {
             CreateStep.Welcome -> Scrolling("create-welcome") {
                 Title(R.string.create_title)
@@ -131,17 +132,17 @@ fun CreateAccountScreen(onLeave: () -> Unit, vm: CreateAccountViewModel = hiltVi
             }
             CreateStep.Follow -> Follow(state, controller)
         }
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(Spacing.l))
         TorLoginRow()
         if (state.step == CreateStep.Follow) {
             state.error?.let {
                 Text(it.asString(), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(Spacing.s))
             }
             Button(onClick = { vm.finish() }, enabled = !state.busy, modifier = Modifier.fillMaxWidth().testTag("create-finish")) {
                 if (state.busy) {
                     CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(Spacing.s))
                 }
                 Text(stringResource(R.string.create_finish))
             }
@@ -158,7 +159,7 @@ fun CreateAccountScreen(onLeave: () -> Unit, vm: CreateAccountViewModel = hiltVi
 private fun ColumnScope.Scrolling(tag: String, content: @Composable ColumnScope.() -> Unit) {
     Column(
         Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).testTag(tag),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(Spacing.l),
         content = content,
     )
 }
@@ -207,9 +208,9 @@ private fun Backup(state: CreateAccountState, controller: CreateAccountControlle
 @Composable
 private fun ColumnScope.Follow(state: CreateAccountState, controller: CreateAccountController) {
     Title(R.string.create_follow_title)
-    Spacer(Modifier.height(8.dp))
+    Spacer(Modifier.height(Spacing.s))
     Text(stringResource(R.string.create_follow_text), style = MaterialTheme.typography.bodyMedium)
-    Spacer(Modifier.height(8.dp))
+    Spacer(Modifier.height(Spacing.s))
     LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("create-follows")) {
         items(SuggestedFollows.all, key = { it.pubkey }) { f ->
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -219,7 +220,7 @@ private fun ColumnScope.Follow(state: CreateAccountState, controller: CreateAcco
                     enabled = !state.busy,
                     modifier = Modifier.testTag("create-follow-" + f.pubkey.take(8)),
                 )
-                Column(Modifier.padding(start = 4.dp)) {
+                Column(Modifier.padding(start = Spacing.xs)) {
                     Text(f.name, style = MaterialTheme.typography.bodyLarge)
                     Text(stringResource(f.who), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }

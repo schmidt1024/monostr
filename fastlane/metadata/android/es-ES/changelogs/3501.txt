@@ -1,0 +1,2 @@
+- Espaciados y esquinas unificados en toda la app
+- Correcciones

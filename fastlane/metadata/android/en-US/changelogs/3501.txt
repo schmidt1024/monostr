@@ -1,0 +1,2 @@
+- Spacing and corners tidied up across the app
+- Fixes

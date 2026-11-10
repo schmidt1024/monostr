@@ -5,7 +5,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.ui.graphics.Color
 import androidx.compose.material.icons.filled.PlayArrow
@@ -44,7 +43,7 @@ object Thumbnails {
 fun NoteThumbnail(note: Note, size: Dp = 48.dp) {
     val source = Thumbnails.source(note) ?: return
     val (covered, waiting) = rememberMediaCover(note, hasImages = true)
-    val shape = RoundedCornerShape(8.dp)
+    val shape = MaterialTheme.shapes.small
     val placeholder = rememberBlurhash(source.blurhash)
     Box(
         Modifier.size(size).clip(shape).background(MaterialTheme.colorScheme.surfaceVariant).testTag("note-thumbnail-${note.id.take(8)}"),

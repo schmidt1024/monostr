@@ -26,6 +26,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.monostr.app.R
+import com.monostr.app.ui.theme.Spacing
 import kotlinx.coroutines.delay
 
 /** Spec 3: after this long without a session the start screen shows a spinner. */
@@ -55,7 +56,7 @@ fun StartScreen(spinnerDelayMs: Long = START_SPINNER_DELAY_MS) {
                 colorFilter = ink,
                 modifier = Modifier.height(LOGO_HEIGHT).testTag("start-logo"),
             )
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(Spacing.l))
             Image(
                 painter = painterResource(R.drawable.ic_wordmark),
                 contentDescription = stringResource(R.string.app_name),
@@ -63,7 +64,7 @@ fun StartScreen(spinnerDelayMs: Long = START_SPINNER_DELAY_MS) {
                 modifier = Modifier.height(40.dp),
             )
             if (spinner) {
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(Spacing.xl))
                 CircularProgressIndicator(Modifier.size(24.dp).testTag("start-spinner"), strokeWidth = 2.dp)
             }
         }
