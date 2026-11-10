@@ -55,6 +55,7 @@ import com.monostr.app.ui.common.Avatar
 import com.monostr.app.ui.common.LoadingScreen
 import com.monostr.app.ui.common.UiText
 import com.monostr.app.ui.common.asString
+import com.monostr.app.ui.theme.PlainShapes
 import com.monostr.app.ui.theme.Spacing
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -111,7 +112,7 @@ fun ProfileEditScreen(onDone: () -> Unit, vm: ProfileEditViewModel = hiltViewMod
                 if (f.banner.isNotBlank() && !state.bannerInvalid) {
                     AsyncImage(
                         model = f.banner.trim(), contentDescription = null, contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(MaterialTheme.shapes.medium).background(MaterialTheme.colorScheme.surfaceVariant),
+                        modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(PlainShapes.medium).background(MaterialTheme.colorScheme.surfaceVariant),
                     )
                 }
                 EditField(f.picture, R.string.profile_edit_picture, "edit-picture", invalid = state.pictureInvalid) { v -> vm.controller.update { it.copy(picture = v) } }
@@ -122,7 +123,7 @@ fun ProfileEditScreen(onDone: () -> Unit, vm: ProfileEditViewModel = hiltViewMod
                 EditField(f.about, R.string.profile_edit_about, "edit-about", singleLine = false) { v -> vm.controller.update { it.copy(about = v) } }
                 EditField(f.nip05, R.string.profile_edit_nip05, "edit-nip05") { v -> vm.controller.update { it.copy(nip05 = v) } }
                 EditField(f.website, R.string.profile_edit_website, "edit-website", invalid = state.websiteInvalid, errorText = R.string.profile_website_invalid) { v -> vm.controller.update { it.copy(website = v) } }
-                Button(onClick = vm.controller::save, enabled = state.canSave, modifier = Modifier.fillMaxWidth().testTag("edit-save")) {
+                Button(onClick = vm.controller::save, enabled = state.canSave, modifier = Modifier.fillMaxWidth().testTag("edit-save"), shape = MaterialTheme.shapes.medium) {
                     Text(stringResource(if (state.saving) R.string.state_sending else R.string.profile_edit_save))
                 }
             }
@@ -141,6 +142,7 @@ private fun EditField(value: String, @StringRes label: Int, tag: String, invalid
         isError = invalid,
         supportingText = if (invalid) { { Text(stringResource(errorText)) } } else null,
         modifier = Modifier.fillMaxWidth().testTag(tag),
+        shape = MaterialTheme.shapes.medium,
     )
 }
 

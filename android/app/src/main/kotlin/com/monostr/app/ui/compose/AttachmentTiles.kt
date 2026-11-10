@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.monostr.app.R
 import com.monostr.app.ui.common.asString
+import com.monostr.app.ui.theme.PlainShapes
 import com.monostr.app.ui.theme.Spacing
 
 /**
@@ -46,7 +47,7 @@ fun AttachmentTiles(attachments: List<Attachment>, enabled: Boolean, onRemove: (
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(Spacing.s)) {
             attachments.forEachIndexed { i, a ->
                 Box(
-                    Modifier.size(84.dp).clip(MaterialTheme.shapes.medium).background(MaterialTheme.colorScheme.surfaceVariant).testTag("compose-attachment-$i"),
+                    Modifier.size(84.dp).clip(PlainShapes.medium).background(MaterialTheme.colorScheme.surfaceVariant).testTag("compose-attachment-$i"),
                 ) {
                     // a video shows its poster once it is up; before that the tile stays plain (no frame is decoded here)
                     val model = a.uploaded?.posterUrl ?: a.source.takeUnless { a.video }

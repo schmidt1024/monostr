@@ -65,6 +65,7 @@ fun TranslationSection(mode: TranslationMode, customUrl: String, onMode: (Transl
                     { Text(stringResource(R.string.settings_translate_url_invalid), modifier = Modifier.testTag("translate-url-error")) }
                 } else null,
                 modifier = Modifier.fillMaxWidth().testTag("translate-url"),
+                shape = MaterialTheme.shapes.medium,
             )
             TextButton(onClick = { invalid = !onSaveUrl(text) }, enabled = text.trim() != customUrl, modifier = Modifier.testTag("translate-url-save")) {
                 Text(stringResource(R.string.profile_edit_save))

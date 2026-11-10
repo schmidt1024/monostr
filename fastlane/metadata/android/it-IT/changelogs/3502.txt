@@ -1,0 +1,5 @@
+- Angoli più morbidi: campi, pulsanti, schede e finestre di dialogo a forma di squircle
+- Nuova barra in basso con icone a tratto sottile; la scheda attiva è piena
+- Colori di accento: Arancione, Champagne, Mono e Personalizzato (parte dal blu); se usavi Blu, resta in Personalizzato
+- Lo scorrimento resta veloce come prima
+- Correzioni

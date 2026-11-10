@@ -38,7 +38,7 @@ class UiSettingsStoreTest {
         assertEquals(ThemeMode.DARK, settings.themeMode.first())
         assertEquals(Accent.ORANGE, settings.accent.first())
         // spec 11.4 §3: the custom hue defaults, round-trips, and an invalid value falls back
-        assertEquals(200f, settings.customHue.first())
+        assertEquals(220f, settings.customHue.first())
         // NIP-89 "via monostr" tag: off by default (0.18), round-trips
         assertFalse(settings.clientTag.first())
         settings.setClientTag(true)
@@ -48,13 +48,13 @@ class UiSettingsStoreTest {
         settings.setLinkAlwaysOpen(true)
         assertTrue(settings.linkAlwaysOpen.first())
         settings.setCustomHue(33.5f); assertEquals(33.5f, settings.customHue.first())
-        settings.setCustomHue(400f); assertEquals(200f, settings.customHue.first())
+        settings.setCustomHue(400f); assertEquals(220f, settings.customHue.first())
         settings.setAccent(Accent.CUSTOM); assertEquals(Accent.CUSTOM, settings.accent.first())
         // a value written by a newer or older app version falls back to the defaults
         store.edit { it[stringPreferencesKey("ui.theme_mode")] = "SEPIA"; it[stringPreferencesKey("ui.accent")] = "" }
         assertEquals(ThemeMode.SYSTEM, settings.themeMode.first())
         assertEquals(Accent.ORANGE, settings.accent.first()) // v0.12.8: Monero orange is the default, nothing stored or an unknown value gives it
-        // v0.12.7: red and green left the picker; a stored one becomes the custom accent with that hue, a stored hue wins
+        // v0.12.7: red and green left the picker; a stored one becomes the custom accent with that hue
         store.edit { it[stringPreferencesKey("ui.accent")] = "RED"; it.remove(floatPreferencesKey("ui.custom_hue")) }
         assertEquals(Accent.CUSTOM, settings.accent.first()); assertEquals(0f, settings.customHue.first())
         store.edit { it[stringPreferencesKey("ui.accent")] = "GREEN" }
@@ -63,6 +63,11 @@ class UiSettingsStoreTest {
         store.edit { it[stringPreferencesKey("ui.accent")] = "PURPLE" }
         assertEquals(Accent.CUSTOM, settings.accent.first()); assertEquals(259f, settings.customHue.first())
         settings.setCustomHue(20f); assertEquals(20f, settings.customHue.first())
+        // 2026-11-10: blue folded into custom; its hue beats one left from an earlier custom pick, and the slider takes over again
+        store.edit { it[stringPreferencesKey("ui.accent")] = "BLUE"; it[floatPreferencesKey("ui.custom_hue")] = 90f }
+        assertEquals(Accent.CUSTOM, settings.accent.first()); assertEquals(220f, settings.customHue.first())
+        settings.setCustomHue(300f)
+        assertEquals(Accent.CUSTOM, settings.accent.first()); assertEquals(300f, settings.customHue.first())
         scope.cancel()
     }
 

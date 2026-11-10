@@ -1,5 +1,6 @@
 package com.monostr.app.ui.common
 
+import com.monostr.app.ui.theme.PlainShapes
 import com.monostr.app.ui.tips.LocalAmountUnit
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -223,7 +224,7 @@ private fun ActionIcon(
         // moved it left by 9 dp when the count arrived). The rounded clip covers the whole box, so nothing is cut.
         Modifier
             .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
-            .clip(MaterialTheme.shapes.extraLarge)
+            .clip(PlainShapes.extraLarge) // bounds the tap effect only: a plain rounded clip, five per note on the scroll path
             .combinedClickable(enabled = enabled, onClick = onClick, onClickLabel = description, onLongClick = onLongClick, onLongClickLabel = longClickLabel)
             .semantics {
                 this.selected = selected
@@ -366,6 +367,7 @@ private fun ReactionSheet(onPick: (String) -> Unit, onDismiss: () -> Unit) {
                     value = other, onValueChange = { other = it }, singleLine = true,
                     label = { Text(stringResource(R.string.note_react_other)) },
                     modifier = Modifier.weight(1f).testTag("reaction-other"),
+                    shape = MaterialTheme.shapes.medium,
                 )
                 Spacer(Modifier.width(Spacing.s))
                 TextButton(onClick = { cleaned?.let(onPick) }, enabled = cleaned != null, modifier = Modifier.testTag("reaction-other-send")) {

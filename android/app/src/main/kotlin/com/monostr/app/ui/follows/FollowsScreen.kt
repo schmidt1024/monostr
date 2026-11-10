@@ -270,9 +270,9 @@ private fun PersonRow(p: Profile, follow: FollowState?, busy: Boolean, onOpen: (
                     val pad = PaddingValues(horizontal = Spacing.l)
                     val canSend = LocalCanSend.current
                     when (follow) {
-                        FollowState.Following -> OutlinedButton(onClick = onUnfollow, enabled = !busy && canSend, contentPadding = pad, modifier = tag) { Text(stringResource(R.string.profile_following), style = MaterialTheme.typography.labelMedium) }
-                        FollowState.NotFollowing -> Button(onClick = onFollow, enabled = !busy && canSend, contentPadding = pad, modifier = tag) { Text(stringResource(R.string.profile_follow), style = MaterialTheme.typography.labelMedium) }
-                        FollowState.Unknown -> Button(onClick = {}, enabled = false, contentPadding = pad, modifier = tag) { Text(stringResource(R.string.profile_follow), style = MaterialTheme.typography.labelMedium) }
+                        FollowState.Following -> OutlinedButton(onClick = onUnfollow, enabled = !busy && canSend, contentPadding = pad, modifier = tag, shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.profile_following), style = MaterialTheme.typography.labelMedium) }
+                        FollowState.NotFollowing -> Button(onClick = onFollow, enabled = !busy && canSend, contentPadding = pad, modifier = tag, shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.profile_follow), style = MaterialTheme.typography.labelMedium) }
+                        FollowState.Unknown -> Button(onClick = {}, enabled = false, contentPadding = pad, modifier = tag, shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.profile_follow), style = MaterialTheme.typography.labelMedium) }
                     }
                 }
             }

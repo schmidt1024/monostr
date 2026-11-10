@@ -65,6 +65,7 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.widthIn
 import com.monostr.app.ui.theme.MonostrFonts
+import com.monostr.app.ui.theme.PlainShapes
 import com.monostr.app.ui.theme.Spacing
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -225,7 +226,7 @@ fun ArticleScreen(
                     // a link that does not decode has nothing to open
                     if (vm.ref.kind == Article.KIND) {
                         Spacer(Modifier.height(Spacing.l))
-                        Button(onClick = { runCatching { uriHandler.openUri(AddressLinks.web(vm.ref)) } }, modifier = Modifier.testTag("article-open-browser")) {
+                        Button(onClick = { runCatching { uriHandler.openUri(AddressLinks.web(vm.ref)) } }, modifier = Modifier.testTag("article-open-browser"), shape = MaterialTheme.shapes.medium) {
                             Text(stringResource(R.string.article_open_browser))
                         }
                     }
@@ -532,7 +533,7 @@ private fun ArticlePicture(url: String, ctx: RenderContext, index: Int, modifier
         val box = MediaBoxes.single(learned, widthDp = maxWidth.value)
         val ratio = if (cover) box.ratio.coerceIn(1f, 2f) else box.ratio
         Box(
-            Modifier.fillMaxWidth().aspectRatio(ratio).then(if (cover) Modifier else Modifier.clip(MaterialTheme.shapes.medium))
+            Modifier.fillMaxWidth().aspectRatio(ratio).then(if (cover) Modifier else Modifier.clip(PlainShapes.medium))
                 .background(MaterialTheme.colorScheme.surfaceVariant)
                 .clickable {
                     when {

@@ -1,0 +1,5 @@
+- Cantos mais suaves: campos, botões, cartões e diálogos em formato squircle
+- Nova barra inferior com ícones de traço fino; a aba ativa fica preenchida
+- Cores de destaque: Laranja, Champanhe, Mono e Personalizado (começa no azul); se você usava Azul, ele continua em Personalizado
+- A rolagem continua tão rápida quanto antes
+- Correções

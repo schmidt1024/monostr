@@ -415,7 +415,6 @@
     <string name="settings_accent">Cor de destaque</string>
     <string name="settings_accent_mono">Mono</string>
     <string name="settings_accent_orange">Laranja</string>
-    <string name="settings_accent_blue">Azul</string>
     <string name="settings_accent_champagne">Champanhe</string>
     <string name="settings_accent_custom">Personalizado</string>
     <string name="settings_accent_hue">Tom</string>

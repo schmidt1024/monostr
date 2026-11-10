@@ -1,5 +1,14 @@
 package com.monostr.app.ui.common
 
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.material3.ripple
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
 import com.monostr.app.ui.media.NoteLinkPreview
 import com.monostr.app.ui.media.LinkPreviewRules
 import com.monostr.app.ui.media.rememberNoteLink
@@ -20,15 +29,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.ChatBubble
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.outlined.BookmarkBorder
-import androidx.compose.material.icons.outlined.ChatBubbleOutline
-import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -37,10 +37,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarDefaults
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -71,6 +67,7 @@ import com.monostr.app.ui.feed.NoteUi
 import com.monostr.app.ui.media.NoteMediaRow
 import com.monostr.app.ui.theme.Spacing
 import com.monostr.app.ui.theme.StatusColors
+import com.monostr.app.ui.theme.TabIcons
 import com.monostr.nostr.model.RelayState
 import kotlinx.coroutines.flow.distinctUntilChanged
 import java.util.Locale
@@ -413,7 +410,12 @@ private fun DetailNoteCard(
 
 enum class BottomTab { FEED, SEARCH, BOOKMARKS, NOTIFICATIONS, MESSAGES }
 
-/** Spec 5.7: notifications tab with unread badge; spec 3: search tab after the feed; spec 11.1: five destinations with the bookmarks in the middle, the badged tabs (notifications, messages) on the right. */
+/**
+ * Spec 5.7: notifications tab with unread badge; spec 3: search tab after the feed; spec 11.1: five destinations with the
+ * bookmarks in the middle, the badged tabs (notifications, messages) on the right. Spec 2026-11-10 (bar B after the
+ * owner's review, «so wie X»): line icons of the quill's family, no indicator; the active tab is filled and in the text
+ * colour, the others grey; 60 dp high. Material's NavigationBar always draws an indicator, hence a bar of our own.
+ */
 @Composable
 fun MonostrBottomBar(
     current: BottomTab,
@@ -425,53 +427,45 @@ fun MonostrBottomBar(
     onMessages: () -> Unit,
     onNotifications: () -> Unit,
     /** Inside [HideOnScrollFooter]: `WindowInsets(0)`, the footer pads the navigation bar itself. */
-    windowInsets: WindowInsets = NavigationBarDefaults.windowInsets,
+    windowInsets: WindowInsets = WindowInsets.navigationBars,
 ) {
     // Spec 2026-10-16 §2 (user ruling): a thin line like the one between notes sets the bar off from the content; it slides with the bar
-    Column {
+    Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
         HorizontalDivider(Modifier.testTag("bottom-bar-divider"))
-        NavigationBar(containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 0.dp, windowInsets = windowInsets) {
-            NavigationBarItem(
-                selected = current == BottomTab.FEED, onClick = onFeed,
-                icon = { Icon(if (current == BottomTab.FEED) Icons.Filled.Home else Icons.Outlined.Home, contentDescription = stringResource(R.string.tab_feed), modifier = Modifier.size(TAB_ICON)) }, modifier = Modifier.testTag("tab-feed"),
-                colors = NavigationBarItemDefaults.colors(indicatorColor = MaterialTheme.colorScheme.primaryContainer),
-            )
-            NavigationBarItem(
-                selected = current == BottomTab.SEARCH, onClick = onSearch,
-                icon = { Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.tab_search), modifier = Modifier.size(TAB_ICON)) }, modifier = Modifier.testTag("tab-search"),
-                colors = NavigationBarItemDefaults.colors(indicatorColor = MaterialTheme.colorScheme.primaryContainer),
-            )
-            NavigationBarItem(
-                selected = current == BottomTab.BOOKMARKS, onClick = onBookmarks,
-                icon = { Icon(if (current == BottomTab.BOOKMARKS) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder, contentDescription = stringResource(R.string.bookmarks_title), modifier = Modifier.size(TAB_ICON)) }, modifier = Modifier.testTag("tab-bookmarks"),
-                colors = NavigationBarItemDefaults.colors(indicatorColor = MaterialTheme.colorScheme.primaryContainer),
-            )
-            NavigationBarItem(
-                selected = current == BottomTab.NOTIFICATIONS, onClick = onNotifications,
-                icon = {
-                    BadgedBox(badge = { CountBadge(unread) }) {
-                        Icon(if (current == BottomTab.NOTIFICATIONS) Icons.Filled.Notifications else Icons.Outlined.Notifications, contentDescription = stringResource(R.string.tab_notifications), modifier = Modifier.size(TAB_ICON))
-                    }
-                },
-                modifier = Modifier.testTag("tab-notifications"),
-                colors = NavigationBarItemDefaults.colors(indicatorColor = MaterialTheme.colorScheme.primaryContainer),
-            )
-            NavigationBarItem(
-                selected = current == BottomTab.MESSAGES, onClick = onMessages,
-                icon = {
-                    BadgedBox(badge = { CountBadge(dmUnread) }) {
-                        Icon(if (current == BottomTab.MESSAGES) Icons.Filled.ChatBubble else Icons.Outlined.ChatBubbleOutline, contentDescription = stringResource(R.string.tab_messages), modifier = Modifier.size(TAB_ICON))
-                    }
-                },
-                modifier = Modifier.testTag("tab-messages"),
-                colors = NavigationBarItemDefaults.colors(indicatorColor = MaterialTheme.colorScheme.primaryContainer),
-            )
+        Row(
+            Modifier.fillMaxWidth().windowInsetsPadding(windowInsets).height(TAB_BAR_HEIGHT).selectableGroup(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            BarTab(current == BottomTab.FEED, onFeed, TabIcons.Home, TabIcons.HomeActive, stringResource(R.string.tab_feed), "tab-feed")
+            BarTab(current == BottomTab.SEARCH, onSearch, TabIcons.Search, TabIcons.SearchActive, stringResource(R.string.tab_search), "tab-search")
+            BarTab(current == BottomTab.BOOKMARKS, onBookmarks, TabIcons.Bookmark, TabIcons.BookmarkActive, stringResource(R.string.bookmarks_title), "tab-bookmarks")
+            BarTab(current == BottomTab.NOTIFICATIONS, onNotifications, TabIcons.Bell, TabIcons.BellActive, stringResource(R.string.tab_notifications), "tab-notifications", badge = unread)
+            BarTab(current == BottomTab.MESSAGES, onMessages, TabIcons.Message, TabIcons.MessageActive, stringResource(R.string.tab_messages), "tab-messages", badge = dmUnread)
         }
     }
 }
 
-/** Bottom-bar icons are larger than Material's 24 dp: the bar has no labels (user decision 2026-09-29). */
-private val TAB_ICON = 28.dp
+@Composable
+private fun RowScope.BarTab(selected: Boolean, onClick: () -> Unit, icon: ImageVector, activeIcon: ImageVector, label: String, tag: String, badge: Int = 0) {
+    val colors = MaterialTheme.colorScheme
+    Box(
+        Modifier
+            .weight(1f)
+            .fillMaxHeight()
+            .selectable(selected = selected, onClick = onClick, role = Role.Tab, interactionSource = null, indication = ripple(bounded = false, radius = TAB_RIPPLE))
+            .testTag(tag),
+        contentAlignment = Alignment.Center,
+    ) {
+        BadgedBox(badge = { CountBadge(badge) }) {
+            Icon(if (selected) activeIcon else icon, contentDescription = label, tint = if (selected) colors.onSurface else colors.onSurfaceVariant, modifier = Modifier.size(TAB_ICON))
+        }
+    }
+}
+
+/** Bottom-bar icons are larger than Material's 24 dp: the bar has no labels (user decision 2026-09-29); 26 dp for the finer line icons (2026-11-10). */
+private val TAB_ICON = 26.dp
+private val TAB_BAR_HEIGHT = 60.dp
+private val TAB_RIPPLE = 26.dp
 
 /** The unread count of a tab or a list row; nothing at 0. */
 @Composable

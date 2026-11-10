@@ -422,7 +422,6 @@
     <string name="settings_accent">Акцентный цвет</string>
     <string name="settings_accent_mono">Моно</string>
     <string name="settings_accent_orange">Оранжевый</string>
-    <string name="settings_accent_blue">Синий</string>
     <string name="settings_accent_champagne">Шампань</string>
     <string name="settings_accent_custom">Своя</string>
     <string name="settings_accent_hue">Оттенок</string>

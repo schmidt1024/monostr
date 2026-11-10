@@ -460,7 +460,7 @@ fun SettingsScreen(section: String? = null, onBack: () -> Unit, onMoneroSetup: (
             Text(Profile.shortPubkey(vm.pubkey), style = MaterialTheme.typography.bodyMedium)
             if (vm.isAmber) {
                 val renewBusy by vm.renewBusy.collectAsStateWithLifecycle()
-                OutlinedButton(onClick = vm::renewAmber, enabled = !renewBusy, modifier = Modifier.fillMaxWidth().testTag("settings-amber-renew")) { Text(stringResource(R.string.settings_amber_renew)) }
+                OutlinedButton(onClick = vm::renewAmber, enabled = !renewBusy, modifier = Modifier.fillMaxWidth().testTag("settings-amber-renew"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.settings_amber_renew)) }
             }
             if (!vm.isAmber) ShowKeyButton(onShowKey)
             Spacer(Modifier.height(Spacing.l))
@@ -485,7 +485,7 @@ fun SettingsScreen(section: String? = null, onBack: () -> Unit, onMoneroSetup: (
                 GifMode.entries.forEachIndexed { i, mode ->
                     SegmentedButton(
                         selected = gifMode == mode, onClick = { vm.setGifMode(mode) },
-                        shape = SegmentedButtonDefaults.itemShape(i, GifMode.entries.size), modifier = Modifier.testTag("settings-gif-$mode"),
+                        shape = SegmentedButtonDefaults.itemShape(i, GifMode.entries.size, baseShape = MaterialTheme.shapes.medium), modifier = Modifier.testTag("settings-gif-$mode"),
                     ) {
                         Text(stringResource(when (mode) { GifMode.AUTO -> R.string.settings_gif_auto; GifMode.ON_TAP -> R.string.settings_gif_tap; GifMode.OFF -> R.string.settings_gif_off }))
                     }
@@ -541,7 +541,7 @@ fun SettingsScreen(section: String? = null, onBack: () -> Unit, onMoneroSetup: (
                 POW_CHOICES.forEachIndexed { i, bits ->
                     SegmentedButton(
                         selected = pow == bits, onClick = { vm.setPowBits(bits) },
-                        shape = SegmentedButtonDefaults.itemShape(i, POW_CHOICES.size), modifier = Modifier.testTag("settings-pow-$bits"),
+                        shape = SegmentedButtonDefaults.itemShape(i, POW_CHOICES.size, baseShape = MaterialTheme.shapes.medium), modifier = Modifier.testTag("settings-pow-$bits"),
                     ) { Text(if (bits == 0) stringResource(R.string.settings_pow_off) else stringResource(R.string.settings_pow_bits, bits)) }
                 }
             }
@@ -553,7 +553,7 @@ fun SettingsScreen(section: String? = null, onBack: () -> Unit, onMoneroSetup: (
                 POW_CHOICES.forEachIndexed { i, bits ->
                     SegmentedButton(
                         selected = powFilter == bits, onClick = { vm.setPowFilterBits(bits) },
-                        shape = SegmentedButtonDefaults.itemShape(i, POW_CHOICES.size), modifier = Modifier.testTag("settings-pow-filter-$bits"),
+                        shape = SegmentedButtonDefaults.itemShape(i, POW_CHOICES.size, baseShape = MaterialTheme.shapes.medium), modifier = Modifier.testTag("settings-pow-filter-$bits"),
                     ) { Text(if (bits == 0) stringResource(R.string.settings_pow_off) else stringResource(R.string.settings_pow_bits, bits)) }
                 }
             }
@@ -591,21 +591,21 @@ fun SettingsScreen(section: String? = null, onBack: () -> Unit, onMoneroSetup: (
                     TextButton(onClick = { copyToClipboard(context, payto, copied) }, modifier = Modifier.testTag("settings-monero-copy-payto")) { Text(stringResource(R.string.action_copy_address)) }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(Spacing.s)) {
-                    OutlinedButton(onClick = onMoneroSetup, modifier = Modifier.testTag("settings-monero-payto-change")) { Text(stringResource(R.string.settings_monero_payto_change)) }
-                    OutlinedButton(onClick = vm.monero::removePayto, enabled = !monero.busy, modifier = Modifier.testTag("settings-monero-payto-remove")) { Text(stringResource(R.string.settings_monero_payto_remove)) }
+                    OutlinedButton(onClick = onMoneroSetup, modifier = Modifier.testTag("settings-monero-payto-change"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.settings_monero_payto_change)) }
+                    OutlinedButton(onClick = vm.monero::removePayto, enabled = !monero.busy, modifier = Modifier.testTag("settings-monero-payto-remove"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.settings_monero_payto_remove)) }
                 }
-                Card(Modifier.fillMaxWidth().testTag("settings-monero-upgrade")) {
+                Card(Modifier.fillMaxWidth().testTag("settings-monero-upgrade"), shape = MaterialTheme.shapes.large) {
                     Column(Modifier.padding(Spacing.m), verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
                         Text(stringResource(R.string.setup_upgrade_title), style = MaterialTheme.typography.titleSmall)
                         Text(stringResource(R.string.setup_upgrade_text), style = MaterialTheme.typography.bodySmall)
-                        OutlinedButton(onClick = onMoneroUpgrade, modifier = Modifier.fillMaxWidth().testTag("settings-monero-upgrade-action")) { Text(stringResource(R.string.setup_upgrade_action)) }
+                        OutlinedButton(onClick = onMoneroUpgrade, modifier = Modifier.fillMaxWidth().testTag("settings-monero-upgrade-action"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.setup_upgrade_action)) }
                     }
                 }
             } else if (setup == null) {
                 val announced = monero.announced
                 if (announced != null) Text(stringResource(R.string.settings_monero_announced, announced.take(8), announced.takeLast(6)), style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("settings-monero-announced"))
                 else Text(stringResource(R.string.settings_monero_not_set_up), style = MaterialTheme.typography.bodySmall)
-                Button(onClick = onMoneroSetup, modifier = Modifier.fillMaxWidth().testTag("settings-monero-setup")) { Text(stringResource(R.string.settings_monero_set_up)) }
+                Button(onClick = onMoneroSetup, modifier = Modifier.fillMaxWidth().testTag("settings-monero-setup"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.settings_monero_set_up)) }
             } else {
                 // launch feedback: people expected tips at a Monero address in their bio; say plainly where they go
                 val copied = stringResource(R.string.note_copied)
@@ -627,8 +627,8 @@ fun SettingsScreen(section: String? = null, onBack: () -> Unit, onMoneroSetup: (
                     Text(line, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("settings-monero-watcher"))
                 } else Text(stringResource(R.string.settings_monero_watcher, setup.watcherUrl), style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("settings-monero-watcher"))
                 Row(horizontalArrangement = Arrangement.spacedBy(Spacing.s)) {
-                    OutlinedButton(onClick = onMoneroSetup, modifier = Modifier.testTag("settings-monero-setup")) { Text(stringResource(R.string.settings_monero_switch_watcher)) }
-                    OutlinedButton(onClick = vm.monero::disable, enabled = !monero.busy, modifier = Modifier.testTag("settings-monero-disable")) { Text(stringResource(R.string.settings_monero_disable)) }
+                    OutlinedButton(onClick = onMoneroSetup, modifier = Modifier.testTag("settings-monero-setup"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.settings_monero_switch_watcher)) }
+                    OutlinedButton(onClick = vm.monero::disable, enabled = !monero.busy, modifier = Modifier.testTag("settings-monero-disable"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.settings_monero_disable)) }
                 }
             }
             if (setup != null) {
@@ -654,7 +654,7 @@ fun SettingsScreen(section: String? = null, onBack: () -> Unit, onMoneroSetup: (
                 AmountUnit.entries.forEachIndexed { i, u ->
                     SegmentedButton(
                         selected = monero.unit == u, onClick = { vm.monero.setUnit(u) },
-                        shape = SegmentedButtonDefaults.itemShape(i, AmountUnit.entries.size), modifier = Modifier.testTag("settings-amount-unit-${u.name.lowercase()}"),
+                        shape = SegmentedButtonDefaults.itemShape(i, AmountUnit.entries.size, baseShape = MaterialTheme.shapes.medium), modifier = Modifier.testTag("settings-amount-unit-${u.name.lowercase()}"),
                     ) { Text(u.label) }
                 }
             }
@@ -666,6 +666,7 @@ fun SettingsScreen(section: String? = null, onBack: () -> Unit, onMoneroSetup: (
                     OutlinedTextField(
                         value = v, onValueChange = { nv -> vm.monero.editPreset(i, nv) }, singleLine = true,
                         label = { Text(stringResource(R.string.settings_preset_n, i + 1)) }, isError = monero.error != null, modifier = Modifier.weight(1f).testTag("settings-preset-$i"),
+                        shape = MaterialTheme.shapes.medium,
                     )
                     IconButton(onClick = { vm.monero.removePreset(i) }, enabled = monero.presets.size > 1, modifier = Modifier.testTag("settings-preset-remove-$i")) {
                         Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.settings_preset_remove))
@@ -674,16 +675,16 @@ fun SettingsScreen(section: String? = null, onBack: () -> Unit, onMoneroSetup: (
             }
             TextButton(onClick = vm.monero::addPreset, enabled = monero.canAddPreset, modifier = Modifier.testTag("settings-preset-add")) { Text(stringResource(R.string.settings_preset_add)) }
             monero.error?.let { Text(it.asString(), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
-            OutlinedButton(onClick = { vm.monero.savePresets() }, modifier = Modifier.fillMaxWidth().testTag("settings-presets-save")) { Text(stringResource(R.string.settings_presets_save)) }
+            OutlinedButton(onClick = { vm.monero.savePresets() }, modifier = Modifier.fillMaxWidth().testTag("settings-presets-save"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.settings_presets_save)) }
             Spacer(Modifier.height(Spacing.xl))
-            OutlinedButton(onClick = onMuted, modifier = Modifier.fillMaxWidth().testTag("settings-muted")) { Text(stringResource(R.string.mute_settings_title)) }
+            OutlinedButton(onClick = onMuted, modifier = Modifier.fillMaxWidth().testTag("settings-muted"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.mute_settings_title)) }
             Spacer(Modifier.height(Spacing.s))
-            OutlinedButton(onClick = onSupport, modifier = Modifier.fillMaxWidth().testTag("settings-support")) { Text(stringResource(R.string.support_title)) }
+            OutlinedButton(onClick = onSupport, modifier = Modifier.fillMaxWidth().testTag("settings-support"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.support_title)) }
             Spacer(Modifier.height(Spacing.s))
-            OutlinedButton(onClick = onAbout, modifier = Modifier.fillMaxWidth().testTag("settings-about")) { Text(stringResource(R.string.about_title)) }
+            OutlinedButton(onClick = onAbout, modifier = Modifier.fillMaxWidth().testTag("settings-about"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.about_title)) }
             Spacer(Modifier.height(Spacing.xl))
             val logoutBusy by vm.logoutBusy.collectAsStateWithLifecycle()
-            OutlinedButton(onClick = { vm.logout(onBack) }, enabled = !logoutBusy, modifier = Modifier.fillMaxWidth().testTag("settings-logout")) {
+            OutlinedButton(onClick = { vm.logout(onBack) }, enabled = !logoutBusy, modifier = Modifier.fillMaxWidth().testTag("settings-logout"), shape = MaterialTheme.shapes.medium) {
                 if (logoutBusy) {
                     CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                     Spacer(Modifier.width(Spacing.s))
@@ -810,9 +811,10 @@ private fun RelayListEditor(
         OutlinedTextField(
             value = newRelay, onValueChange = { newRelay = it }, modifier = Modifier.weight(1f).testTag("$tagPrefix-input"), singleLine = true,
             label = { Text(stringResource(R.string.settings_relay_placeholder)) }, isError = error != null, supportingText = { error?.let { Text(it.asString()) } },
+            shape = MaterialTheme.shapes.medium,
         )
         Spacer(Modifier.width(Spacing.s))
-        OutlinedButton(onClick = { if (onAdd(newRelay)) newRelay = "" }, enabled = newRelay.isNotBlank(), modifier = Modifier.testTag("$tagPrefix-add")) { Text(stringResource(R.string.action_add)) }
+        OutlinedButton(onClick = { if (onAdd(newRelay)) newRelay = "" }, enabled = newRelay.isNotBlank(), modifier = Modifier.testTag("$tagPrefix-add"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.action_add)) }
     }
     footer()
 }
@@ -926,7 +928,7 @@ private fun SuggestedRelays(suggestions: List<RelaySuggestion>, onAdd: (String) 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun InboxHintCard(text: String, tag: String, onDismiss: () -> Unit, dismissTag: String, actions: @Composable () -> Unit) {
-    Card(Modifier.fillMaxWidth().padding(vertical = Spacing.s).testTag(tag)) {
+    Card(Modifier.fillMaxWidth().padding(vertical = Spacing.s).testTag(tag), shape = MaterialTheme.shapes.large) {
         Column(Modifier.padding(Spacing.m)) {
             Text(text, style = MaterialTheme.typography.bodyMedium)
             FlowRow(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
@@ -945,7 +947,7 @@ private fun InboxHintCard(text: String, tag: String, onDismiss: () -> Unit, dism
 @Composable
 private fun ShowKeyButton(onShowKey: () -> Unit) {
     var warn by rememberSaveable { mutableStateOf(false) }
-    OutlinedButton(onClick = { warn = true }, modifier = Modifier.fillMaxWidth().testTag("settings-show-key")) { Text(stringResource(R.string.settings_show_key)) }
+    OutlinedButton(onClick = { warn = true }, modifier = Modifier.fillMaxWidth().testTag("settings-show-key"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.settings_show_key)) }
     if (warn) {
         GuardedAlertDialog(
             onDismissRequest = { warn = false },

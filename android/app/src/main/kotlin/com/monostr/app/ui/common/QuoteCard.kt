@@ -47,6 +47,7 @@ import com.monostr.app.ui.media.rememberBlurhash
 import com.monostr.app.ui.media.MediaCoverBadge
 import com.monostr.app.ui.media.rememberMediaCover
 import com.monostr.app.ui.media.MediaReveals
+import com.monostr.app.ui.theme.PlainShapes
 import com.monostr.app.ui.theme.Spacing
 import com.monostr.nostr.model.Note
 import com.monostr.nostr.model.NoteMedia
@@ -162,11 +163,11 @@ fun QuoteCard(
     LaunchedEffect(quotedId, loader) {
         if (loader != null && ui == QuoteUi.Loading) ui = loader.load(quotedId, hints, author)
     }
-    val shape = MaterialTheme.shapes.medium
+    val shape = MaterialTheme.shapes.large
     Column(
         modifier
             .fillMaxWidth()
-            .clip(shape)
+            .clip(PlainShapes.large) // the content clip stays a fast rounded rect; the squircle border covers the sub-pixel difference
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
             .clickable { onOpenNote(quotedId) }
             .testTag("quote-${quotedId.take(8)}")
@@ -225,7 +226,7 @@ private fun QuoteImage(note: Note, media: NoteMedia, onOpen: () -> Unit) {
             Modifier
                 .fillMaxWidth()
                 .aspectRatio(box.ratio)
-                .clip(MaterialTheme.shapes.small)
+                .clip(PlainShapes.small)
                 .background(MaterialTheme.colorScheme.surfaceVariant)
                 .clickable { if (covered || waiting) MediaReveals.reveal(note.id) else onOpen() }
                 .testTag("quote-media-${note.id.take(8)}"),

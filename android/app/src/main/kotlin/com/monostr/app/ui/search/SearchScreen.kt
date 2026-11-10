@@ -166,6 +166,7 @@ fun SearchScreen(
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     keyboardActions = KeyboardActions(onSearch = { vm.controller.submit() }),
                     modifier = Modifier.fillMaxWidth().focusRequester(focus).testTag("search-field"),
+                    shape = MaterialTheme.shapes.medium,
                 )
             }
             TorBannerSlot() }

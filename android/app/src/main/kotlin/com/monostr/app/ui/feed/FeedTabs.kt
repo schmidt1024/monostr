@@ -127,7 +127,7 @@ internal fun UnavailableTab(onUnpin: () -> Unit) {
     ) {
         Text(stringResource(R.string.list_unavailable), textAlign = TextAlign.Center)
         Spacer(Modifier.height(Spacing.m))
-        OutlinedButton(onClick = onUnpin, modifier = Modifier.testTag("feed-tab-unpin")) { Text(stringResource(R.string.list_unpin)) }
+        OutlinedButton(onClick = onUnpin, modifier = Modifier.testTag("feed-tab-unpin"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.list_unpin)) }
     }
 }
 

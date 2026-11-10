@@ -761,6 +761,7 @@ fun ComposeScreen(onDone: () -> Unit, vm: ComposeViewModel = hiltViewModel()) {
                         enabled = canSend,
                         contentPadding = PaddingValues(horizontal = Spacing.l),
                         modifier = Modifier.padding(end = Spacing.m).height(36.dp).testTag("compose-send"),
+                        shape = MaterialTheme.shapes.medium,
                     ) {
                         Text(stringResource(when {
                             state.sending -> R.string.state_sending

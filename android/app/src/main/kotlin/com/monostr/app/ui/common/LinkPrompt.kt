@@ -117,15 +117,15 @@ fun LinkPromptHost(alwaysOpen: Boolean, onAlwaysOpen: () -> Unit, torOn: () -> B
                 if (web && viaTor) Text(stringResource(R.string.link_prompt_tor), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("link-tor-note"))
             }
             FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.s)) {
-                OutlinedButton({ answer(false) }, Modifier.testTag("link-cancel")) { Text(stringResource(R.string.link_prompt_cancel)) }
-                if (torChoices) OutlinedButton({ copyLink() }, Modifier.testTag("link-copy")) { Text(stringResource(R.string.link_prompt_copy)) }
+                OutlinedButton({ answer(false) }, Modifier.testTag("link-cancel"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.link_prompt_cancel)) }
+                if (torChoices) OutlinedButton({ copyLink() }, Modifier.testTag("link-copy"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.link_prompt_copy)) }
                 val pkg = torBrowserPkg.takeIf { torChoices }
                 if (pkg != null) {
-                    Button({ openInTorBrowser(pkg) }, Modifier.testTag("link-torbrowser")) { Text(stringResource(R.string.link_prompt_torbrowser)) }
+                    Button({ openInTorBrowser(pkg) }, Modifier.testTag("link-torbrowser"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.link_prompt_torbrowser)) }
                     // beside Tor Browser the default browser is the less private choice, so it steps back
-                    OutlinedButton({ answer(true) }, Modifier.testTag("link-open")) { Text(stringResource(R.string.link_prompt_open)) }
+                    OutlinedButton({ answer(true) }, Modifier.testTag("link-open"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.link_prompt_open)) }
                 } else {
-                    Button({ answer(true) }, Modifier.testTag("link-open")) { Text(stringResource(R.string.link_prompt_open)) }
+                    Button({ answer(true) }, Modifier.testTag("link-open"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.link_prompt_open)) }
                 }
                 // under Tor it asks every time whatever is stored (spec 6), so the offer would promise what it cannot keep
                 if (web && !viaTor) TextButton({ answer(true, always = true) }, Modifier.testTag("link-always")) { Text(stringResource(R.string.link_prompt_always)) }

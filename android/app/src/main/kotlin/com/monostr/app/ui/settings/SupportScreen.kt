@@ -109,7 +109,7 @@ fun SupportContent(address: String, repoUrl: String, contributors: List<String>,
         Text(stringResource(R.string.support_text), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("support-text"))
         if (address.isNotBlank()) {
             Spacer(Modifier.height(Spacing.l))
-            Button(onClick = onDonate, modifier = Modifier.fillMaxWidth().testTag("support-donate")) { Text(stringResource(R.string.support_button)) }
+            Button(onClick = onDonate, modifier = Modifier.fillMaxWidth().testTag("support-donate"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.support_button)) }
         }
         if (contributors.isNotEmpty()) {
             Spacer(Modifier.height(Spacing.xl))

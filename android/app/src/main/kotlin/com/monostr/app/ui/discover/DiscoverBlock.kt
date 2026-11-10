@@ -113,9 +113,9 @@ fun LazyListScope.discoverItems(
 @Composable
 fun FollowPill(following: Boolean, onClick: () -> Unit, tag: String) {
     if (following) {
-        OutlinedButton(onClick = {}, enabled = false, modifier = Modifier.testTag(tag)) { Text(stringResource(R.string.discover_following)) }
+        OutlinedButton(onClick = {}, enabled = false, modifier = Modifier.testTag(tag), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.discover_following)) }
     } else {
-        Button(onClick = onClick, enabled = LocalCanSend.current, modifier = Modifier.testTag(tag)) { Text(stringResource(R.string.discover_follow)) }
+        Button(onClick = onClick, enabled = LocalCanSend.current, modifier = Modifier.testTag(tag), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.discover_follow)) }
     }
 }
 

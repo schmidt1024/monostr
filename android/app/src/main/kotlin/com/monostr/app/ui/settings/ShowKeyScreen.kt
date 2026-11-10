@@ -117,6 +117,7 @@ fun ShowKeyScreen(onBack: () -> Unit, vm: ShowKeyViewModel = hiltViewModel()) {
                     copiedAt = System.currentTimeMillis()
                 },
                 modifier = Modifier.fillMaxWidth().testTag("show-key-copy"),
+                shape = MaterialTheme.shapes.medium,
             ) { Text(stringResource(R.string.create_copy)) }
             copiedAt?.let { at ->
                 Text(stringResource(R.string.create_copied), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

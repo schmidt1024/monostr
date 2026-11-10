@@ -21,6 +21,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.monostr.app.ui.theme.PlainShapes
 import com.monostr.nostr.model.Note
 import com.monostr.nostr.model.NoteMedia
 
@@ -43,7 +44,7 @@ object Thumbnails {
 fun NoteThumbnail(note: Note, size: Dp = 48.dp) {
     val source = Thumbnails.source(note) ?: return
     val (covered, waiting) = rememberMediaCover(note, hasImages = true)
-    val shape = MaterialTheme.shapes.small
+    val shape = PlainShapes.small
     val placeholder = rememberBlurhash(source.blurhash)
     Box(
         Modifier.size(size).clip(shape).background(MaterialTheme.colorScheme.surfaceVariant).testTag("note-thumbnail-${note.id.take(8)}"),

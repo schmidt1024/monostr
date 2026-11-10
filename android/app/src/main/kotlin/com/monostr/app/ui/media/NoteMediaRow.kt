@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.monostr.app.R
+import com.monostr.app.ui.theme.PlainShapes
 import com.monostr.app.ui.theme.Spacing
 import com.monostr.nostr.model.Note
 import com.monostr.nostr.model.NoteMedia
@@ -111,7 +112,7 @@ fun NoteMediaRow(
 @Composable
 private fun BoxScope.Cover(tag: String, icon: ImageVector, title: String, subtitle: String?, onTap: () -> Unit) {
     Box(
-        Modifier.matchParentSize().clip(MaterialTheme.shapes.medium).background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.35f)).clickable(onClick = onTap, onClickLabel = title).testTag(tag),
+        Modifier.matchParentSize().clip(PlainShapes.medium).background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.35f)).clickable(onClick = onTap, onClickLabel = title).testTag(tag),
         contentAlignment = Alignment.Center,
     ) {
         MediaCoverBadge(icon, title, subtitle, Modifier.testTag("media-cover-badge-${tag.substringAfterLast('-')}"))
@@ -136,7 +137,7 @@ fun MediaCoverBadge(icon: ImageVector, title: String?, subtitle: String? = null,
 
 @Composable
 private fun MediaGrid(media: List<NoteMedia>, tag: String, blurred: Boolean, placeholderOnly: Boolean, enabled: Boolean, onOpenMedia: (Int) -> Unit, onOpenVideo: (String) -> Unit, maxHeightDp: Float = MediaBoxes.MAX_HEIGHT_DP) {
-    val shape = MaterialTheme.shapes.medium
+    val shape = PlainShapes.medium
     if (media.size == 1) {
         val m = media[0]
         val video = m.kind == NoteMedia.Kind.VIDEO

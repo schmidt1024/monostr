@@ -8,7 +8,8 @@ import kotlin.math.abs
  * fixed accents (5.5:1 in the light, 7:1 in the dark), so any hue reads in both modes.
  */
 object AccentSeed {
-    const val DEFAULT_HUE = 200f
+    /** 2026-11-10: blue, the hue of the retired BLUE accent (#2F6FED), so a fresh custom pick starts where blue was. */
+    const val DEFAULT_HUE = 220f
     private const val S = 0.85f
     private const val V = 0.90f
 

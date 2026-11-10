@@ -1,0 +1,5 @@
+- Coins plus doux : champs, boutons, cartes et dialogues en forme de squircle
+- Nouvelle barre du bas avec des icônes au trait fin ; l'onglet actif est plein
+- Couleurs d'accent : Orange, Champagne, Mono et Personnalisé (commence au bleu) ; si vous utilisiez Bleu, il reste sous Personnalisé
+- Le défilement reste aussi rapide qu'avant
+- Corrections

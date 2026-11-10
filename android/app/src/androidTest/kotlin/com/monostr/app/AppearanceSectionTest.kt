@@ -43,7 +43,7 @@ class AppearanceSectionTest {
     @Test
     fun fiveChoicesWithNamesAndTheSliderOnlyForCustom() {
         var accent by mutableStateOf(Accent.MONO)
-        var hue by mutableStateOf(200f)
+        var hue by mutableStateOf(220f)
         rule.setContent {
             MonostrTheme(ThemeMode.LIGHT, accent, hue) {
                 Box(Modifier.background(MaterialTheme.colorScheme.surface).padding(16.dp).fillMaxWidth().testTag("appearance-root")) {
@@ -51,10 +51,10 @@ class AppearanceSectionTest {
                 }
             }
         }
-        assertEquals(listOf("mono", "orange", "champagne", "blue", "custom"), Accent.entries.map { it.name.lowercase() })
+        assertEquals(listOf("mono", "orange", "champagne", "custom"), Accent.entries.map { it.name.lowercase() })
         for (a in Accent.entries) rule.onNodeWithTag("appearance-accent-${a.name.lowercase()}").assertIsDisplayed()
-        // 2026-10-30: one row per accent, top to bottom orange, champagne, blue, mono, custom
-        val tops = listOf("orange", "champagne", "blue", "mono", "custom").map { rule.onNodeWithTag("appearance-accent-$it").fetchSemanticsNode().boundsInRoot.top }
+        // 2026-10-30: one row per accent, top to bottom orange, champagne, mono, custom (blue folded into custom 2026-11-10)
+        val tops = listOf("orange", "champagne", "mono", "custom").map { rule.onNodeWithTag("appearance-accent-$it").fetchSemanticsNode().boundsInRoot.top }
         assertEquals(tops.sorted(), tops)
         rule.onNodeWithText(ctx.getString(R.string.settings_accent_orange), useUnmergedTree = true).assertIsDisplayed()
         rule.onNodeWithTag("appearance-accent-mono").assertIsSelected()

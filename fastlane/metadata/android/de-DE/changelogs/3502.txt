@@ -1,0 +1,5 @@
+- Weichere Ecken: Felder, Buttons, Karten und Dialoge in Squircle-Form
+- Neue Leiste unten mit feinen Strich-Icons; der aktive Tab ist gefüllt
+- Akzentfarben: Orange, Champagner, Mono und Eigene (startet bei Blau); wer Blau hatte, behält es unter Eigene
+- Scrollen bleibt so schnell wie bisher
+- Korrekturen

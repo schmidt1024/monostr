@@ -1,6 +1,5 @@
 package com.monostr.app.ui.theme
 
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 import com.monostr.app.data.Accent
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -73,11 +72,10 @@ class ThemeTest {
         // the measured values the acceptance on the phone refers to (spec 11.1 §2); light, dark (brand grey), black
         val expected = mapOf(
             "ORANGE light" to "FFB34700", "ORANGE dark" to "FFFF6600", "ORANGE black" to "FFFF6600",
-            "BLUE light" to "FF285EC9", "BLUE dark" to "FF6393F2", "BLUE black" to "FF6D9AF2",
             "CHAMPAGNE light" to "FF865F20", "CHAMPAGNE dark" to "FFD5B07A", "CHAMPAGNE black" to "FFD5B07A",
         )
         val actual = LinkedHashMap<String, String>()
-        for (accent in listOf(Accent.ORANGE, Accent.BLUE, Accent.CHAMPAGNE)) {
+        for (accent in listOf(Accent.ORANGE, Accent.CHAMPAGNE)) {
             for ((name, mode) in listOf("light" to (false to false), "dark" to (true to false), "black" to (true to true))) {
                 actual["$accent $name"] = "%08X".format(AccentPalette.tokens(accent, mode.first, black = mode.second).primary)
             }
@@ -94,11 +92,12 @@ class ThemeTest {
 
     @Test
     fun `shapes follow the spec radii`() {
-        assertEquals(RoundedCornerShape(4.dp), MonostrShapes.extraSmall)
-        assertEquals(RoundedCornerShape(8.dp), MonostrShapes.small)
-        assertEquals(RoundedCornerShape(12.dp), MonostrShapes.medium)
-        assertEquals(RoundedCornerShape(16.dp), MonostrShapes.large)
-        assertEquals(RoundedCornerShape(24.dp), MonostrShapes.extraLarge)
+        assertEquals(SquircleShape(4.dp), MonostrShapes.extraSmall)
+        assertEquals(SquircleShape(8.dp), MonostrShapes.small)
+        assertEquals(SquircleShape(12.dp), MonostrShapes.medium)
+        assertEquals(SquircleShape(16.dp), MonostrShapes.large)
+        assertEquals(SquircleShape(24.dp), MonostrShapes.extraLarge)
+        assertEquals(0.6f, (MonostrShapes.medium as SquircleShape).smoothing)
     }
 
     @Test

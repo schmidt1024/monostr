@@ -68,7 +68,7 @@ fun AppearanceSection(mode: ThemeMode, accent: Accent, customHue: Float, onMode:
             modes.forEachIndexed { i, (m, label) ->
                 SegmentedButton(
                     selected = mode == m, onClick = { onMode(m) },
-                    shape = SegmentedButtonDefaults.itemShape(index = i, count = modes.size),
+                    shape = SegmentedButtonDefaults.itemShape(index = i, count = modes.size, baseShape = MaterialTheme.shapes.medium),
                     modifier = Modifier.testTag("appearance-mode-${m.name.lowercase()}"),
                 ) { Text(stringResource(label)) }
             }
@@ -79,7 +79,7 @@ fun AppearanceSection(mode: ThemeMode, accent: Accent, customHue: Float, onMode:
         // the swatches show the accent as the active mode really paints it, not the raw seed (2026-10-08)
         val dark = isDark(mode)
         val customSeed = AccentSeed.fromHue(customHue)
-        // five choices as a list, one row each (2026-10-30, was a row of swatches): Monero orange first as the default
+        // four choices as a list, one row each (2026-10-30, was a row of swatches; blue folded into custom 2026-11-10): Monero orange first as the default
         Column(Modifier.fillMaxWidth()) {
             PICKER_ORDER.forEach { a ->
                 val tokens = AccentPalette.tokens(a, dark, customSeed, black = mode == ThemeMode.BLACK)
@@ -135,17 +135,17 @@ fun AppearanceSection(mode: ThemeMode, accent: Accent, customHue: Float, onMode:
                     }
                 },
                 modifier = Modifier.testTag("appearance-language"),
+                shape = MaterialTheme.shapes.medium,
             ) { Text(stringResource(R.string.settings_language_button)) }
         }
     }
 }
 
-private val PICKER_ORDER = listOf(Accent.ORANGE, Accent.CHAMPAGNE, Accent.BLUE, Accent.MONO, Accent.CUSTOM)
+private val PICKER_ORDER = listOf(Accent.ORANGE, Accent.CHAMPAGNE, Accent.MONO, Accent.CUSTOM)
 
 private fun accentName(a: Accent): Int = when (a) {
     Accent.MONO -> R.string.settings_accent_mono
     Accent.ORANGE -> R.string.settings_accent_orange
     Accent.CHAMPAGNE -> R.string.settings_accent_champagne
-    Accent.BLUE -> R.string.settings_accent_blue
     Accent.CUSTOM -> R.string.settings_accent_custom
 }

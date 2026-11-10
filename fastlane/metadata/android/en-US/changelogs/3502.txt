@@ -1,0 +1,5 @@
+- Softer corners: fields, buttons, cards and dialogs in a squircle shape
+- New bottom bar with fine line icons; the active tab is filled
+- Accent colours: Orange, Champagne, Mono and Custom (starts at blue); if you used Blue, it lives on under Custom
+- Scrolling stays as fast as before
+- Fixes

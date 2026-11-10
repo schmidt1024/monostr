@@ -205,8 +205,8 @@ fun TranslateConsentSheet(host: String, onTranslate: () -> Unit, onSettings: () 
             Text(stringResource(if (article) R.string.translate_consent_body_article else R.string.translate_consent_body, host), style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(Spacing.xl))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.m, Alignment.End)) {
-                OutlinedButton(onClick = onSettings, modifier = Modifier.testTag("translate-consent-settings")) { Text(stringResource(R.string.translate_consent_settings)) }
-                Button(onClick = onTranslate, modifier = Modifier.testTag("translate-consent-translate")) { Text(stringResource(R.string.translate_consent_translate)) }
+                OutlinedButton(onClick = onSettings, modifier = Modifier.testTag("translate-consent-settings"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.translate_consent_settings)) }
+                Button(onClick = onTranslate, modifier = Modifier.testTag("translate-consent-translate"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.translate_consent_translate)) }
             }
             Spacer(Modifier.height(Spacing.xl))
         }

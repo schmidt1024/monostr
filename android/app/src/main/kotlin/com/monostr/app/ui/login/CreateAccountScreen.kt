@@ -128,6 +128,7 @@ fun CreateAccountScreen(onLeave: () -> Unit, vm: CreateAccountViewModel = hiltVi
                         Text(stringResource(if (tooLong) R.string.create_name_too_long else R.string.create_name_hint))
                     },
                     modifier = Modifier.fillMaxWidth().testTag("create-name"),
+                    shape = MaterialTheme.shapes.medium,
                 )
             }
             CreateStep.Follow -> Follow(state, controller)
@@ -139,7 +140,7 @@ fun CreateAccountScreen(onLeave: () -> Unit, vm: CreateAccountViewModel = hiltVi
                 Text(it.asString(), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
                 Spacer(Modifier.height(Spacing.s))
             }
-            Button(onClick = { vm.finish() }, enabled = !state.busy, modifier = Modifier.fillMaxWidth().testTag("create-finish")) {
+            Button(onClick = { vm.finish() }, enabled = !state.busy, modifier = Modifier.fillMaxWidth().testTag("create-finish"), shape = MaterialTheme.shapes.medium) {
                 if (state.busy) {
                     CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                     Spacer(Modifier.width(Spacing.s))
@@ -147,7 +148,7 @@ fun CreateAccountScreen(onLeave: () -> Unit, vm: CreateAccountViewModel = hiltVi
                 Text(stringResource(R.string.create_finish))
             }
         } else {
-            Button(onClick = controller::next, enabled = state.canNext, modifier = Modifier.fillMaxWidth().testTag("create-next")) {
+            Button(onClick = controller::next, enabled = state.canNext, modifier = Modifier.fillMaxWidth().testTag("create-next"), shape = MaterialTheme.shapes.medium) {
                 Text(stringResource(R.string.create_next))
             }
         }
@@ -184,6 +185,7 @@ private fun Backup(state: CreateAccountState, controller: CreateAccountControlle
             copiedAt = System.currentTimeMillis()
         },
         modifier = Modifier.fillMaxWidth().testTag("create-copy"),
+        shape = MaterialTheme.shapes.medium,
     ) { Text(stringResource(R.string.create_copy)) }
     copiedAt?.let { at ->
         Text(stringResource(R.string.create_copied), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

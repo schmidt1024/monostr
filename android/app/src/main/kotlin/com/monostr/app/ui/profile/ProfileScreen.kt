@@ -828,7 +828,7 @@ fun ProfileScreen(
                             horizontalArrangement = Arrangement.spacedBy(Spacing.s), verticalAlignment = Alignment.CenterVertically,
                         ) {
                             if (state.isSelf) {
-                                OutlinedButton(onClick = onEditProfile, modifier = Modifier.testTag("profile-edit")) { Text(stringResource(R.string.profile_edit)) }
+                                OutlinedButton(onClick = onEditProfile, modifier = Modifier.testTag("profile-edit"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.profile_edit)) }
                             } else {
                                 OutlinedIconButton(onClick = { onMessage(state.profile.pubkey) }, modifier = Modifier.testTag("profile-message")) {
                                     Icon(Icons.Outlined.ChatBubbleOutline, contentDescription = stringResource(R.string.profile_message), tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -972,7 +972,7 @@ fun ProfileScreen(
                 if (state.shown.size < SHORT_TAB) item(key = "profile-tab-room") { Spacer(Modifier.fillParentMaxHeight()) }
             } else {
                 if (vm.lists.isSelf) item(key = "list-create") {
-                    OutlinedButton(onClick = onCreateList, modifier = Modifier.padding(Spacing.l).testTag("list-create")) {
+                    OutlinedButton(onClick = onCreateList, modifier = Modifier.padding(Spacing.l).testTag("list-create"), shape = MaterialTheme.shapes.medium) {
                         Icon(Icons.Filled.Add, contentDescription = null)
                         Spacer(Modifier.width(Spacing.s))
                         Text(stringResource(R.string.list_create))
@@ -1059,9 +1059,9 @@ private fun FollowButton(follow: FollowState, busy: Boolean, onFollow: () -> Uni
     val tagged = Modifier.testTag("profile-follow")
     val canSend = LocalCanSend.current
     when (follow) {
-        FollowState.Following -> OutlinedButton(onClick = onUnfollow, enabled = !busy && canSend, modifier = tagged) { Text(stringResource(R.string.profile_following)) }
-        FollowState.NotFollowing -> Button(onClick = onFollow, enabled = !busy && canSend, modifier = tagged) { Text(stringResource(R.string.profile_follow)) }
-        FollowState.Unknown -> Button(onClick = {}, enabled = false, modifier = tagged) { Text(stringResource(R.string.profile_follow)) }
+        FollowState.Following -> OutlinedButton(onClick = onUnfollow, enabled = !busy && canSend, modifier = tagged, shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.profile_following)) }
+        FollowState.NotFollowing -> Button(onClick = onFollow, enabled = !busy && canSend, modifier = tagged, shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.profile_follow)) }
+        FollowState.Unknown -> Button(onClick = {}, enabled = false, modifier = tagged, shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.profile_follow)) }
     }
 }
 

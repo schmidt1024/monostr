@@ -51,6 +51,7 @@ import com.monostr.app.ui.media.LocalMediaSettings
 import com.monostr.app.ui.media.MediaCoverBadge
 import com.monostr.app.ui.media.MediaReveals
 import com.monostr.app.ui.theme.MonoColors
+import com.monostr.app.ui.theme.PlainShapes
 import com.monostr.app.ui.theme.Spacing
 import com.monostr.nostr.PerfTrace
 import com.monostr.nostr.model.AddressLinks
@@ -193,11 +194,11 @@ fun AddressCard(
     val uriHandler = LocalUriHandler.current
     val openArticle = LocalOpenArticle.current
     val openList = LocalOpenList.current
-    val shape = MaterialTheme.shapes.medium
+    val shape = MaterialTheme.shapes.large
     Column(
         modifier
             .fillMaxWidth()
-            .clip(shape)
+            .clip(PlainShapes.large) // the content clip stays a fast rounded rect; the squircle border covers the sub-pixel difference
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
             .clickable {
                 // an article opens in the reader, a list in the list screen; a card that did not resolve (or any other kind) goes to the web

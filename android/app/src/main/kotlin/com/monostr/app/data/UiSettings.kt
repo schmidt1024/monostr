@@ -25,15 +25,14 @@ enum class Accent(val seedArgb: Long, val lightSeedArgb: Long? = null) {
     // 2026-10-30: replaces purple. Darkened towards black the light-mode champagne turned a muddy grey-brown (#756143), so
     // the light mode starts from its own saturated bronze (5.7:1 on white, user: «das sattere Bronze»)
     CHAMPAGNE(0xFFD5B07A, lightSeedArgb = 0xFF865F20),
-    BLUE(0xFF2F6FED),
     /** Spec 11.4 §3: the seed is a placeholder; the real one comes from [UiSettingsStore.customHue]. */
     CUSTOM(0xFF2F6FED);
 
     companion object {
         /** v0.12.8: Monero orange out of the box — the default is the app for most people, and it says what Monostr is; Mono is one tap away. */
         val DEFAULT = ORANGE
-        /** Accents that left the picker (red, green in v0.12.7; purple 2026-10-30) and live on as [CUSTOM] with their hue. */
-        val LEGACY_HUES = mapOf("RED" to 0f, "GREEN" to 135f, "PURPLE" to 259f)
+        /** Accents that left the picker (red, green in v0.12.7; purple 2026-10-30; blue 2026-11-10, now the custom default) and live on as [CUSTOM] with their hue. */
+        val LEGACY_HUES = mapOf("RED" to 0f, "GREEN" to 135f, "PURPLE" to 259f, "BLUE" to 220f)
     }
 }
 
@@ -101,11 +100,18 @@ class PrefsUiSettingsStore(private val store: DataStore<Preferences>) : UiSettin
     override suspend fun setPowBits(bits: Int) { store.edit { it[POW_BITS] = powChoice(bits) } }
     override val powFilterBits: Flow<Int> = data.map { p -> powChoice(p[POW_FILTER_BITS] ?: 0) }
     override suspend fun setPowFilterBits(bits: Int) { store.edit { it[POW_FILTER_BITS] = powChoice(bits) } }
-    override val customHue: Flow<Float> = data.map { p -> p[CUSTOM_HUE]?.takeIf { h -> h >= 0f && h < 360f } ?: Accent.LEGACY_HUES[p[ACCENT]] ?: AccentSeed.DEFAULT_HUE }
+    // a retired accent still stored shows its own hue, even over a hue left from an earlier custom pick (2026-11-10: someone on
+    // blue who once tried the slider keeps blue); moving the slider stores CUSTOM, so from then on the stored hue counts
+    override val customHue: Flow<Float> = data.map { p -> Accent.LEGACY_HUES[p[ACCENT]] ?: p[CUSTOM_HUE]?.takeIf { h -> h >= 0f && h < 360f } ?: AccentSeed.DEFAULT_HUE }
 
     override suspend fun setThemeMode(mode: ThemeMode) { store.edit { it[THEME_MODE] = mode.name } }
     override suspend fun setAccent(accent: Accent) { store.edit { it[ACCENT] = accent.name } }
-    override suspend fun setCustomHue(hue: Float) { store.edit { it[CUSTOM_HUE] = if (hue >= 0f && hue < 360f) hue else AccentSeed.DEFAULT_HUE } }
+    override suspend fun setCustomHue(hue: Float) {
+        store.edit {
+            it[CUSTOM_HUE] = if (hue >= 0f && hue < 360f) hue else AccentSeed.DEFAULT_HUE
+            if (it[ACCENT] in Accent.LEGACY_HUES) it[ACCENT] = Accent.CUSTOM.name
+        }
+    }
     override suspend fun setBlurSensitive(on: Boolean) { store.edit { it[BLUR_SENSITIVE] = on } }
     override suspend fun setMediaOnTap(on: Boolean) { store.edit { it[MEDIA_ON_TAP] = on } }
     override suspend fun setLinkPreviews(on: Boolean) { store.edit { it[LINK_PREVIEWS] = on } }

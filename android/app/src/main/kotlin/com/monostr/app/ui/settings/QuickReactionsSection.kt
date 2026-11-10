@@ -58,6 +58,7 @@ fun QuickReactionsSection(list: List<String>, onChange: (List<String>) -> Unit) 
                 value = input, onValueChange = { input = it }, singleLine = true, enabled = !full,
                 label = { Text(stringResource(R.string.settings_reactions_add)) },
                 modifier = Modifier.weight(1f).testTag("settings-reaction-input"),
+                shape = MaterialTheme.shapes.medium,
             )
             Spacer(Modifier.width(Spacing.s))
             val next = Reactions.add(list, input)

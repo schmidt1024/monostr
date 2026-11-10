@@ -195,6 +195,7 @@ private fun ChatScreenContent(
                     value = text, onValueChange = { text = it }, maxLines = 5,
                     placeholder = { Text(stringResource(R.string.chat_input_hint)) },
                     modifier = Modifier.weight(1f).testTag("chat-input"),
+                    shape = MaterialTheme.shapes.medium,
                 )
                 IconButton(
                     onClick = { vm.controller.send(text); text = "" },

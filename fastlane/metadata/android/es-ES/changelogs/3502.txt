@@ -1,0 +1,5 @@
+- Esquinas más suaves: campos, botones, tarjetas y diálogos con forma de squircle
+- Nueva barra inferior con iconos de línea fina; la pestaña activa aparece rellena
+- Colores de acento: Naranja, Champán, Mono y Personalizado (empieza en azul); si usabas Azul, sigue en Personalizado
+- El desplazamiento sigue igual de rápido
+- Correcciones

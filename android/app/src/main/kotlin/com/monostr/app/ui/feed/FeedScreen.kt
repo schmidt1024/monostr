@@ -299,7 +299,7 @@ internal fun FeedTopBar(relayStates: List<RelayState>, picture: String?, onToTop
 /** Spec 4: "Enjoying Monostr?" with Support and Hide; both end it for good. */
 @Composable
 private fun SupportHintCard(onSupport: () -> Unit, onDismiss: () -> Unit) {
-    Card(Modifier.fillMaxWidth().padding(horizontal = Spacing.l, vertical = Spacing.s).testTag("support-hint")) {
+    Card(Modifier.fillMaxWidth().padding(horizontal = Spacing.l, vertical = Spacing.s).testTag("support-hint"), shape = MaterialTheme.shapes.large) {
         Column(Modifier.padding(Spacing.l)) {
             Text(stringResource(R.string.support_hint_title), style = MaterialTheme.typography.titleSmall)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {

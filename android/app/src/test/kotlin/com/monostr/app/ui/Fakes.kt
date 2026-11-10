@@ -738,7 +738,7 @@ class FakeUiSettings : UiSettingsStore {
     override suspend fun setMediaServer(url: String) { mediaServerState.value = url }
     override suspend fun setThemeMode(mode: ThemeMode) { modeState.value = mode }
     override suspend fun setAccent(accent: Accent) { accentState.value = accent }
-    val customHueState = MutableStateFlow(200f)
+    val customHueState = MutableStateFlow(220f)
     override val customHue: Flow<Float> = customHueState
     override suspend fun setCustomHue(hue: Float) { customHueState.value = hue }
     override suspend fun setBlurSensitive(on: Boolean) { blurSensitiveState.value = on }

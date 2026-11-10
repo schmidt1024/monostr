@@ -44,6 +44,7 @@ fun MediaServerSetting(current: String, onSave: (String) -> Boolean, onReset: ()
             }
         },
         modifier = Modifier.fillMaxWidth().testTag("settings-media-server"),
+        shape = MaterialTheme.shapes.medium,
     )
     Row {
         TextButton(onClick = { invalid = !onSave(text) }, enabled = text.trim() != current, modifier = Modifier.testTag("settings-media-server-save")) {

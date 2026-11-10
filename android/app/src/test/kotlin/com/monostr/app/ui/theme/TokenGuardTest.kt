@@ -85,6 +85,27 @@ class TokenGuardTest {
     }
 
     @Test
+    fun `control guard flags buttons, fields and cards without a shape`() {
+        assertEquals(listOf("a.kt:1: Card"), shapelessControls("a.kt", "Card(Modifier) { Text(\"x\") }"))
+        assertEquals(listOf("a.kt:2: OutlinedTextField"), shapelessControls("a.kt", "val x = 1\nOutlinedTextField(\n    value = v,\n    onValueChange = {},\n)"))
+        assertTrue(shapelessControls("a.kt", "OutlinedTextField(value = v, onValueChange = {}, shape = MaterialTheme.shapes.medium)").isEmpty())
+        // a shape further down, inside a nested call, does not count for the outer one
+        assertEquals(1, shapelessControls("a.kt", "Card(onClick = { Box(Modifier.clip(shape = s)) }) { }").size)
+        assertEquals(listOf("a.kt:1: Button"), shapelessControls("a.kt", "Button(onClick = {}) { }"))
+        assertTrue(shapelessControls("a.kt", "IconButton(onClick = {}) { }").isEmpty())
+        assertTrue(shapelessControls("a.kt", "TextButton(onClick = {}) { }").isEmpty())
+        assertTrue(shapelessControls("a.kt", "// Button(onClick = {})").isEmpty())
+        assertTrue(shapelessControls("a.kt", "fun Card(x: Int) = x").isEmpty())
+    }
+
+    @Test
+    fun `buttons, fields and cards carry a theme shape`() {
+        // spec 2026-11-10 (squircle; owner review: buttons squircle too, bar like X): Material's pill button, 4 dp field and 12 dp card become the theme's squircles
+        val hits = sources().flatMap { (p, s) -> shapelessControls(p, s) }
+        assertTrue(hits.isEmpty(), "pass shape = MaterialTheme.shapes.medium (buttons, fields) or .large (cards):\n" + hits.joinToString("\n"))
+    }
+
+    @Test
     fun `thread line stubs use the row padding token`() {
         // the line in Conversation.kt rows must reach the card edge: its stub length is the row's vertical padding (review 2026-11-10)
         val src = File(root, "app/src/main/kotlin/com/monostr/app/ui/common/Conversation.kt").readText()
@@ -105,6 +126,28 @@ class TokenGuardTest {
         )
 
         fun shapeViolations(path: String, source: String): List<String> = literalsInCalls(path, source, listOf(SHAPE_CALL))
+
+        private val CONTROL_CALL = Regex("""(?<![\w.])(Button|OutlinedButton|OutlinedTextField|TextField|Card)\(""")
+        private val SHAPE_ARG = Regex("""(?<![\w.])shape\s*=""")
+
+        /** Calls of [CONTROL_CALL] whose own argument list (not a nested call's) has no `shape =`. */
+        fun shapelessControls(path: String, original: String): List<String> {
+            val source = maskCommentsAndStrings(original)
+            return CONTROL_CALL.findAll(source).mapNotNull { m ->
+                if (source.substring(0, m.range.first).trimEnd().endsWith("fun")) return@mapNotNull null
+                val open = m.range.last
+                val close = matchingParen(source, open) ?: return@mapNotNull null
+                val hasShape = SHAPE_ARG.findAll(source.substring(open + 1, close)).any { depthAt(source, open + 1, open + 1 + it.range.first) == 0 }
+                if (hasShape) null else "$path:${source.lineNumberAt(m.range.first)}: ${m.groupValues[1]}"
+            }.toList()
+        }
+
+        /** The bracket depth at [to], counted from [from]. */
+        private fun depthAt(s: String, from: Int, to: Int): Int {
+            var depth = 0
+            for (i in from until to) when (s[i]) { '(', '[', '{' -> depth++; ')', ']', '}' -> depth-- }
+            return depth
+        }
 
         fun spacingViolations(path: String, source: String): List<String> = literalsInCalls(path, source, SPACING_CALLS)
 

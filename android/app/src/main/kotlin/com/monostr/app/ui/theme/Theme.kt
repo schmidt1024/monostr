@@ -2,8 +2,8 @@ package com.monostr.app.ui.theme
 
 import android.app.Activity
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -26,14 +26,32 @@ fun isDark(mode: ThemeMode): Boolean = when (mode) {
 
 private fun c(argb: Long) = Color(argb)
 
-/** Corner radii (spec 2026-11-10 §5): call sites use MaterialTheme.shapes, never a hand-built radius. */
+/**
+ * Corner radii (spec 2026-11-10 §5): call sites use MaterialTheme.shapes, never a hand-built radius. Squircle corners
+ * since 2026-11-10: buttons and fields take [Shapes.medium], cards [Shapes.large].
+ */
 val MonostrShapes = Shapes(
-    extraSmall = RoundedCornerShape(4.dp),
-    small = RoundedCornerShape(8.dp),
-    medium = RoundedCornerShape(12.dp),
-    large = RoundedCornerShape(16.dp),
-    extraLarge = RoundedCornerShape(24.dp),
+    extraSmall = SquircleShape(4.dp),
+    small = SquircleShape(8.dp),
+    medium = SquircleShape(12.dp),
+    large = SquircleShape(16.dp),
+    extraLarge = SquircleShape(24.dp),
 )
+
+/**
+ * Plain rounded corners for clips on the feed's scroll path: pictures (note media, thumbnails, link-preview images, quoted
+ * media, attachments, banners), the tap-effect bounds of the note actions and the content clip of cards (their border and
+ * background stay squircles). A clip to a squircle path costs GPU time every frame, a rounded rectangle clips on the fast
+ * path. Pixel 7a, 2026-11-10, 30 s feed scroll: squircle clips everywhere 7-8 ms median frame (was 5), 2x GPU time; with
+ * these plain clips back to 5 ms. Squircle pictures cost another 1-2 ms at the 90th percentile, so pictures stay plain
+ * until they are drawn as a shader-filled squircle instead of a clip (backlog). Owner: performance before design.
+ */
+object PlainShapes {
+    val small = RoundedCornerShape(8.dp)
+    val medium = RoundedCornerShape(12.dp)
+    val large = RoundedCornerShape(16.dp)
+    val extraLarge = RoundedCornerShape(24.dp)
+}
 
 /** Spec 4: monochrome base, accent only on the primary tokens, flat shapes, Inter/JetBrains Mono. */
 @Composable

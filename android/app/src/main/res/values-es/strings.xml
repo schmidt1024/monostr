@@ -415,7 +415,6 @@
     <string name="settings_accent">Color de acento</string>
     <string name="settings_accent_mono">Mono</string>
     <string name="settings_accent_orange">Naranja</string>
-    <string name="settings_accent_blue">Azul</string>
     <string name="settings_accent_champagne">Champán</string>
     <string name="settings_accent_custom">Personalizado</string>
     <string name="settings_accent_hue">Tono</string>

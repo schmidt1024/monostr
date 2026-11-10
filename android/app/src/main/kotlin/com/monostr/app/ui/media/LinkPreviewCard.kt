@@ -47,6 +47,7 @@ import com.monostr.app.data.linkpreview.LinkPreview
 import com.monostr.app.data.linkpreview.LinkPreviews
 import com.monostr.app.ui.common.NoteLinks
 import com.monostr.app.ui.common.NoteSpan
+import com.monostr.app.ui.theme.PlainShapes
 import com.monostr.app.ui.theme.Spacing
 import com.monostr.nostr.model.Note
 import kotlinx.coroutines.delay
@@ -168,12 +169,12 @@ fun LinkPreviewCard(note: Note, url: String, preview: LinkPreview, onDismiss: ((
     val (covered, waiting) = rememberMediaCover(note, hasImages = image != null)
     val cd = stringResource(R.string.link_preview_cd, preview.title, domain)
     val open: () -> Unit = { runCatching { uriHandler.openUri(url) } }
-    val shape = MaterialTheme.shapes.medium
+    val shape = MaterialTheme.shapes.large
     val textPart = Modifier.clickable(onClickLabel = cd, onClick = open).semantics { contentDescription = cd }.padding(Spacing.m)
     if (preview.large && image != null) {
         // like X (2026-10-30): the title on one line in a small dark label on the picture, the domain under the card
         Column(Modifier.fillMaxWidth().padding(top = Spacing.s).testTag("link-preview-$id8")) {
-            Box(Modifier.fillMaxWidth().aspectRatio(1.91f).clip(shape).border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)) {
+            Box(Modifier.fillMaxWidth().aspectRatio(1.91f).clip(PlainShapes.large).border(1.dp, MaterialTheme.colorScheme.outlineVariant, PlainShapes.large)) {
                 PreviewImage(image, note, covered, waiting, open, onFailed = { imageFailed = true }, Modifier.fillMaxSize())
                 onDismiss?.let { DismissButton(it, Modifier.align(Alignment.TopStart)) }
                 Text(
@@ -193,7 +194,7 @@ fun LinkPreviewCard(note: Note, url: String, preview: LinkPreview, onDismiss: ((
         }
     } else {
         Row(
-            Modifier.fillMaxWidth().padding(top = Spacing.s).clip(shape).border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape).testTag("link-preview-$id8"),
+            Modifier.fillMaxWidth().padding(top = Spacing.s).clip(PlainShapes.large).border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape).testTag("link-preview-$id8"),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             image?.let { PreviewImage(it, note, covered, waiting, open, onFailed = { imageFailed = true }, Modifier.size(72.dp)) }

@@ -433,10 +433,10 @@ fun TorDetailsContent(state: TorState?, turning: TorTurn?, error: TorSwitchError
         Text(stringResource(R.string.tor_explanation), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (state == TorState.Failed) {
             // what helps comes first, the way to direct stays the quiet one
-            Button(onClick = onRetry, enabled = turning == null, modifier = Modifier.fillMaxWidth().testTag("tor-retry-sheet")) { Text(stringResource(R.string.tor_try_again)) }
+            Button(onClick = onRetry, enabled = turning == null, modifier = Modifier.fillMaxWidth().testTag("tor-retry-sheet"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.tor_try_again)) }
             TextButton(onClick = onTurnOff, enabled = turning == null, modifier = Modifier.fillMaxWidth().testTag("tor-off")) { Text(stringResource(R.string.tor_off_action)) }
         } else {
-            OutlinedButton(onClick = onTurnOff, enabled = turning == null, modifier = Modifier.fillMaxWidth().testTag("tor-off")) { Text(stringResource(R.string.tor_off_action)) }
+            OutlinedButton(onClick = onTurnOff, enabled = turning == null, modifier = Modifier.fillMaxWidth().testTag("tor-off"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.tor_off_action)) }
         }
         Column {
             Text(stringResource(R.string.tor_credit), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("tor-credit"))

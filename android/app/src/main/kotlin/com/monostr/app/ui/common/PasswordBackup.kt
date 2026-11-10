@@ -121,6 +121,7 @@ fun PasswordBackupDialog(secretHex: String, onDismiss: () -> Unit) {
                             isError = state.password.isNotEmpty() && state.tooShort,
                             supportingText = { if (state.password.isNotEmpty() && state.tooShort) Text(stringResource(R.string.backup_password_too_short)) },
                             modifier = Modifier.fillMaxWidth().testTag("backup-password"),
+                            shape = MaterialTheme.shapes.medium,
                         )
                         OutlinedTextField(
                             value = state.repeat, onValueChange = controller::setRepeat, singleLine = true,
@@ -130,6 +131,7 @@ fun PasswordBackupDialog(secretHex: String, onDismiss: () -> Unit) {
                             isError = state.mismatch,
                             supportingText = { if (state.mismatch) Text(stringResource(R.string.backup_password_mismatch)) },
                             modifier = Modifier.fillMaxWidth().testTag("backup-password-repeat"),
+                            shape = MaterialTheme.shapes.medium,
                         )
                         if (step == PasswordBackupState.Step.Failed) {
                             Text(stringResource(R.string.backup_password_failed), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
@@ -144,6 +146,7 @@ fun PasswordBackupDialog(secretHex: String, onDismiss: () -> Unit) {
                                 copiedAt = System.currentTimeMillis()
                             },
                             modifier = Modifier.fillMaxWidth().testTag("backup-ncryptsec-copy"),
+                            shape = MaterialTheme.shapes.medium,
                         ) { Text(stringResource(R.string.backup_copy)) }
                         copiedAt?.let { at ->
                             Text(stringResource(R.string.backup_copied), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

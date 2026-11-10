@@ -1,0 +1,5 @@
+- Daha yumuşak köşeler: alanlar, düğmeler, kartlar ve iletişim kutuları squircle biçiminde
+- İnce çizgi simgeli yeni alt çubuk; etkin sekme dolu görünür
+- Vurgu renkleri: Turuncu, Şampanya, Mono ve Özel (maviden başlar); Mavi kullandıysanız Özel altında devam eder
+- Kaydırma eskisi kadar hızlı
+- Düzeltmeler

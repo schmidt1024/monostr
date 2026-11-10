@@ -38,15 +38,15 @@ private enum class RelayListAction { PUBLISH, ADOPT, RESET }
 @Composable
 fun RelayListActions(isDefault: Boolean, busy: Boolean, onPublish: () -> Unit, onAdopt: () -> Unit, onReset: () -> Unit) {
     var asking by rememberSaveable { mutableStateOf<RelayListAction?>(null) }
-    OutlinedButton(onClick = { asking = RelayListAction.PUBLISH }, enabled = !busy, modifier = Modifier.fillMaxWidth().testTag("settings-publish-relays")) {
+    OutlinedButton(onClick = { asking = RelayListAction.PUBLISH }, enabled = !busy, modifier = Modifier.fillMaxWidth().testTag("settings-publish-relays"), shape = MaterialTheme.shapes.medium) {
         Text(stringResource(R.string.settings_publish_relays))
     }
     Text(stringResource(R.string.settings_publish_relays_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    OutlinedButton(onClick = { asking = RelayListAction.ADOPT }, enabled = !busy, modifier = Modifier.fillMaxWidth().testTag("settings-adopt-relays")) {
+    OutlinedButton(onClick = { asking = RelayListAction.ADOPT }, enabled = !busy, modifier = Modifier.fillMaxWidth().testTag("settings-adopt-relays"), shape = MaterialTheme.shapes.medium) {
         Text(stringResource(R.string.settings_adopt_relays))
     }
     if (!isDefault) {
-        OutlinedButton(onClick = { asking = RelayListAction.RESET }, enabled = !busy, modifier = Modifier.fillMaxWidth().testTag("settings-reset-relays")) {
+        OutlinedButton(onClick = { asking = RelayListAction.RESET }, enabled = !busy, modifier = Modifier.fillMaxWidth().testTag("settings-reset-relays"), shape = MaterialTheme.shapes.medium) {
             Text(stringResource(R.string.settings_reset_relays))
         }
     }

@@ -28,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.monostr.app.R
+import com.monostr.app.ui.theme.PlainShapes
 import com.monostr.app.ui.theme.Spacing
 import com.monostr.nostr.model.LightningInvoice
 import java.text.NumberFormat
@@ -43,11 +44,11 @@ fun InvoiceCard(invoice: LightningInvoice, modifier: Modifier = Modifier, now: (
     val context = LocalContext.current
     val copied = stringResource(R.string.invoice_copied)
     val expired = remember(invoice.raw) { invoice.expired(now()) }
-    val shape = MaterialTheme.shapes.medium
+    val shape = MaterialTheme.shapes.large
     Column(
         modifier
             .fillMaxWidth()
-            .clip(shape)
+            .clip(PlainShapes.large) // the content clip stays a fast rounded rect; the squircle border covers the sub-pixel difference
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
             .combinedClickable(onClick = {}, onLongClick = { copyToClipboard(context, invoice.raw, copied) })
             .padding(Spacing.m)
@@ -78,7 +79,7 @@ fun InvoiceCard(invoice: LightningInvoice, modifier: Modifier = Modifier, now: (
             if (expired) {
                 Text(stringResource(R.string.invoice_expired), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("invoice-expired"))
             } else {
-                OutlinedButton(onClick = { openInvoice(context, invoice.raw, copied) }, modifier = Modifier.testTag("invoice-open")) {
+                OutlinedButton(onClick = { openInvoice(context, invoice.raw, copied) }, modifier = Modifier.testTag("invoice-open"), shape = MaterialTheme.shapes.medium) {
                     Text(stringResource(R.string.invoice_open))
                 }
             }

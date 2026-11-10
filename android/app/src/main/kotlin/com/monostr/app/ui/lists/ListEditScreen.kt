@@ -87,6 +87,7 @@ fun ListEditScreen(onDone: (deleted: Boolean) -> Unit, vm: ListEditViewModel = h
                 label = { Text(stringResource(R.string.list_title_label)) },
                 supportingText = { Text("${state.title.length}/${ListEditController.MAX_TITLE}") },
                 modifier = Modifier.fillMaxWidth().testTag("list-title"),
+                shape = MaterialTheme.shapes.medium,
             )
             Spacer(Modifier.height(Spacing.s))
             OutlinedTextField(
@@ -94,6 +95,7 @@ fun ListEditScreen(onDone: (deleted: Boolean) -> Unit, vm: ListEditViewModel = h
                 label = { Text(stringResource(R.string.list_description_label)) },
                 supportingText = { Text("${state.description.length}/${ListEditController.MAX_DESCRIPTION}") },
                 modifier = Modifier.fillMaxWidth().testTag("list-description"),
+                shape = MaterialTheme.shapes.medium,
             )
             Spacer(Modifier.height(Spacing.s))
             Row(verticalAlignment = Alignment.CenterVertically) {

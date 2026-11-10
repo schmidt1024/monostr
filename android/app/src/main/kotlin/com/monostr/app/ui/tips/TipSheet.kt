@@ -137,7 +137,7 @@ fun TipSheetContent(
                     WalletFallback(phase.uri, phase.address, null, state.unit, uriHandler, clipboard)
                     Spacer(Modifier.height(Spacing.s))
                 }
-                Button(onClick = onPayTo, modifier = Modifier.fillMaxWidth().testTag("tip-payto-pay")) { Text(stringResource(R.string.tip_payto_pay)) }
+                Button(onClick = onPayTo, modifier = Modifier.fillMaxWidth().testTag("tip-payto-pay"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.tip_payto_pay)) }
                 Spacer(Modifier.height(Spacing.s))
                 TextButton(onClick = onDone, modifier = Modifier.align(Alignment.End).testTag("tip-done")) { Text(stringResource(R.string.action_close)) }
             }
@@ -168,6 +168,7 @@ fun TipSheetContent(
                     isError = amountError,
                     supportingText = if (amountError && error != null) { { Text(error.asString()) } } else null,
                     modifier = Modifier.fillMaxWidth().testTag("tip-custom"),
+                    shape = MaterialTheme.shapes.medium,
                 )
                 // the whole row toggles; the Switch itself only shows the state. Locked while sending:
                 // the display must not differ from what is being sent
@@ -194,7 +195,7 @@ fun TipSheetContent(
                     Text(stringResource(R.string.send_blocked_tor), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("tip-blocked-reason"))
                 }
                 Spacer(Modifier.height(Spacing.m))
-                Button(onClick = onSend, enabled = phase == TipPhase.Ready && canSend, modifier = Modifier.fillMaxWidth().testTag("tip-send")) {
+                Button(onClick = onSend, enabled = phase == TipPhase.Ready && canSend, modifier = Modifier.fillMaxWidth().testTag("tip-send"), shape = MaterialTheme.shapes.medium) {
                     Text(stringResource(if (phase == TipPhase.Sending) R.string.state_sending else R.string.tip_pay))
                 }
             }
@@ -210,7 +211,7 @@ fun TipSheetContent(
                     state.notice?.let { Text(it.asString(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error); Spacer(Modifier.height(Spacing.s)) }
                     if (phase.walletMissing == true) {
                         WalletFallback(phase.uri, phase.address, phase.amount, state.unit, uriHandler, clipboard)
-                        Button(onClick = onRetryWallet, modifier = Modifier.fillMaxWidth().testTag("tip-open-wallet")) { Text(stringResource(R.string.tip_open_wallet_again)) }
+                        Button(onClick = onRetryWallet, modifier = Modifier.fillMaxWidth().testTag("tip-open-wallet"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.tip_open_wallet_again)) }
                     } else {
                         Text(stringResource(R.string.tip_sent), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("tip-sent"))
                     }
@@ -244,8 +245,8 @@ private fun ColumnScope.WalletFallback(uri: String, address: String, amount: Lon
                         Text(address, style = MaterialTheme.typography.bodySmall, fontFamily = MonostrFonts.mono, modifier = Modifier.testTag("tip-fallback-address"))
                         Spacer(Modifier.height(Spacing.s))
                         Row(horizontalArrangement = Arrangement.spacedBy(Spacing.s)) {
-                            OutlinedButton(onClick = { clipboard.setText(AnnotatedString(address)) }, modifier = Modifier.testTag("tip-copy-address")) { Text(stringResource(R.string.action_copy_address)) }
-                            OutlinedButton(onClick = { clipboard.setText(AnnotatedString(uri)) }, modifier = Modifier.testTag("tip-copy-uri")) { Text(stringResource(R.string.action_copy_uri)) }
+                            OutlinedButton(onClick = { clipboard.setText(AnnotatedString(address)) }, modifier = Modifier.testTag("tip-copy-address"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.action_copy_address)) }
+                            OutlinedButton(onClick = { clipboard.setText(AnnotatedString(uri)) }, modifier = Modifier.testTag("tip-copy-uri"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.action_copy_uri)) }
                         }
                         Spacer(Modifier.height(Spacing.s))
 }

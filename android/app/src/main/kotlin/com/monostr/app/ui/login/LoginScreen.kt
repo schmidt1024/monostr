@@ -103,7 +103,7 @@ fun LoginScreen(onCreate: () -> Unit = {}, vm: LoginViewModel = hiltViewModel())
         }
         Spacer(Modifier.height(Spacing.xxl))
         if (state.amberAvailable) {
-            Button(onClick = vm::loginWithAmber, enabled = !state.busy, modifier = Modifier.fillMaxWidth().testTag("login-amber")) { Text(stringResource(R.string.login_amber)) }
+            Button(onClick = vm::loginWithAmber, enabled = !state.busy, modifier = Modifier.fillMaxWidth().testTag("login-amber"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.login_amber)) }
             Spacer(Modifier.height(Spacing.xl))
             Text(stringResource(R.string.login_or_key), style = MaterialTheme.typography.labelLarge)
         } else {
@@ -116,6 +116,7 @@ fun LoginScreen(onCreate: () -> Unit = {}, vm: LoginViewModel = hiltViewModel())
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
             isError = state.error != null, supportingText = { state.error?.let { Text(it.asString()) } },
             modifier = Modifier.fillMaxWidth().testTag("login-secret"),
+            shape = MaterialTheme.shapes.medium,
         )
         if (needsPassword) {
             Spacer(Modifier.height(Spacing.s))
@@ -125,10 +126,11 @@ fun LoginScreen(onCreate: () -> Unit = {}, vm: LoginViewModel = hiltViewModel())
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
                 isError = state.passwordError != null, supportingText = { state.passwordError?.let { Text(it.asString()) } },
                 modifier = Modifier.fillMaxWidth().testTag("login-password"),
+                shape = MaterialTheme.shapes.medium,
             )
         }
         Spacer(Modifier.height(Spacing.s))
-        OutlinedButton(onClick = { vm.loginWithSecret(secret, password) }, enabled = !state.busy && secret.isNotBlank() && (!needsPassword || password.isNotEmpty()), modifier = Modifier.fillMaxWidth().testTag("login-secret-button")) { Text(stringResource(R.string.login_button)) }
+        OutlinedButton(onClick = { vm.loginWithSecret(secret, password) }, enabled = !state.busy && secret.isNotBlank() && (!needsPassword || password.isNotEmpty()), modifier = Modifier.fillMaxWidth().testTag("login-secret-button"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.login_button)) }
         Spacer(Modifier.height(Spacing.l))
         // spec 2026-10-17 §2: the way in for someone without a key
         TextButton(onClick = onCreate, enabled = !state.busy, modifier = Modifier.fillMaxWidth().testTag("login-create")) { Text(stringResource(R.string.login_create)) }

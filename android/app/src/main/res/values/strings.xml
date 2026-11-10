@@ -418,7 +418,6 @@
     <string name="settings_accent">Accent color</string>
     <string name="settings_accent_mono">Mono</string>
     <string name="settings_accent_orange">Orange</string>
-    <string name="settings_accent_blue">Blue</string>
     <string name="settings_accent_champagne">Champagne</string>
     <string name="settings_accent_custom">Custom</string>
     <string name="settings_accent_hue">Hue</string>
