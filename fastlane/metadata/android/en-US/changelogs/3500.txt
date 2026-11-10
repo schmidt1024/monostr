@@ -1,0 +1,4 @@
+- New logo: a coin with the Monostr M, on the app icon and in the app
+- The tip button is the coin too; after a tip it fills in your accent colour
+- After you turn Tor on, the app comes back by itself again
+- Fixes

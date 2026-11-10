@@ -68,7 +68,7 @@ import androidx.compose.ui.unit.dp
 import com.monostr.app.R
 import com.monostr.app.data.Presets
 import com.monostr.app.ui.feed.NoteUi
-import com.monostr.app.ui.theme.MoneroGlyph
+import com.monostr.app.ui.theme.tipCoin
 import com.monostr.app.ui.theme.MonostrFonts
 import com.monostr.nostr.model.Note
 import androidx.compose.ui.unit.Dp
@@ -139,7 +139,7 @@ fun NoteActionRow(
             // spec 5.5: the tip is its own action; the pending state also shows as text below
             val pendingLabel = stringResource(R.string.note_tip_pending)
             ActionIcon(
-                icon = MoneroGlyph, description = stringResource(R.string.note_tip), selected = false,
+                icon = tipCoin(note.tipped), description = stringResource(R.string.note_tip), selected = false,
                 stateDescription = if (note.pendingTip) pendingLabel else null,
                 tint = if (note.pendingTip || note.tipped) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 onClick = onTip, tag = "note-tip-${shown.id.take(8)}", enabled = note.canTip,

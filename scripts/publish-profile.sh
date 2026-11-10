@@ -9,6 +9,7 @@
 #
 # Usage: scripts/publish-profile.sh [--publish] [relay …]
 #        NSEC=nsec1… scripts/publish-profile.sh --publish
+#        BANNER=https://… also replaces the banner URL, PICTURE=https://… the profile picture (dry run and publish alike)
 # Default relays: relay.monostr.com, relay.damus.io, nos.lol, purplepag.es
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -88,8 +89,12 @@ content["name"] = sys.argv[1]
 content["display_name"] = sys.argv[1]
 if "displayName" in content:  # legacy key some clients still read
     content["displayName"] = sys.argv[1]
+if sys.argv[2]:  # BANNER=<url>: a new file name, as clients cache the old one for years
+    content["banner"] = sys.argv[2]
+if sys.argv[3]:  # PICTURE=<url>: the same for the profile picture
+    content["picture"] = sys.argv[3]
 print(json.dumps({"kind": 0, "tags": live.get("tags", []), "content": json.dumps(content, ensure_ascii=False, separators=(",", ":"))}, ensure_ascii=False))
-' "$NAME")
+' "$NAME" "${BANNER:-}" "${PICTURE:-}")
 
 CURRENT_ID=$(printf '%s' "$CURRENT" | python3 -I -c 'import json,sys; print(json.load(sys.stdin)["id"])')
 AGREE=$(printf '%s' "$ANSWERS" | awk -F'\t' -v id="$CURRENT_ID" '$2 == id' | wc -l)

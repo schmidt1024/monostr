@@ -59,6 +59,7 @@ class MainActivity : ComponentActivity() {
     companion object {
         /** True while an instance is started (between onStart and onStop); the background worker must not release a shared engine then. */
         val inForeground = java.util.concurrent.atomic.AtomicBoolean(false)
+        private val started = StartedCount()
 
         /** Intent extra of a DM notification: the peer's hex pubkey whose chat to open. */
         const val EXTRA_OPEN_DM = "open_dm"
@@ -99,8 +100,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        inForeground.set(true)
-        torSwitch.onForeground()
+        // only the first started instance: with two tasks the newer one starts before the older one stops
+        if (started.start()) {
+            inForeground.set(true)
+            torSwitch.onForeground()
+        }
         // back from the background the relay sockets are usually gone: reconnect now instead of
         // waiting for the pool's next retry (a publish in that window found no relay, v0.8.1)
         lifecycleScope.launch { session.reconnectIfLost() }
@@ -109,8 +113,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onStop() {
         unregisterNetworkWatch()
-        inForeground.set(false)
-        torSwitch.onBackground()
+        if (started.stop()) {
+            inForeground.set(false)
+            torSwitch.onBackground()
+        }
         super.onStop()
     }
 

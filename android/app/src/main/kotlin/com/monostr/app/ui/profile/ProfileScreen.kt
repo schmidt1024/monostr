@@ -162,7 +162,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.material3.OutlinedIconButton
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import com.monostr.app.ui.theme.MoneroGlyph
+import com.monostr.app.ui.theme.TipCoinOutline
 import com.monostr.app.ui.tips.TipTarget
 import javax.inject.Inject
 
@@ -1073,7 +1073,7 @@ private fun ProfileTipButton(pending: Boolean, onClick: () -> Unit) {
         modifier = Modifier.testTag("profile-tip").semantics { if (pending) stateDescription = pendingLabel },
     ) {
         Icon(
-            MoneroGlyph, contentDescription = stringResource(R.string.note_tip),
+            TipCoinOutline, contentDescription = stringResource(R.string.note_tip),
             tint = if (pending) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }

@@ -85,9 +85,9 @@ fun LoginScreen(onCreate: () -> Unit = {}, vm: LoginViewModel = hiltViewModel())
             painter = painterResource(R.drawable.ic_logo_mark),
             contentDescription = null, // decorative; the wordmark below carries the name
             colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onBackground),
-            modifier = Modifier.height(32.dp),
+            modifier = Modifier.height(52.dp), // the coin is square, larger than the old M to hold its weight
         )
-        Spacer(Modifier.height(20.dp)) // gap = mark height / φ
+        Spacer(Modifier.height(32.dp)) // gap = mark height / φ
         Image(
             painter = painterResource(R.drawable.ic_wordmark),
             contentDescription = stringResource(R.string.app_name),

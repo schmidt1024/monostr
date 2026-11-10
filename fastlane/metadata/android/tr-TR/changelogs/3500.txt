@@ -1,0 +1,4 @@
+- Yeni logo: Monostr M harfli bir madeni para, uygulama simgesinde ve uygulamada
+- Bahşiş düğmesi de bu para; bahşişten sonra vurgu renginle dolar
+- Tor açıldıktan sonra uygulama yeniden kendiliğinden açılır
+- Düzeltmeler

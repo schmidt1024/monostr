@@ -1,0 +1,4 @@
+- Novo logo: uma moeda com o M do Monostr, no ícone e no app
+- O botão de gorjeta também é a moeda; depois de uma gorjeta ela se preenche com sua cor de destaque
+- Ao ativar o Tor, o app volta a abrir sozinho
+- Correções

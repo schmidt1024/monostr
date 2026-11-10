@@ -20,6 +20,7 @@ baseline, y grows downwards) and only moved left by KERN_SHIFT.
 """
 import math
 import os
+import coin
 import re
 import sys
 
@@ -37,11 +38,26 @@ BASELINE = 62.16      # baseline inside that viewBox (unchanged)
 OLD_ADVANCE = 345.32  # old wordmark viewBox width
 ADVANCE = OLD_ADVANCE + KERN_SHIFT
 INK_RIGHT = 344.148 + KERN_SHIFT   # right edge of the r
-LOCKUP_H_WIDTH = ADVANCE + 150 - 24.18   # horizontal lockup: wordmark origin at 150, crop 24.18 left
+# Lockups with the coin (coin.py). The coin with its ring stroke spans 95 units on its 100 grid.
+CAP = 62.0                 # cap height of the wordmark
+COIN_H = 1.5 * CAP         # horizontal lockup: coin diameter 1.5x the cap height
+COIN_H_SCALE = COIN_H / 95
+COIN_GAP = 0.5 * CAP       # space between coin and the M
+H_WORD_TX = COIN_H + COIN_GAP - X0           # wordmark origin so its M starts COIN_GAP after the coin
+H_BASELINE = COIN_H / 2 + CAP / 2            # cap band centred on the coin
+LOCKUP_H_WIDTH = H_WORD_TX + INK_RIGHT       # crop at the r's right edge
+LOCKUP_H_HEIGHT = COIN_H
+COIN_V = 96.0              # stacked lockup: coin diameter
+V_GAP = 34.0               # coin bottom to cap top (as before between the M and the wordmark)
 
 INK = {"hell": "#16161A", "dunkel": "#F2F1ED"}
 TITLE = "Monostr"
-SYMBOL = '<polyline points="24,72 24,28 50,56 76,28 76,72" fill="none" stroke="{c}" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>'
+
+
+def coin_symbol(c, scale, tx, ty):
+    """The coin (outline, large geometry) in colour c, its 95-unit ink box placed at tx,ty and scaled."""
+    return (f'<g transform="translate({fmt(tx - 2.5 * scale)},{fmt(ty - 2.5 * scale)}) scale({fmt(scale)})">'
+            f'{coin.coin_body(c, "none")}</g>')
 
 ONOSTR = (
     "M106.932 1.596Q100.884 1.596 96.26400000000001 -0.3360000000000001Q91.644 -2.2680000000000002 88.452 -5.586Q85.26 -8.904 83.622 -13.104000000000001Q81.984 -17.304000000000002 81.984 -21.84V-23.604000000000003Q81.984 -28.308000000000003 83.70599999999999 -32.550000000000004Q85.428 -36.792 88.662 -40.11Q91.896 -43.428000000000004 96.51599999999999 -45.318000000000005Q101.136 -47.208000000000006 106.932 -47.208000000000006Q112.72800000000001 -47.208000000000006 117.34800000000001 -45.318000000000005Q121.968 -43.428000000000004 125.202 -40.11Q128.436 -36.792 130.11599999999999 -32.550000000000004Q131.796 -28.308000000000003 131.796 -23.604000000000003V-21.84Q131.796 -17.304000000000002 130.15800000000002 -13.104000000000001Q128.52 -8.904 125.328 -5.586Q122.136 -2.2680000000000002 117.51599999999999 -0.3360000000000001Q112.896 1.596 106.932 1.596Z"
@@ -147,22 +163,20 @@ def wortmarke(c):
 
 
 def lockup_horizontal(c):
-    # symbol scale 1.24, wordmark origin at x = 150 (same gap as before), baseline 84.428
-    # (wordmark box top aligned as before); the outer group crops to the ink of the symbol.
-    w = fmt(LOCKUP_H_WIDTH)
-    body = (f'<g transform="translate(-24.18,-22.27)"><g transform="scale(1.24)">{SYMBOL.format(c=c)}</g>'
-            f'<path d="{wordmark_path(tx=150, ty=84.428)}" fill="{c}"/></g>')
-    return svg(w, "72.59", body)
+    # coin left (diameter 1.5x cap), wordmark after a gap of half the cap, cap band centred on the coin
+    body = (coin_symbol(c, COIN_H_SCALE, 0, 0)
+            + f'<path d="{wordmark_path(tx=H_WORD_TX, ty=H_BASELINE)}" fill="{c}"/>')
+    return svg(fmt(LOCKUP_H_WIDTH), fmt(LOCKUP_H_HEIGHT), body)
 
 
 def lockup_gestapelt(c):
-    # wordmark at 6/7, full width; symbol (scale 1.68) centred above it, same vertical layout
+    # wordmark at 6/7, full width; the coin centred above it, V_GAP between coin and cap top
     k = 6 / 7
     width = ADVANCE * k
-    sym_x = width / 2 - 50 * 1.68
-    body = (f'<g transform="translate(0,-39.48)"><g transform="translate({sym_x:.2f},0) scale(1.68)">{SYMBOL.format(c=c)}</g>'
-            f'<path d="{wordmark_path(sx=k, ty=215.80)}" fill="{c}"/></g>')
-    return svg(f"{width:.2f}", "178.32", body)
+    baseline = COIN_V + V_GAP + CAP * k
+    body = (coin_symbol(c, COIN_V / 95, width / 2 - COIN_V / 2, 0)
+            + f'<path d="{wordmark_path(sx=k, ty=baseline)}" fill="{c}"/>')
+    return svg(f"{width:.2f}", fmt(baseline + 2), body)
 
 
 def drawable():

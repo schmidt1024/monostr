@@ -4,7 +4,7 @@ repository: https://github.com/schmidt1024/monostr
 # the project account publishes (and the relay whitelists it by this file)
 pubkey: npub1zcqletxlyf7amggwx0n3j9unpdymusmtgw7aqv9hnx2g48e8fmfs89e6z2
 name: Monostr
-summary: Nostr client with Monero tips
+summary: Nostr with Monero tips
 license: AGPL-3.0-or-later
 website: https://monostr.com
 icon: ./fastlane/metadata/android/en-US/images/icon.png

@@ -1,0 +1,4 @@
+- Nuovo logo: una moneta con la M di Monostr, sull'icona e nell'app
+- Anche il pulsante della mancia è la moneta; dopo una mancia si riempie del tuo colore d'accento
+- Dopo aver attivato Tor, l'app si riapre da sola
+- Correzioni

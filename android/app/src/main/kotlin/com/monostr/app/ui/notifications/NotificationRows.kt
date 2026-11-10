@@ -37,7 +37,7 @@ import com.monostr.app.ui.common.Avatar
 import com.monostr.app.ui.common.MentionNames
 import com.monostr.app.ui.common.asString
 import com.monostr.app.ui.common.relativeTime
-import com.monostr.app.ui.theme.MoneroGlyph
+import com.monostr.app.ui.theme.TipCoinFilled
 import com.monostr.nostr.model.NoteMedia
 import com.monostr.nostr.repo.AboutNote
 import com.monostr.nostr.repo.NotificationKind
@@ -194,7 +194,7 @@ private fun TipRow(single: NotificationRow.Single, row: NotificationRowUi, names
             .testTag("notification-${item.id}"),
         verticalAlignment = Alignment.Top,
     ) {
-        LeadingSlot { Icon(MoneroGlyph, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(LEADING_ICON)) }
+        LeadingSlot { Icon(TipCoinFilled, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(LEADING_ICON)) }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             val name = item.from?.let { row.names[it] } ?: stringResource(R.string.tip_anonymous)

@@ -3,6 +3,7 @@ package com.monostr.app.ui.settings
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -74,8 +75,9 @@ fun AboutContent(
 ) {
     val ink = ColorFilter.tint(MaterialTheme.colorScheme.onBackground)
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
-        Image(painterResource(R.drawable.ic_logo_mark), contentDescription = null, colorFilter = ink, modifier = Modifier.height(32.dp))
-        Spacer(Modifier.height(12.dp))
+        // the coin is square: larger than the old M to hold its weight next to the wordmark; gap = coin height / φ
+        Image(painterResource(R.drawable.ic_logo_mark), contentDescription = null, colorFilter = ink, modifier = Modifier.height(40.dp))
+        Spacer(Modifier.height(24.dp))
         Image(painterResource(R.drawable.ic_wordmark), contentDescription = stringResource(R.string.app_name), colorFilter = ink, modifier = Modifier.height(28.dp))
         Spacer(Modifier.height(16.dp))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -88,10 +90,10 @@ fun AboutContent(
         }
         Spacer(Modifier.height(16.dp))
         if (feedbackPubkey != null) {
-            TextButton(onClick = { onFeedback(feedbackPubkey) }, modifier = Modifier.testTag("about-feedback")) { Text(stringResource(R.string.about_feedback)) }
+            TextButton(onClick = { onFeedback(feedbackPubkey) }, contentPadding = PaddingValues(0.dp), modifier = Modifier.testTag("about-feedback")) { Text(stringResource(R.string.about_feedback)) }
         }
         if (issuesUrl.isNotBlank()) {
-            TextButton(onClick = onIssues, modifier = Modifier.testTag("about-issues")) { Text(stringResource(R.string.about_issues)) }
+            TextButton(onClick = onIssues, contentPadding = PaddingValues(0.dp), modifier = Modifier.testTag("about-issues")) { Text(stringResource(R.string.about_issues)) }
         }
         if (mediaHost.isNotBlank()) {
             Spacer(Modifier.height(8.dp))

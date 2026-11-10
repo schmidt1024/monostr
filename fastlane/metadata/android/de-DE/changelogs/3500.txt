@@ -1,0 +1,4 @@
+- Neues Logo: eine Münze mit dem Monostr-M, als App-Icon und in der App
+- Auch der Tipp-Knopf ist die Münze; nach einem Tipp füllt sie sich in deiner Akzentfarbe
+- Nach dem Einschalten von Tor öffnet sich die App wieder von selbst
+- Korrekturen

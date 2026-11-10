@@ -1,1 +1,1 @@
-Client Nostr avec pourboires en Monero. Sans Lightning, sans dépositaire.
+Nostr avec pourboires en Monero. Sans Lightning, sans dépositaire.

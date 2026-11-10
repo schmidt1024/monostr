@@ -1,1 +1,1 @@
-Hintergrundfarbe: #16161A
+Hintergrundfarbe: #16161A (wie android/app/src/main/res/values/ic_launcher_background.xml; dunkel bevorzugt)

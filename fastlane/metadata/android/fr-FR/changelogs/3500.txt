@@ -1,0 +1,4 @@
+- Nouveau logo : une pièce avec le M de Monostr, sur l'icône et dans l'app
+- Le bouton de pourboire est aussi la pièce ; après un pourboire, elle se remplit de votre couleur d'accent
+- Après l'activation de Tor, l'app se rouvre d'elle-même
+- Corrections

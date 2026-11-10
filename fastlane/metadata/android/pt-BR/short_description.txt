@@ -1,1 +1,1 @@
-Cliente Nostr com gorjetas em Monero. Sem Lightning, sem custódia, sem carteira.
+Nostr com gorjetas em Monero. Sem Lightning, sem custódia, sem carteira.

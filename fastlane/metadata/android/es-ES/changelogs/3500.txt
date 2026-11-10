@@ -1,0 +1,4 @@
+- Nuevo logo: una moneda con la M de Monostr, en el icono y en la app
+- El botón de propina también es la moneda; tras una propina se rellena con tu color de acento
+- Al activar Tor, la app vuelve a abrirse sola
+- Correcciones
