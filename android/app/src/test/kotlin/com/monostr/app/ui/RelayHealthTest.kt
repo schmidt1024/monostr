@@ -8,6 +8,8 @@ import com.monostr.app.ui.settings.RelayListDiff
 import com.monostr.app.ui.settings.RelayStatusLine
 import com.monostr.app.ui.settings.relayListDiff
 import com.monostr.app.ui.settings.relayStatusLine
+import com.monostr.app.ui.settings.RelayTone
+import com.monostr.app.ui.settings.relayTone
 import com.monostr.nostr.RelayList
 import com.monostr.nostr.model.RelayInfo
 import com.monostr.nostr.model.RelayMode
@@ -113,5 +115,16 @@ class RelayHealthTest {
         assertEquals(live[0], relayInfoFor(live, "ws://abc.onion/"))
         assertEquals(null, relayInfoFor(live, "wss://path.example/case"), "other relays keep an exact match")
         assertEquals(live[1], relayInfoFor(live, "wss://Path.example/Case"))
+    }
+
+    @Test
+    fun `a short disconnect is amber, red only for resting or never connected`() {
+        fun tone(info: RelayInfo?, seen: Long? = null) = relayTone(info, relayStatusLine(info, seen, now))
+        assertEquals(RelayTone.OK, tone(RelayInfo("wss://a", RelayState.CONNECTED, everConnected = true)))
+        assertEquals(RelayTone.PENDING, tone(RelayInfo("wss://a", RelayState.CONNECTING)))
+        assertEquals(RelayTone.WARN, tone(RelayInfo("wss://a", RelayState.DISCONNECTED), seen = now - 300))
+        assertEquals(RelayTone.BAD, tone(RelayInfo("wss://a", RelayState.DISCONNECTED)))
+        assertEquals(RelayTone.BAD, tone(RelayInfo("wss://a", RelayState.DISCONNECTED, resting = true), seen = now - 300))
+        assertEquals(RelayTone.NONE, tone(null))
     }
 }

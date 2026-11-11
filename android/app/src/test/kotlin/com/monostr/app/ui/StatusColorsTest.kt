@@ -9,10 +9,10 @@ import org.junit.jupiter.api.Test
 class StatusColorsTest {
     @Test
     fun `status colours read on their surfaces`() {
-        listOf(StatusColors.LightOk, StatusColors.LightBad).forEach { c ->
+        listOf(StatusColors.LightOk, StatusColors.LightBad, StatusColors.LightWarn).forEach { c ->
             assertTrue(Contrast.ratio(c, MonoColors.LightSurface) >= 4.5, "light ${c.toString(16)}")
         }
-        listOf(StatusColors.DarkOk, StatusColors.DarkBad).forEach { c ->
+        listOf(StatusColors.DarkOk, StatusColors.DarkBad, StatusColors.DarkWarn).forEach { c ->
             assertTrue(Contrast.ratio(c, MonoColors.DarkSurface) >= 4.5, "dark ${c.toString(16)}")
         }
     }

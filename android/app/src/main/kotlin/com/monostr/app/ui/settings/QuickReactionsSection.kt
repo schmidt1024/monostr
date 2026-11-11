@@ -30,11 +30,11 @@ import com.monostr.app.R
 import com.monostr.app.ui.common.Reactions
 import com.monostr.app.ui.theme.Spacing
 
-/** Settings → Reactions: the quick emojis of the long press on the heart, in the user's order. */
+/** Settings → Reactions: the quick emojis of the long press on the heart, in the user's order. [showTitle] is false under a top bar naming it. */
 @Composable
-fun QuickReactionsSection(list: List<String>, onChange: (List<String>) -> Unit) {
+fun QuickReactionsSection(list: List<String>, onChange: (List<String>) -> Unit, showTitle: Boolean = true) {
     Column(Modifier.fillMaxWidth()) {
-        Text(stringResource(R.string.settings_reactions), style = MaterialTheme.typography.titleMedium)
+        if (showTitle) Text(stringResource(R.string.settings_reactions), style = MaterialTheme.typography.titleMedium)
         Text(stringResource(R.string.settings_reactions_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         list.forEachIndexed { i, e ->
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.testTag("settings-reaction-$i")) {

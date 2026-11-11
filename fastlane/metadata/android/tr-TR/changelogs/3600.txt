@@ -1,0 +1,6 @@
+- Ayarlar yenilendi: aramalı kısa bir genel bakış; Tor, relay'ler ve Monero canlı durumla en üstte, her konu için bir sayfa
+- Arama her ayarı bulur ve doğrudan oraya götürür
+- Çıkış yapmadan, bahşişleri kapatmadan, görüntüleme anahtarını silmeden veya adresini kaldırmadan önce sorar
+- Bir relay silindikten sonra geri al, okuma/yazma modu korunur
+- Telefonlarda dikey; resimler ve videolar dönmeye devam eder
+- Düzeltmeler

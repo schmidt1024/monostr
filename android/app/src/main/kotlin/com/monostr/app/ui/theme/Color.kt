@@ -38,4 +38,6 @@ object StatusColors {
     const val DarkOk = 0xFF3DDC84
     const val LightBad = 0xFFC62828
     const val DarkBad = 0xFFEF5350
+    const val LightWarn = 0xFF8A5A00
+    const val DarkWarn = 0xFFFFB74D
 }

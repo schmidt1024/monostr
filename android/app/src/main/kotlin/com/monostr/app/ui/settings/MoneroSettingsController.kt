@@ -67,8 +67,13 @@ data class MoneroSettingsState(
     val personalLine: PersonalWatcherLine = PersonalWatcherLine.Unknown,
     /** Whether the watcher speaks protocol 0.5 (hidden amounts); null while unknown or unreachable. */
     val amountsSupported: Boolean? = null,
+    /** The stored presets, formatted like [presets]: the fields differ from them only while there is something to save. */
+    val savedPresets: List<String> = presets,
 ) {
     val canAddPreset: Boolean get() = presets.size < Presets.MAX
+
+    /** UX P2-13: «Save» shows only while the fields hold a change (a comma counts as the decimal point, as [Presets.parse] reads it). */
+    val presetsDirty: Boolean get() = presets.map { it.trim().replace(',', '.') } != savedPresets
 
     /**
      * The address to show with «Change» / «Remove» / the receipts upgrade: only for an account with just a payto.
@@ -140,7 +145,8 @@ class MoneroSettingsController(
         }
         scope.launch {
             combine(settings.presets, settings.amountUnit) { p, u -> p to u }.collect { (p, u) ->
-                _state.update { it.copy(presets = p.map { v -> Presets.format(v, u) }, unit = u) }
+                val formatted = p.map { v -> Presets.format(v, u) }
+                _state.update { it.copy(presets = formatted, savedPresets = formatted, unit = u) }
             }
         }
     }
@@ -230,7 +236,9 @@ class MoneroSettingsController(
         }
         scope.launch {
             settings.setPresets(parsed)
-            _state.update { it.copy(error = null, message = uiText(R.string.settings_msg_presets_saved)) }
+            // the store does not emit again for equal values ("0.0010" saved over "0.001"): the fields take the saved form here
+            val formatted = parsed.map { Presets.format(it, _state.value.unit) }
+            _state.update { it.copy(presets = formatted, savedPresets = formatted, error = null, message = uiText(R.string.settings_msg_presets_saved)) }
         }
     }
 

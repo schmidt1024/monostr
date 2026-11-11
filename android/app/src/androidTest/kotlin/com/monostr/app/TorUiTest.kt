@@ -1,5 +1,6 @@
 package com.monostr.app
 
+import com.monostr.app.ui.settings.SettingsPage
 import android.content.res.Configuration
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -484,6 +485,7 @@ class TorUiTest {
     @Test
     fun theRoutesASwitchReturnsTo() {
         assertEquals("settings?section=privacy", Routes.afterTorSwitch("settings?section={section}"))
+        assertEquals("settings?section=privacy", Routes.afterTorSwitch("settings/{page}?focus={focus}"))
         for (tab in listOf(Routes.MESSAGES, Routes.BOOKMARKS, Routes.NOTIFICATIONS)) assertEquals(tab, Routes.afterTorSwitch(tab))
         assertEquals("search", Routes.afterTorSwitch(Routes.SEARCH))
         for (other in listOf(Routes.FEED, "thread/{id}", "profile/{pubkey}", null)) assertEquals(null, Routes.afterTorSwitch(other))
@@ -847,7 +849,7 @@ class TorUiRealSwitchTest {
             rule.onNodeWithTag("setup-skip").performClick()
             rule.waitUntil(15_000) { has("fab-compose") }
         }
-        rule.onNodeWithTag("feed-settings").performClick()
+        rule.openSettingsPage(ctx, SettingsPage.PRIVACY)
         rule.waitUntil(15_000) { has("settings-tor") }
         rule.onNodeWithTag("settings-tor").performScrollTo().performClick()
         rule.waitUntil(5_000) { has("tor-explain-confirm") }

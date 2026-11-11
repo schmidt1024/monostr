@@ -1,11 +1,20 @@
 package com.monostr.app.ui.settings
 
-import com.monostr.app.ui.common.GuardedAlertDialog
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Text
+import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
 import androidx.compose.material3.TextButton
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.unit.dp
+import com.monostr.app.ui.theme.SettingsIcons
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -13,7 +22,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import com.monostr.app.ui.theme.Spacing
 import com.monostr.app.R
 import com.monostr.app.data.PrefsRelayStore
 import com.monostr.nostr.model.RelayMode
@@ -30,24 +41,26 @@ fun isDefaultRelayList(
 private enum class RelayListAction { PUBLISH, ADOPT, RESET }
 
 /**
- * The actions on the whole relay list, side by side so that their directions cannot be mixed up:
- * publish the app's relays as the NIP-65 list, replace the app's relays by the published list,
- * and go back to the default relays ([isDefault]: nothing to go back to). Each replaces a list
- * for good and therefore asks first.
+ * The actions on the whole relay list (UX P2-3): publish the app's relays as the NIP-65 list (the one primary, filled
+ * action), take over the published list, and go back to the default relays ([isDefault]: nothing to go back to). The card
+ * title names NIP-65, so the buttons are short; each replaces a list for good and therefore asks first, with the full text.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun RelayListActions(isDefault: Boolean, busy: Boolean, onPublish: () -> Unit, onAdopt: () -> Unit, onReset: () -> Unit) {
     var asking by rememberSaveable { mutableStateOf<RelayListAction?>(null) }
-    OutlinedButton(onClick = { asking = RelayListAction.PUBLISH }, enabled = !busy, modifier = Modifier.fillMaxWidth().testTag("settings-publish-relays"), shape = MaterialTheme.shapes.medium) {
-        Text(stringResource(R.string.settings_publish_relays))
+    // a filled button: the theme maps the tonal container to the card colour, so a tonal one read as plain text
+    Button(onClick = { asking = RelayListAction.PUBLISH }, enabled = !busy, modifier = Modifier.fillMaxWidth().testTag("settings-publish-relays"), shape = MaterialTheme.shapes.medium) {
+        Text(stringResource(R.string.settings_publish_list))
     }
-    Text(stringResource(R.string.settings_publish_relays_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    OutlinedButton(onClick = { asking = RelayListAction.ADOPT }, enabled = !busy, modifier = Modifier.fillMaxWidth().testTag("settings-adopt-relays"), shape = MaterialTheme.shapes.medium) {
-        Text(stringResource(R.string.settings_adopt_relays))
-    }
-    if (!isDefault) {
-        OutlinedButton(onClick = { asking = RelayListAction.RESET }, enabled = !busy, modifier = Modifier.fillMaxWidth().testTag("settings-reset-relays"), shape = MaterialTheme.shapes.medium) {
-            Text(stringResource(R.string.settings_reset_relays))
+    FlowRow {
+        TextButton(onClick = { asking = RelayListAction.ADOPT }, enabled = !busy, modifier = Modifier.testTag("settings-adopt-relays")) {
+            Text(stringResource(R.string.settings_use_published_list))
+        }
+        if (!isDefault) {
+            TextButton(onClick = { asking = RelayListAction.RESET }, enabled = !busy, modifier = Modifier.testTag("settings-reset-relays")) {
+                Text(stringResource(R.string.settings_reset_relays))
+            }
         }
     }
     when (asking) {
@@ -69,11 +82,23 @@ fun RelayListActions(isDefault: Boolean, busy: Boolean, onPublish: () -> Unit, o
 
 @Composable
 private fun ConfirmRelayListAction(title: Int, text: Int, confirm: Int, confirmTag: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
-    GuardedAlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(title)) },
-        text = { Text(stringResource(text)) },
-        confirmButton = { TextButton(onClick = onConfirm, modifier = Modifier.testTag(confirmTag)) { Text(stringResource(confirm)) } },
-        dismissButton = { TextButton(onClick = onDismiss, modifier = Modifier.testTag("settings-confirm-cancel")) { Text(stringResource(R.string.action_cancel)) } },
-    )
+    SettingsConfirmDialog(stringResource(title), stringResource(text), stringResource(confirm), confirmTag, onConfirm, onDismiss)
+}
+
+/**
+ * 0.24.3: says how the app's relays differ from the published NIP-65 list, above the button that publishes them. Round 2
+ * (UX P2-3): a normal state, so neutral text with an info icon, not error red.
+ */
+@Composable
+fun RelayListDiffHint(diff: RelayListDiff) {
+    val lines = buildList {
+        if (diff.noneFound) add(stringResource(R.string.relays_none_found))
+        if (diff.unpublished > 0) add(pluralStringResource(R.plurals.relays_unpublished, diff.unpublished, diff.unpublished))
+        if (diff.missing > 0) add(pluralStringResource(R.plurals.relays_missing_here, diff.missing, diff.missing))
+    }
+    Row(Modifier.fillMaxWidth().padding(vertical = Spacing.s)) {
+        Icon(SettingsIcons.Info, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(Spacing.m))
+        Text(lines.joinToString(" "), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("settings-relay-diff"))
+    }
 }

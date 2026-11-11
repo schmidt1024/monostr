@@ -68,3 +68,18 @@ fun relayShownUrl(url: String): String {
     val u = url.trim().trimEnd('/')
     return if (u.startsWith("wss://", ignoreCase = true)) u.substring(6) else u
 }
+
+/**
+ * How loud a relay's status line is (UX P2-15): a short disconnect is amber, red is kept for a relay that rests after
+ * failing or never connected, so it does not compete with real errors; connected is green, connecting grey.
+ */
+enum class RelayTone { OK, PENDING, WARN, BAD, NONE }
+
+fun relayTone(info: RelayInfo?, line: RelayStatusLine): RelayTone = when {
+    info == null -> RelayTone.NONE
+    info.resting -> RelayTone.BAD
+    info.state == RelayState.CONNECTED -> RelayTone.OK
+    info.state == RelayState.CONNECTING -> RelayTone.PENDING
+    line.neverSeen -> RelayTone.BAD
+    else -> RelayTone.WARN
+}

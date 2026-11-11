@@ -211,6 +211,8 @@ class TranslateTest {
         rule.onNodeWithTag("translate-mode-off").performClick()
         rule.waitUntil(5_000) { nodes("translate-url").isEmpty() }
         Espresso.pressBack()
+        rule.waitUntil(15_000) { nodes("settings-cat-privacy").isNotEmpty() } // the overview lies under the page
+        Espresso.pressBack()
         rule.waitUntil(15_000) { nodes("note-text-${id8(fr)}").isNotEmpty() }
         assertTrue("off: no button", nodes("translate-${id8(fr)}").isEmpty())
         assertEquals(0, server.requestCount)

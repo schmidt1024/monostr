@@ -1,0 +1,6 @@
+- Configurações refeitas: visão geral curta com busca; Tor, relays e Monero no topo com status ao vivo, uma página por tema
+- A busca encontra qualquer configuração e leva direto até ela
+- Pede confirmação antes de sair, desativar gorjetas, apagar a chave de visualização ou remover seu endereço
+- Desfazer após apagar um relay, mantendo o modo de leitura/escrita
+- Retrato em celulares; imagens e vídeos continuam girando
+- Correções

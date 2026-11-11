@@ -47,20 +47,24 @@ class MediaServerSettingTest {
         }
         rule.onNodeWithTag("settings-media-server").assertTextContains(MediaServer.DEFAULT)
         assertTrue(nodes("settings-media-server-reset").isEmpty()) // nothing to reset while the default is set
+        // owner 5: the check icon (inside the field, so unmerged) only while the field holds an unsaved change
+        assertTrue(nodes("settings-media-server-save").isEmpty())
 
         rule.onNodeWithTag("settings-media-server").performTextClearance()
         rule.onNodeWithTag("settings-media-server").performTextInput("http://plain.example")
-        rule.onNodeWithTag("settings-media-server-save").performClick()
+        rule.onNodeWithTag("settings-media-server-save", useUnmergedTree = true).performClick()
+        androidx.test.espresso.Espresso.closeSoftKeyboard() // the line sits under the field; with the keyboard up the check fails on the AVD
         rule.onNodeWithTag("settings-media-server-error", useUnmergedTree = true).assertIsDisplayed()
         assertTrue(saved.isEmpty())
 
         rule.onNodeWithTag("settings-media-server").performTextClearance()
         rule.onNodeWithTag("settings-media-server").performTextInput("https://Blossom.Example/")
-        rule.onNodeWithTag("settings-media-server-save").performClick()
+        rule.onNodeWithTag("settings-media-server-save", useUnmergedTree = true).performClick()
         rule.waitForIdle()
         assertEquals(listOf("https://blossom.example"), saved)
         assertTrue(nodes("settings-media-server-error").isEmpty())
         rule.onNodeWithTag("settings-media-server").assertTextContains("https://blossom.example")
+        assertTrue(nodes("settings-media-server-save").isEmpty())
 
         rule.onNodeWithTag("settings-media-server-reset").performClick()
         rule.waitForIdle()

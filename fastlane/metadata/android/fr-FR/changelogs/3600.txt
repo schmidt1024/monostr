@@ -1,0 +1,6 @@
+- Réglages refaits : un aperçu court avec recherche ; Tor, relays et Monero en haut avec leur état en direct, une page par thème
+- La recherche trouve chaque réglage et y mène directement
+- Demande confirmation avant de se déconnecter, désactiver les pourboires, supprimer la clé de vue ou retirer votre adresse
+- Annuler après la suppression d'un relay, avec son mode lecture/écriture
+- Portrait sur téléphone ; images et vidéos pivotent toujours
+- Corrections

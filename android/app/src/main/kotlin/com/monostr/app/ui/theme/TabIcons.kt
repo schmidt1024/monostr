@@ -26,29 +26,29 @@ object TabIcons {
     private const val BELL_CLAPPER = "M13.73 21A2 2 0 0 1 10.27 21"
     private const val MESSAGE = "M21 11.5A8.38 8.38 0 0 1 20.1 15.3A8.5 8.5 0 0 1 12.5 20A8.38 8.38 0 0 1 8.7 19.1L3 21L4.9 15.3A8.38 8.38 0 0 1 4 11.5A8.5 8.5 0 0 1 8.7 3.9A8.38 8.38 0 0 1 12.5 3H13A8.48 8.48 0 0 1 21 11V11.5Z"
 
-    val Home by lazy { icon("tab_home", listOf(HOME to false, HOME_DOOR to false)) }
-    val HomeActive by lazy { icon("tab_home_active", listOf(HOME to true)) }
-    val Search by lazy { icon("tab_search", listOf(SEARCH to false)) }
-    val SearchActive by lazy { icon("tab_search_active", listOf(SEARCH to false), stroke = STROKE_ACTIVE) }
-    val Bookmark by lazy { icon("tab_bookmark", listOf(BOOKMARK to false)) }
-    val BookmarkActive by lazy { icon("tab_bookmark_active", listOf(BOOKMARK to true)) }
-    val Bell by lazy { icon("tab_bell", listOf(BELL to false, BELL_CLAPPER to false)) }
-    val BellActive by lazy { icon("tab_bell_active", listOf(BELL to true, BELL_CLAPPER to false)) }
-    val Message by lazy { icon("tab_message", listOf(MESSAGE to false)) }
-    val MessageActive by lazy { icon("tab_message_active", listOf(MESSAGE to true)) }
-
-    /** [paths]: SVG path data, each with whether it is filled as well as stroked. */
-    private fun icon(name: String, paths: List<Pair<String, Boolean>>, stroke: Float = STROKE): ImageVector =
-        ImageVector.Builder(name = name, defaultWidth = 24.dp, defaultHeight = 24.dp, viewportWidth = 24f, viewportHeight = 24f).apply {
-            for ((data, filled) in paths) {
-                addPath(
-                    pathData = addPathNodes(data),
-                    fill = if (filled) SolidColor(Color.Black) else null,
-                    stroke = SolidColor(Color.Black),
-                    strokeLineWidth = stroke,
-                    strokeLineCap = StrokeCap.Round,
-                    strokeLineJoin = StrokeJoin.Round,
-                )
-            }
-        }.build()
+    val Home by lazy { featherIcon("tab_home", listOf(HOME to false, HOME_DOOR to false)) }
+    val HomeActive by lazy { featherIcon("tab_home_active", listOf(HOME to true)) }
+    val Search by lazy { featherIcon("tab_search", listOf(SEARCH to false)) }
+    val SearchActive by lazy { featherIcon("tab_search_active", listOf(SEARCH to false), stroke = STROKE_ACTIVE) }
+    val Bookmark by lazy { featherIcon("tab_bookmark", listOf(BOOKMARK to false)) }
+    val BookmarkActive by lazy { featherIcon("tab_bookmark_active", listOf(BOOKMARK to true)) }
+    val Bell by lazy { featherIcon("tab_bell", listOf(BELL to false, BELL_CLAPPER to false)) }
+    val BellActive by lazy { featherIcon("tab_bell_active", listOf(BELL to true, BELL_CLAPPER to false)) }
+    val Message by lazy { featherIcon("tab_message", listOf(MESSAGE to false)) }
+    val MessageActive by lazy { featherIcon("tab_message_active", listOf(MESSAGE to true)) }
 }
+
+/** [paths]: SVG path data, each with whether it is filled as well as stroked. */
+internal fun featherIcon(name: String, paths: List<Pair<String, Boolean>>, stroke: Float = 1.8f): ImageVector =
+    ImageVector.Builder(name = name, defaultWidth = 24.dp, defaultHeight = 24.dp, viewportWidth = 24f, viewportHeight = 24f).apply {
+        for ((data, filled) in paths) {
+            addPath(
+                pathData = addPathNodes(data),
+                fill = if (filled) SolidColor(Color.Black) else null,
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = stroke,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+            )
+        }
+    }.build()

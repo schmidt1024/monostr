@@ -1,5 +1,6 @@
 package com.monostr.app
 
+import com.monostr.app.ui.settings.SettingsPage
 import android.view.WindowManager
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertTextEquals
@@ -76,7 +77,7 @@ class ShowKeyTest {
 
     /** Settings → "Show key" → warning → confirm (no screen lock on the emulator) → the key screen. */
     private fun openShowKey() {
-        rule.onNodeWithContentDescription(ctx.getString(R.string.feed_settings)).performClick()
+        rule.openSettingsPage(ctx, SettingsPage.ACCOUNT)
         rule.waitUntil(15_000) { nodes("settings-show-key").isNotEmpty() }
         rule.onNodeWithTag("settings-show-key").performScrollTo().performClick()
         rule.waitUntil(5_000) { nodes("show-key-warning").isNotEmpty() }

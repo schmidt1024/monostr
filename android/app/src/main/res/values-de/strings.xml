@@ -5,7 +5,7 @@
 
     <!-- shared actions and states -->
     <string name="action_back">Zurück</string>
-    <string name="action_close">Schließen</string>
+    <string name="action_close">Schliessen</string>
     <string name="action_done">Fertig</string>
     <string name="action_check">Prüfen</string>
     <string name="action_add">Hinzufügen</string>
@@ -27,7 +27,7 @@
     <string name="relay_resting">nicht erreichbar, neuer Versuch alle 10 Minuten</string>
     <string name="relay_last_seen">zuletzt verbunden: %1$s</string>
     <string name="relay_never_seen">noch nie verbunden</string>
-    <string name="relays_none_found">Keine veröffentlichte Relay-Liste gefunden. Andere Apps und der Tip-Watcher suchen dich auf den Relays dieser Liste. Sobald du eine veröffentlichst, suchen sie nur noch dort: Füge zuerst die Relays mit deinen älteren Notes hinzu, sonst wirken diese verschwunden.</string>
+    <string name="relays_none_found">Noch keine Relay-Liste veröffentlicht. Andere Apps und der Tip-Watcher finden dich darüber. Füge vor dem Veröffentlichen die Relays mit deinen älteren Notes hinzu.</string>
     <plurals name="relays_unpublished">
         <item quantity="one">%d Relay hier ist nicht in deiner veröffentlichten Liste: Andere Apps und der Tip-Watcher suchen dich dort nicht.</item>
         <item quantity="other">%d Relays hier sind nicht in deiner veröffentlichten Liste: Andere Apps und der Tip-Watcher suchen dich dort nicht.</item>
@@ -84,7 +84,7 @@
     <string name="media_tap_to_load">Tippen, um Bilder zu laden</string>
     <string name="media_failed">Bild konnte nicht geladen werden</string>
     <string name="media_video">Video abspielen</string>
-    <string name="media_viewer_close">Schließen</string>
+    <string name="media_viewer_close">Schliessen</string>
     <string name="media_copy_link">Link kopieren</string>
     <string name="media_open_browser">Im Browser öffnen</string>
     <string name="media_save">Bild speichern</string>
@@ -192,7 +192,7 @@
     <string name="tip_no_wallet_text">Installiere Unstoppable oder Cake Wallet, oder zahle den Betrag manuell an diese Adresse:</string>
     <string name="tip_open_wallet_again">Wallet erneut öffnen</string>
     <string name="tip_sent">Wallet geöffnet. Der Tip wartet auf die Bestätigung durch den Watcher.</string>
-    <string name="tip_error_amount">Betrag ungültig (z. B. 0.005)</string>
+    <string name="tip_error_amount">Betrag ungültig (z. B. 0,005 oder 0.005)</string>
     <string name="tip_payto_title_plain">Monero senden</string>
     <string name="tip_payto_note">Geht an die Adresse, nicht an diese Notiz. Ohne Bestätigung: Monostr sieht nicht, ob gezahlt wurde.</string>
     <string name="tip_payto_profile">Ohne Bestätigung: Monostr sieht nicht, ob gezahlt wurde.</string>
@@ -316,12 +316,12 @@
     <string name="relay_mode_description">%1$s, %2$s. Zum Ändern tippen</string>
     <string name="settings_relay_save_failed">Relays konnten nicht gespeichert werden</string>
     <string name="settings_messages">Nachrichten</string>
-    <string name="settings_dm_relays">DM-Relays (NIP-17)</string>
-    <string name="settings_dm_relays_hint">Dorthin liefern andere deine Nachrichten; wird als kind 10050 veröffentlicht. relay.monostr.com verlangt eine Anmeldung (NIP-42) – Amber braucht dafür die Berechtigung für kind 22242, siehe „Amber-Berechtigungen erneuern“.</string>
+    <string name="settings_dm_relays">Nachrichten-Relays</string>
+    <string name="settings_dm_relays_hint">Dorthin liefern andere deine Nachrichten; wird als kind 10050 veröffentlicht. relay.monostr.com verlangt eine Anmeldung (NIP-42) – Amber braucht dafür die Berechtigung für kind 22242, siehe «Amber-Berechtigungen erneuern».</string>
     <string name="settings_dm_preview_name">Absender in Benachrichtigung zeigen</string>
     <string name="settings_dm_preview_text">Text in Benachrichtigung zeigen</string>
     <string name="settings_search_relays">Such-Relays</string>
-    <string name="settings_search_relays_hint">Nur für Namens- und Volltextsuche (NIP-50), nie für den Feed.</string>
+    <string name="settings_search_relays_hint">Nur für Namens- und Volltextsuche (NIP-50), nie für den Feed. Deine Suchbegriffe gehen an diese Relays.</string>
     <string name="settings_search_relays_reset">Auf Standard zurücksetzen</string>
     <string name="settings_suggested_relays">Vorgeschlagene Relays</string>
     <string name="settings_suggested_relays_hint">Bezahlte Monero-Relays: Lesen ist frei, Schreiben nach einmaliger XMR-Zahlung auf der Website des Relays. Quelle: pmnr.xmr.rocks</string>
@@ -348,23 +348,21 @@
     <string name="link_preview_remove">Vorschau entfernen</string>
     <string name="settings_author_relays">Relays des Autors temporär verbinden</string>
     <string name="settings_author_relays_hint">Notes werden auch von den eigenen Relays anderer Leute geholt: wenn du ein Profil öffnest und wenn eine Note auf eine antwortet oder eine zitiert, die deine Relays nicht haben. Diese Relays sehen deine IP-Adresse und welche Notes du anschaust.</string>
-    <string name="settings_pow">Proof of Work</string>
+    <string name="settings_pow">Proof of Work beim Senden</string>
     <string name="settings_pow_hint">Manche Relays nehmen nur Notes mit Proof of Work an (NIP-13). Mehr Bits werden eher angenommen, das Senden dauert aber länger.</string>
     <string name="settings_pow_off">Aus</string>
     <string name="settings_pow_bits">%1$d Bit</string>
-    <string name="settings_pow_filter">Mindest-Proof-of-Work für Notes</string>
+    <string name="settings_pow_filter">Notes ohne Proof of Work ausblenden</string>
     <string name="settings_pow_filter_hint">Blendet Notes unter diesem Wert von Leuten aus, denen du nicht folgst. Wenige Apps senden Proof of Work, darum verschwinden die meisten ihrer Notes. Notes, die du öffnest, und Tips bleiben.</string>
-    <string name="settings_client_tag">„via Monostr“ anzeigen</string>
-    <string name="settings_client_tag_hint">Notes, Likes und Reposts tragen einen Client-Tag, den andere Apps als „via Monostr“ zeigen.</string>
+    <string name="settings_client_tag">«via Monostr» anzeigen</string>
+    <string name="settings_client_tag_hint">Notes, Likes und Reposts tragen einen Client-Tag, den andere Apps als «via Monostr» zeigen.</string>
     <string name="note_via">via %1$s</string>
     <string name="settings_monero">Monero-Tips</string>
-    <string name="settings_monero_not_set_up">Nicht eingerichtet. Zum Senden von Tips nicht nötig.</string>
-    <string name="settings_monero_payto">Deine Monero-Adresse %1$s…%2$s</string>
+    <string name="settings_monero_not_set_up">Nicht eingerichtet · Senden geht auch ohne</string>
     <string name="settings_monero_payto_change">Ändern</string>
     <string name="settings_monero_payto_remove">Entfernen</string>
     <string name="settings_msg_payto_removed">Adresse entfernt</string>
     <string name="settings_msg_disabled_payto_left">Tips sind aus, aber deine öffentliche Adresse konnte nicht entfernt werden.</string>
-    <string name="settings_monero_announced">Tips kommen an %1$s…%2$s an, eingerichtet auf einem anderen Gerät. Eine Einrichtung hier ersetzt diese Adresse.</string>
     <string name="settings_monero_set_up">Monero-Tips empfangen einrichten</string>
     <string name="settings_monero_address">Tips kommen in dieser Wallet an: %1$s…%2$s · %3$s</string>
     <string name="settings_monero_wallet_hint">Nicht an einer Monero-Adresse in deiner Bio oder anderen Profilfeldern. Tip-Belege erreichen dich über den Watcher und deine eigenen Relays; bezahlte Relays sind nicht nötig.</string>
@@ -382,8 +380,8 @@
     <string name="settings_monero_disable">Tips abschalten</string>
     <string name="settings_monero_delete_view_key">View-Key lokal löschen</string>
     <string name="settings_amount_unit">Einheit</string>
-    <string name="settings_amount_unit_hint">Wie Beträge angezeigt und eingegeben werden. 1 mXMR = 0,001 XMR; die Wallet bekommt immer XMR.</string>
-    <string name="settings_presets">Tip-Presets (%1$s)</string>
+    <string name="settings_amount_unit_hint">Wie Beträge angezeigt und eingegeben werden. 1 mXMR = ein Tausendstel XMR; die Wallet bekommt immer XMR.</string>
+    <string name="settings_presets">Tip-Beträge (%1$s)</string>
     <string name="settings_preset_n">Preset %1$d</string>
     <string name="settings_presets_save">Presets speichern</string>
     <string name="settings_preset_add">Preset hinzufügen</string>
@@ -403,7 +401,7 @@
     <string name="settings_reset_relays_hint">Die Relays dieser App werden durch die Standard-Relays von Monostr ersetzt.</string>
     <string name="settings_msg_relay_list_published">Relay-Liste veröffentlicht</string>
     <string name="settings_msg_relay_list_not_published">Kein Relay hat die Relay-Liste angenommen</string>
-    <string name="settings_err_presets">Presets: gültige %1$s-Beträge, z. B. 0.001</string>
+    <string name="settings_err_presets">Presets: gültige %1$s-Beträge, z. B. 0,001 oder 0.001</string>
 
     <!-- appearance (Task 5) -->
     <string name="settings_appearance">Darstellung</string>
@@ -420,7 +418,6 @@
     <string name="settings_accent_selected">%1$s, ausgewählt</string>
     <string name="settings_language">Sprache</string>
     <string name="settings_language_text">Die App-Sprache folgt der Systemeinstellung.</string>
-    <string name="settings_language_button">App-Sprache ändern</string>
 
     <!-- notifications -->
     <string name="notifications_title">Mitteilungen</string>
@@ -428,7 +425,7 @@
     <string name="notifications_checking">Relays werden gefragt…</string>
     <string name="notifications_error_load">Mitteilungen konnten nicht geladen werden</string>
     <string name="messages_title">Nachrichten</string>
-    <string name="messages_empty">Noch keine Nachrichten. Öffne ein Profil und tippe auf „Nachricht“.</string>
+    <string name="messages_empty">Noch keine Nachrichten. Öffne ein Profil und tippe auf «Nachricht».</string>
     <plurals name="messages_requests">
         <item quantity="one">Anfrage (%1$d)</item>
         <item quantity="other">Anfragen (%1$d)</item>
@@ -478,8 +475,8 @@
         <item quantity="one">%1$s, %2$s und %3$d weitere Person haben deine Note repostet</item>
         <item quantity="other">%1$s, %2$s und %3$d weitere haben deine Note repostet</item>
     </plurals>
-    <string name="notif_about_reply">Antwort auf: „%1$s“</string>
-    <string name="notif_about_quote">Zitiert: „%1$s“</string>
+    <string name="notif_about_reply">Antwort auf: «%1$s»</string>
+    <string name="notif_about_quote">Zitiert: «%1$s»</string>
     <string name="notif_tip_profile">an dein Profil</string>
     <string name="avatar_of">Profil von %1$s</string>
     <string name="notif_note_missing">Note nicht geladen</string>
@@ -580,7 +577,7 @@
     <string name="dm_relay_hint_dismiss">Ausblenden</string>
     <string name="dm_relay_hint_replace">Deine Inbox-Liste ist voll. Welches Relay soll relay.monostr.com ersetzen?</string>
     <string name="upload_error_nsfw">Dieser Server nimmt keine Inhalte für Erwachsene an. In den Einstellungen kannst du einen anderen Medien-Server wählen.</string>
-    <string name="upload_error_too_large">Bild zu groß für diesen Server</string>
+    <string name="upload_error_too_large">Bild zu gross für diesen Server</string>
     <string name="upload_error_quota">Dein Speicher auf diesem Server ist voll</string>
     <string name="upload_error_rate">Upload-Limit erreicht, versuch es morgen wieder</string>
     <string name="upload_error_type">Der Server nimmt diese Art Datei nicht an</string>
@@ -651,7 +648,7 @@
     <string name="create_cancel_text">Abbrechen? Der Schlüssel wird verworfen.</string>
     <string name="create_cancel_yes">Verwerfen</string>
     <string name="create_cancel_no">Weitermachen</string>
-    <string name="settings_show_key">Schlüssel anzeigen</string>
+    <string name="settings_show_key">Privaten Schlüssel anzeigen (nsec)</string>
     <string name="settings_show_key_title">Dein Schlüssel</string>
     <string name="settings_show_key_warning">Wer diesen Schlüssel hat, kontrolliert dein Konto. Anzeigen?</string>
     <string name="settings_show_key_confirm">Anzeigen</string>
@@ -817,4 +814,81 @@
         <item quantity="one">%d offener Tip wird verworfen.</item>
         <item quantity="other">%d offene Tips werden verworfen.</item>
     </plurals>
+    <!-- settings overview -->
+    <string name="settings_page_account">Konto &amp; Schlüssel</string>
+    <string name="settings_page_privacy">Tor &amp; Privatsphäre</string>
+    <string name="settings_page_monero">Monero &amp; Tips</string>
+    <string name="settings_page_notifications">Benachrichtigungen</string>
+    <string name="settings_page_content">Inhalt &amp; Medien</string>
+    <string name="settings_page_help">Hilfe &amp; Info</string>
+    <string name="settings_sub_privacy">Tor, Links, Vorschauen, Muten</string>
+    <string name="settings_sub_relays">Eigene, Nachrichten, Suche, PoW</string>
+    <string name="settings_sub_monero">Wallet, Watcher, Beträge, Einheit</string>
+    <string name="settings_sub_notifications">Nachrichtenvorschau</string>
+    <string name="settings_sub_content">Bilder, GIFs, Reaktionen, PoW</string>
+    <string name="settings_sub_translation">Dienst, eigener Server</string>
+    <string name="settings_sub_appearance">Design, Akzent, Sprache</string>
+    <string name="settings_sub_help">Unterstützung, Version, Lizenzen</string>
+    <string name="settings_search_hint">Einstellungen durchsuchen</string>
+    <string name="settings_search_none">Keine Einstellungen gefunden</string>
+    <string name="settings_chip_tor_off">Tor aus</string>
+    <string name="settings_chip_tor_connecting">Verbindet</string>
+    <string name="settings_chip_tor_on">Tor an</string>
+    <string name="settings_chip_tor_failed">Tor nicht verbunden</string>
+    <string name="settings_chip_relays">%1$d/%2$d</string>
+    <string name="settings_chip_monero_ready">Bereit</string>
+    <string name="settings_label_links">Links</string>
+    <string name="settings_label_visibility">Sichtbarkeit</string>
+    <string name="settings_label_people">Personen</string>
+    <string name="settings_label_my_relays">Meine Relays</string>
+    <string name="settings_label_other_lists">Weitere Listen</string>
+    <string name="settings_label_sending_tips">Tips senden</string>
+    <string name="settings_label_payto">Zahlungsadresse</string>
+    <string name="settings_label_danger">Gefahrenzone</string>
+    <string name="settings_theme_mode">Farbschema</string>
+    <string name="settings_translate_service">Übersetzungsdienst</string>
+    <string name="settings_search_relays_reset_entry">Such-Relays zurücksetzen</string>
+    <string name="settings_relay_add">Relay hinzufügen</string>
+    <string name="settings_dm_relay_add">Nachrichten-Relay hinzufügen</string>
+    <string name="tor_settings_off">Aus</string>
+    <string name="settings_label_key">Schlüssel</string>
+    <string name="settings_label_connections">Verbindungen</string>
+    <string name="settings_label_relay_list">Relay-Liste (NIP-65)</string>
+    <string name="settings_label_sending">Senden</string>
+    <string name="settings_label_privacy">Privatsphäre</string>
+    <string name="settings_label_receiving_tips">Tips empfangen</string>
+    <string name="settings_label_pictures">Bilder &amp; Video</string>
+    <string name="settings_label_uploads">Uploads</string>
+    <string name="settings_label_feed_filter">Feed-Filter</string>
+    <string name="settings_quick_reactions">Schnellreaktionen</string>
+    <string name="about_license_row">Lizenz</string>
+    <string name="settings_app_language">Sprache der App</string>
+    <string name="settings_monero_disable_q">Tips abschalten?</string>
+    <string name="settings_monero_disable_text">Dein Konto nennt deine Monero-Adresse nicht mehr, und der Watcher zählt keine Tips mehr. Dein View-Key bleibt auf diesem Telefon.</string>
+    <string name="settings_monero_disable_action">Abschalten</string>
+    <string name="settings_monero_delete_view_key_q">View-Key löschen?</string>
+    <string name="settings_monero_delete_view_key_text">Nur die Kopie auf diesem Telefon wird gelöscht. Um später den Watcher zu wechseln, gibst du ihn aus deiner Wallet neu ein.</string>
+    <string name="settings_monero_delete_view_key_action">Löschen</string>
+    <string name="settings_monero_payto_remove_q">Monero-Adresse entfernen?</string>
+    <string name="settings_monero_payto_remove_text">Sie verschwindet aus deinem öffentlichen Profil, dort kann dir dann niemand mehr Tips senden.</string>
+    <string name="settings_logout_q">Abmelden?</string>
+    <string name="settings_logout_key_warning">Dein Schlüssel ist nur auf diesem Telefon. Ohne Kopie kannst du dich nicht mehr anmelden.</string>
+    <string name="settings_logout_show_key">Schlüssel anzeigen</string>
+    <string name="settings_monero_active">Aktiv</string>
+    <string name="settings_chip_monero_active">Aktiv</string>
+    <string name="settings_monero_active_elsewhere">%1$s…%2$s · auf einem anderen Gerät eingerichtet</string>
+    <string name="settings_monero_active_payto">%1$s…%2$s · deine öffentliche Monero-Adresse</string>
+    <string name="settings_monero_receipts">Quittungen einrichten (Watcher + View-Key, optional)</string>
+    <string name="settings_monero_receipts_replaces">Eine Einrichtung hier ersetzt die auf dem anderen Gerät.</string>
+    <string name="settings_media_server_save">Medien-Server speichern</string>
+    <string name="settings_show_key_sub">Wer ihn hat, kontrolliert dein Konto.</string>
+    <string name="settings_no_name">Noch kein Name</string>
+    <string name="settings_copy_npub">npub kopieren</string>
+    <string name="settings_dm_relays_sub">Posteingang für DMs · NIP-17</string>
+    <string name="settings_publish_list">Liste veröffentlichen</string>
+    <string name="settings_use_published_list">Veröffentlichte Liste übernehmen</string>
+    <string name="relay_removed">Relay entfernt</string>
+    <string name="relay_remove_named">%1$s entfernen</string>
+    <string name="settings_chip_relays_spoken">%1$d von %2$d verbunden</string>
+    <string name="settings_tip_amounts">Tip-Beträge</string>
 </resources>

@@ -1,5 +1,6 @@
 package com.monostr.app
 
+import com.monostr.app.ui.settings.SettingsPage
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -53,7 +54,7 @@ class RelayModesTest {
     }
 
     private fun openSettings() {
-        rule.onNodeWithContentDescription(ctx.getString(R.string.feed_settings)).performClick()
+        rule.openSettingsPage(ctx, SettingsPage.RELAYS)
     }
 
     private fun chooseMode(url: String, mode: RelayMode) {
@@ -132,6 +133,8 @@ class RelayModesTest {
                 // a fresh read of the followed author's notes after the modes were set (the feed's own subscriptions were opened before)
                 readAliceAndOwnProfile()
 
+                Espresso.pressBack()
+                rule.waitUntil(15_000) { nodes("settings-cat-privacy").isNotEmpty() } // the overview lies under the page
                 Espresso.pressBack()
                 rule.waitUntil(15_000) { nodes("fab-compose").isNotEmpty() }
                 rule.onNodeWithTag("fab-compose").performClick()

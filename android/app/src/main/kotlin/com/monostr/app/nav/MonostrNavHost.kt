@@ -23,6 +23,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.navigation
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.monostr.app.MainActivity
@@ -69,7 +70,21 @@ import com.monostr.app.ui.search.SearchScreen
 import com.monostr.app.ui.follows.FollowsScreen
 import com.monostr.app.ui.settings.AboutScreen
 import com.monostr.app.ui.settings.MutedScreen
-import com.monostr.app.ui.settings.SettingsScreen
+import com.monostr.app.ui.settings.SettingsOverview
+import com.monostr.app.ui.settings.SettingsPage
+import com.monostr.app.ui.settings.SettingsViewModel
+import com.monostr.app.ui.settings.pages.AccountPage
+import com.monostr.app.ui.settings.pages.AppearancePage
+import com.monostr.app.ui.settings.pages.ContentPage
+import com.monostr.app.ui.settings.pages.ReactionsPage
+import com.monostr.app.ui.settings.pages.DmRelaysPage
+import com.monostr.app.ui.settings.pages.HelpPage
+import com.monostr.app.ui.settings.pages.MoneroPage
+import com.monostr.app.ui.settings.pages.NotificationsPage
+import com.monostr.app.ui.settings.pages.PrivacyPage
+import com.monostr.app.ui.settings.pages.RelaysPage
+import com.monostr.app.ui.settings.pages.SearchRelaysPage
+import com.monostr.app.ui.settings.pages.TranslationPage
 import com.monostr.app.ui.settings.ShowKeyScreen
 import com.monostr.app.ui.settings.SupportScreen
 import com.monostr.app.ui.thread.ThreadScreen
@@ -86,6 +101,10 @@ object Routes {
     const val LOGIN = "login"
     const val FEED = "feed"
     const val SETTINGS = "settings"
+    /** Spec 2026-11-11: the nested graph of the overview and its pages, the scope of their shared view model. */
+    const val SETTINGS_GRAPH = "settings-graph"
+    const val SETTINGS_OVERVIEW = "$SETTINGS?section={section}"
+    const val SETTINGS_PAGE = "$SETTINGS/{page}?focus={focus}"
     const val MONERO_SETUP = "monero-setup"
     const val NOTIFICATIONS = "notifications"
     const val MESSAGES = "messages"
@@ -124,14 +143,18 @@ object Routes {
      */
     fun afterTorSwitch(destination: String?): String? = when {
         destination == null -> null
+        // the overview and every subpage: back to Tor & privacy, where the Tor row is
         destination.startsWith(SETTINGS) -> settings(SettingsSection.PRIVACY)
         destination == MESSAGES || destination == BOOKMARKS || destination == NOTIFICATIONS -> destination
         destination == SEARCH -> "search"
         else -> null
     }
 
-    /** Settings scrolled to one section ([SettingsSection]). */
+    /** Settings opened at one section ([SettingsSection]): the overview, with that page opened on top of it. */
     fun settings(section: String) = "settings?section=$section"
+
+    /** One settings subpage, at the setting [focus] (a search result) when given. */
+    fun settingsPage(page: SettingsPage, focus: String? = null) = "$SETTINGS/${page.id}" + (focus?.let { "?focus=${android.net.Uri.encode(it)}" } ?: "")
     fun moneroSetup(intro: Boolean, upgrade: Boolean = false) = "monero-setup?intro=$intro&upgrade=$upgrade"
     fun search(q: String? = null) = if (q == null) "search" else "search?q=" + android.net.Uri.encode(q)
     fun media(noteId: String, index: Int) = "media/$noteId/$index"
@@ -440,20 +463,57 @@ private fun LoggedInNavHost(
                 VideoPlayerScreen(url = checkNotNull(entry.arguments?.getString("url")), onBack = { nav.popBackStack() })
             }
             composable(Routes.PROFILE_EDIT) { ProfileEditScreen(onDone = { nav.popBackStack() }) }
-            composable(
-                "${Routes.SETTINGS}?section={section}",
-                arguments = listOf(navArgument("section") { type = NavType.StringType; nullable = true; defaultValue = null }),
-            ) { entry ->
-                SettingsScreen(
-                    section = entry.arguments?.getString("section"),
-                    onBack = { nav.popBackStack() },
-                    onMoneroSetup = { nav.navigate(Routes.moneroSetup(intro = false)) },
-                    onMoneroUpgrade = { nav.navigate(Routes.moneroSetup(intro = false, upgrade = true)) },
-                    onSupport = { nav.navigate(Routes.SUPPORT) },
-                    onAbout = { nav.navigate(Routes.ABOUT) },
-                    onMuted = { nav.navigate(Routes.MUTED) },
-                    onShowKey = { nav.navigate(Routes.SHOW_KEY) },
-                )
+            // spec 2026-11-11: the overview and one page per category share one view model, scoped to this graph
+            navigation(startDestination = Routes.SETTINGS_OVERVIEW, route = Routes.SETTINGS_GRAPH) {
+                composable(
+                    Routes.SETTINGS_OVERVIEW,
+                    arguments = listOf(navArgument("section") { type = NavType.StringType; nullable = true; defaultValue = null }),
+                ) { entry ->
+                    val parent = remember(entry) { nav.getBackStackEntry(Routes.SETTINGS_GRAPH) }
+                    SettingsOverview(
+                        section = entry.arguments?.getString("section"),
+                        vm = hiltViewModel<SettingsViewModel>(parent),
+                        onBack = { nav.popBackStack() },
+                        // a second tap during the push transition must not push the page twice
+                        onOpen = { page, focus -> if (entry.isResumed()) nav.navigate(Routes.settingsPage(page, focus)) },
+                        onLogout = { nav.popBackStack() },
+                        // the deep link opens its page from the first composition, before the entry is resumed
+                        onRedirect = { page -> nav.navigate(Routes.settingsPage(page)) },
+                        // the sign-out dialog is the warning; the grant only where the key screen really opens
+                        onShowKey = { if (entry.isResumed()) { com.monostr.app.ui.settings.ShowKeyGate.grant(); nav.navigate(Routes.SHOW_KEY) } },
+                    )
+                }
+                composable(
+                    Routes.SETTINGS_PAGE,
+                    arguments = listOf(
+                        navArgument("page") { type = NavType.StringType },
+                        navArgument("focus") { type = NavType.StringType; nullable = true; defaultValue = null },
+                    ),
+                ) { entry ->
+                    val parent = remember(entry) { nav.getBackStackEntry(Routes.SETTINGS_GRAPH) }
+                    val vm: SettingsViewModel = hiltViewModel(parent)
+                    val focus = entry.arguments?.getString("focus")
+                    val back: () -> Unit = { nav.popBackStack() }
+                    when (SettingsPage.of(entry.arguments?.getString("page"))) {
+                        SettingsPage.ACCOUNT -> AccountPage(vm, focus, back, onShowKey = { nav.navigate(Routes.SHOW_KEY) })
+                        SettingsPage.PRIVACY -> PrivacyPage(vm, focus, back, onMuted = { nav.navigate(Routes.MUTED) })
+                        SettingsPage.RELAYS -> RelaysPage(vm, focus, back, onOpen = { if (entry.isResumed()) nav.navigate(Routes.settingsPage(it)) })
+                        SettingsPage.DM_RELAYS -> DmRelaysPage(vm, focus, back)
+                        SettingsPage.SEARCH_RELAYS -> SearchRelaysPage(vm, focus, back)
+                        SettingsPage.MONERO -> MoneroPage(
+                            vm, focus, back,
+                            onMoneroSetup = { nav.navigate(Routes.moneroSetup(intro = false)) },
+                            onMoneroUpgrade = { nav.navigate(Routes.moneroSetup(intro = false, upgrade = true)) },
+                        )
+                        SettingsPage.NOTIFICATIONS -> NotificationsPage(vm, focus, back)
+                        SettingsPage.CONTENT -> ContentPage(vm, focus, back, onOpen = { if (entry.isResumed()) nav.navigate(Routes.settingsPage(it)) })
+                        SettingsPage.REACTIONS -> ReactionsPage(vm, focus, back)
+                        SettingsPage.TRANSLATION -> TranslationPage(vm, focus, back)
+                        SettingsPage.APPEARANCE -> AppearancePage(vm, focus, back)
+                        SettingsPage.HELP -> HelpPage(vm, focus, back, onOpenProfile = { nav.navigate(Routes.profile(it)) })
+                        null -> LaunchedEffect(Unit) { nav.popBackStack() }
+                    }
+                }
             }
             // pops only this route: "no key" and ON_STOP may both close it
             composable(Routes.SHOW_KEY) { ShowKeyScreen(onBack = { nav.popBackStack(Routes.SHOW_KEY, inclusive = true) }) }
@@ -472,3 +532,6 @@ private fun LoggedInNavHost(
         }
     }
 }
+
+/** Whether this entry is the settled top of the back stack; taps during a transition into another page arrive while it is not. */
+private fun androidx.navigation.NavBackStackEntry.isResumed(): Boolean = lifecycle.currentState == androidx.lifecycle.Lifecycle.State.RESUMED

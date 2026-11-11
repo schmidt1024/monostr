@@ -43,6 +43,17 @@ class SessionRelays(
         applyLocked(wanted, modes.modes.first().filterKeys { it in wanted })
     }
 
+    /**
+     * The settings' «Undo» after a removal: [list] with [url] back in it and, in the same locked step, its former [mode]
+     * (null: it read and wrote), so a read-only or write-only relay never comes back reading and writing for a moment.
+     */
+    suspend fun restore(list: List<String>, url: String, mode: RelayMode?): Boolean = lock.withLock {
+        val wanted = clean(list)
+        val relay = norm(url)
+        val kept = modes.modes.first().filterKeys { it in wanted }
+        applyLocked(wanted, if (mode != null && relay in wanted) kept + (relay to mode) else kept)
+    }
+
     /** False, and nothing changes, for a relay outside the list or a mode that would leave no reader or writer. No connection is dropped and DMs do not restart. */
     suspend fun setRelayMode(url: String, mode: RelayMode): Boolean = lock.withLock {
         val relay = norm(url)

@@ -25,7 +25,9 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.monostr.app.data.Accent
 import com.monostr.app.data.ThemeMode
-import com.monostr.app.ui.settings.AppearanceSection
+import com.monostr.app.ui.settings.AccentList
+import com.monostr.app.ui.settings.ThemeModeControl
+import androidx.compose.foundation.layout.Column
 import com.monostr.app.ui.theme.MonostrTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -47,7 +49,11 @@ class AppearanceSectionTest {
         rule.setContent {
             MonostrTheme(ThemeMode.LIGHT, accent, hue) {
                 Box(Modifier.background(MaterialTheme.colorScheme.surface).padding(16.dp).fillMaxWidth().testTag("appearance-root")) {
-                    AppearanceSection(ThemeMode.LIGHT, accent, hue, onMode = {}, onAccent = { accent = it }, onHue = { hue = it })
+                    // the Appearance page's own controls (round 2: the old all-in-one section is gone)
+                    Column {
+                        ThemeModeControl(ThemeMode.LIGHT, onMode = {})
+                        AccentList(ThemeMode.LIGHT, accent, hue, onAccent = { accent = it }, onHue = { hue = it })
+                    }
                 }
             }
         }

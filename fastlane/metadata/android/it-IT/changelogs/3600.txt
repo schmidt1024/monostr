@@ -1,0 +1,6 @@
+- Impostazioni rifatte: panoramica breve con ricerca; Tor, relay e Monero in alto con stato in tempo reale, una pagina per argomento
+- La ricerca trova ogni impostazione e ci porta direttamente
+- Chiede conferma prima di uscire, disattivare le mance, eliminare la chiave di visualizzazione o rimuovere il tuo indirizzo
+- Annulla dopo aver eliminato un relay, mantenendo la modalità lettura/scrittura
+- Verticale sui telefoni; immagini e video ruotano ancora
+- Correzioni

@@ -212,6 +212,7 @@ internal fun MediaSheetItems(onSave: () -> Unit, onShare: () -> Unit, onCopyLink
 fun MediaViewerScreen(onBack: () -> Unit, vm: MediaViewerViewModel = hiltViewModel()) {
     val state by vm.controller.state.collectAsStateWithLifecycle()
     LaunchedEffect(state.missing) { if (state.missing) onBack() }
+    AllowRotation()
     if (state.media.isEmpty()) return
     val pager = rememberPagerState(initialPage = state.page) { state.media.size }
     var sheetFor by remember { mutableStateOf<NoteMedia?>(null) }

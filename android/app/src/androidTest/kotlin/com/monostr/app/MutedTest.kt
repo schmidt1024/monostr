@@ -1,5 +1,6 @@
 package com.monostr.app
 
+import com.monostr.app.ui.settings.SettingsPage
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -106,7 +107,7 @@ class MutedTest {
     }
 
     private fun openMutedList() {
-        rule.onNodeWithContentDescription(str(R.string.feed_settings)).performClick()
+        rule.openSettingsPage(ctx, SettingsPage.PRIVACY)
         rule.waitUntil(15_000) { nodes("settings-muted").isNotEmpty() }
         rule.onNodeWithTag("settings-muted").performScrollTo()
         rule.onNodeWithTag("settings-muted").performClick()
@@ -142,6 +143,8 @@ class MutedTest {
         // back at once, before a relay answered: the write runs on the session's scope and still goes out
         rule.onNodeWithContentDescription(str(R.string.action_back)).performClick()
         rule.waitUntil(15_000) { nodes("settings-muted").isNotEmpty() }
+        rule.onNodeWithContentDescription(str(R.string.action_back)).performClick()
+        rule.waitUntil(15_000) { nodes("settings-cat-privacy").isNotEmpty() } // the overview lies under the page
         rule.onNodeWithContentDescription(str(R.string.action_back)).performClick()
         rule.waitUntil(15_000) { nodes("feed-refresh").isNotEmpty() }
         rule.onNodeWithTag("feed-refresh").performTouchInput { swipeDown() }

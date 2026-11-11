@@ -590,6 +590,9 @@ class NostrSession @Inject constructor(
     /** Applies a new relay list to the running engine; false when it would leave no relay to read from or none to write to. See [SessionRelays.apply]. */
     suspend fun applyRelays(relays: List<String>): Boolean = sessionRelays.apply(relays)
 
+    /** Puts a removed relay back with its former mode in one step. See [SessionRelays.restore]. */
+    suspend fun restoreRelay(relays: List<String>, url: String, mode: RelayMode?): Boolean = sessionRelays.restore(relays, url, mode)
+
     /** False when [RelayModes][com.monostr.nostr.model.RelayModes] refuses: at least one relay reads and one writes. See [SessionRelays.setRelayMode]. */
     suspend fun setRelayMode(url: String, mode: RelayMode): Boolean = sessionRelays.setRelayMode(url, mode)
 

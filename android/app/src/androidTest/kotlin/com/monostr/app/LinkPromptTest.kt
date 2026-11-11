@@ -1,5 +1,6 @@
 package com.monostr.app
 
+import com.monostr.app.ui.settings.SettingsPage
 import android.app.Activity
 import android.app.Instrumentation
 import android.content.Intent
@@ -68,7 +69,6 @@ class LinkPromptTest {
     }
 
     @After fun restore() {
-        runCatching { rule.activityRule.scenario.onActivity { it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED } }
         runCatching { Intents.release() }
         runBlocking {
             runCatching { entry.torSwitchControl().turnOff() }
@@ -185,12 +185,14 @@ class LinkPromptTest {
         reachFeed()
         val marker = "undo-${System.currentTimeMillis()}.example"
         post("read it https://$marker/page")
-        rule.onNodeWithContentDescription(ctx.getString(R.string.feed_settings)).performClick()
+        rule.openSettingsPage(ctx, SettingsPage.PRIVACY)
         rule.waitUntil(15_000) { nodes("settings-ask-links").isNotEmpty() }
         // askLinks starts as true until DataStore delivers the stored value (off); a click before that sets the wrong one
         rule.waitUntil(15_000) { toggle("settings-ask-links") == ToggleableState.Off }
         rule.onNodeWithTag("settings-ask-links").performScrollTo().performClick()
         rule.waitUntil(15_000) { toggle("settings-ask-links") == ToggleableState.On }
+        Espresso.pressBack()
+        rule.waitUntil(15_000) { nodes("settings-cat-privacy").isNotEmpty() } // the overview lies under the page
         Espresso.pressBack()
         rule.waitUntil(15_000) { nodes("feed-list").isNotEmpty() }
         Intents.init()
@@ -215,19 +217,5 @@ class LinkPromptTest {
         rule.onNodeWithTag("link-host", useUnmergedTree = true).fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult].action?.invoke(layout)
         assertTrue("the host is not clipped", layout.isNotEmpty() && !layout[0].hasVisualOverflow && layout[0].lineCount > 1)
         rule.onNodeWithTag("link-open").assertIsDisplayed()
-    }
-
-    @Test
-    fun landscapeKeepsThePromptAndItsButtonsOnScreen() {
-        runBlocking { runCatching { entry.session().logout() } }
-        reachFeed()
-        val marker = "land-${System.currentTimeMillis()}.example"
-        post("read it https://$marker/" + "a".repeat(3000))
-        tapLink(marker)
-        rule.waitUntil(10_000) { nodes("link-open").isNotEmpty() }
-        rule.activityRule.scenario.onActivity { it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
-        rule.waitUntil(15_000) { nodes("link-prompt").isNotEmpty() && nodes("link-open").isNotEmpty() && ctx.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE }
-        rule.onNodeWithTag("link-open").assertIsDisplayed()
-        rule.onNodeWithTag("link-cancel").assertIsDisplayed()
     }
 }

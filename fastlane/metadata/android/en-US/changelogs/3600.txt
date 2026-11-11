@@ -1,0 +1,6 @@
+- Settings rebuilt: a short overview with search; Tor, relays and Monero on top with live status, one page per topic
+- Search finds every setting and jumps right to it
+- Asks before you sign out, disable tips, delete the view key or remove your address
+- Undo after deleting a relay, keeping its read/write mode
+- Portrait on phones; pictures and videos still rotate
+- Fixes

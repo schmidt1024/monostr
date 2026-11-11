@@ -1,5 +1,6 @@
 package com.monostr.app
 
+import com.monostr.app.ui.settings.SettingsPage
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -62,7 +63,7 @@ class FollowCountsTest {
     @Test
     fun settingsHaveNoPrimalSwitch() {
         reachFeed()
-        rule.onNodeWithContentDescription(ctx.getString(R.string.feed_settings)).performClick()
+        rule.openSettingsPage(ctx, SettingsPage.RELAYS)
         rule.waitUntil(15_000) { nodes("settings-pow").isNotEmpty() }
         rule.onNodeWithTag("settings-pow").performScrollTo()
         assertTrue(nodes("settings-primal-stats").isEmpty())

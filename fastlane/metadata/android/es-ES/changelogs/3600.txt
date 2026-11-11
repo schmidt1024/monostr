@@ -1,0 +1,6 @@
+- Ajustes renovados: resumen corto con búsqueda; Tor, relays y Monero arriba con estado en vivo, una página por tema
+- La búsqueda encuentra cualquier ajuste y te lleva directo a él
+- Pregunta antes de cerrar sesión, desactivar las propinas, borrar la clave de vista o quitar tu dirección
+- Deshacer tras borrar un relay, conservando su modo de lectura/escritura
+- Vertical en teléfonos; imágenes y vídeos siguen girando
+- Correcciones

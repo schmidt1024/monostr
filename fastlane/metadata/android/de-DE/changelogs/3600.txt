@@ -1,0 +1,6 @@
+- Einstellungen neu: kurze Übersicht mit Suche; Tor, Relays und Monero oben mit Live-Status, eine Seite pro Thema
+- Die Suche findet jede Einstellung und springt direkt hin
+- Fragt nach vor dem Abmelden, Ausschalten der Tips, Löschen des View-Keys oder Entfernen deiner Adresse
+- Rückgängig nach dem Löschen eines Relays, mit seinem Lese-/Schreibmodus
+- Hochformat auf Handys; Bilder und Videos drehen weiterhin
+- Korrekturen

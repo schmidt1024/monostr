@@ -617,4 +617,14 @@ class MoneroSettingsControllerTest {
         assertEquals(addr, MoneroSettingsState(payto = addr).paytoOnly)
         assertNull(MoneroSettingsState(payto = addr, setup = MoneroSetup("4addr", "https://w.example", "c".repeat(64), "mainnet", 1)).paytoOnly)
     }
+
+    @Test
+    fun presetsAreDirtyOnlyWithARealChange() {
+        val saved = listOf("0.001", "0.01")
+        assertFalse(MoneroSettingsState(presets = saved, savedPresets = saved).presetsDirty)
+        // UX P2-13: the German decimal comma is the same value
+        assertFalse(MoneroSettingsState(presets = listOf("0,001", " 0.01"), savedPresets = saved).presetsDirty)
+        assertTrue(MoneroSettingsState(presets = listOf("0.002", "0.01"), savedPresets = saved).presetsDirty)
+        assertTrue(MoneroSettingsState(presets = saved + "", savedPresets = saved).presetsDirty)
+    }
 }

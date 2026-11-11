@@ -74,11 +74,14 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextOverflow
 import com.monostr.app.R
 import com.monostr.app.net.TorState
 import com.monostr.app.net.TorSwitchError
 import com.monostr.app.net.TorTurn
 import com.monostr.app.net.TorUi
+import com.monostr.app.ui.settings.TorChip
+import com.monostr.app.ui.settings.torChip
 import com.monostr.app.ui.theme.Spacing
 import com.monostr.nostr.model.RelayState
 import kotlinx.coroutines.CancellationException
@@ -484,8 +487,10 @@ private fun TorOffDialog(tips: Int?, onConfirm: () -> Unit, onCancel: () -> Unit
 }
 
 /**
- * The row in the Privacy section. Off: the explanation first. On: the question first. While a switch runs it is disabled and says which way;
- * connecting, connected and failed as in the banner, failed with «Try again» and Details. Orbot's line stands there always, nothing is detected.
+ * The Tor card's content at the top of Tor & privacy (round 2, owner decision 3): title, one status line and the switch in one
+ * row, then the error, «Try again» / Details when it failed, and Orbot's line small and grey below, all in one column (a Row
+ * and Texts side by side in a Box drew the hint over the title). Off: the explanation first. On: the question first. While a
+ * switch runs it is disabled and says which way. Orbot's line stands there always, nothing is detected.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -496,37 +501,44 @@ fun TorSettingsRow() {
     val turning by ui.turning.collectAsState()
     val error by ui.error.collectAsState()
     val state by ui.state.collectAsState()
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .toggleable(value = active, enabled = turning == null, role = Role.Switch, onValueChange = { if (it) sheets.explain = true else sheets.confirmOff = true })
-            .padding(vertical = Spacing.s)
-            .testTag("settings-tor"),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(stringResource(R.string.tor_connect), style = MaterialTheme.typography.bodyLarge)
-            val now = state
-            val hint = when {
-                turning != null -> turningLine(turning!!)
-                // under the title «Connect through Tor» one word is enough
-                active && now == TorState.Connected -> R.string.tor_settings_connected
-                active && now != null -> stateLine(now)
-                else -> null
+    Column(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 56.dp)
+                .toggleable(value = active, enabled = turning == null, role = Role.Switch, onValueChange = { if (it) sheets.explain = true else sheets.confirmOff = true })
+                .padding(horizontal = Spacing.l, vertical = Spacing.m)
+                .testTag("settings-tor"),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(R.string.tor_connect), style = MaterialTheme.typography.bodyLarge)
+                val now = state
+                val hint = when {
+                    turning != null -> turningLine(turning!!)
+                    // under the title «Connect through Tor» one word is enough
+                    active && now == TorState.Connected -> R.string.tor_settings_connected
+                    active && now != null -> stateLine(now)
+                    active -> null
+                    else -> R.string.tor_settings_off
+                }
+                if (hint != null) Text(stringResource(hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            if (hint != null) Text(stringResource(hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.width(Spacing.l))
+            Switch(checked = active, onCheckedChange = null, enabled = turning == null)
         }
-        Spacer(Modifier.width(Spacing.l))
-        Switch(checked = active, onCheckedChange = null, enabled = turning == null)
-    }
-    error?.let { TorErrorLine(it) }
-    if (active && state == TorState.Failed && turning == null) {
-        FlowRow {
-            TextButton(onClick = { sheets.retry(ui) }, modifier = Modifier.testTag("tor-retry")) { Text(stringResource(R.string.tor_try_again)) }
-            TextButton(onClick = { sheets.details = true }, modifier = Modifier.testTag("tor-details")) { Text(stringResource(R.string.tor_details)) }
+        error?.let { Box(Modifier.padding(horizontal = Spacing.l)) { TorErrorLine(it) } }
+        if (active && state == TorState.Failed && turning == null) {
+            FlowRow(Modifier.padding(horizontal = Spacing.s)) {
+                TextButton(onClick = { sheets.retry(ui) }, modifier = Modifier.testTag("tor-retry")) { Text(stringResource(R.string.tor_try_again)) }
+                TextButton(onClick = { sheets.details = true }, modifier = Modifier.testTag("tor-details")) { Text(stringResource(R.string.tor_details)) }
+            }
         }
+        Text(
+            stringResource(R.string.tor_orbot), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = Spacing.l, end = Spacing.l, bottom = Spacing.m).testTag("settings-tor-orbot"),
+        )
     }
-    Text(stringResource(R.string.tor_orbot), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("settings-tor-orbot"))
 }
 
 /**
@@ -582,4 +594,13 @@ fun torAwareEmptyText(res: Int): String {
     if (!LocalTorActive.current) return stringResource(res)
     val state by LocalTorUi.current.state.collectAsState()
     return stringResource(if (state == TorState.Connected) res else R.string.feed_empty_tor)
+}
+
+/** The Tor state for the settings overview's chip. With the switch off a boolean read and no flow. */
+@Composable
+fun rememberTorChip(): TorChip {
+    val active = LocalTorActive.current
+    if (!active) return torChip(false, null)
+    val state by LocalTorUi.current.state.collectAsState()
+    return torChip(true, state)
 }

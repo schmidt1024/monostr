@@ -22,7 +22,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -48,6 +47,9 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.platform.LocalConfiguration
+import com.monostr.app.ui.theme.SettingsIcons
 import com.monostr.app.R
 import com.monostr.app.data.Accent
 import com.monostr.app.data.ThemeMode
@@ -56,62 +58,61 @@ import com.monostr.app.ui.theme.AccentPalette
 import com.monostr.app.ui.theme.AccentSeed
 import com.monostr.app.ui.theme.Spacing
 
-/** Spec 5: appearance controls, as simple as possible — a segmented mode row and the accents as a list. */
+/** System / Light / Dark / Black as one segmented row. */
 @Composable
-fun AppearanceSection(mode: ThemeMode, accent: Accent, customHue: Float, onMode: (ThemeMode) -> Unit, onAccent: (Accent) -> Unit, onHue: (Float) -> Unit) {
-    val context = LocalContext.current
+fun ThemeModeControl(mode: ThemeMode, onMode: (ThemeMode) -> Unit, modifier: Modifier = Modifier) {
+    SingleChoiceSegmentedButtonRow(modifier.fillMaxWidth().settingAnchor("settings-theme-mode")) {
+        val modes = listOf(ThemeMode.SYSTEM to R.string.settings_theme_system, ThemeMode.LIGHT to R.string.settings_theme_light, ThemeMode.DARK to R.string.settings_theme_dark, ThemeMode.BLACK to R.string.settings_theme_black)
+        modes.forEachIndexed { i, (m, label) ->
+            SegmentedButton(
+                selected = mode == m, onClick = { onMode(m) },
+                shape = SegmentedButtonDefaults.itemShape(index = i, count = modes.size, baseShape = MaterialTheme.shapes.medium),
+                modifier = Modifier.testTag("appearance-mode-${m.name.lowercase()}"),
+            ) { Text(stringResource(label)) }
+        }
+    }
+}
+
+/** The accents as a list, one row each, and the hue slider under «Custom» when it is chosen. [rowPadding] is the rows' side padding. */
+@Composable
+fun AccentList(mode: ThemeMode, accent: Accent, customHue: Float, onAccent: (Accent) -> Unit, onHue: (Float) -> Unit, rowPadding: Dp = Spacing.xs) {
+    // the swatches show the accent as the active mode really paints it, not the raw seed (2026-10-08)
+    val dark = isDark(mode)
+    val customSeed = AccentSeed.fromHue(customHue)
+    // four choices as a list, one row each (2026-10-30, was a row of swatches; blue folded into custom 2026-11-10): Monero orange first as the default
     Column(Modifier.fillMaxWidth()) {
-        Text(stringResource(R.string.settings_appearance), style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(Spacing.s))
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-            val modes = listOf(ThemeMode.SYSTEM to R.string.settings_theme_system, ThemeMode.LIGHT to R.string.settings_theme_light, ThemeMode.DARK to R.string.settings_theme_dark, ThemeMode.BLACK to R.string.settings_theme_black)
-            modes.forEachIndexed { i, (m, label) ->
-                SegmentedButton(
-                    selected = mode == m, onClick = { onMode(m) },
-                    shape = SegmentedButtonDefaults.itemShape(index = i, count = modes.size, baseShape = MaterialTheme.shapes.medium),
-                    modifier = Modifier.testTag("appearance-mode-${m.name.lowercase()}"),
-                ) { Text(stringResource(label)) }
-            }
-        }
-        Spacer(Modifier.height(Spacing.l))
-        Text(stringResource(R.string.settings_accent), style = MaterialTheme.typography.labelLarge)
-        Spacer(Modifier.height(Spacing.s))
-        // the swatches show the accent as the active mode really paints it, not the raw seed (2026-10-08)
-        val dark = isDark(mode)
-        val customSeed = AccentSeed.fromHue(customHue)
-        // four choices as a list, one row each (2026-10-30, was a row of swatches; blue folded into custom 2026-11-10): Monero orange first as the default
-        Column(Modifier.fillMaxWidth()) {
-            PICKER_ORDER.forEach { a ->
-                val tokens = AccentPalette.tokens(a, dark, customSeed, black = mode == ThemeMode.BLACK)
-                val name = stringResource(accentName(a))
-                val selected = a == accent
-                val description = if (selected) stringResource(R.string.settings_accent_selected, name) else name
-                Row(
+        PICKER_ORDER.forEach { a ->
+            val tokens = AccentPalette.tokens(a, dark, customSeed, black = mode == ThemeMode.BLACK)
+            val name = stringResource(accentName(a))
+            val selected = a == accent
+            val description = if (selected) stringResource(R.string.settings_accent_selected, name) else name
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 56.dp)
+                    .clip(MaterialTheme.shapes.medium)
+                    .clickable(role = Role.RadioButton) { onAccent(a) }
+                    .semantics(mergeDescendants = true) { contentDescription = description; this.selected = selected }
+                    .testTag("appearance-accent-${a.name.lowercase()}")
+                    .padding(horizontal = rowPadding),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
                     Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 56.dp)
-                        .clip(MaterialTheme.shapes.medium)
-                        .clickable(role = Role.RadioButton) { onAccent(a) }
-                        .semantics(mergeDescendants = true) { contentDescription = description; this.selected = selected }
-                        .testTag("appearance-accent-${a.name.lowercase()}")
-                        .padding(horizontal = Spacing.xs),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Box(
-                        Modifier
-                            .size(24.dp)
-                            .clip(CircleShape)
-                            .then(if (a == Accent.MONO) Modifier.background(Brush.horizontalGradient(0f to Color.Black, 0.5f to Color.Black, 0.5f to Color.White, 1f to Color.White)) else Modifier.background(Color(tokens.primary)))
-                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape),
-                    )
-                    Spacer(Modifier.width(Spacing.l))
-                    Text(name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                    if (selected) Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                }
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .then(if (a == Accent.MONO) Modifier.background(Brush.horizontalGradient(0f to Color.Black, 0.5f to Color.Black, 0.5f to Color.White, 1f to Color.White)) else Modifier.background(Color(tokens.primary)))
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape),
+                )
+                Spacer(Modifier.width(Spacing.l))
+                Text(name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                if (selected) Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
             }
         }
-        if (accent == Accent.CUSTOM) {
-            // spec 11.4 §3: a hue slider, saturation and value fixed; the swatch shows the mixed colour of the active mode
+    }
+    if (accent == Accent.CUSTOM) {
+        // spec 11.4 §3: a hue slider, saturation and value fixed; the swatch shows the mixed colour of the active mode
+        Column(Modifier.fillMaxWidth().padding(horizontal = rowPadding)) {
             Spacer(Modifier.height(Spacing.s))
             Text(stringResource(R.string.settings_accent_hue), style = MaterialTheme.typography.labelMedium)
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -122,21 +123,44 @@ fun AppearanceSection(mode: ThemeMode, accent: Accent, customHue: Float, onMode:
                 Box(Modifier.size(32.dp).clip(CircleShape).background(Color(AccentPalette.tokens(Accent.CUSTOM, dark, AccentSeed.fromHue(dragging)).primary)))
             }
         }
-        Spacer(Modifier.height(Spacing.l))
-        Text(stringResource(R.string.settings_language), style = MaterialTheme.typography.labelLarge)
-        Text(stringResource(R.string.settings_language_text), style = MaterialTheme.typography.bodySmall)
-        if (Build.VERSION.SDK_INT >= 33) {
-            OutlinedButton(
-                onClick = {
-                    try {
-                        context.startActivity(Intent(Settings.ACTION_APP_LOCALE_SETTINGS, Uri.fromParts("package", context.packageName, null)))
-                    } catch (e: ActivityNotFoundException) {
-                        // Some OEM builds lack the per-app language screen; nothing else to offer.
-                    }
-                },
-                modifier = Modifier.testTag("appearance-language"),
-                shape = MaterialTheme.shapes.medium,
-            ) { Text(stringResource(R.string.settings_language_button)) }
+    }
+}
+
+/**
+ * Round 2 (UX «Proposed order», P3-4): the app language as a row with the current language and a chevron, opening the
+ * system's per-app language screen (Android 13+). Older systems have none: the row says the app follows the system.
+ */
+@Composable
+fun AppLanguageRow() {
+    val context = LocalContext.current
+    val locale = LocalConfiguration.current.locales[0]
+    val current = remember(locale) { locale.getDisplayLanguage(locale).replaceFirstChar { it.titlecase(locale) } }
+    val perApp = Build.VERSION.SDK_INT >= 33
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .settingAnchor("appearance-language")
+            .heightIn(min = 56.dp)
+            .clickable(enabled = perApp, role = Role.Button) {
+                if (Build.VERSION.SDK_INT >= 33) try {
+                    context.startActivity(Intent(Settings.ACTION_APP_LOCALE_SETTINGS, Uri.fromParts("package", context.packageName, null)))
+                } catch (e: ActivityNotFoundException) {
+                    // Some OEM builds lack the per-app language screen; nothing else to offer.
+                }
+            }
+            .padding(horizontal = Spacing.l, vertical = Spacing.m)
+            .testTag("appearance-language"),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(R.string.settings_app_language), style = MaterialTheme.typography.bodyLarge)
+            if (!perApp) Text(stringResource(R.string.settings_language_text), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Spacer(Modifier.width(Spacing.s))
+        Text(current, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        if (perApp) {
+            Spacer(Modifier.width(Spacing.s))
+            Icon(SettingsIcons.Chevron, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

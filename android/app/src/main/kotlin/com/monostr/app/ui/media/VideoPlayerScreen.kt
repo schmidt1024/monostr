@@ -51,6 +51,7 @@ class VideoPlayerViewModel @Inject constructor(val http: OkHttpClient) : ViewMod
 @OptIn(UnstableApi::class)
 @Composable
 fun VideoPlayerScreen(url: String, onBack: () -> Unit, http: OkHttpClient = hiltViewModel<VideoPlayerViewModel>().http) {
+    AllowRotation()
     val context = LocalContext.current
     val player = remember(url) {
         val source = OkHttpDataSource.Factory(http.newBuilder().followSslRedirects(false).build())

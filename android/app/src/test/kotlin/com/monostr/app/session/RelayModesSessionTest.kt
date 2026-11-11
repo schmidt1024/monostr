@@ -94,6 +94,20 @@ class RelayModesSessionTest {
     }
 
     @Test
+    fun `undo of a removal brings the relay back with its mode in one step`() = runTest {
+        val f = Fixture(listOf(a, b, c), mapOf(a to RelayMode.WRITE, b to RelayMode.READ))
+        assertTrue(f.session.apply(listOf(a, c)))
+        assertEquals(mapOf(a to RelayMode.WRITE), f.modeStore.state.value)
+        f.running.calls.clear()
+        assertTrue(f.session.restore(listOf(a, b, c), b, RelayMode.READ))
+        assertEquals(listOf(a, b, c), f.relayStore.state.value)
+        assertEquals(mapOf(a to RelayMode.WRITE, b to RelayMode.READ), f.modeStore.state.value)
+        // the engine gets the mode before the relay joins: it never reads and writes on its way back
+        assertEquals(mapOf(a to RelayMode.WRITE, b to RelayMode.READ), f.running.applied)
+        assertTrue(f.running.calls.indexOf("modes") < f.running.calls.indexOfFirst { it.startsWith("add:") })
+    }
+
+    @Test
     fun `a change that leaves no reader or writer is refused and nothing is stored`() = runTest {
         val modes = mapOf(a to RelayMode.WRITE, b to RelayMode.READ)
         val f = Fixture(listOf(a, b), modes)

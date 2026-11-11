@@ -1,5 +1,6 @@
 package com.monostr.app
 
+import com.monostr.app.ui.settings.SettingsPage
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasTestTag
@@ -61,10 +62,15 @@ class ReactionsTest {
         }
 
         // Settings → Reactions: move 🚀 to the front
-        rule.onNodeWithContentDescription(ctx.getString(R.string.feed_settings)).performClick()
+        // round 2: the editor is a page of its own under Content & media
+        rule.openSettingsPage(ctx, SettingsPage.REACTIONS)
         rule.waitUntil(15_000) { nodes("settings-reaction-up-1").isNotEmpty() }
         rule.onNodeWithTag("settings-reaction-up-1").performScrollTo().performClick()
         rule.waitUntil(10_000) { runBlocking { entry.uiSettings().quickReactions.first() } == listOf("🚀", "🔥") }
+        rule.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        rule.waitUntil(15_000) { nodes("settings-open-reactions").isNotEmpty() } // Content & media lies under it
+        rule.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        rule.waitUntil(15_000) { nodes("settings-cat-privacy").isNotEmpty() } // the overview lies under the page
         rule.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
         rule.waitUntil(15_000) { nodes("fab-compose").isNotEmpty() }
 

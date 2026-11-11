@@ -47,6 +47,42 @@ class SettingsControllerTest {
     }
 
     @Test
+    fun `undo puts a removed relay back at its old place once`() = runTest {
+        val store = FakeRelayStore(listOf("wss://a.example", "wss://b.example", "wss://c.example"))
+        val c = SettingsController(store, { store.set(it) }, eager())
+        c.start(); advanceUntilIdle()
+        assertTrue(c.remove("wss://b.example")); advanceUntilIdle()
+        assertEquals(listOf("wss://a.example", "wss://c.example"), c.state.value.relays)
+        c.restore("wss://b.example", 1); advanceUntilIdle()
+        assertEquals(listOf("wss://a.example", "wss://b.example", "wss://c.example"), c.state.value.relays)
+        c.restore("wss://b.example", 0); advanceUntilIdle()
+        assertEquals(listOf("wss://a.example", "wss://b.example", "wss://c.example"), c.state.value.relays)
+    }
+
+    @Test
+    fun `undo is offered only after the removal was applied`() = runTest {
+        val store = FakeRelayStore(listOf("wss://a.example", "wss://b.example"))
+        var refuse = true
+        val c = SettingsController(store, { if (refuse) throw RelayListRefused() else store.set(it) }, eager())
+        c.start(); advanceUntilIdle()
+        var offered = 0
+        assertTrue(c.remove("wss://b.example") { offered++ }); advanceUntilIdle()
+        assertEquals(0, offered)
+        assertEquals(listOf("wss://a.example", "wss://b.example"), c.state.value.relays)
+        refuse = false
+        assertTrue(c.remove("wss://b.example") { offered++ }); advanceUntilIdle()
+        assertEquals(1, offered)
+    }
+
+    @Test
+    fun `remove says false when the minimum keeps the relay`() = runTest {
+        val store = FakeRelayStore(listOf("wss://a.example"))
+        val c = SettingsController(store, { store.set(it) }, eager())
+        c.start(); advanceUntilIdle()
+        assertFalse(c.remove("wss://a.example"))
+    }
+
+    @Test
     fun `dm relay list keeps at least one relay and applies through the store`() = runTest {
         val dmSettings = FakeDmSettings(listOf("wss://relay.monostr.com"))
         val applied = ArrayList<List<String>>()
