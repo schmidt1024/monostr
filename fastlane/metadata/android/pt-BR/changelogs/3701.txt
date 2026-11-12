@@ -1,0 +1,4 @@
+- Visão dos relays mais compacta: conectados e não conectados de relance, «Gerenciar» no topo
+- A visão não pula mais com muitos relays
+- Início: uma só moeda do toque ao feed
+- Correções

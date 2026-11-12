@@ -21,6 +21,8 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
@@ -74,7 +76,8 @@ class AddressCardTest {
         rule.waitUntil(30_000) { nodes("login-secret").isNotEmpty() || nodes("fab-compose").isNotEmpty() || nodes("setup-skip").isNotEmpty() }
         if (nodes("login-secret").isNotEmpty()) {
             rule.onNodeWithTag("login-secret").performTextInput(secret)
-            rule.onNodeWithTag("login-secret-button").performClick()
+            // the semantics action, not a tap: the tap lands while the keyboard's inset animation moves the form, and was lost about 1 in 50 runs
+            rule.onNodeWithTag("login-secret-button").performSemanticsAction(SemanticsActions.OnClick)
             rule.waitUntil(30_000) { nodes("fab-compose").isNotEmpty() || nodes("setup-skip").isNotEmpty() }
         }
         if (nodes("setup-skip").isNotEmpty()) {

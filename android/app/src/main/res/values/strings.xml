@@ -27,6 +27,12 @@
     <string name="relay_needs_tor">needs Tor</string>
     <string name="relay_resting">unreachable, tried again every 10 minutes</string>
     <string name="relay_sheet_manage">Manage relays</string>
+    <string name="relay_sheet_manage_short">Manage</string>
+    <string name="relay_sheet_via_tor">%1$s · via Tor</string>
+    <string name="relay_group_connected">Connected · %1$d</string>
+    <string name="relay_group_other">Not connected · %1$d</string>
+    <string name="relay_short_ok">ok</string>
+    <string name="relay_short_resting">retry in 10 min</string>
     <string name="relay_last_seen">last connected: %1$s</string>
     <string name="relay_never_seen">never connected yet</string>
     <string name="relays_none_found">No relay list published yet. Other apps and the tip watcher find you through it. Before you publish, add the relays that hold your older notes.</string>

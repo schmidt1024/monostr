@@ -32,6 +32,8 @@ import rust.nostr.sdk.Filter
 import rust.nostr.sdk.Keys
 import rust.nostr.sdk.Kind
 import rust.nostr.sdk.Metadata
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.performSemanticsAction
 
 /** Spec 8: the bookmark toggle publishes the private list, the bookmarks screen lists the note, toggling again removes it. Needs network (default relays). */
 @RunWith(AndroidJUnit4::class)
@@ -54,7 +56,7 @@ class BookmarkTest {
         rule.waitUntil(30_000) { nodes("login-secret").isNotEmpty() || nodes("fab-compose").isNotEmpty() || nodes("setup-skip").isNotEmpty() }
         if (nodes("login-secret").isNotEmpty()) {
             rule.onNodeWithTag("login-secret").performTextInput(secret)
-            rule.onNodeWithTag("login-secret-button").performClick()
+            rule.onNodeWithTag("login-secret-button").performSemanticsAction(SemanticsActions.OnClick)
             rule.waitUntil(30_000) { nodes("fab-compose").isNotEmpty() || nodes("setup-skip").isNotEmpty() }
         }
         if (nodes("setup-skip").isNotEmpty()) {

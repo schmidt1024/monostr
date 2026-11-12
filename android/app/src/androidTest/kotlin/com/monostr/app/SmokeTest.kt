@@ -18,6 +18,8 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.performSemanticsAction
 
 /**
  * Launches the real app on the device: the login screen renders, a local
@@ -52,7 +54,7 @@ class SmokeTest {
         rule.waitForIdle()
         rule.onNodeWithTag("login-secret").assertIsDisplayed()
         rule.onNodeWithTag("login-secret").performTextInput("0000000000000000000000000000000000000000000000000000000000000001")
-        rule.onNodeWithTag("login-secret-button").performClick()
+        rule.onNodeWithTag("login-secret-button").performSemanticsAction(SemanticsActions.OnClick)
         rule.waitUntil(30_000) {
             rule.onAllNodes(hasTestTag("fab-compose")).fetchSemanticsNodes().isNotEmpty() ||
                 rule.onAllNodes(hasTestTag("setup-skip")).fetchSemanticsNodes().isNotEmpty()

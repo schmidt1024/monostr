@@ -1,0 +1,4 @@
+- Resumen de relays más compacto: conectados y no conectados de un vistazo, «Gestionar» arriba
+- El resumen ya no salta con muchos relays
+- Inicio: una sola moneda del toque al feed
+- Correcciones

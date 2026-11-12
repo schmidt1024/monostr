@@ -26,6 +26,12 @@
     <string name="relay_needs_tor">richiede Tor</string>
     <string name="relay_resting">irraggiungibile, nuovo tentativo ogni 10 minuti</string>
     <string name="relay_sheet_manage">Gestisci relay</string>
+    <string name="relay_sheet_manage_short">Gestisci</string>
+    <string name="relay_sheet_via_tor">%1$s · tramite Tor</string>
+    <string name="relay_group_connected">Connessi · %1$d</string>
+    <string name="relay_group_other">Non connessi · %1$d</string>
+    <string name="relay_short_ok">ok</string>
+    <string name="relay_short_resting">riprova tra 10 min</string>
     <string name="relay_last_seen">ultima connessione: %1$s</string>
     <string name="relay_never_seen">mai connesso</string>
     <string name="relays_none_found">Nessuna lista di relay ancora pubblicata. Le altre app e il watcher delle mance ti trovano tramite essa. Prima di pubblicare, aggiungi i relay con le tue note più vecchie.</string>

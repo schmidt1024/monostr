@@ -26,6 +26,12 @@
     <string name="relay_needs_tor">requiere Tor</string>
     <string name="relay_resting">inaccesible, se reintenta cada 10 minutos</string>
     <string name="relay_sheet_manage">Gestionar relays</string>
+    <string name="relay_sheet_manage_short">Gestionar</string>
+    <string name="relay_sheet_via_tor">%1$s · vía Tor</string>
+    <string name="relay_group_connected">Conectados · %1$d</string>
+    <string name="relay_group_other">No conectados · %1$d</string>
+    <string name="relay_short_ok">ok</string>
+    <string name="relay_short_resting">reintento en 10 min</string>
     <string name="relay_last_seen">última conexión: %1$s</string>
     <string name="relay_never_seen">nunca conectado</string>
     <string name="relays_none_found">Aún no has publicado una lista de relays. Otras apps y el watcher de propinas te encuentran con ella. Antes de publicar, añade los relays que guardan tus notas antiguas.</string>

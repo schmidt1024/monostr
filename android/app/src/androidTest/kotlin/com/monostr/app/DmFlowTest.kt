@@ -25,6 +25,8 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import rust.nostr.sdk.Keys
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.performSemanticsAction
 
 /**
  * Spec 10b end to end on the real relays (relay.monostr.com requires NIP-42 AUTH for kind 1059,
@@ -81,7 +83,7 @@ class DmFlowTest {
             rule.waitUntil(15_000) { nodes("login-secret").isNotEmpty() }
         }
         rule.onNodeWithTag("login-secret").performTextInput(secret)
-        rule.onNodeWithTag("login-secret-button").performClick()
+        rule.onNodeWithTag("login-secret-button").performSemanticsAction(SemanticsActions.OnClick)
         rule.waitUntil(30_000) { nodes("fab-compose").isNotEmpty() || nodes("setup-skip").isNotEmpty() }
         if (nodes("setup-skip").isNotEmpty()) {
             rule.onNodeWithTag("setup-skip").performClick()

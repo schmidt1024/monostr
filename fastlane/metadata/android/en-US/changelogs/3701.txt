@@ -1,0 +1,4 @@
+- Relay overview more compact: connected and not connected at a glance, «Manage» on top
+- The overview no longer hops with many relays
+- Start: one coin from tap to feed
+- Fixes

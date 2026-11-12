@@ -26,6 +26,8 @@ import rust.nostr.sdk.EventBuilder
 import rust.nostr.sdk.Keys
 import rust.nostr.sdk.Kind
 import rust.nostr.sdk.Tag
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.performSemanticsAction
 
 /** Spec perf 3.7 / 6: a pinned own list shows its title from the device while the only relay never answers; logout takes the summary along. */
 @RunWith(AndroidJUnit4::class)
@@ -65,7 +67,7 @@ class ListTabOfflineTest {
                 entry.feedTabs().save(pk, CachedTabs(listOf("30000:$pk:offline"), 1))
             }
             rule.onNodeWithTag("login-secret").performTextInput(secret)
-            rule.onNodeWithTag("login-secret-button").performClick()
+            rule.onNodeWithTag("login-secret-button").performSemanticsAction(SemanticsActions.OnClick)
             rule.waitUntil(30_000) { nodes("fab-compose").isNotEmpty() || nodes("setup-skip").isNotEmpty() }
             if (nodes("setup-skip").isNotEmpty()) {
                 rule.onNodeWithTag("setup-skip").performClick()

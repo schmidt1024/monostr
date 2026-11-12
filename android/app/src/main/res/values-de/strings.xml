@@ -26,6 +26,12 @@
     <string name="relay_needs_tor">braucht Tor</string>
     <string name="relay_resting">nicht erreichbar, neuer Versuch alle 10 Minuten</string>
     <string name="relay_sheet_manage">Relays verwalten</string>
+    <string name="relay_sheet_manage_short">Verwalten</string>
+    <string name="relay_sheet_via_tor">%1$s · über Tor</string>
+    <string name="relay_group_connected">Verbunden · %1$d</string>
+    <string name="relay_group_other">Nicht verbunden · %1$d</string>
+    <string name="relay_short_ok">ok</string>
+    <string name="relay_short_resting">Neuversuch in 10 Min.</string>
     <string name="relay_last_seen">zuletzt verbunden: %1$s</string>
     <string name="relay_never_seen">noch nie verbunden</string>
     <string name="relays_none_found">Noch keine Relay-Liste veröffentlicht. Andere Apps und der Tip-Watcher finden dich darüber. Füge vor dem Veröffentlichen die Relays mit deinen älteren Notes hinzu.</string>

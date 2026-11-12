@@ -26,6 +26,12 @@
     <string name="relay_needs_tor">нужен Tor</string>
     <string name="relay_resting">недоступен, новая попытка каждые 10 минут</string>
     <string name="relay_sheet_manage">Управлять релеями</string>
+    <string name="relay_sheet_manage_short">Управлять</string>
+    <string name="relay_sheet_via_tor">%1$s · через Tor</string>
+    <string name="relay_group_connected">Подключены · %1$d</string>
+    <string name="relay_group_other">Не подключены · %1$d</string>
+    <string name="relay_short_ok">ok</string>
+    <string name="relay_short_resting">повтор через 10 мин</string>
     <string name="relay_last_seen">последнее подключение: %1$s</string>
     <string name="relay_never_seen">ещё не подключался</string>
     <string name="relays_none_found">Список релеев ещё не опубликован. По нему вас находят другие приложения и watcher чаевых. Перед публикацией добавьте релеи с вашими старыми заметками.</string>

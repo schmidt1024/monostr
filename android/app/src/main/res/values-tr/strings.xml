@@ -26,6 +26,12 @@
     <string name="relay_needs_tor">Tor gerekli</string>
     <string name="relay_resting">ulaşılamıyor, 10 dakikada bir yeniden deneniyor</string>
     <string name="relay_sheet_manage">Relay\'leri yönet</string>
+    <string name="relay_sheet_manage_short">Yönet</string>
+    <string name="relay_sheet_via_tor">%1$s · Tor üzerinden</string>
+    <string name="relay_group_connected">Bağlı · %1$d</string>
+    <string name="relay_group_other">Bağlı değil · %1$d</string>
+    <string name="relay_short_ok">ok</string>
+    <string name="relay_short_resting">10 dk sonra yeniden dene</string>
     <string name="relay_last_seen">son bağlantı: %1$s</string>
     <string name="relay_never_seen">henüz bağlanmadı</string>
     <string name="relays_none_found">Henüz röle listesi yayınlanmadı. Diğer uygulamalar ve bahşiş watcher\'ı seni bununla bulur. Yayınlamadan önce eski notlarının bulunduğu röleleri ekle.</string>

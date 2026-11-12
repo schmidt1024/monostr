@@ -43,6 +43,8 @@ import rust.nostr.sdk.Filter
 import rust.nostr.sdk.Keys
 import rust.nostr.sdk.Kind
 import rust.nostr.sdk.Tag
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.performSemanticsAction
 
 /**
  * Spec 7.4: tapping the tip icon publishes a tip intent and hands a `monero:` URI to
@@ -81,7 +83,7 @@ class TipFlowTest {
         rule.waitUntil(30_000) { nodes("login-secret").isNotEmpty() || nodes("fab-compose").isNotEmpty() || nodes("setup-skip").isNotEmpty() }
         if (nodes("login-secret").isNotEmpty()) {
             rule.onNodeWithTag("login-secret").performTextInput(secret)
-            rule.onNodeWithTag("login-secret-button").performClick()
+            rule.onNodeWithTag("login-secret-button").performSemanticsAction(SemanticsActions.OnClick)
             rule.waitUntil(30_000) { nodes("fab-compose").isNotEmpty() || nodes("setup-skip").isNotEmpty() }
         }
         if (nodes("setup-skip").isNotEmpty()) {

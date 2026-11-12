@@ -24,6 +24,8 @@ import rust.nostr.sdk.Filter
 import rust.nostr.sdk.Keys
 import rust.nostr.sdk.Kind
 import rust.nostr.sdk.Metadata
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.performSemanticsAction
 
 /**
  * Spec 2026-10-30 follow lists: the profile's numbers open both lists; rows show name, bio and the follow button
@@ -67,7 +69,7 @@ class FollowListsTest {
             }
             rule.waitUntil(30_000) { nodes("login-secret").isNotEmpty() }
             rule.onNodeWithTag("login-secret").performTextInput(me.secretKey().toHex())
-            rule.onNodeWithTag("login-secret-button").performClick()
+            rule.onNodeWithTag("login-secret-button").performSemanticsAction(SemanticsActions.OnClick)
             rule.waitUntil(30_000) { nodes("fab-compose").isNotEmpty() || nodes("setup-skip").isNotEmpty() }
             if (nodes("setup-skip").isNotEmpty()) {
                 rule.onNodeWithTag("setup-skip").performClick()

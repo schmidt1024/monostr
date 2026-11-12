@@ -48,6 +48,8 @@ import rust.nostr.sdk.Contact
 import rust.nostr.sdk.EventBuilder
 import rust.nostr.sdk.Keys
 import rust.nostr.sdk.Metadata
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.performSemanticsAction
 
 /** Opening a web link asks first (the site learns the IP); Cancel opens nothing, Open once, Always open remembers. */
 @RunWith(AndroidJUnit4::class)
@@ -83,7 +85,7 @@ class LinkPromptTest {
         rule.waitUntil(30_000) { nodes("login-secret").isNotEmpty() || nodes("fab-compose").isNotEmpty() || nodes("setup-skip").isNotEmpty() }
         if (nodes("login-secret").isNotEmpty()) {
             rule.onNodeWithTag("login-secret").performTextInput(secret)
-            rule.onNodeWithTag("login-secret-button").performClick()
+            rule.onNodeWithTag("login-secret-button").performSemanticsAction(SemanticsActions.OnClick)
             rule.waitUntil(30_000) { nodes("fab-compose").isNotEmpty() || nodes("setup-skip").isNotEmpty() }
         }
         if (nodes("setup-skip").isNotEmpty()) {

@@ -37,6 +37,8 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.performSemanticsAction
 
 /**
  * Spec 2026-10-17 §3/§4/§11: the four steps from the login screen publish kind 0, 10002, 10050 and 3
@@ -174,7 +176,7 @@ class CreateAccountTest {
         val key = NewKeys.generate()
         runBlocking { entry.pendingSetup().save(key.pubkey, orphan()) }
         rule.onNodeWithTag("login-secret").performTextInput(key.nsec)
-        rule.onNodeWithTag("login-secret-button").performClick()
+        rule.onNodeWithTag("login-secret-button").performSemanticsAction(SemanticsActions.OnClick)
         rule.waitUntil(30_000) { nodes("fab-compose").isNotEmpty() || nodes("setup-skip").isNotEmpty() }
         assertNull(runBlocking { entry.pendingSetup().load(key.pubkey) })
         Thread.sleep(5_000) // a resumed setup would have gone out by now

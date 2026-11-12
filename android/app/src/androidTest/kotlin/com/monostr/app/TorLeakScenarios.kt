@@ -87,6 +87,8 @@ import java.net.ServerSocket
 import java.time.Duration
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.thread
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.performSemanticsAction
 
 /**
  * Tor plan Task 11: what runs while `scripts/tor-capture.sh` records the wire. Not part of the suite: every test is skipped without
@@ -366,7 +368,7 @@ class TorLeakScenarios {
         log("result fresh state ${tor.state.value}")
         // at once: this first login must wait or go through Tor, connected or not
         rule.onNodeWithTag("login-secret").performScrollTo().performTextInput(Keys.generate().secretKey().toHex())
-        rule.onNodeWithTag("login-secret-button").performClick()
+        rule.onNodeWithTag("login-secret-button").performSemanticsAction(SemanticsActions.OnClick)
         rule.waitUntil(60_000) { has("fab-compose") || has("setup-skip") }
         log("result fresh login-passed state ${tor.state.value}")
         runBlocking {

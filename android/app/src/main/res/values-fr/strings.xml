@@ -26,6 +26,12 @@
     <string name="relay_needs_tor">nécessite Tor</string>
     <string name="relay_resting">injoignable, nouvel essai toutes les 10 minutes</string>
     <string name="relay_sheet_manage">Gérer les relais</string>
+    <string name="relay_sheet_manage_short">Gérer</string>
+    <string name="relay_sheet_via_tor">%1$s · via Tor</string>
+    <string name="relay_group_connected">Connectés · %1$d</string>
+    <string name="relay_group_other">Non connectés · %1$d</string>
+    <string name="relay_short_ok">ok</string>
+    <string name="relay_short_resting">nouvel essai dans 10 min</string>
     <string name="relay_last_seen">dernière connexion : %1$s</string>
     <string name="relay_never_seen">jamais connecté</string>
     <string name="relays_none_found">Aucune liste de relais publiée pour l\'instant. Les autres apps et le watcher de pourboires te trouvent grâce à elle. Avant de publier, ajoute les relais qui ont tes anciennes notes.</string>

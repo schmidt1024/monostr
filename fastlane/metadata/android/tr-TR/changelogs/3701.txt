@@ -1,0 +1,4 @@
+- Relay görünümü daha derli toplu: bağlı ve bağlı olmayanlar bir bakışta, «Yönet» üstte
+- Görünüm çok sayıda relay'de artık zıplamıyor
+- Başlangıç: dokunuştan akışa tek bir para
+- Düzeltmeler

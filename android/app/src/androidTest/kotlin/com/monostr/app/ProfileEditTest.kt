@@ -29,6 +29,8 @@ import org.junit.runner.RunWith
 import rust.nostr.sdk.EventBuilder
 import rust.nostr.sdk.Keys
 import rust.nostr.sdk.Kind
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.performSemanticsAction
 
 /**
  * Spec 8: profile edit roundtrip; a foreign key of the stored kind 0 survives. On a loopback relay with a fresh key per run
@@ -58,7 +60,7 @@ class ProfileEditTest {
         if (nodes("login-secret").isNotEmpty()) {
             runBlocking { entry.session().applyRelays(listOf(relay.url)) }
             rule.onNodeWithTag("login-secret").performTextInput(secret)
-            rule.onNodeWithTag("login-secret-button").performClick()
+            rule.onNodeWithTag("login-secret-button").performSemanticsAction(SemanticsActions.OnClick)
             rule.waitUntil(30_000) { nodes("fab-compose").isNotEmpty() || nodes("setup-skip").isNotEmpty() }
         }
         if (nodes("setup-skip").isNotEmpty()) {

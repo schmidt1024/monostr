@@ -162,7 +162,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // spec 3: before super.onCreate, so the launch theme hands over to Theme.Monostr
-        installSplashScreen()
+        // Pixel 2026-11-12 (start variant C, «a big coin, then a small one»): the system's own starting window stays while the
+        // session restores, at most START_SPINNER_DELAY_MS, and fades straight into the app; no in-app copy of the splash, which
+        // drew the coin at another size. Only a slower restore shows the start screen, with the same coin and a spinner.
+        val splashSince = android.os.SystemClock.uptimeMillis()
+        installSplashScreen().setKeepOnScreenCondition {
+            session.state.value is com.monostr.app.session.SessionState.Loading &&
+                android.os.SystemClock.uptimeMillis() - splashSince < com.monostr.app.ui.common.START_SPINNER_DELAY_MS
+        }
         super.onCreate(savedInstanceState)
         // a recreated activity (rotation) still carries the launch intent; the chat was opened already
         if (savedInstanceState == null) takeOpenDm(intent)

@@ -23,6 +23,8 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import rust.nostr.sdk.Keys
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.performSemanticsAction
 
 /** Spec perf2 D5: a 300-message chat opens at its newest message and pages older ones in on scroll. Relays never answer; seeded text is generated. */
 @RunWith(AndroidJUnit4::class)
@@ -60,7 +62,7 @@ class LongChatTest {
         LoopbackRelay(silent = true).use { relay ->
             runBlocking { entry.session().applyRelays(listOf(relay.url)) }
             rule.onNodeWithTag("login-secret").performTextInput(me.secretKey().toHex())
-            rule.onNodeWithTag("login-secret-button").performClick()
+            rule.onNodeWithTag("login-secret-button").performSemanticsAction(SemanticsActions.OnClick)
             rule.waitUntil(30_000) { nodes("fab-compose").isNotEmpty() || nodes("setup-skip").isNotEmpty() }
             if (nodes("setup-skip").isNotEmpty()) {
                 rule.onNodeWithTag("setup-skip").performClick()

@@ -26,6 +26,8 @@ import rust.nostr.sdk.EventBuilder
 import rust.nostr.sdk.Keys
 import rust.nostr.sdk.Metadata
 import rust.nostr.sdk.Tag
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.performSemanticsAction
 
 /** Spec 8: hashtag search finds a seeded local note; an npub opens the profile. Both the search relays and the normal session relays point at a dead port, so nothing leaves the device. */
 @RunWith(AndroidJUnit4::class)
@@ -56,7 +58,7 @@ class SearchTest {
         rule.waitUntil(30_000) { nodes("login-secret").isNotEmpty() || nodes("fab-compose").isNotEmpty() || nodes("setup-skip").isNotEmpty() }
         if (nodes("login-secret").isNotEmpty()) {
             rule.onNodeWithTag("login-secret").performTextInput(secret)
-            rule.onNodeWithTag("login-secret-button").performClick()
+            rule.onNodeWithTag("login-secret-button").performSemanticsAction(SemanticsActions.OnClick)
             rule.waitUntil(30_000) { nodes("fab-compose").isNotEmpty() || nodes("setup-skip").isNotEmpty() }
         }
         if (nodes("setup-skip").isNotEmpty()) {

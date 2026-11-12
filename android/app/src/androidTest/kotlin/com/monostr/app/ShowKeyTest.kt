@@ -27,6 +27,8 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import rust.nostr.sdk.Keys
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.performSemanticsAction
 
 /**
  * Spec 2026-10-17 §6/§11: Settings → "Show key" for a key login asks first, then shows the nsec on a
@@ -67,7 +69,7 @@ class ShowKeyTest {
     private fun loginFresh() {
         rule.waitUntil(60_000) { nodes("login-secret").isNotEmpty() }
         rule.onNodeWithTag("login-secret").performTextInput(secret)
-        rule.onNodeWithTag("login-secret-button").performClick()
+        rule.onNodeWithTag("login-secret-button").performSemanticsAction(SemanticsActions.OnClick)
         rule.waitUntil(30_000) { nodes("fab-compose").isNotEmpty() || nodes("setup-skip").isNotEmpty() }
         if (nodes("setup-skip").isNotEmpty()) {
             rule.onNodeWithTag("setup-skip").performClick()

@@ -31,6 +31,8 @@ import rust.nostr.sdk.Filter
 import rust.nostr.sdk.Keys
 import rust.nostr.sdk.Kind
 import rust.nostr.sdk.PublicKey
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.performSemanticsAction
 
 /** Emoji reactions (2026-10-11): the user's own quick list in their order, a long press reacts, the emoji replaces the heart. */
 @RunWith(AndroidJUnit4::class)
@@ -54,7 +56,7 @@ class ReactionsTest {
         runBlocking { runCatching { entry.session().logout() }; entry.uiSettings().setQuickReactions(listOf("🔥", "🚀")) }
         rule.waitUntil(15_000) { nodes("login-secret").isNotEmpty() }
         rule.onNodeWithTag("login-secret").performTextInput(me.secretKey().toHex())
-        rule.onNodeWithTag("login-secret-button").performClick()
+        rule.onNodeWithTag("login-secret-button").performSemanticsAction(SemanticsActions.OnClick)
         rule.waitUntil(30_000) { nodes("fab-compose").isNotEmpty() || nodes("setup-skip").isNotEmpty() }
         if (nodes("setup-skip").isNotEmpty()) {
             rule.onNodeWithTag("setup-skip").performClick()

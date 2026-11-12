@@ -1,3 +1,5 @@
 <resources>
     <color name="window_background">#000000</color>
+    <!-- owner 2026-11-12: the splash coin ink = MaterialTheme onBackground (MonoColors.DarkOnSurface, ui/theme/Color.kt) -->
+    <color name="splash_ink">#F2F2F2</color>
 </resources>

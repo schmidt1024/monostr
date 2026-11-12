@@ -46,6 +46,8 @@ import rust.nostr.sdk.Event
 import rust.nostr.sdk.EventBuilder
 import rust.nostr.sdk.Keys
 import rust.nostr.sdk.Metadata
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.performSemanticsAction
 
 /**
  * Spec 2026-11-03 note translation, UI: the button on foreign notes only, the consent sheet before anything is sent,
@@ -116,7 +118,7 @@ class TranslateTest {
         rule.waitUntil(15_000) { nodes("login-secret").isNotEmpty() }
         runBlocking { entry.session().applyRelays(listOf(relay.url)) }
         rule.onNodeWithTag("login-secret").performTextInput(secret)
-        rule.onNodeWithTag("login-secret-button").performClick()
+        rule.onNodeWithTag("login-secret-button").performSemanticsAction(SemanticsActions.OnClick)
         rule.waitUntil(30_000) { nodes("fab-compose").isNotEmpty() || nodes("setup-skip").isNotEmpty() }
         if (nodes("setup-skip").isNotEmpty()) {
             rule.onNodeWithTag("setup-skip").performClick()

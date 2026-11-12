@@ -18,7 +18,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** Spec 3: logo centre at 38.2 % of the height, the spinner only after 1.5 s (test clock), never on a fast restore. */
+/** Spec 3: coin alone, centred in the window, the spinner only after 1.5 s (test clock), never on a fast restore. */
 @RunWith(AndroidJUnit4::class)
 class StartScreenTest {
     @get:Rule val rule = createComposeRule()
@@ -49,13 +49,12 @@ class StartScreenTest {
     }
 
     @Test
-    fun theLogoCentreSitsAtTheGoldenSection() {
+    fun theCoinIsCentredInTheWindow() {
         rule.setContent { MaterialTheme { StartScreen() } }
         val root = rule.onRoot().getBoundsInRoot()
         val logo = rule.onNodeWithTag("start-logo").getBoundsInRoot()
-        val centre = (logo.top + logo.bottom) / 2
-        val expected = (root.bottom - root.top) * 0.382f
-        assertEquals(expected.value, centre.value, 1.dp.value)
+        assertEquals(((root.bottom - root.top) / 2).value, ((logo.top + logo.bottom) / 2).value, 1.dp.value)
+        assertEquals(((root.right - root.left) / 2).value, ((logo.left + logo.right) / 2).value, 1.dp.value)
         assertEquals(96.dp.value, (logo.bottom - logo.top).value, 0.5f)
     }
 }

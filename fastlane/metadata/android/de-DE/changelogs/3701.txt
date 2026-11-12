@@ -1,0 +1,4 @@
+- Relay-Übersicht kompakter: verbunden und nicht verbunden auf einen Blick, «Verwalten» oben
+- Die Übersicht hüpft bei vielen Relays nicht mehr
+- Start: eine Münze vom Tippen bis zum Feed
+- Korrekturen

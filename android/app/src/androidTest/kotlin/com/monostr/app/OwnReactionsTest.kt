@@ -28,6 +28,8 @@ import rust.nostr.sdk.Filter
 import rust.nostr.sdk.Keys
 import rust.nostr.sdk.Kind
 import rust.nostr.sdk.PublicKey
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.performSemanticsAction
 
 /** A like is remembered (also one stored before the session started), shows on every screen; a second tap takes it back. */
 @RunWith(AndroidJUnit4::class)
@@ -56,7 +58,7 @@ class OwnReactionsTest {
         rule.waitUntil(15_000) { nodes("login-secret").isNotEmpty() }
         runBlocking { entry.session().applyRelays(listOf(relay.url)) }
         rule.onNodeWithTag("login-secret").performTextInput(me.secretKey().toHex())
-        rule.onNodeWithTag("login-secret-button").performClick()
+        rule.onNodeWithTag("login-secret-button").performSemanticsAction(SemanticsActions.OnClick)
         rule.waitUntil(30_000) { nodes("fab-compose").isNotEmpty() || nodes("setup-skip").isNotEmpty() }
         if (nodes("setup-skip").isNotEmpty()) {
             rule.onNodeWithTag("setup-skip").performClick()

@@ -1,0 +1,4 @@
+- Panoramica dei relay più compatta: connessi e non connessi a colpo d’occhio, «Gestisci» in alto
+- La panoramica non salta più con molti relay
+- Avvio: una sola moneta dal tocco al feed
+- Correzioni

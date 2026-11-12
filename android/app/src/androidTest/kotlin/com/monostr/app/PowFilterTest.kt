@@ -22,6 +22,8 @@ import rust.nostr.sdk.Contact
 import rust.nostr.sdk.EventBuilder
 import rust.nostr.sdk.Keys
 import rust.nostr.sdk.Tag
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.performSemanticsAction
 
 /** GitHub #4: with a minimum set, a thread keeps the replies with enough proof of work and the replies of follows. */
 @RunWith(AndroidJUnit4::class)
@@ -61,7 +63,7 @@ class PowFilterTest {
             }
             rule.waitUntil(30_000) { nodes("login-secret").isNotEmpty() }
             rule.onNodeWithTag("login-secret").performTextInput(me.secretKey().toHex())
-            rule.onNodeWithTag("login-secret-button").performClick()
+            rule.onNodeWithTag("login-secret-button").performSemanticsAction(SemanticsActions.OnClick)
             rule.waitUntil(30_000) { nodes("fab-compose").isNotEmpty() || nodes("setup-skip").isNotEmpty() }
             if (nodes("setup-skip").isNotEmpty()) {
                 rule.onNodeWithTag("setup-skip").performClick()

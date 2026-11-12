@@ -98,6 +98,7 @@ import org.junit.runner.RunWith
 import java.io.File
 import java.util.Locale
 import kotlin.math.abs
+import androidx.compose.ui.test.performSemanticsAction
 
 /** The screens against a fake Tor: what each state shows, and that there is no quick way back to direct. */
 @RunWith(AndroidJUnit4::class)
@@ -843,7 +844,7 @@ class TorUiRealSwitchTest {
         runBlocking { runCatching { entry.session().logout() } }
         rule.waitUntil(30_000) { has("login-secret") }
         rule.onNodeWithTag("login-secret").performTextInput("0000000000000000000000000000000000000000000000000000000000000003")
-        rule.onNodeWithTag("login-secret-button").performClick()
+        rule.onNodeWithTag("login-secret-button").performSemanticsAction(SemanticsActions.OnClick)
         rule.waitUntil(30_000) { has("fab-compose") || has("setup-skip") }
         if (has("setup-skip")) {
             rule.onNodeWithTag("setup-skip").performClick()

@@ -34,6 +34,8 @@ import rust.nostr.sdk.Kind
 import rust.nostr.sdk.Metadata
 import rust.nostr.sdk.Nip19Event
 import rust.nostr.sdk.Tag
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.performSemanticsAction
 
 /** Spec 8: a quote card shows in the feed and opens the quoted thread; quoting from the repost sheet stores q and p tags. Nothing leaves the device (dead relay). */
 @RunWith(AndroidJUnit4::class)
@@ -56,7 +58,7 @@ class QuoteCardTest {
         rule.waitUntil(30_000) { nodes("login-secret").isNotEmpty() || nodes("fab-compose").isNotEmpty() || nodes("setup-skip").isNotEmpty() }
         if (nodes("login-secret").isNotEmpty()) {
             rule.onNodeWithTag("login-secret").performTextInput(secret)
-            rule.onNodeWithTag("login-secret-button").performClick()
+            rule.onNodeWithTag("login-secret-button").performSemanticsAction(SemanticsActions.OnClick)
             rule.waitUntil(30_000) { nodes("fab-compose").isNotEmpty() || nodes("setup-skip").isNotEmpty() }
         }
         if (nodes("setup-skip").isNotEmpty()) {

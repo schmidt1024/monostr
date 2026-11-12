@@ -1,0 +1,4 @@
+- Aperçu des relais plus compact : connectés et non connectés d’un coup d’œil, « Gérer » en haut
+- L’aperçu ne saute plus avec beaucoup de relais
+- Démarrage : une seule pièce du toucher au fil
+- Corrections
