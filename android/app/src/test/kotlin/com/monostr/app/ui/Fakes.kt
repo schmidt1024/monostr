@@ -114,6 +114,11 @@ class FakeConversations(var chains: Map<String, com.monostr.nostr.repo.Chain> = 
 }
 
 class FakeFeed : FeedRepository {
+    val originals = MutableSharedFlow<Set<String>>(extraBufferCapacity = 4)
+    /** Repost id → the repost with its original, once that "arrived". */
+    var reloads: Map<String, Note> = emptyMap()
+    override val repostOriginals: Flow<Set<String>> get() = originals
+    override suspend fun reloaded(repost: Note): Note? = reloads[repost.id]
     var current: List<Note> = emptyList()
     var older: List<Note> = emptyList()
     var byAuthor: Map<String, List<Note>> = emptyMap()
@@ -262,13 +267,13 @@ class FakeProfiles(known: Map<String, Profile> = emptyMap()) : ProfileRepository
     override suspend fun invalidate(pubkey: String): Profile { invalidated += pubkey; return current.value[pubkey] ?: Profile.empty(pubkey) }
 }
 
-class FakeQuotes(var notes: Map<String, Note> = emptyMap()) : QuoteRepository {
+class FakeQuotes(var notes: Map<String, Note> = emptyMap(), var zaps: Map<String, com.monostr.nostr.model.ZapQuote> = emptyMap()) : QuoteRepository {
     /** (id, hints) of every get, in order. */
     val calls = ArrayList<Pair<String, List<String>>>()
     override fun cached(id: String, author: String?): QuoteResult? = null
-    override suspend fun get(id: String, hints: List<String>, author: String?): QuoteResult {
+    override suspend fun get(id: String, hints: List<String>, author: String?, guesses: List<String>): QuoteResult {
         calls += id to hints
-        return notes[id]?.let { QuoteResult.Found(it) } ?: QuoteResult.Missing
+        return notes[id]?.let { QuoteResult.Found(it) } ?: zaps[id]?.let { QuoteResult.Zap(it) } ?: QuoteResult.Missing
     }
 }
 
@@ -293,10 +298,10 @@ class FakePublish(var relaysOk: Boolean = true, private val fail: Boolean = fals
         lastSensitive = sensitive
         return (if (attachments.isEmpty()) "" else "|${attachments.size}img") + (if (sensitive) "|cw" else "")
     }
-    override suspend fun post(text: String, attachments: List<NoteAttachment>, sensitive: Boolean) =
-        result(1).also { calls += "post:$text" + suffix(attachments, sensitive) }
-    override suspend fun reply(text: String, to: Note, attachments: List<NoteAttachment>, sensitive: Boolean) =
-        result(1).also { calls += "reply:${to.id.take(4)}:$text" + suffix(attachments, sensitive) }
+    override suspend fun post(text: String, attachments: List<NoteAttachment>, sensitive: Boolean, noPreview: Boolean) =
+        result(1).also { calls += "post:$text" + suffix(attachments, sensitive) + (if (noPreview) "|nopreview" else "") }
+    override suspend fun reply(text: String, to: Note, attachments: List<NoteAttachment>, sensitive: Boolean, noPreview: Boolean) =
+        result(1).also { calls += "reply:${to.id.take(4)}:$text" + suffix(attachments, sensitive) + (if (noPreview) "|nopreview" else "") }
     override suspend fun quote(text: String, of: Note, attachments: List<NoteAttachment>, sensitive: Boolean) =
         result(1).also { calls += "quote:${of.id.take(4)}:$text" + suffix(attachments, sensitive) }
     /** JSON of every profile publish, in order. */
@@ -304,7 +309,7 @@ class FakePublish(var relaysOk: Boolean = true, private val fail: Boolean = fals
     override suspend fun profile(json: String) = result(0).also { calls += "profile"; profileJson += json }
     override suspend fun react(note: Note, content: String) = result(7).also { calls += if (content == "+") "like:${note.id.take(4)}" else "react:${note.id.take(4)}:$content" }
     override suspend fun repost(note: Note) = result(6).also { calls += "repost:${note.id.take(4)}" }
-    override suspend fun comment(text: String, article: Note, parent: Note?, attachments: List<NoteAttachment>, sensitive: Boolean) = result(1111).also { calls += "comment:${article.id.take(4)}:${parent?.id?.take(4) ?: "-"}:$text" }
+    override suspend fun comment(text: String, article: Note, parent: Note?, attachments: List<NoteAttachment>, sensitive: Boolean, noPreview: Boolean) = result(1111).also { calls += "comment:${article.id.take(4)}:${parent?.id?.take(4) ?: "-"}:$text" }
     val withdrawKinds = ArrayList<Int>()
     override suspend fun withdraw(noteId: String, kind: Int) = result(5).also { withdrawKinds += kind; calls += (if (kind == 7) "unlike:" else "unrepost:") + noteId.take(4) }
     override suspend fun delete(note: Note) = result(5).also { calls += "delete:${note.id.take(4)}" }
@@ -425,6 +430,8 @@ class FakeTips(
     var own: OwnPayto = OwnPayto.Known(null)
     /** Every address passed to [setOwnPayto]; a [PaytoWrite.Published] result also becomes [own]. */
     val paytoWrites = ArrayList<String?>()
+    private var publishedPaytoWrites = 0
+    override val ownPaytoWrites: Int get() = publishedPaytoWrites
     var paytoResult = PaytoWrite.Published
     override suspend fun cachedPayto(pubkey: String): String? = paytos[pubkey] ?: outboxPaytos[pubkey]?.takeIf { pubkey in outboxFetched }
     /** Payto entries only the recipient's own relays have: [cachedPayto] reads one once [fetchPayto] got that pubkey with non-empty relays. */
@@ -450,7 +457,7 @@ class FakeTips(
     override suspend fun ownPayto(): OwnPayto { ownCalls++; ownGate?.await(); return own }
     override suspend fun setOwnPayto(address: String?): PaytoWrite {
         paytoWrites += address
-        if (paytoResult == PaytoWrite.Published) own = OwnPayto.Known(address)
+        if (paytoResult == PaytoWrite.Published) { own = OwnPayto.Known(address); publishedPaytoWrites++ }
         return paytoResult
     }
     override suspend fun disablePaymentInfo(): PublishResult {

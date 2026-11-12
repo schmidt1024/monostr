@@ -91,6 +91,10 @@ class ThreadComposeControllerTest {
         assertTrue(post.state.value.done)
         assertNull(post.state.value.error)
         assertEquals(listOf("post:hello"), publish.calls)
+        val away = FakePublish()
+        ComposeController(null, threads, away, eager()).apply { start(); send("see https://a.example/", noPreview = true) }
+        advanceUntilIdle()
+        assertEquals(listOf("post:see https://a.example/|nopreview"), away.calls)
         val reply = ComposeController(root.id, threads, publish, eager())
         reply.start()
         advanceUntilIdle()

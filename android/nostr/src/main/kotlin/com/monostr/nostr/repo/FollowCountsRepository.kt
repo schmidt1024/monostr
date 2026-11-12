@@ -20,7 +20,8 @@ import rust.nostr.sdk.PublicKey
 import java.time.Duration
 
 /** What the profile header shows; null = unknown (the line is left out). */
-data class FollowCounts(val following: Int?, val followers: Long?)
+/** [followsYou]: the profile's own contact list names the viewer (read from that list, nothing extra is fetched); null = no list known. */
+data class FollowCounts(val following: Int?, val followers: Long?, val followsYou: Boolean? = null)
 
 /** An index that has seen everybody's contact lists (none wired since 0.22.4; nostr.band was one, offline since 2026-10-04): the numbers other clients show. Null = nothing known. */
 interface FollowStatsIndexer {
@@ -55,6 +56,8 @@ class NostrFollowCountsRepository(
     private val maxAgeSeconds: Long = 300,
     /** Spec perf2 A6: shares the per-relay COUNT cap with the note counts. */
     private val limiter: CountLimiter = CountLimiter(),
+    /** The signed-in account: [FollowCounts.followsYou] says whether a profile's list names it; null = never asked. */
+    private val viewer: String? = null,
 ) : FollowCountsRepository {
     /** [complete]: every relay answered or timed out; a partial result (the screen left early) is continued at the next open. */
     private class Known(val counts: FollowCounts, val at: Long, val complete: Boolean)
@@ -82,7 +85,7 @@ class NostrFollowCountsRepository(
             }
             // the own list is exact: once it is counted, an indexer's following number never replaces it
             var listed = false
-            launch { following(author) { n -> publish { listed = true; it.copy(following = n) } } }
+            launch { following(author) { n, you -> publish { listed = true; it.copy(following = n, followsYou = you) } } }
             for (relay in relays) launch {
                 val n = limiter.withPermit(relay) { engine.countFrom(relay, Filter().kind(Kind(3u)).pubkey(author), timeout, attach = false) }
                     ?.takeIf { it in 0..MAX_FOLLOWERS } ?: return@launch
@@ -93,7 +96,7 @@ class NostrFollowCountsRepository(
                 publish { current ->
                     val followers = stats.followers?.takeIf { it in 0..MAX_FOLLOWERS && it > (current.followers ?: -1) } ?: current.followers
                     val following = if (listed || stats.following == null) current.following else stats.following
-                    FollowCounts(following, followers)
+                    current.copy(following = following, followers = followers)
                 }
             }
         }.distinctUntilChanged().filter { it.following != null || it.followers != null }
@@ -124,11 +127,11 @@ class NostrFollowCountsRepository(
      * Hands the stored list's count to [found] at once (backlog 41: it waited for the index relays before), then,
      * when there is none or it is old, the count of what the relays bring (normal and index), if that differs.
      */
-    private suspend fun following(author: PublicKey, found: suspend (Int) -> Unit) {
+    private suspend fun following(author: PublicKey, found: suspend (Int, Boolean?) -> Unit) {
         val filter = Filter().kind(Kind(3u)).author(author).limit(1u)
         var list = engine.query(filter).firstOrNull()
-        val storedCount = list?.let(::followed)
-        storedCount?.let { found(it) }
+        val stored = list?.let(::followed)
+        stored?.let { found(it.first, it.second) }
         val stale = list == null || now() - list.createdAt().asSecs().toLong() > LIST_MAX_AGE_SECONDS
         if (stale) {
             // the normal relays too, not the index relays alone: purplepag.es lacks some lists every normal relay has
@@ -141,12 +144,14 @@ class NostrFollowCountsRepository(
             }
             list = engine.query(filter).firstOrNull()
         }
-        list?.let(::followed)?.takeIf { it != storedCount }?.let { found(it) }
+        list?.let(::followed)?.takeIf { it != stored }?.let { found(it.first, it.second) }
     }
 
     /** Distinct well-formed `p` tags, read in Kotlin (0.3–2 s through rust for 300–1500 tags). */
-    private fun followed(list: Event): Int =
-        NoteMapper.decoded(list).tags.filter { it.size >= 2 && it[0] == "p" && HEX64.matches(it[1]) }.map { it[1] }.toSet().size
+    private fun followed(list: Event): Pair<Int, Boolean?> {
+        val keys = NoteMapper.decoded(list).tags.filter { it.size >= 2 && it[0] == "p" && HEX64.matches(it[1]) }.map { it[1] }.toSet()
+        return keys.size to viewer?.let { it in keys }
+    }
 
     companion object {
         /** Relays that answer NIP-45 COUNT (probed 2026-10-08; purplepag.es and snort do not, nostr.band is offline since 2026-10-04). */

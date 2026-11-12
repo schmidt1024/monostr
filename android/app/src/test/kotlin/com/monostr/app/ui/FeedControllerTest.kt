@@ -101,6 +101,37 @@ class FeedControllerTest {
     }
 
     @Test
+    fun `a bare repost whose original arrives later is swapped in place`() = runTest {
+        val original = note('1', alice, 1000)
+        val bare = repostOf(original, bob, 3000).copy(repostOf = null, repostedId = original.id)
+        val feed = FakeFeed().apply { current = listOf(bare) }
+        val c = FeedController(feed, profiles, FakePublish(), decorations(), BookmarkActions(FakeBookmarks(), eager()), FakeCounts(), eager())
+        c.start(); advanceUntilIdle()
+        assertNull(c.state.value.notes.single().note.repostOf)
+        feed.reloads = mapOf(bare.id to bare.copy(repostOf = original))
+        feed.originals.emit(setOf(original.id)); advanceUntilIdle()
+        assertEquals(original.id, c.state.value.notes.single().note.repostOf?.id)
+        assertEquals(bare.id, c.state.value.notes.single().note.id)
+    }
+
+    @Test
+    fun `an original that arrives from a muted author hides the repost`() = runTest {
+        val original = note('1', alice, 1000)
+        val bare = repostOf(original, bob, 3000).copy(repostOf = null, repostedId = original.id)
+        val feed = FakeFeed().apply { current = listOf(bare) }
+        val muted = MutableStateFlow(setOf(alice))
+        val c = FeedController(
+            feed, profiles, FakePublish(), decorations(), BookmarkActions(FakeBookmarks(), eager()), FakeCounts(), eager(),
+            visibility = NoteVisibility(NoteDeletions(), muted),
+        )
+        c.start(); advanceUntilIdle()
+        assertEquals(1, c.state.value.notes.size, "the bare repost names no muted author yet")
+        feed.reloads = mapOf(bare.id to bare.copy(repostOf = original))
+        feed.originals.emit(setOf(original.id)); advanceUntilIdle()
+        assertTrue(c.state.value.notes.isEmpty())
+    }
+
+    @Test
     fun `feed decorates notes with profiles, handles reposts, likes and load more`() = runTest {
         val feed = FakeFeed()
         val n1 = note('1', alice, 1000)

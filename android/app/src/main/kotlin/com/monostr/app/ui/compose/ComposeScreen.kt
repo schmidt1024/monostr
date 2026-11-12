@@ -1,5 +1,6 @@
 package com.monostr.app.ui.compose
 
+import com.monostr.nostr.PerfTrace
 import com.monostr.app.net.SendGate
 import android.content.Context
 import android.net.Uri
@@ -88,6 +89,7 @@ import com.monostr.app.session.NostrSession
 import com.monostr.app.ui.common.Avatar
 import com.monostr.app.ui.common.QuoteCard
 import com.monostr.app.ui.media.LinkPreviewCard
+import com.monostr.app.ui.media.LinkPreviewRules
 import com.monostr.app.ui.media.rememberDraftLink
 import com.monostr.app.ui.common.UiText
 import com.monostr.app.ui.common.asString
@@ -572,7 +574,8 @@ class ComposeController(
         }
     }
 
-    fun send(text: String) {
+    /** [noPreview]: the link card was put away while writing (owner 2026-11-12): the note says so with [com.monostr.nostr.model.NoPreview]. */
+    fun send(text: String, noPreview: Boolean = false) {
         if (_state.value.sending) return
         val quoting = quoteId != null
         val attachments = _state.value.attachments
@@ -606,6 +609,7 @@ class ComposeController(
         consumed = true
         saveJob?.cancel() // a pending save must not bring back the draft this send takes along
         _state.update { it.copy(sending = true, error = null) }
+        PerfTrace.mark("compose send tap reply=${replyToId != null} article=${articleRef != null}")
         scope.launch {
             try {
                 val parent = _state.value.replyTo
@@ -615,11 +619,12 @@ class ComposeController(
                 val sensitive = _state.value.sensitive
                 val result = when {
                     pending != null -> publish.resend(pending)
-                    articleRef != null -> publish.comment(text, checkNotNull(_state.value.article), parent, media, sensitive)
-                    parent != null -> publish.reply(text, parent, media, sensitive)
+                    articleRef != null -> publish.comment(text, checkNotNull(_state.value.article), parent, media, sensitive, noPreview)
+                    parent != null -> publish.reply(text, parent, media, sensitive, noPreview)
                     quoted != null -> publish.quote(text, quoted, media, sensitive)
-                    else -> publish.post(text, media, sensitive)
+                    else -> publish.post(text, media, sensitive, noPreview)
                 }
+                PerfTrace.mark("compose send result ok=${result.successRelays.size} failed=${result.failedRelays}")
                 pendingEventId = if (result.sentToAny) null else result.eventId
                 if (!result.sentToAny && !sendGate.canSend.value) {
                     // Tor went during the send. The text stays a draft, not only a stored event nobody sends; a tap with Tor back sends that same event
@@ -630,6 +635,7 @@ class ComposeController(
                 }
                 // spec 2026-10-16 §8.2: sent, or stored for a resend that names the pictures: the draft is done
                 clearDraft()
+                PerfTrace.mark("compose send draft cleared")
                 _state.update {
                     it.copy(
                         sending = false, done = result.sentToAny, pendingResend = !result.sentToAny,
@@ -747,6 +753,8 @@ fun ComposeScreen(onDone: () -> Unit, vm: ComposeViewModel = hiltViewModel()) {
     val pickVideo = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let { vm.controller.attachVideo(it.toString()) } }
     val videoOnly = remember { PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly) }
     val self by vm.self.collectAsStateWithLifecycle()
+    // the link whose card was put away with its X: the sent note then says «no card» too (owner 2026-11-12)
+    var dismissedLink by rememberSaveable { mutableStateOf<String?>(null) }
     val canSend = !state.sending && (field.text.isNotBlank() || vm.quoteId != null || state.attachments.isNotEmpty()) &&
         state.attachmentsReady && !state.replyUnresolved && !state.quoteUnresolved && !state.articleUnresolved
     // 2026-10-30, like X's editor: close left, a small «Post» pill right, the picture beside a frameless text, the tools above the keyboard
@@ -757,7 +765,10 @@ fun ComposeScreen(onDone: () -> Unit, vm: ComposeViewModel = hiltViewModel()) {
                 navigationIcon = { IconButton(onClick = onDone) { Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.action_close)) } },
                 actions = {
                     Button(
-                        onClick = { vm.controller.send(field.text.toString()) },
+                        onClick = {
+                            val text = field.text.toString()
+                            vm.controller.send(text, noPreview = dismissedLink != null && dismissedLink == LinkPreviewRules.firstPreviewUrl(text))
+                        },
                         enabled = canSend,
                         contentPadding = PaddingValues(horizontal = Spacing.l),
                         modifier = Modifier.padding(end = Spacing.m).height(36.dp).testTag("compose-send"),
@@ -827,8 +838,7 @@ fun ComposeScreen(onDone: () -> Unit, vm: ComposeViewModel = hiltViewModel()) {
                 }
             }
             // 2026-10-30, like X's editor: the card the note's first link will get, with an X to put it away while writing;
-            // a quote or attached media mean no card, so none shows. The X only hides it here (other clients decide themselves).
-            var dismissedLink by rememberSaveable { mutableStateOf<String?>(null) }
+            // a quote or attached media mean no card, so none shows. The X also marks the sent note (other clients decide themselves).
             rememberDraftLink(field.text.toString(), blocked = vm.quoteId != null || state.attachments.isNotEmpty())
                 ?.takeIf { (_, link) -> link.url != dismissedLink }
                 ?.let { (draft, link) ->

@@ -45,6 +45,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.graphics.Color
 import com.monostr.app.data.linkpreview.LinkPreview
 import com.monostr.app.data.linkpreview.LinkPreviews
+import com.monostr.app.ui.common.LocalTorActive
 import com.monostr.app.ui.common.NoteLinks
 import com.monostr.app.ui.common.NoteSpan
 import com.monostr.app.ui.theme.PlainShapes
@@ -64,6 +65,15 @@ object LinkPreviewRules {
     fun shownDomain(url: String): String = url.toHttpUrlOrNull()?.host?.removePrefix("www.") ?: NoteLinks.shownUrl(url)
 
     /**
+     * Owner 2026-11-12: a page without a title of its own (media.monostr.com) has its host as title, and the card named the
+     * host twice. True when [title] says nothing but [domain]: case, a `www.`, a scheme or a trailing slash aside.
+     */
+    fun titleRepeatsDomain(title: String, domain: String): Boolean {
+        fun bare(s: String) = s.trim().lowercase().removePrefix("https://").removePrefix("http://").removePrefix("www.").trimEnd('/')
+        return bare(title) == bare(domain)
+    }
+
+    /**
      * The note's text while [url]'s card shows: a link that ends the note leaves it, the card opens it (like X);
      * a link inside a sentence stays, so the sentence stays whole.
      */
@@ -77,7 +87,7 @@ object LinkPreviewRules {
     }
 
     fun firstPreviewUrl(note: Note): String? {
-        if (note.media.isNotEmpty() || note.quotedId != null) return null
+        if (note.media.isNotEmpty() || note.quotedId != null || note.noPreview) return null
         return firstPreviewUrl(note.displayContent)
     }
 
@@ -164,20 +174,32 @@ fun LinkPreviewCard(note: Note, url: String, preview: LinkPreview, onDismiss: ((
     val uriHandler = LocalUriHandler.current
     val id8 = note.id.take(8)
     val domain = remember(url) { LinkPreviewRules.shownDomain(url) }
-    var imageFailed by remember(preview.imageUrl) { mutableStateOf(false) }
-    val image = preview.imageUrl?.takeIf { !imageFailed }
+    var failure by remember(preview.imageUrl) { mutableStateOf<MediaFailure?>(null) }
+    val image = preview.imageUrl?.takeIf { failure == null }
+    // owner 2026-11-12: a picture the site refused over Tor says so, like note pictures; any other failure just hides it
+    val torBlocked = failure == MediaFailure.TOR_BLOCKED
+    val torActive = LocalTorActive.current
+    val onFailed: (Throwable?) -> Unit = { failure = MediaFailures.of(it, torActive) }
     val (covered, waiting) = rememberMediaCover(note, hasImages = image != null)
     val cd = stringResource(R.string.link_preview_cd, preview.title, domain)
+    val titled = !LinkPreviewRules.titleRepeatsDomain(preview.title, domain)
     val open: () -> Unit = { runCatching { uriHandler.openUri(url) } }
     val shape = MaterialTheme.shapes.large
     val textPart = Modifier.clickable(onClickLabel = cd, onClick = open).semantics { contentDescription = cd }.padding(Spacing.m)
-    if (preview.large && image != null) {
+    if (preview.large && (image != null || torBlocked)) {
         // like X (2026-10-30): the title on one line in a small dark label on the picture, the domain under the card
         Column(Modifier.fillMaxWidth().padding(top = Spacing.s).testTag("link-preview-$id8")) {
             Box(Modifier.fillMaxWidth().aspectRatio(1.91f).clip(PlainShapes.large).border(1.dp, MaterialTheme.colorScheme.outlineVariant, PlainShapes.large)) {
-                PreviewImage(image, note, covered, waiting, open, onFailed = { imageFailed = true }, Modifier.fillMaxSize())
+                if (image != null) {
+                    PreviewImage(image, note, covered, waiting, open, onFailed, Modifier.fillMaxSize())
+                } else {
+                    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant).clickable(onClick = open).testTag("link-preview-tor-$id8"), contentAlignment = Alignment.Center) {
+                        MediaFailedMark(MediaFailure.TOR_BLOCKED)
+                    }
+                }
                 onDismiss?.let { DismissButton(it, Modifier.align(Alignment.TopStart)) }
-                Text(
+                // no label when the title is only the host: the domain line under the picture names it already
+                if (titled) Text(
                     preview.title, style = MaterialTheme.typography.labelMedium, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.align(Alignment.BottomStart).padding(Spacing.s)
                         .clip(MaterialTheme.shapes.extraSmall).background(Color.Black.copy(alpha = 0.75f))
@@ -197,8 +219,9 @@ fun LinkPreviewCard(note: Note, url: String, preview: LinkPreview, onDismiss: ((
             Modifier.fillMaxWidth().padding(top = Spacing.s).clip(PlainShapes.large).border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape).testTag("link-preview-$id8"),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            image?.let { PreviewImage(it, note, covered, waiting, open, onFailed = { imageFailed = true }, Modifier.size(72.dp)) }
-            PreviewText(domain, preview.title, Modifier.weight(1f).then(textPart))
+            image?.let { PreviewImage(it, note, covered, waiting, open, onFailed, Modifier.size(72.dp)) }
+            // the small card has no room for the mark: one quiet line under the title instead
+            PreviewText(domain.takeIf { titled }, preview.title, Modifier.weight(1f).then(textPart), torBlocked = torBlocked)
             onDismiss?.let { DismissButton(it) }
         }
     }
@@ -218,16 +241,20 @@ private fun DismissButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun PreviewText(domain: String, title: String, modifier: Modifier) {
+private fun PreviewText(domain: String?, title: String, modifier: Modifier, torBlocked: Boolean = false) {
     Column(modifier) {
-        Text(domain, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        // null: the title is the host already, it stands alone
+        if (domain != null) Text(domain, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(title, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        if (torBlocked) {
+            Text(stringResource(R.string.media_tor_blocked), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
     }
 }
 
 /** Covered (sensitive) or waiting ("media on tap") pictures are not downloaded; a tap reveals them, like note media (spec 2.3). */
 @Composable
-private fun PreviewImage(url: String, note: Note, covered: Boolean, waiting: Boolean, onOpen: () -> Unit, onFailed: () -> Unit, modifier: Modifier) {
+private fun PreviewImage(url: String, note: Note, covered: Boolean, waiting: Boolean, onOpen: () -> Unit, onFailed: (Throwable?) -> Unit, modifier: Modifier) {
     val id8 = note.id.take(8)
     val hidden = covered || waiting
     Box(
@@ -244,7 +271,7 @@ private fun PreviewImage(url: String, note: Note, covered: Boolean, waiting: Boo
         } else {
             // never the app's shared loader: that one has no address check
             LocalPreviewImageLoader.current?.let { loader ->
-                AsyncImage(model = url, contentDescription = null, imageLoader = loader, contentScale = ContentScale.Crop, onError = { onFailed() }, modifier = Modifier.matchParentSize())
+                AsyncImage(model = url, contentDescription = null, imageLoader = loader, contentScale = ContentScale.Crop, onError = { onFailed(it.result.throwable) }, modifier = Modifier.matchParentSize())
             }
         }
     }

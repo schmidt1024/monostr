@@ -88,6 +88,13 @@ class NoteMapperMediaTest {
     }
 
     @Test
+    fun `a preview off tag marks the note, other preview values do not`() {
+        assertTrue(NoteMapper.note(event("see https://a.example/", listOf(Tag.parse(listOf("preview", "off")))))!!.noPreview)
+        assertFalse(NoteMapper.note(event("see https://a.example/", listOf(Tag.parse(listOf("preview", "on")))))!!.noPreview)
+        assertFalse(NoteMapper.note(event("see https://a.example/", emptyList()))!!.noPreview)
+    }
+
+    @Test
     fun `content-warning tag, nsfw t-tag and nsfw hashtag each mark the note sensitive`() {
         assertEquals("", NoteMapper.note(event("x", listOf(Tag.parse(listOf("content-warning")))))!!.contentWarning)
         assertEquals("gore", NoteMapper.note(event("x", listOf(Tag.parse(listOf("content-warning", "gore")))))!!.contentWarning)

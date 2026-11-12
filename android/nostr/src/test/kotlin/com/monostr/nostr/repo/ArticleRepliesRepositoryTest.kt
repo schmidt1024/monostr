@@ -8,6 +8,7 @@ import com.monostr.nostr.untilFirst
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -42,6 +43,41 @@ class ArticleRepliesRepositoryTest {
 
     private fun unrelated(text: String) =
         EventBuilder.textNote(text).tags(listOf(Tag.parse(listOf("a", "30023:${ref.pubkey}:other")))).customCreatedAt(at()).signWithKeys(bob)
+
+    private fun mention(text: String) =
+        EventBuilder.textNote("$text nostr:${ref.toBech32()}").tags(listOf(Tag.parse(listOf("a", ref.coordinate)))).customCreatedAt(at()).signWithKeys(bob)
+
+    @Test
+    fun `a kind 1 counts as reply only when it answers the article`() {
+        val c = ref.coordinate
+        fun reply(tags: List<List<String>>, content: String = "nice") = NostrArticleRepliesRepository.isOldStyleReply(tags, content, c)
+        // replies: unmarked a (older clients), marked root/reply, also when the text happens to link the article
+        assertTrue(reply(listOf(listOf("a", c))))
+        assertTrue(reply(listOf(listOf("a", c, "wss://r.example", "root"))))
+        assertTrue(reply(listOf(listOf("a", c, "", "reply")), "see nostr:${ref.toBech32()}"))
+        // mentions and shares
+        assertFalse(reply(listOf(listOf("a", c, "", "mention"))))
+        assertFalse(reply(listOf(listOf("a", c)), "read this nostr:${ref.toBech32()}"))
+        assertFalse(reply(listOf(listOf("a", c)), "read https://habla.news/a/${ref.toBech32()}"))
+        assertFalse(reply(listOf(listOf("a", c), listOf("q", c))))
+        assertFalse(reply(listOf(listOf("a", "30023:${ref.pubkey}:other"))))
+        // a link to another article does not make a reply a share
+        assertTrue(reply(listOf(listOf("a", c)), "also nostr:${AddressRef(30023, ref.pubkey, "other").toBech32()}"))
+    }
+
+    @Test
+    fun `a note that only mentions the article is not listed`() = runTest {
+        SilentWsRelay(answerEose = true).use { relay ->
+            val e = connectedEngine(dir, relay)
+            try {
+                listOf(oldReply("reply"), mention("shared"), comment("comment")).forEach { e.save(it) }
+                val first = NostrArticleRepliesRepository(e).observe(ref).first()
+                assertEquals(listOf("reply", "comment"), first.map { it.content })
+            } finally {
+                e.close()
+            }
+        }
+    }
 
     @Test
     fun `the filters ask kind 1111 by A and kind 1 by a`() {

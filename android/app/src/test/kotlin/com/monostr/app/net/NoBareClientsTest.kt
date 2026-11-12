@@ -72,7 +72,8 @@ class NoBareClientsTest {
         Rule(Regex("""\bDefaultMediaSourceFactory\("""), setOf("app/src/main/kotlin/com/monostr/app/ui/media/VideoPlayerScreen.kt")),
         // the platform's players and the retriever open a URL on their own; the retriever here only reads a picked local video
         Rule(Regex("""\bMediaPlayer\b|\bVideoView\b""")),
-        Rule(Regex("""\.setDataSource\("""), setOf("app/src/main/kotlin/com/monostr/app/media/VideoPreparer.kt")),
+        // the frame extractor's RangeMediaSource reads only through the gated client (spec 2026-11-12); any other source is caught
+        Rule(Regex("""\.setDataSource\((?!RangeMediaSource\()"""), setOf("app/src/main/kotlin/com/monostr/app/media/VideoPreparer.kt")),
         // only the gate's factory opens plain sockets, and it asks for them without this spelling
         Rule(Regex("""SocketFactory\.getDefault""")),
     )
@@ -140,6 +141,7 @@ class NoBareClientsTest {
             "dial { runCatching { client.tryConnect(RECONNECT_WAIT) } }",
             "ignoringErrors { client.connect() } // under routeTurn: a dial would wait for itself",
             "val s = DetachedSender(engine.ffiDispatcher, networkGate, torReady = torConnected(tor))",
+            "r.setDataSource(RangeMediaSource(reader))",
         ).forEach { assertTrue(!caught(it), it) }
     }
 

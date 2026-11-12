@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -169,7 +170,9 @@ fun TranslateRow(
         else -> Unit
     } else when (state) {
         is TranslationState.Shown -> Row(modifier.padding(top = Spacing.xs).testTag("translated-by-$id8"), verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.translate_by, state.host) + SEPARATOR, style = style, color = muted, modifier = Modifier.weight(1f, fill = false))
+            // a gap, not « · »: the host wraps to a second line on a phone, and the dot then hung alone at its end (owner 2026-11-12)
+            Text(stringResource(R.string.translate_by, state.host), style = style, color = muted, modifier = Modifier.weight(1f, fill = false))
+            Spacer(Modifier.width(Spacing.m))
             Text(stringResource(R.string.translate_original), style = style, color = accent, maxLines = 1, modifier = Modifier.clickable(role = Role.Button, onClick = onOriginal).testTag("translate-original-$id8"))
         }
         is TranslationState.Original -> Row(modifier.padding(top = Spacing.xs).testTag("translated-by-$id8")) {

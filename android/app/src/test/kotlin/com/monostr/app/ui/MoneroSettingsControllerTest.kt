@@ -21,6 +21,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.flow.first
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -447,8 +448,11 @@ class MoneroSettingsControllerTest {
 
     private val addr = "4" + "A".repeat(94)
 
+    /** Epoch seconds the payto controllers see; a test moves it past the resume read gap. */
+    private var clock = 1_000L
+
     private fun TestScope.paytoController(tips: FakeTips, setup: MoneroSetup? = null, settings: FakeTipSettings = FakeTipSettings(setup = setup)) =
-        MoneroSettingsController(settings, FakeSecrets(), tips, FakeWatcherGateway(), { AdoptResult.ADOPTED }, eager())
+        MoneroSettingsController(settings, FakeSecrets(), tips, FakeWatcherGateway(), { AdoptResult.ADOPTED }, eager(), now = { clock })
 
     @Test
     fun `showsPaytoWithoutSetup`() = runTest {
@@ -539,7 +543,6 @@ class MoneroSettingsControllerTest {
         val tips = FakeTips()
         val c = paytoController(tips)
         c.start()
-        c.resumed() // the opening: start already reads
         advanceUntilIdle()
         assertEquals(1, tips.ownCalls)
         assertNull(c.state.value.payto)
@@ -548,16 +551,67 @@ class MoneroSettingsControllerTest {
         c.resumed()
         advanceUntilIdle()
         assertEquals(addr, c.state.value.payto)
-        // «Change» there
-        tips.own = OwnPayto.Known(addr2)
+        // «Change» there, within the minute: this app wrote it, so the resume reads at once (review 2026-11-12)
+        tips.setOwnPayto(addr2)
         c.resumed()
         advanceUntilIdle()
         assertEquals(addr2, c.state.value.payto)
-        // removed there
-        tips.own = OwnPayto.Known(null)
+        // removed there, again within the minute
+        tips.setOwnPayto(null)
         c.resumed()
         advanceUntilIdle()
         assertNull(c.state.value.payto)
+    }
+
+    @Test
+    fun `aChangeFromAnotherClientIsReadAtMostOncePerMinute`() = runTest {
+        val tips = FakeTips()
+        val c = paytoController(tips)
+        c.start()
+        advanceUntilIdle()
+        c.resumed()
+        advanceUntilIdle()
+        val calls = tips.ownCalls
+        tips.own = OwnPayto.Known(addr2) // another client, not this app
+        c.resumed()
+        advanceUntilIdle()
+        assertEquals(calls, tips.ownCalls)
+        assertNull(c.state.value.payto)
+        clock += 61
+        c.resumed()
+        advanceUntilIdle()
+        assertEquals(addr2, c.state.value.payto)
+    }
+
+    @Test
+    fun `firstResumeAfterStartReadsAgain`() = runTest {
+        // owner 2026-11-12: the controller starts with the settings graph; the Monero page (or the app) resumes later
+        val tips = FakeTips()
+        val c = paytoController(tips)
+        c.start()
+        advanceUntilIdle()
+        tips.own = OwnPayto.Known(addr) // set in another client meanwhile
+        c.resumed()
+        advanceUntilIdle()
+        assertEquals(addr, c.state.value.payto)
+        assertEquals(2, tips.ownCalls)
+    }
+
+    @Test
+    fun `resumeBeforeTheSetupIsReadOrDuringARead`() = runTest {
+        val tips = FakeTips().apply { ownGate = kotlinx.coroutines.CompletableDeferred() }
+        val settings = FakeTipSettings()
+        val c = paytoController(tips, settings = settings)
+        c.resumed() // not started: start reads itself
+        assertEquals(0, tips.ownCalls)
+        c.start()
+        runCurrent()
+        assertEquals(1, tips.ownCalls)
+        c.resumed() // the start's read is still running: reused
+        runCurrent()
+        assertEquals(1, tips.ownCalls)
+        tips.ownGate!!.complete(Unit)
+        advanceUntilIdle()
     }
 
     @Test
@@ -598,6 +652,65 @@ class MoneroSettingsControllerTest {
         tips.ownGate!!.complete(Unit)
         advanceUntilIdle()
         assertNull(c.state.value.payto)
+    }
+
+    @Test
+    fun `resumeReadsAnnouncedAddressAgain`() = runTest {
+        // owner 2026-11-12: like the payto, the announced tip address (kind 10037) is read again on resume
+        val self = "5".repeat(64)
+        val first = MoneroKeys.generate().address(Network.MAINNET)
+        val second = MoneroKeys.generate().address(Network.MAINNET)
+        val watcher = Watcher.Http("https://w.example", "c".repeat(64))
+        val tips = FakeTips()
+        val c = MoneroSettingsController(FakeTipSettings(), FakeSecrets(), tips, FakeWatcherGateway(), { AdoptResult.ADOPTED }, eager(), selfPubkey = self, now = { clock })
+        c.start()
+        advanceUntilIdle()
+        assertNull(c.state.value.announced)
+        // set up on another device meanwhile
+        tips.liveInfos = mapOf(self to PaymentInfo.Enabled(first, watcher))
+        c.resumed()
+        advanceUntilIdle()
+        assertEquals(first.encode(), c.state.value.announced)
+        assertEquals(1, tips.liveCalls)
+        // within the minute: no second relay read
+        tips.liveInfos = mapOf(self to PaymentInfo.Enabled(second, watcher))
+        c.resumed()
+        advanceUntilIdle()
+        assertEquals(first.encode(), c.state.value.announced)
+        assertEquals(1, tips.liveCalls)
+        clock += 61
+        c.resumed()
+        advanceUntilIdle()
+        assertEquals(second.encode(), c.state.value.announced)
+        // switched off there
+        tips.liveInfos = mapOf(self to PaymentInfo.Disabled)
+        clock += 61
+        c.resumed()
+        advanceUntilIdle()
+        assertNull(c.state.value.announced)
+    }
+
+    @Test
+    fun `resumeReusesARunningAnnouncedRead`() = runTest {
+        val self = "5".repeat(64)
+        val address = MoneroKeys.generate().address(Network.MAINNET)
+        val tips = FakeTips().apply { liveInfos = mapOf(self to PaymentInfo.Enabled(address, Watcher.Http("https://w.example", "c".repeat(64)))); liveGate = kotlinx.coroutines.CompletableDeferred() }
+        val c = MoneroSettingsController(FakeTipSettings(), FakeSecrets(), tips, FakeWatcherGateway(), { AdoptResult.ADOPTED }, eager(), selfPubkey = self, now = { clock })
+        c.start()
+        advanceUntilIdle()
+        c.resumed()
+        runCurrent()
+        assertEquals(1, tips.liveCalls)
+        // later resume while the relays still have not answered: the payto is read again, the announced read is reused
+        clock += 61
+        c.resumed()
+        runCurrent()
+        assertEquals(1, tips.liveCalls)
+        assertEquals(0, tips.liveCancelled)
+        assertEquals(3, tips.ownCalls)
+        tips.liveGate!!.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(address.encode(), c.state.value.announced)
     }
 
     @Test

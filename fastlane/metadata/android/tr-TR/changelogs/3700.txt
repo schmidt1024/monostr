@@ -1,0 +1,8 @@
+- Hangi relay'lerin bağlı olduğunu görmek için relay noktasına dokun
+- Profillerde «Seni takip ediyor» görünür; bahşiş parasına dokunmak daha kolay
+- 2, 3 ve 4+ görselli galeriler tek bir yuvarlak blokta
+- Önizleme görseli olmayan videolar ilk karelerinden bir tane alır
+- Alıntılanan zap'ler zap kartı olarak görünür
+- Kaldırdığın bağlantı kartı gönderilen notta da görünmez
+- Notlar artık «Gönderiliyor…» durumunda takılmıyor
+- Düzeltmeler

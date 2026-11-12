@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -23,7 +25,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.ui.graphics.Color
-import androidx.compose.material.icons.filled.BrokenImage
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Icon
@@ -49,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.monostr.app.R
+import com.monostr.app.ui.common.LocalTorActive
 import com.monostr.app.ui.theme.PlainShapes
 import com.monostr.app.ui.theme.Spacing
 import com.monostr.nostr.model.Note
@@ -92,8 +94,9 @@ fun NoteMediaRow(
 ) {
     if (note.media.isEmpty()) return
     val tag = note.id.take(8)
-    // A video poster is an image download too, so it waits like a picture.
-    val (covered, waiting) = rememberMediaCover(note, hasImages = note.media.any { it.kind == NoteMedia.Kind.IMAGE || it.poster != null })
+    // A video poster is an image download too, so it waits like a picture; a video without one downloads its first frame
+    // (spec 2026-11-12), so every cell here downloads something.
+    val (covered, waiting) = rememberMediaCover(note, hasImages = true)
     Box(Modifier.fillMaxWidth().padding(top = Spacing.s)) {
         // Covered or waiting media is never fetched: only the blurhash placeholder (or a grey box) shows.
         // backlog 62: a single picture as tall as the screen allows (header, actions and bars still in view), never below the old cap
@@ -147,25 +150,37 @@ private fun MediaGrid(media: List<NoteMedia>, tag: String, blurred: Boolean, pla
         // Full width, height from the real ratio up to a cap (see MediaBoxes): only a picture taller
         // than the cap is cropped, everything else is fully visible.
         BoxWithConstraints(Modifier.fillMaxWidth()) {
-            val box = MediaBoxes.single(m.dim ?: learned, widthDp = maxWidth.value, maxHeightDp = maxHeightDp, video = video)
+            // owner 2026-11-12 (Pegah, via Primal): `dim 4000x3000` for a portrait photo turned by EXIF; the loaded picture's own
+            // size wins when it contradicts the stated one, otherwise the stated size stays and nothing is relaid out
+            val stated = m.dim
+            val box = MediaBoxes.single(learned?.takeIf { stated == null || MediaRatios.contradicts(stated, it) } ?: stated, widthDp = maxWidth.value, maxHeightDp = maxHeightDp, video = video)
             MediaCell(
                 m, 0, tag, Modifier.fillMaxWidth().aspectRatio(box.ratio).clip(shape), blurred, placeholderOnly, enabled, onOpenMedia, onOpenVideo,
                 contentScale = if (box.crop) ContentScale.Crop else ContentScale.Fit,
                 alignment = if (box.crop && !video) Alignment.TopCenter else Alignment.Center,
-                onSize = if (m.dim == null) { w, h -> MediaRatios.put(m.url, w, h); learned = MediaRatios[m.url] } else null,
+                onSize = { w, h ->
+                    if (stated == null || MediaRatios.contradicts(stated, w to h)) { MediaRatios.put(m.url, w, h); learned = MediaRatios[m.url] }
+                },
             )
         }
         return
     }
-    // backlog 39: X's arrangement; every cell opens the viewer at its own index (the viewer holds all pictures)
+    // backlog 39: X's arrangement; every cell opens the viewer at its own index (the viewer holds all pictures).
+    // Owner 2026-11-12 (variant C): the gallery is one block with squircle corners outside and square ones inside, 2 dp
+    // apart: one squircle clip per gallery instead of a rounded clip per picture; each cell only clips to its bounds.
     val layout = MediaGridLayout.of(media.size)
-    val gap = Spacing.xs
+    val gap = GALLERY_GAP
     @Composable
-    fun cell(i: Int, modifier: Modifier) = MediaCell(media[i], i, tag, modifier.clip(shape), blurred, placeholderOnly, enabled, onOpenMedia, onOpenVideo)
+    fun cell(i: Int, modifier: Modifier) = MediaCell(media[i], i, tag, modifier.clipToBounds(), blurred, placeholderOnly, enabled, onOpenMedia, onOpenVideo)
+    Box(Modifier.fillMaxWidth().clip(MaterialTheme.shapes.large)) { GalleryCells(layout, gap, tag, ::cell) }
+}
+
+@Composable
+private fun GalleryCells(layout: MediaGridLayout, gap: Dp, tag: String, cell: @Composable (Int, Modifier) -> Unit) {
     when (layout.kind) {
-        MediaGridLayout.Kind.PAIR -> Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
-            cell(0, Modifier.weight(1f).aspectRatio(1f))
-            cell(1, Modifier.weight(1f).aspectRatio(1f))
+        MediaGridLayout.Kind.PAIR -> Row(Modifier.fillMaxWidth().aspectRatio(MediaGridLayout.BLOCK_RATIO), horizontalArrangement = Arrangement.spacedBy(gap)) {
+            cell(0, Modifier.weight(1f).fillMaxHeight())
+            cell(1, Modifier.weight(1f).fillMaxHeight())
         }
         // three squares: the big side and the small side from the width, so that the gaps do not bend them
         MediaGridLayout.Kind.BIG_LEFT -> BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -186,7 +201,7 @@ private fun MediaGrid(media: List<NoteMedia>, tag: String, blurred: Boolean, pla
                     // from five pictures on: «+N» over the fourth, a tap opens the viewer there and swipes on
                     if (row == 1 && layout.more > 0) {
                         Box(
-                            Modifier.matchParentSize().clip(shape).background(Color.Black.copy(alpha = 0.6f)).testTag("note-media-more-$tag"),
+                            Modifier.matchParentSize().background(Color.Black.copy(alpha = 0.6f)).testTag("note-media-more-$tag"),
                             contentAlignment = Alignment.Center,
                         ) {
                             Text("+${layout.more}", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = Color.White)
@@ -211,7 +226,9 @@ private fun MediaCell(
     val videoLabel = stringResource(R.string.media_video)
     val uriHandler = LocalUriHandler.current
     // Spec 3.2: a tap on a failed picture opens it externally instead of the (unusable) viewer.
-    var failed by remember(m.url) { mutableStateOf(false) }
+    var failure by remember(m.url) { mutableStateOf<MediaFailure?>(null) }
+    val failed = failure != null
+    val torActive = LocalTorActive.current
     val base = modifier
         .background(MaterialTheme.colorScheme.surfaceVariant)
         .then(if (blurred) Modifier.blur(24.dp) else Modifier)
@@ -224,24 +241,29 @@ private fun MediaCell(
         }
         .testTag("note-media-$tag-$index")
     Box(base, contentAlignment = Alignment.Center) {
-        val source = if (m.kind == NoteMedia.Kind.VIDEO) m.poster else m.url
+        val source: Any? = MediaModels.cell(m)
         when {
             placeholder != null && (placeholderOnly || source == null) -> Image(placeholder, contentDescription = m.alt, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             placeholderOnly || source == null -> Unit
             m.kind == NoteMedia.Kind.IMAGE && GifPlayback.isGif(m.url, m.mime) -> GifImage(
                 m.url, key = "$tag-$index", contentDescription = m.alt, contentScale = contentScale, alignment = alignment,
                 placeholder = remember(placeholder) { placeholder?.let { androidx.compose.ui.graphics.painter.BitmapPainter(it) } },
-                onSize = onSize, onError = { failed = true },
+                onSize = onSize, onError = { e -> failure = MediaFailures.of(e, torActive) },
             )
             // AsyncImage, not SubcomposeAsyncImage: no subcomposition per loading state in a scrolling list (Coil's advice)
             else -> AsyncImage(
                 model = source, contentDescription = m.alt, contentScale = contentScale, alignment = alignment, modifier = Modifier.fillMaxSize(),
                 placeholder = remember(placeholder) { placeholder?.let { androidx.compose.ui.graphics.painter.BitmapPainter(it) } },
                 onSuccess = { s -> onSize?.invoke(s.result.image.width, s.result.image.height) },
-                onError = { failed = true },
+                onError = { e -> failure = MediaFailures.of(e.result.throwable, torActive) },
             )
         }
-        if (failed && !placeholderOnly && source != null) Icon(Icons.Filled.BrokenImage, contentDescription = stringResource(R.string.media_failed), tint = MaterialTheme.colorScheme.outline)
+        // a derived video frame that did not come gives up quietly: the play button stays alone
+        val shown = failure
+        if (shown != null && !placeholderOnly && source != null && !MediaModels.derived(source)) MediaFailedMark(shown)
         if (m.kind == NoteMedia.Kind.VIDEO) Icon(Icons.Filled.PlayArrow, contentDescription = videoLabel, tint = Color.White, modifier = Modifier.background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.5f), RoundedCornerShape(50)).padding(Spacing.m))
     }
 }
+
+/** The lines between a gallery's pictures. */
+private val GALLERY_GAP = 2.dp

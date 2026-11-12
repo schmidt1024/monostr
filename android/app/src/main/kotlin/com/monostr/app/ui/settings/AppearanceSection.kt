@@ -23,6 +23,9 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
+import androidx.compose.ui.unit.sp
+import androidx.compose.material3.LocalTextStyle
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
@@ -58,6 +61,9 @@ import com.monostr.app.ui.theme.AccentPalette
 import com.monostr.app.ui.theme.AccentSeed
 import com.monostr.app.ui.theme.Spacing
 
+/** The smallest a theme segment's label shrinks to before it would wrap. */
+private val MIN_SEGMENT_TEXT = 10.sp
+
 /** System / Light / Dark / Black as one segmented row. */
 @Composable
 fun ThemeModeControl(mode: ThemeMode, onMode: (ThemeMode) -> Unit, modifier: Modifier = Modifier) {
@@ -68,7 +74,16 @@ fun ThemeModeControl(mode: ThemeMode, onMode: (ThemeMode) -> Unit, modifier: Mod
                 selected = mode == m, onClick = { onMode(m) },
                 shape = SegmentedButtonDefaults.itemShape(index = i, count = modes.size, baseShape = MaterialTheme.shapes.medium),
                 modifier = Modifier.testTag("appearance-mode-${m.name.lowercase()}"),
-            ) { Text(stringResource(label)) }
+                // no check mark: the filled segment shows the choice, and four labels need the width (backlog 70)
+                icon = {},
+            ) {
+                // backlog 70: «System» wrapped to «Syste m» at font scale 1.3 on 360 dp; one line, shrunk a little when needed
+                val style = LocalTextStyle.current
+                Text(
+                    stringResource(label), style = style, maxLines = 1, softWrap = false,
+                    autoSize = TextAutoSize.StepBased(minFontSize = MIN_SEGMENT_TEXT, maxFontSize = style.fontSize),
+                )
+            }
         }
     }
 }

@@ -3,6 +3,9 @@ package com.monostr.app.ui
 import com.monostr.app.ui.media.MediaRatioCache
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Assertions.assertFalse
+import com.monostr.app.ui.media.MediaRatios
 import org.junit.jupiter.api.Test
 
 /** Spec 2026-10-16 §5: sizes learned from loaded pictures, per URL, least recently used ones fall out. */
@@ -29,5 +32,13 @@ class MediaRatiosTest {
     @Test
     fun `the app-wide cache holds about five hundred`() {
         assertEquals(500, MediaRatioCache.MAX)
+    }
+
+    @Test
+    fun `a turned photo contradicts its stated dim, a matching or slightly off size does not`() {
+        assertTrue(MediaRatios.contradicts(4000 to 3000, 1080 to 1440)) // Pegah: dim landscape, the picture portrait
+        assertFalse(MediaRatios.contradicts(4000 to 3000, 1440 to 1080))
+        assertFalse(MediaRatios.contradicts(1920 to 1080, 1918 to 1080))
+        assertFalse(MediaRatios.contradicts(0 to 0, 100 to 200))
     }
 }

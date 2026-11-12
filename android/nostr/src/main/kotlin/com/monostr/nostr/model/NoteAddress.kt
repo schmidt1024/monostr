@@ -37,6 +37,14 @@ object NoteAddress {
 
     fun find(content: String): AddressRef? = refs(content).firstOrNull()?.second
 
+    /** Whether [content] holds an naddr of [coordinate] anywhere, also inside a web link (`https://…/naddr1…`). */
+    fun mentions(content: String, coordinate: String): Boolean {
+        if (!content.contains("naddr1", ignoreCase = true)) return false
+        return ANY_NADDR.findAll(content).any { decode(it.value)?.coordinate == coordinate }
+    }
+
+    private val ANY_NADDR = Regex("(?i)naddr1[0-9a-z]+") // regex
+
     /** Removes the reference only when it stands on its own line or ends the text, like [NoteQuote.strip]. */
     fun strip(content: String, ref: AddressRef): String {
         val range = refs(content).firstOrNull { it.second.coordinate == ref.coordinate }?.first ?: return content

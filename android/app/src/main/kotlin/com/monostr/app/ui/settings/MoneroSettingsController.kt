@@ -102,6 +102,7 @@ class MoneroSettingsController(
     private var statusJob: Job? = null
     private var supportJob: Job? = null
     private var paytoJob: Job? = null
+    private var announcedJob: Job? = null
     /** Counts published removals: a read that started before one must not bring the address back. */
     private var paytoRemovals = 0
     private val visibility = AmountsVisibility(tips, gateway, settings, sendGate)
@@ -113,10 +114,10 @@ class MoneroSettingsController(
     fun start() {
         scope.launch {
             settings.setup.collect { s ->
+                setupLoaded = true
                 _state.update { it.copy(setup = s, hasViewKey = secrets.get(KeystoreSecretStore.SECRET_VIEW_KEY) != null) }
                 // after a reinstall or on a second device "not set up" would be wrong: tips still arrive at the announced address
-                val announced = if (s == null && selfPubkey != null) announcedAddress(selfPubkey) else null
-                _state.update { it.copy(announced = announced.takeIf { _ -> it.setup == null }) }
+                if (s == null && selfPubkey != null) readAnnounced(selfPubkey, forced = false) else { announcedJob?.cancel(); _state.update { it.copy(announced = null) } }
                 // read in the background: relays may be slow and must not hold back the rest of the state
                 if (s == null) readPayto() else { paytoJob?.cancel(); _state.update { it.copy(payto = null) } }
                 statusJob?.cancel()
@@ -168,17 +169,57 @@ class MoneroSettingsController(
         }
     }
 
-    private var resumedOnce = false
+    /**
+     * Reads the announced tip address (kind 10037) in the background. The first read after a setup change counts
+     * unreachable relays as nothing announced; a [forced] read from [resumed] asks the relays and, when that
+     * fails, keeps what is shown.
+     */
+    private fun readAnnounced(pubkey: String, forced: Boolean) {
+        announcedJob?.cancel()
+        announcedJob = scope.launch {
+            val info = try {
+                if (forced) tips.paymentInfo(pubkey, maxAgeSeconds = 0) else tips.paymentInfo(pubkey)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (forced) return@launch else null
+            }
+            val address = (info as? PaymentInfo.Enabled)?.address?.encode()
+            _state.update { it.copy(announced = address.takeIf { _ -> it.setup == null }) }
+        }
+    }
+
+    /** The stored setup has been read once; before that [start] does the first payto read itself. */
+    private var setupLoaded = false
 
     /**
-     * The Settings screen is back in front: the setup screen may have published, changed or removed the address
-     * without touching the stored setup, so the own payto is read again. The first resume is the opening, which
-     * [start] already reads for.
+     * The overview or the Monero page is (back) in front, also after the app returns: the setup screen or another
+     * client may have published, changed or removed the address without touching the stored setup, so the own
+     * payto is read again, and so is the announced tip address (owner 2026-11-12). Every resume counts, not only
+     * the second one; the controller lives with the settings graph and is started long before the Monero page
+     * opens. A read still running is reused.
      */
     fun resumed() {
-        if (!resumedOnce) { resumedOnce = true; return }
-        if (_state.value.setup == null) readPayto()
+        if (!setupLoaded || _state.value.setup != null) return
+        val paytoRunning = paytoJob?.isActive == true
+        val announcedRunning = selfPubkey == null || announcedJob?.isActive == true
+        if (paytoRunning && announcedRunning) return
+        // moving between the overview and a page resumes each time: one relay read per minute is enough, unless this
+        // app changed the payto meanwhile (the setup screen's address step leaves the stored setup alone): then at once
+        val t = now()
+        val writes = tips.ownPaytoWrites
+        if (lastResumeRead != 0L && t - lastResumeRead < RESUME_READ_GAP_S && writes == seenPaytoWrites) return
+        lastResumeRead = t
+        seenPaytoWrites = writes
+        if (!paytoRunning) readPayto()
+        if (!announcedRunning && selfPubkey != null) readAnnounced(selfPubkey, forced = true)
     }
+
+    /** Epoch seconds of the last read [resumed] started; 0 = none yet. */
+    private var lastResumeRead = 0L
+
+    /** [TipsRepository.ownPaytoWrites] at that read. */
+    private var seenPaytoWrites = 0
 
     /** The status must name this account and the stored address, or the watcher watches something else (a null [selfPubkey] skips the account check). */
     private fun personalLine(setup: MoneroSetup, st: WatcherStatus?): PersonalWatcherLine = when {
@@ -201,15 +242,6 @@ class MoneroSettingsController(
         // the setup changed while the relays answered (a switch here, a new setup): that is newer than the lookup
         if (settings.setup.first() != s) return
         settings.setSetup(s.copy(amountsHidden = info.amountsHidden))
-    }
-
-    /** Unreachable relays count as nothing announced: the row then says "not set up", as before. */
-    private suspend fun announcedAddress(pubkey: String): String? = try {
-        (tips.paymentInfo(pubkey) as? PaymentInfo.Enabled)?.address?.encode()
-    } catch (e: CancellationException) {
-        throw e
-    } catch (e: Exception) {
-        null
     }
 
     fun editPreset(index: Int, value: String) = _state.update { st ->
@@ -362,3 +394,6 @@ class MoneroSettingsController(
         val ERR_NOT_PUBLISHED = uiText(R.string.setup_err_not_published)
     }
 }
+
+/** Least time between two payto and announced-address reads started by [MoneroSettingsController.resumed]. */
+private const val RESUME_READ_GAP_S = 60L

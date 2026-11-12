@@ -25,6 +25,7 @@
     <string name="relay_not_connected">non connesso</string>
     <string name="relay_needs_tor">richiede Tor</string>
     <string name="relay_resting">irraggiungibile, nuovo tentativo ogni 10 minuti</string>
+    <string name="relay_sheet_manage">Gestisci relay</string>
     <string name="relay_last_seen">ultima connessione: %1$s</string>
     <string name="relay_never_seen">mai connesso</string>
     <string name="relays_none_found">Nessuna lista di relay ancora pubblicata. Le altre app e il watcher delle mance ti trovano tramite essa. Prima di pubblicare, aggiungi i relay con le tue note più vecchie.</string>
@@ -83,6 +84,7 @@
     <string name="media_tap_to_show">Tocca per mostrare</string>
     <string name="media_tap_to_load">Tocca per caricare le immagini</string>
     <string name="media_failed">Impossibile caricare l\'immagine</string>
+    <string name="media_tor_blocked">Il sito blocca Tor</string>
     <string name="media_video">Riproduci video</string>
     <string name="media_viewer_close">Chiudi</string>
     <string name="media_copy_link">Copia link</string>
@@ -145,6 +147,7 @@
     <string name="profile_title_self">Il mio profilo</string>
     <string name="profile_error_load">Impossibile caricare il profilo</string>
     <string name="profile_copy_npub">Copia npub</string>
+    <string name="profile_follows_you">Ti segue</string>
     <string name="note_replying_one">In risposta a %1$s</string>
     <string name="note_replying_two">In risposta a %1$s e %2$s</string>
     <plurals name="note_replying_more">
@@ -194,6 +197,7 @@
     <string name="tip_open_wallet_again">Riapri il portafoglio</string>
     <string name="tip_sent">Portafoglio aperto. La mancia attende la conferma del watcher.</string>
     <string name="tip_error_amount">Importo non valido (ad es. 0.005)</string>
+    <string name="tip_payto_title">Invia Monero a %1$s</string>
     <string name="tip_payto_title_plain">Invia Monero</string>
     <string name="tip_payto_note">Va al suo indirizzo, non a questa nota. Senza conferma: Monostr non vede se hai pagato.</string>
     <string name="tip_payto_profile">Senza conferma: Monostr non vede se hai pagato.</string>
@@ -508,8 +512,11 @@
     <string name="bookmarks_error_load">Impossibile caricare i segnalibri</string>
     <string name="note_ref_label">nota</string>
     <string name="quote_missing">Nota non trovata</string>
-    <string name="quote_gone">Nota non più sui relay</string>
+    <string name="quote_gone">Nota non trovata</string>
     <string name="mute_quote_placeholder">Nota di un account silenziato</string>
+    <string name="quote_zap_title">⚡ Zap Lightning · %s sats</string>
+    <string name="quote_zap_from_to">da %1$s a %2$s</string>
+    <string name="quote_zap_to">a %s</string>
     <string name="address_ref_label">evento</string>
     <string name="address_type_article">Articolo</string>
     <string name="address_type_live">Live</string>

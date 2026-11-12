@@ -17,6 +17,11 @@ class LinkPreviewRulesTest {
     }
 
     @Test
+    fun `a note whose author put the card away gets none`() {
+        assertNull(LinkPreviewRules.firstPreviewUrl(note("see https://a.example/x").copy(noPreview = true)))
+    }
+
+    @Test
     fun `a draft's text follows the same link rules`() {
         assertEquals("https://a.example/x", LinkPreviewRules.firstPreviewUrl("see https://a.example/x and https://b.example/"))
         assertNull(LinkPreviewRules.firstPreviewUrl("pic https://a.example/p.JPG"))
@@ -97,5 +102,15 @@ class LinkPreviewRulesTest {
         gate.complete(Unit)
         assertNull(pending.await())
         assertNull(loader.cached(n, "https://a.example/"))
+    }
+
+    @Test
+    fun `a title that is only the host repeats the domain, a real title does not`() {
+        val d = LinkPreviewRules.shownDomain("https://media.monostr.com/")
+        listOf("media.monostr.com", "Media.Monostr.com", "www.media.monostr.com", "https://media.monostr.com/").forEach {
+            assertEquals(true, LinkPreviewRules.titleRepeatsDomain(it, d), it)
+        }
+        assertEquals(false, LinkPreviewRules.titleRepeatsDomain("Monostr media", d))
+        assertEquals(false, LinkPreviewRules.titleRepeatsDomain("monostr.com", d))
     }
 }

@@ -12,6 +12,14 @@ class MediaRatioCache(private val max: Int = MAX) {
     @Synchronized
     operator fun get(url: String): Pair<Int, Int>? = map[url]
 
+    /** The loaded size's ratio differs from the stated `dim` by more than a tenth (a turned photo: width and height swapped). */
+    fun contradicts(stated: Pair<Int, Int>, real: Pair<Int, Int>): Boolean {
+        if (stated.first <= 0 || stated.second <= 0 || real.first <= 0 || real.second <= 0) return false
+        val a = stated.first.toDouble() / stated.second
+        val b = real.first.toDouble() / real.second
+        return kotlin.math.abs(a - b) / a > 0.1
+    }
+
     /** A failed or empty load (no size) is not remembered: the placeholder box stays. */
     @Synchronized
     fun put(url: String, width: Int, height: Int) {

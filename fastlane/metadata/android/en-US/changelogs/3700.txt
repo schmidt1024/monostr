@@ -1,0 +1,8 @@
+- Tap the relay dot to see which relays are connected
+- Profiles show «Follows you»; the tip coin is easier to hit
+- Galleries of 2, 3 and 4+ pictures in one rounded block
+- Videos without a preview picture get one from their first frame
+- Quoted zaps show as zap cards
+- A link card you removed stays off in the sent note
+- Notes no longer hang on «Sending…»
+- Fixes

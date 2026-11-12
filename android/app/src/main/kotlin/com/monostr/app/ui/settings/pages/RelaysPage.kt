@@ -141,7 +141,7 @@ fun RelaysPage(vm: SettingsViewModel, focus: String?, onBack: () -> Unit, onOpen
 
 /** The colour of a relay's dot and status line ([RelayTone.NONE]: not in the pool, grey). */
 @Composable
-private fun RelayTone.color(): Color {
+internal fun RelayTone.color(): Color {
     val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     return when (this) {
         RelayTone.OK -> Color(if (dark) StatusColors.DarkOk else StatusColors.LightOk)

@@ -102,8 +102,13 @@ sealed class SetupStep {
     /**
      * [amountsHidden]: the published payment info hides tip amounts (protocol 0.5).
      * [paytoFailed]: the setup is complete, but the own payto entry could not be set to [address] (spec payto §4).
+     * [paytoConflict]: the write found a different own payto nobody was asked about; the question is asked here
+     * (owner 2026-11-12: a retry alone could never replace it). [answerPayto] is the answer.
      */
-    data class Done(val address: String, val restoreHeight: Long?, val amountsHidden: Boolean = false, val paytoFailed: Boolean = false) : SetupStep()
+    data class Done(
+        val address: String, val restoreHeight: Long?, val amountsHidden: Boolean = false, val paytoFailed: Boolean = false,
+        val paytoConflict: String? = null,
+    ) : SetupStep()
 }
 
 data class SetupState(
@@ -189,6 +194,8 @@ class MoneroSetupController(
     private var paytoAsked = false
     /** [paytoAsked] of the setup that ended in [SetupStep.Done], for [retryPayto]. */
     private var retryAsked = false
+    /** The differing own payto the user agreed to replace on [SetupStep.Done]; a retry may replace it too. */
+    private var retryReplacing: String? = null
     private var paytoRetry: Job? = null
 
     fun start() {
@@ -228,25 +235,51 @@ class MoneroSetupController(
 
     /**
      * Spec payto §4: the own payto entry fills the address field; in the intro it counts as set up and closes it
-     * (also over a watcher step the announced lookup opened). A failed or unknown read leaves the field empty.
+     * (also over a watcher step the announced lookup opened). A failed or unknown read leaves the field as it is.
+     * Owner 2026-11-12: the stored copy fills the field at once; the relay read (seconds) corrects an untouched field.
      */
     private suspend fun prefillOwnPayto() {
-        val address = ownPaytoAddress() ?: return
+        val read = paytoLookup()
+        val stored = try {
+            tips.cachedPayto(selfPubkey)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        }
+        // the relay read may have finished first: then it alone counts
+        if (stored != null && !read.isCompleted) fillAddress(stored)
+        val own = read.await() as? OwnPayto.Known ?: return
+        val address = own.address
         val s = _state.value
         val step = s.step
         val untouched = (step is SetupStep.Address && !step.loading) || (step is SetupStep.Watcher && watcherForAnnounced && !step.loading)
-        if (s.intro && untouched) {
+        if (address != null && s.intro && untouched) {
             runCatching { settings.setOnboardingSeen() }
             _state.update { it.copy(finished = true) }
             return
         }
-        _state.update { cur ->
-            val st = cur.step as? SetupStep.Address
-            if (st != null && !st.loading && st.input.isEmpty()) {
-                prefilled = address
-                cur.copy(step = st.copy(input = address, known = true))
-            } else cur
-        }
+        // the relays know better than the stored copy: an untouched field follows them, also to empty
+        if (address != null) fillAddress(address) else clearPrefill()
+    }
+
+    /** Fills an empty or still prefilled (untouched) address field with the own payto [address]. */
+    private fun fillAddress(address: String) = _state.update { cur ->
+        val st = cur.step as? SetupStep.Address
+        if (st != null && !st.loading && (st.input.isEmpty() || st.input == prefilled)) {
+            prefilled = address
+            cur.copy(step = st.copy(input = address, known = true))
+        } else cur
+    }
+
+    /** The relays have no own payto: a field still holding the stored copy is emptied. */
+    private fun clearPrefill() = _state.update { cur ->
+        val st = cur.step as? SetupStep.Address
+        val shown = prefilled
+        if (st != null && !st.loading && shown != null && st.input == shown) {
+            prefilled = null
+            cur.copy(step = st.copy(input = "", known = false))
+        } else cur
     }
 
     /**
@@ -668,8 +701,9 @@ class MoneroSetupController(
                 existing = settings.setup.first()
                 val address = status.address.encode()
                 retryAsked = asked
-                val paytoFailed = (step.paytoConflict == null || step.replacePayto) && !publishPayto(address, asked)
-                _state.update { it.copy(step = SetupStep.Done(address, null, hidden, paytoFailed), error = null) }
+                retryReplacing = null
+                val payto = if (step.paytoConflict == null || step.replacePayto) publishPayto(address, asked) else PaytoOutcome.Written
+                _state.update { it.copy(step = payto.done(SetupStep.Done(address, null, hidden)), error = null) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: SetupFailure) {
@@ -716,8 +750,28 @@ class MoneroSetupController(
         val step = _state.value.step as? SetupStep.Done ?: return
         if (!step.paytoFailed || paytoRetry?.isActive == true || refused()) return
         paytoRetry = scope.launch {
-            val failed = !publishPayto(step.address, retryAsked)
-            _state.update { s -> (s.step as? SetupStep.Done)?.let { s.copy(step = it.copy(paytoFailed = failed)) } ?: s }
+            val outcome = publishPayto(step.address, retryAsked, retryReplacing)
+            _state.update { s -> (s.step as? SetupStep.Done)?.let { s.copy(step = outcome.done(it)) } ?: s }
+        }
+    }
+
+    /**
+     * The answer to the question on [SetupStep.Done] about a differing own payto found at the write: «Replace»
+     * writes the tip address over exactly that address (asked now), «Keep» leaves it.
+     */
+    fun answerPayto(replace: Boolean) {
+        val step = _state.value.step as? SetupStep.Done ?: return
+        val shown = step.paytoConflict ?: return
+        if (!replace) {
+            _state.update { s -> (s.step as? SetupStep.Done)?.let { s.copy(step = it.copy(paytoConflict = null)) } ?: s }
+            return
+        }
+        if (paytoRetry?.isActive == true || refused()) return
+        paytoRetry = scope.launch {
+            // asked about [shown]: should the relays now hold yet another address, that one is asked about instead
+            retryReplacing = shown
+            val outcome = publishPayto(step.address, asked = false, replacing = shown)
+            _state.update { s -> (s.step as? SetupStep.Done)?.let { s.copy(step = outcome.done(it)) } ?: s }
         }
     }
 
@@ -756,17 +810,31 @@ class MoneroSetupController(
         return own?.address?.takeIf { it != address }
     }
 
+    /** What [publishPayto] did: written, failed (retry may help), or stopped at a differing address nobody was asked about. */
+    private sealed class PaytoOutcome {
+        data object Written : PaytoOutcome()
+        data object Failed : PaytoOutcome()
+        data class Differs(val address: String) : PaytoOutcome()
+
+        fun done(step: SetupStep.Done): SetupStep.Done = when (this) {
+            Written -> step.copy(paytoFailed = false, paytoConflict = null)
+            Failed -> step.copy(paytoFailed = true, paytoConflict = null)
+            is Differs -> step.copy(paytoFailed = false, paytoConflict = address)
+        }
+    }
+
     /**
-     * Spec payto §4: the tip address becomes the own payto too. False when that failed; the setup itself stands.
+     * Spec payto §4: the tip address becomes the own payto too; the setup itself stands whatever happens here.
      * Without a known own payto at the question ([asked] false), a fresh read comes first: a differing address
-     * nobody was asked about is never replaced.
+     * nobody was asked about ([replacing] is the one the user agreed to replace) is never replaced, it is asked about.
      */
-    private suspend fun publishPayto(address: String, asked: Boolean): Boolean {
+    private suspend fun publishPayto(address: String, asked: Boolean, replacing: String? = null): PaytoOutcome {
         val written = try {
             if (!asked) {
-                val now = tips.ownPayto() as? OwnPayto.Known ?: return false
+                val now = tips.ownPayto() as? OwnPayto.Known ?: return PaytoOutcome.Failed
                 knownPayto = now
-                if (now.address != null && now.address != address) return false
+                val current = now.address
+                if (current != null && current != address && current != replacing) return PaytoOutcome.Differs(current)
             }
             tips.setOwnPayto(address) == PaytoWrite.Published
         } catch (e: CancellationException) {
@@ -775,7 +843,7 @@ class MoneroSetupController(
             false
         }
         if (written) knownPayto = OwnPayto.Known(address)
-        return written
+        return if (written) PaytoOutcome.Written else PaytoOutcome.Failed
     }
 
     /** Wipes key material of an abandoned setup (the screen's ViewModel is cleared). */
@@ -829,8 +897,9 @@ class MoneroSetupController(
                 wipe()
                 // spec payto §4: after the payment info is out; a failure here is a warning, never a rollback
                 retryAsked = asked
-                val paytoFailed = (back.paytoConflict == null || back.replacePayto) && !publishPayto(back.address, asked)
-                _state.update { it.copy(step = SetupStep.Done(back.address, restoreHeight, hidden, paytoFailed), error = null) }
+                retryReplacing = null
+                val payto = if (back.paytoConflict == null || back.replacePayto) publishPayto(back.address, asked) else PaytoOutcome.Written
+                _state.update { it.copy(step = payto.done(SetupStep.Done(back.address, restoreHeight, hidden)), error = null) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: SetupFailure) {

@@ -75,6 +75,9 @@ import com.monostr.app.ui.common.MessageSnackbar
 import com.monostr.app.ui.common.MonostrBottomBar
 import com.monostr.app.ui.common.HideOnScrollFooter
 import com.monostr.app.ui.common.RelayDot
+import androidx.compose.runtime.saveable.rememberSaveable
+import com.monostr.nostr.model.RelayInfo
+import com.monostr.app.ui.common.RelayStatusSheet
 import com.monostr.app.ui.common.LocalTorActive
 import com.monostr.app.ui.common.TorBannerSlot
 import com.monostr.app.ui.common.TorBarIcon
@@ -108,6 +111,7 @@ fun FeedScreen(
     onQuote: (String) -> Unit = {},
     onSupport: () -> Unit = {},
     onOpenList: (ListAddress) -> Unit = {},
+    onManageRelays: () -> Unit = onSettings,
     vm: FeedViewModel = hiltViewModel(),
 ) {
     val tabs by vm.tabs.state.collectAsStateWithLifecycle()
@@ -150,7 +154,7 @@ fun FeedScreen(
     Scaffold(
         modifier = Modifier.nestedScroll(hide.connection),
         topBar = { HideOnScrollHeader(hide) { Column {
-            FeedTopBar(relays.map { it.state }, self.picture, toTop, onSettings) { onOpenProfile(vm.selfPubkey) }
+            FeedTopBar(relays.map { it.state }, self.picture, toTop, onSettings, onProfile = { onOpenProfile(vm.selfPubkey) }, relays = relays, onManageRelays = onManageRelays)
             TorBannerSlot()
             // spec 2026-10-18 §2.1: only with a pinned list; it hides and returns with the other bars
             if (tabs.showRow) {
@@ -254,7 +258,12 @@ fun FeedScreen(
 /** Left to right: logo, then right-aligned the Tor onion (only with the switch on), relay dot, settings, avatar, about 24 dp apart as seen (spec 2026-11-06 5.5). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun FeedTopBar(relayStates: List<RelayState>, picture: String?, onToTop: () -> Unit, onSettings: () -> Unit, onProfile: () -> Unit) {
+internal fun FeedTopBar(
+    relayStates: List<RelayState>, picture: String?, onToTop: () -> Unit, onSettings: () -> Unit, onProfile: () -> Unit,
+    relays: List<RelayInfo> = emptyList(), onManageRelays: () -> Unit = {},
+) {
+    var relaySheet by rememberSaveable { mutableStateOf(false) }
+    if (relaySheet) RelayStatusSheet(relays, onManage = { relaySheet = false; onManageRelays() }, onDismiss = { relaySheet = false })
     TopAppBar(
         windowInsets = WindowInsets(0),
         title = {
@@ -282,7 +291,7 @@ internal fun FeedTopBar(relayStates: List<RelayState>, picture: String?, onToTop
         actions = {
             // from the right: own avatar, settings, relay indicator (bookmarks live in the bottom bar since 11.1), Tor
             if (LocalTorActive.current) TorBarIcon()
-            RelayDot(relayStates)
+            RelayDot(relayStates, onClick = { relaySheet = true })
             IconButton(onClick = onSettings, modifier = Modifier.testTag("feed-settings")) { Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.feed_settings)) }
             val selfLabel = stringResource(R.string.feed_profile)
             IconButton(onClick = onProfile, modifier = Modifier.testTag("feed-profile")) {

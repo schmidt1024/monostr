@@ -1,0 +1,8 @@
+- Toca el punto de relays para ver cuáles están conectados
+- Los perfiles muestran «Te sigue»; la moneda de propina es más fácil de tocar
+- Galerías de 2, 3 y 4+ imágenes en un solo bloque redondeado
+- Los vídeos sin imagen de vista previa obtienen una de su primer fotograma
+- Los zaps citados se muestran como tarjetas de zap
+- Una tarjeta de enlace que quitaste no aparece en la nota enviada
+- Las notas ya no se quedan en «Enviando…»
+- Correcciones

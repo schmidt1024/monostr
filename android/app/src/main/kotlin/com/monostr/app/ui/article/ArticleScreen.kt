@@ -26,7 +26,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.BrokenImage
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material3.Button
@@ -81,6 +80,7 @@ import com.monostr.app.ui.common.Avatar
 import com.monostr.app.ui.common.LocalOpenArticle
 import com.monostr.app.ui.common.LocalOpenList
 import com.monostr.app.ui.common.LocalAllowForeign
+import com.monostr.app.ui.common.LocalTorActive
 import androidx.compose.runtime.CompositionLocalProvider
 import com.monostr.app.ui.common.LoadingScreen
 import com.monostr.app.ui.common.MessageSnackbar
@@ -99,6 +99,9 @@ import com.monostr.app.ui.common.NoteSpan
 import com.monostr.app.ui.common.QuoteCard
 import com.monostr.app.ui.media.LocalMediaSettings
 import com.monostr.app.ui.media.MediaBoxes
+import com.monostr.app.ui.media.MediaFailedMark
+import com.monostr.app.ui.media.MediaFailure
+import com.monostr.app.ui.media.MediaFailures
 import com.monostr.app.ui.media.MediaCoverBadge
 import com.monostr.app.ui.media.MediaRatios
 import com.monostr.app.ui.media.MediaReveals
@@ -528,7 +531,8 @@ private fun ArticlePicture(url: String, ctx: RenderContext, index: Int, modifier
     val covered = settings.blurSensitive && ctx.sensitive && ctx.articleId !in revealed
     val waiting = !covered && settings.mediaOnTap && ctx.articleId !in revealed
     var learned by remember(url) { mutableStateOf(MediaRatios[url]) }
-    var failed by remember(url) { mutableStateOf(false) }
+    var failure by remember(url) { mutableStateOf<MediaFailure?>(null) }
+    val torActive = LocalTorActive.current
     BoxWithConstraints(modifier) {
         val box = MediaBoxes.single(learned, widthDp = maxWidth.value)
         val ratio = if (cover) box.ratio.coerceIn(1f, 2f) else box.ratio
@@ -549,12 +553,12 @@ private fun ArticlePicture(url: String, ctx: RenderContext, index: Int, modifier
                     if (covered) Icons.Filled.VisibilityOff else Icons.Outlined.Image,
                     title = stringResource(if (covered) R.string.media_sensitive else R.string.media_tap_to_load),
                 )
-                failed -> Icon(Icons.Filled.BrokenImage, contentDescription = stringResource(R.string.media_failed), tint = MaterialTheme.colorScheme.outline)
+                failure != null -> MediaFailedMark(failure!!)
                 else -> SubcomposeAsyncImage(
                     model = url, contentDescription = alt.ifBlank { null },
                     contentScale = if (cover) ContentScale.Crop else ContentScale.Fit, modifier = Modifier.fillMaxSize(),
                     onSuccess = { r -> MediaRatios.put(url, r.result.image.width, r.result.image.height); learned = MediaRatios[url] },
-                    onError = { failed = true },
+                    onError = { e -> failure = MediaFailures.of(e.result.throwable, torActive) },
                 )
             }
         }

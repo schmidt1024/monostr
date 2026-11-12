@@ -25,6 +25,7 @@
     <string name="relay_not_connected">не подключено</string>
     <string name="relay_needs_tor">нужен Tor</string>
     <string name="relay_resting">недоступен, новая попытка каждые 10 минут</string>
+    <string name="relay_sheet_manage">Управлять релеями</string>
     <string name="relay_last_seen">последнее подключение: %1$s</string>
     <string name="relay_never_seen">ещё не подключался</string>
     <string name="relays_none_found">Список релеев ещё не опубликован. По нему вас находят другие приложения и watcher чаевых. Перед публикацией добавьте релеи с вашими старыми заметками.</string>
@@ -87,6 +88,7 @@
     <string name="media_tap_to_show">Нажмите, чтобы показать</string>
     <string name="media_tap_to_load">Нажмите, чтобы загрузить изображения</string>
     <string name="media_failed">Не удалось загрузить изображение</string>
+    <string name="media_tor_blocked">Сайт блокирует Tor</string>
     <string name="media_video">Воспроизвести видео</string>
     <string name="media_viewer_close">Закрыть</string>
     <string name="media_copy_link">Копировать ссылку</string>
@@ -151,6 +153,7 @@
     <string name="profile_title_self">Мой профиль</string>
     <string name="profile_error_load">Не удалось загрузить профиль</string>
     <string name="profile_copy_npub">Скопировать npub</string>
+    <string name="profile_follows_you">Читает вас</string>
     <string name="note_replying_one">В ответ %1$s</string>
     <string name="note_replying_two">В ответ %1$s и %2$s</string>
     <plurals name="note_replying_more">
@@ -201,6 +204,7 @@
     <string name="tip_open_wallet_again">Открыть кошелёк снова</string>
     <string name="tip_sent">Кошелёк открыт. Чаевые ожидают подтверждения от watcher.</string>
     <string name="tip_error_amount">Неверная сумма (например, 0.005)</string>
+    <string name="tip_payto_title">Отправить Monero пользователю %1$s</string>
     <string name="tip_payto_title_plain">Отправить Monero</string>
     <string name="tip_payto_note">Уходит на адрес, а не на эту заметку. Без подтверждения: Monostr не видит, оплатили ли вы.</string>
     <string name="tip_payto_profile">Без подтверждения: Monostr не видит, оплатили ли вы.</string>
@@ -523,8 +527,11 @@
     <string name="bookmarks_error_load">Не удалось загрузить закладки</string>
     <string name="note_ref_label">заметка</string>
     <string name="quote_missing">Заметка не найдена</string>
-    <string name="quote_gone">Заметки больше нет на релеях</string>
+    <string name="quote_gone">Заметка не найдена</string>
     <string name="mute_quote_placeholder">Заметка заглушённого аккаунта</string>
+    <string name="quote_zap_title">⚡ Lightning-зап · %s сат</string>
+    <string name="quote_zap_from_to">от %1$s для %2$s</string>
+    <string name="quote_zap_to">для %s</string>
     <string name="address_ref_label">событие</string>
     <string name="address_type_article">Статья</string>
     <string name="address_type_live">Эфир</string>

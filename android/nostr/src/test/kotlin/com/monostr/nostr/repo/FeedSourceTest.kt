@@ -5,7 +5,10 @@ import com.monostr.nostr.NostrEngine
 import com.monostr.nostr.SilentWsRelay
 import com.monostr.nostr.awaitTrue
 import com.monostr.nostr.model.Note
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -103,8 +106,12 @@ class FeedSourceTest {
             var from = relay.requests.size
             repo.refresh(followedOnly)
             repo.loadMore(followedOnly, before = 5000)
-            repo.live(followedOnly).first()
-            assertTrue(awaitTrue { authorSets(from).size >= 3 }, "list requests never reached the relay") // refresh notes + deletions, older page, live
+            // collected until its subscription is out: `first()` alone races the subscription against the cancel, and a
+            // REQ sent after the next step's mark was counted there (failed 11 of 60 on 2026-11-12)
+            val live = launch(Dispatchers.Default) { repo.live(followedOnly).collect {} }
+            assertTrue(awaitTrue { relay.requests.drop(from).any { "\"since\"" in it } }, "the live subscription never reached the relay")
+            live.cancelAndJoin()
+            assertTrue(authorSets(from).size >= 4, "list requests never reached the relay: ${authorSets(from)}") // refresh notes + deletions, older page, live
             assertTrue(authorSets(from).all { it == home }, "a request named a set other than the home feed's: ${authorSets(from)}")
 
             // a member the user does not follow is added to the home feed's authors, not asked for alone

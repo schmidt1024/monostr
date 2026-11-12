@@ -284,6 +284,7 @@ private fun LoggedInNavHost(
                     onQuote = { nav.navigate(Routes.compose(quote = it)) },
                     onSupport = { nav.navigate(Routes.SUPPORT) },
                     onSettings = { nav.navigate(Routes.SETTINGS) },
+                    onManageRelays = { nav.navigate(Routes.settingsPage(SettingsPage.RELAYS)) },
                     onSearch = { nav.navigate(Routes.search()) { popUpTo(Routes.FEED); launchSingleTop = true } },
                     onMessages = onMessages,
                     onNotifications = { nav.navigate(Routes.NOTIFICATIONS) { popUpTo(Routes.FEED); launchSingleTop = true } },
@@ -493,24 +494,26 @@ private fun LoggedInNavHost(
                     val parent = remember(entry) { nav.getBackStackEntry(Routes.SETTINGS_GRAPH) }
                     val vm: SettingsViewModel = hiltViewModel(parent)
                     val focus = entry.arguments?.getString("focus")
-                    val back: () -> Unit = { nav.popBackStack() }
+                    // backlog 2026-11-11: every way off a page waits for it to be resumed, so a double tap during the
+                    // transition neither pushes a screen twice nor pops two pages
+                    val back: () -> Unit = { if (entry.isResumed()) nav.popBackStack() }
                     when (SettingsPage.of(entry.arguments?.getString("page"))) {
-                        SettingsPage.ACCOUNT -> AccountPage(vm, focus, back, onShowKey = { nav.navigate(Routes.SHOW_KEY) })
-                        SettingsPage.PRIVACY -> PrivacyPage(vm, focus, back, onMuted = { nav.navigate(Routes.MUTED) })
+                        SettingsPage.ACCOUNT -> AccountPage(vm, focus, back, onShowKey = { if (entry.isResumed()) nav.navigate(Routes.SHOW_KEY) })
+                        SettingsPage.PRIVACY -> PrivacyPage(vm, focus, back, onMuted = { if (entry.isResumed()) nav.navigate(Routes.MUTED) })
                         SettingsPage.RELAYS -> RelaysPage(vm, focus, back, onOpen = { if (entry.isResumed()) nav.navigate(Routes.settingsPage(it)) })
                         SettingsPage.DM_RELAYS -> DmRelaysPage(vm, focus, back)
                         SettingsPage.SEARCH_RELAYS -> SearchRelaysPage(vm, focus, back)
                         SettingsPage.MONERO -> MoneroPage(
                             vm, focus, back,
-                            onMoneroSetup = { nav.navigate(Routes.moneroSetup(intro = false)) },
-                            onMoneroUpgrade = { nav.navigate(Routes.moneroSetup(intro = false, upgrade = true)) },
+                            onMoneroSetup = { if (entry.isResumed()) nav.navigate(Routes.moneroSetup(intro = false)) },
+                            onMoneroUpgrade = { if (entry.isResumed()) nav.navigate(Routes.moneroSetup(intro = false, upgrade = true)) },
                         )
                         SettingsPage.NOTIFICATIONS -> NotificationsPage(vm, focus, back)
                         SettingsPage.CONTENT -> ContentPage(vm, focus, back, onOpen = { if (entry.isResumed()) nav.navigate(Routes.settingsPage(it)) })
                         SettingsPage.REACTIONS -> ReactionsPage(vm, focus, back)
                         SettingsPage.TRANSLATION -> TranslationPage(vm, focus, back)
                         SettingsPage.APPEARANCE -> AppearancePage(vm, focus, back)
-                        SettingsPage.HELP -> HelpPage(vm, focus, back, onOpenProfile = { nav.navigate(Routes.profile(it)) })
+                        SettingsPage.HELP -> HelpPage(vm, focus, back, onOpenProfile = { if (entry.isResumed()) nav.navigate(Routes.profile(it)) })
                         null -> LaunchedEffect(Unit) { nav.popBackStack() }
                     }
                 }

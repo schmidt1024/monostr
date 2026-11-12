@@ -75,7 +75,7 @@ fun rememberGifRequest(url: String): ImageRequest {
 @Composable
 fun GifImage(
     url: String, key: String, contentDescription: String?, contentScale: ContentScale, alignment: Alignment, placeholder: Painter?,
-    onSize: ((Int, Int) -> Unit)?, onError: () -> Unit, modifier: Modifier = Modifier,
+    onSize: ((Int, Int) -> Unit)?, onError: (Throwable) -> Unit, modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val mode = LocalMediaSettings.current.gifMode
@@ -83,7 +83,7 @@ fun GifImage(
         // the first frame, as any picture
         AsyncImage(
             model = url, contentDescription = contentDescription, contentScale = contentScale, alignment = alignment, modifier = modifier.fillMaxSize(),
-            placeholder = placeholder, onSuccess = { s -> onSize?.invoke(s.result.image.width, s.result.image.height) }, onError = { onError() },
+            placeholder = placeholder, onSuccess = { s -> onSize?.invoke(s.result.image.width, s.result.image.height) }, onError = { e -> onError(e.result.throwable) },
         )
         return
     }
@@ -148,7 +148,7 @@ fun GifImage(
                 onSize?.invoke(s.result.image.width, s.result.image.height)
                 animation = s.result.image.asDrawable(context.resources) as? Animatable
             },
-            onError = { onError() },
+            onError = { e -> onError(e.result.throwable) },
         )
         if (a != null && moves) {
             val label = stringResource(if (playing) R.string.media_gif_pause else R.string.media_gif_play)

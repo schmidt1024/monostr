@@ -2,6 +2,7 @@ package com.monostr.nostr.repo
 
 import com.monostr.nostr.NostrEngine
 import com.monostr.nostr.model.AddressRef
+import com.monostr.nostr.model.NoteAddress
 import com.monostr.nostr.model.Note
 import com.monostr.nostr.model.NoteMapper
 import com.monostr.tips.Kinds
@@ -25,7 +26,7 @@ import java.time.Duration
 interface ArticleRepliesRepository {
     /**
      * The replies under the article [ref], oldest first: NIP-22 comments (kind 1111, `#A` = coordinate) and old-style
-     * kind 1 notes (`#a` = coordinate). The first emission is the database; the relays follow and every change after them
+     * kind 1 replies (`#a` = coordinate, see [NostrArticleRepliesRepository.isOldStyleReply]). The first emission is the database; the relays follow and every change after them
      * emits again. [allowForeign] false (a reader opened from a direct message): only the user's own relays are asked, no
      * hint and no author relay. Withdrawn notes are left out.
      */
@@ -86,7 +87,8 @@ class NostrArticleRepliesRepository(
     }
 
     private suspend fun read(coordinate: String): List<Note> {
-        val rows = (engine.queryBoth(commentsFilter(coordinate)) + engine.queryBoth(notesFilter(coordinate))).distinctBy { it.second.id }
+        val notes = engine.queryBoth(notesFilter(coordinate)).filter { (_, ev) -> isOldStyleReply(ev.tags, ev.content, coordinate) }
+        val rows = (engine.queryBoth(commentsFilter(coordinate)) + notes).distinctBy { it.second.id }
         return withContext(kotlinx.coroutines.Dispatchers.Default) {
             Withdrawn.filterDecoded(engine, rows).mapNotNull { (_, ev) -> NoteMapper.note(ev) }.sortedBy { it.createdAt }
         }
@@ -140,7 +142,23 @@ class NostrArticleRepliesRepository(
         /** Comments of an article: kind 1111 with the root scope `A` = coordinate. */
         fun commentsFilter(coordinate: String, since: Long? = null): Filter = coordinateFilter(listOf(Kinds.COMMENT), coordinate, "A", since)
 
-        /** Old-style replies: kind 1 naming the coordinate in `a`. */
+        /**
+         * Whether a kind 1 that names [coordinate] in an `a` tag replies to the article (old style, before NIP-22) instead of
+         * only mentioning or sharing it. A marked `a` tag decides: `root`/`reply` is a reply, `mention` is not. Unmarked (how
+         * older clients tagged the article they answered): a quote (`q` = coordinate) or a note whose text links the article
+         * (any naddr of it, also inside a web link) only shares it; anything else is a reply. Kind 1111 needs no such check:
+         * its root scope `A` is the article.
+         */
+        fun isOldStyleReply(tags: List<List<String>>, content: String, coordinate: String): Boolean {
+            val markers = tags.filter { it.size >= 2 && it[0] == "a" && it[1] == coordinate }.map { it.getOrNull(3).orEmpty() }
+            if (markers.isEmpty()) return false
+            if (markers.any { it == "root" || it == "reply" }) return true
+            if (markers.all { it == "mention" }) return false
+            if (tags.any { it.size >= 2 && it[0] == "q" && it[1] == coordinate }) return false
+            return !NoteAddress.mentions(content, coordinate)
+        }
+
+        /** Old-style replies: kind 1 naming the coordinate in `a`; [isOldStyleReply] then drops mere mentions. */
         fun notesFilter(coordinate: String, since: Long? = null): Filter = coordinateFilter(listOf(1), coordinate, "a", since)
     }
 }

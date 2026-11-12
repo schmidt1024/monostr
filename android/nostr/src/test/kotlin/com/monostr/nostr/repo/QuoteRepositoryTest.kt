@@ -46,6 +46,31 @@ class QuoteRepositoryTest {
     }
 
     @Test
+    fun `a stored zap receipt is found as a zap, a malformed one as missing`() = runTest {
+        val e = engine()
+        val bob = Keys.generate()
+        val zapper = Keys.generate() // the signer's own p tag is dropped by rust-nostr: the receipt comes from a third key
+        val request = EventBuilder(Kind(9734u), "thanks")
+            .tags(listOf(Tag.parse(listOf("p", bob.publicKey().toHex())), Tag.parse(listOf("amount", "1000000")))).signWithKeys(alice)
+        val receipt = EventBuilder(Kind(9735u), "").tags(
+            listOf(Tag.parse(listOf("p", bob.publicKey().toHex())), Tag.parse(listOf("description", request.asJson()))),
+        ).signWithKeys(zapper)
+        val broken = EventBuilder(Kind(9735u), "").tags(listOf(Tag.parse(listOf("description", request.asJson())))).signWithKeys(zapper)
+        e.save(receipt)
+        e.save(broken)
+        val r = repo(e)
+        val zap = (r.get(receipt.id().toHex()) as QuoteResult.Zap).zap
+        assertEquals(1_000L, zap.amountSat)
+        // no invoice: nothing binds the request to this receipt, so it lends no sender (ZapQuoteTest covers the bound case)
+        assertEquals(null, zap.sender)
+        assertEquals("", zap.comment)
+        assertEquals(0, r.loads)
+        assertEquals(QuoteResult.Zap(zap), r.cached(receipt.id().toHex()))
+        assertEquals(QuoteResult.Missing, r.get(broken.id().toHex()))
+        e.close()
+    }
+
+    @Test
     fun `a missing note is fetched from the hint relay, stored, and the hint relay is released`() = runTest {
         val ev = note("from the hint")
         SilentWsRelay(serve = listOf(ev.asJson())).use { relay ->
@@ -158,6 +183,22 @@ class QuoteRepositoryTest {
                 withLocator(idx) { _, r ->
                     val found = r.get(id, author = alice.publicKey().toHex())
                     assertEquals("from the outbox", (found as QuoteResult.Found).note.content)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `without an author the quoting note's mentioned people are asked`() = runTest {
+        // owner 2026-11-12: a bare nevent quote (no author) of a note that lives only on its author's own relay
+        val ev = note("only on vult's relay")
+        val id = ev.id().toHex()
+        val stranger = Keys.generate().publicKey().toHex()
+        SilentWsRelay(serveFor = { req -> if (id in req) listOf(ev.asJson()) else emptyList() }).use { f2 ->
+            SilentWsRelay(serveFor = { req -> if ("10002" in req) listOf(relayList(alice, listOf("r", f2.url, "write")).asJson()) else emptyList() }).use { idx ->
+                withLocator(idx) { _, r ->
+                    val found = r.get(id, guesses = listOf(stranger, alice.publicKey().toHex()))
+                    assertEquals("only on vult's relay", (found as QuoteResult.Found).note.content)
                 }
             }
         }

@@ -5,6 +5,8 @@ import com.monostr.nostr.Exit
 import com.monostr.nostr.NostrEngine
 import com.monostr.nostr.model.Note
 import com.monostr.nostr.model.NoteMapper
+import com.monostr.nostr.model.ZapQuote
+import com.monostr.nostr.model.ZapReceipts
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -21,6 +23,8 @@ import java.util.concurrent.atomic.AtomicInteger
 sealed interface QuoteResult {
     /** The quoted note, mapped without its own quote (spec 3: depth 1). */
     data class Found(val note: Note) : QuoteResult
+    /** A quoted zap receipt (kind 9735, owner 2026-11-12), read locally; a malformed one is [Missing]. */
+    data class Zap(val zap: ZapQuote) : QuoteResult
     data object Missing : QuoteResult
 }
 
@@ -28,7 +32,11 @@ interface QuoteRepository {
     /** Memory only: the remembered result, null when not loaded yet or the missing mark expired; also null for a Missing when [author] was not asked yet. */
     fun cached(id: String, author: String? = null): QuoteResult?
     /** Database, else the hint relays plus the normal relays (spec 3), then the [author]'s write relays (spec 2026-10-23 §6); at most one load per id at a time. */
-    suspend fun get(id: String, hints: List<String> = emptyList(), author: String? = null): QuoteResult
+    /**
+     * [guesses]: owner 2026-11-12, a quote whose reference names no author (bare note1/nevent without author): the quoting
+     * note's mentioned people, asked like an author (the quoted author is usually among them); used only without [author].
+     */
+    suspend fun get(id: String, hints: List<String> = emptyList(), author: String? = null, guesses: List<String> = emptyList()): QuoteResult
 }
 
 /**
@@ -52,8 +60,9 @@ class NostrQuoteRepository(
     private val foreign: ForeignRelays? = null,
 ) : QuoteRepository {
     private val lock = Any()
-    private val found = object : LinkedHashMap<String, Note>(16, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Note>?): Boolean = size > capacity
+    /** Found notes and zaps; never [QuoteResult.Missing]. */
+    private val found = object : LinkedHashMap<String, QuoteResult>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, QuoteResult>?): Boolean = size > capacity
     }
     private val missing = HashMap<String, Long>()
     private val inFlight = HashMap<String, Deferred<QuoteResult>>()
@@ -78,16 +87,19 @@ class NostrQuoteRepository(
         if (m === QuoteResult.Missing && author != null && tried[id].orEmpty().none { it.second == author }) null else m
     }
 
-    override suspend fun get(id: String, hints: List<String>, author: String?): QuoteResult {
-        val input = hints to author
+    override suspend fun get(id: String, hints: List<String>, author: String?, guesses: List<String>): QuoteResult {
+        val authors = author?.let(::listOf) ?: guesses.distinct().take(MAX_GUESSES)
+        // the tried-inputs key: the author, or the guessed authors (a new guess asks again like a new author)
+        val key = author ?: authors.joinToString(",").ifEmpty { null }
+        val input = hints to key
         val job = synchronized(lock) {
             val m = memo(id)
-            if (m is QuoteResult.Found) return m
+            if (m != null && m !== QuoteResult.Missing) return m
             // A Missing stands only for inputs already asked; a new hint or author asks again.
             if (m != null && input in tried[id].orEmpty()) return m
             inFlight.getOrPut(id) {
                 tried.getOrPut(id) { HashSet() } += input
-                scope.async { load(id, hints, author) }
+                scope.async { load(id, hints, key, authors) }
             }
         }
         return job.await()
@@ -95,7 +107,7 @@ class NostrQuoteRepository(
 
     /** Caller holds [lock]. */
     private fun memo(id: String): QuoteResult? {
-        found[id]?.let { return QuoteResult.Found(it) }
+        found[id]?.let { return it }
         val at = missing[id] ?: return null
         if (at + missingSeconds > now()) return QuoteResult.Missing
         missing.remove(id)
@@ -103,11 +115,11 @@ class NostrQuoteRepository(
         return null
     }
 
-    private suspend fun load(id: String, hints: List<String>, author: String?): QuoteResult {
+    private suspend fun load(id: String, hints: List<String>, author: String?, authors: List<String>): QuoteResult {
         // set by [lookup] when hint relays found no room in the foreign budget: such a miss is no answer
         var short = false
         val result = try {
-            lookup(id, hints, author) { short = true }
+            lookup(id, hints, authors) { short = true }
         } catch (e: CancellationException) {
             synchronized(lock) { inFlight.remove(id) }
             throw e
@@ -117,7 +129,7 @@ class NostrQuoteRepository(
         synchronized(lock) {
             inFlight.remove(id)
             when (result) {
-                is QuoteResult.Found -> { found[id] = result.note; tried.remove(id) }
+                is QuoteResult.Found, is QuoteResult.Zap -> { found[id] = result; tried.remove(id) }
                 // not every hint was asked: Missing for this call only, the same input asks again (final re-review)
                 QuoteResult.Missing -> if (short) tried[id]?.remove(hints to author) else missing[id] = now()
             }
@@ -126,8 +138,8 @@ class NostrQuoteRepository(
     }
 
     /** [short]: called when some of the hint relays got no slot in the foreign budget. */
-    private suspend fun lookup(id: String, hints: List<String>, author: String?, short: () -> Unit): QuoteResult {
-        local(id)?.let { return QuoteResult.Found(it) }
+    private suspend fun lookup(id: String, hints: List<String>, authors: List<String>, short: () -> Unit): QuoteResult {
+        local(id)?.let { return it }
         loadCount.incrementAndGet()
         val hinted = hints.filter(relayFilter).take(MAX_HINTS)
         // a full budget leaves the hints out: the own relays and the locator still look (final review M2)
@@ -140,26 +152,35 @@ class NostrQuoteRepository(
             }
             val relays = (held + engine.readRelayUrls()).distinct()
             if (relays.isNotEmpty()) {
-                quietly { engine.fetchFrom(relays, Filter().kind(Kind(1u)).id(EventId.parse(id)).limit(1u), timeout, attach = false, exit = Exit.AllIds(setOf(id))) }
+                quietly { engine.fetchFrom(relays, Filter().kinds(listOf(Kind(1u), Kind(ZapReceipts.RECEIPT.toUShort()))).id(EventId.parse(id)).limit(1u), timeout, attach = false, exit = Exit.AllIds(setOf(id))) }
             }
         } finally {
             if (foreign != null) foreign.release(held) else engine.detachTemporary(held)
         }
-        local(id)?.let { return QuoteResult.Found(it) }
+        local(id)?.let { return it }
         // Miss path only; the hints were asked above, the locator respects the author-relays switch itself.
-        if (author != null && locator != null) {
-            locator.find(listOf(Wanted(id, authors = listOf(author))))
-            return local(id)?.let { QuoteResult.Found(it) } ?: QuoteResult.Missing
+        if (authors.isNotEmpty() && locator != null) {
+            locator.find(listOf(Wanted(id, authors = authors)))
+            return local(id) ?: QuoteResult.Missing
         }
         return QuoteResult.Missing
     }
 
-    private suspend fun local(id: String): Note? =
-        engine.eventById(id)?.takeIf { it.kind().asU16().toInt() == 1 && !Withdrawn.isWithdrawn(engine, it) }?.let { NoteMapper.note(it, withQuote = false) }
+    /** A stored kind 1 note or kind 9735 zap receipt; a malformed receipt counts as not there. */
+    private suspend fun local(id: String): QuoteResult? {
+        val event = engine.eventById(id) ?: return null
+        return when (event.kind().asU16().toInt()) {
+            1 -> event.takeIf { !Withdrawn.isWithdrawn(engine, it) }?.let { NoteMapper.note(it, withQuote = false) }?.let(QuoteResult::Found)
+            ZapReceipts.RECEIPT -> event.takeIf { !Withdrawn.isWithdrawn(engine, it) }?.let(ZapReceipts::parse)?.let(QuoteResult::Zap)
+            else -> null
+        }
+    }
 
     private companion object {
         const val CONNECT_WAIT_MS = 2_000L
         /** A crafted note must not make every viewer connect to dozens of relays. */
         const val MAX_HINTS = 3
+        /** Mentioned people asked when the reference names no author: the first few, a long mention list asks no more. */
+        const val MAX_GUESSES = 3
     }
 }

@@ -259,4 +259,15 @@ class ThreadForeignTest {
             }
         }
     }
+
+    @Test
+    fun `candidate write relays shared first, one per author in turn, own relays last`() {
+        val implausible = listOf("wss://relay.damus.io/", "wss://theforest.nostr1.com/", "wss://trending.relays.land/", "wss://nostr.bitcoiner.social/")
+        val vult = listOf("wss://nostr.mom/", "wss://nos.lol/", "wss://nostr.bitcoiner.social/")
+        val own = setOf("wss://relay.damus.io", "wss://nos.lol", "wss://nostr.mom")
+        val ranked = WriteRanking.rank(listOf(implausible, vult), own)
+        assertEquals("wss://nostr.bitcoiner.social", ranked.first())
+        assertEquals(listOf("wss://theforest.nostr1.com", "wss://trending.relays.land"), ranked.drop(1).take(2))
+        assertEquals(own, ranked.takeLast(3).toSet())
+    }
 }

@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.flow
 import com.monostr.app.ui.tips.TipPhase
 import com.monostr.app.ui.tips.TipSheetController
 import com.monostr.app.ui.tips.TipTarget
+import com.monostr.app.ui.tips.storedName
+import com.monostr.nostr.model.Profile
 import com.monostr.monero.MoneroKeys
 import com.monostr.monero.Network
 import com.monostr.tips.PaymentInfo
@@ -559,6 +561,39 @@ class TipSheetControllerTest {
         c.open(n)
         advanceUntilIdle()
         assertEquals(TipPhase.PayTo(sub, "monero:$sub"), c.state.value.phase)
+    }
+
+    @Test
+    fun `payto sheet names the recipient from the stored profile`() = runTest {
+        // owner 2026-11-12: the title names the recipient; asked of the local store only
+        val rig = Rig(FakeTips().apply { paytos = mapOf(alice to sub) })
+        val asked = mutableListOf<String>()
+        val c = TipSheetController(rig.tips, rig.gateway, rig.settings, rig.pending, eager(), rig.authorRelays, { true }, recipientName = { asked += it; "Alice" }, now = { 5_000 })
+        c.open(n)
+        advanceUntilIdle()
+        assertEquals(TipPhase.PayTo(sub, "monero:$sub", name = "Alice"), c.state.value.phase)
+        assertEquals(listOf(alice), asked)
+    }
+
+    @Test
+    fun `payto sheet without a stored name or with a failing store keeps the plain title`() = runTest {
+        val rig = Rig(FakeTips().apply { paytos = mapOf(alice to sub) })
+        val blank = TipSheetController(rig.tips, rig.gateway, rig.settings, rig.pending, eager(), rig.authorRelays, { true }, recipientName = { " " }, now = { 5_000 })
+        blank.open(n)
+        advanceUntilIdle()
+        assertEquals(TipPhase.PayTo(sub, "monero:$sub"), blank.state.value.phase)
+        val failing = TipSheetController(rig.tips, rig.gateway, rig.settings, rig.pending, eager(), rig.authorRelays, { true }, recipientName = { error("db") }, now = { 5_000 })
+        failing.open(n)
+        advanceUntilIdle()
+        assertEquals(TipPhase.PayTo(sub, "monero:$sub"), failing.state.value.phase)
+    }
+
+    @Test
+    fun `stored name prefers the display name and never falls back to a key`() {
+        assertEquals("Alice A.", storedName(Profile(alice, "alice", "Alice A.", null, null, null)))
+        assertEquals("alice", storedName(Profile(alice, "alice", " ", null, null, null)))
+        assertNull(storedName(Profile.empty(alice)))
+        assertNull(storedName(null))
     }
 
     private val dittoRelays = listOf("wss://relay.ditto.example", "wss://nostr.mom.example")

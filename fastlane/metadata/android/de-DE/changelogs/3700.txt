@@ -1,0 +1,8 @@
+- Tipp auf den Relay-Punkt zeigt, welche Relays verbunden sind
+- Profile zeigen «Folgt dir»; die Tip-Münze ist leichter zu treffen
+- Galerien mit 2, 3 und 4+ Bildern in einem runden Block
+- Videos ohne Vorschaubild bekommen eines aus ihrem ersten Bild
+- Zitierte Zaps erscheinen als Zap-Karten
+- Eine entfernte Linkkarte bleibt auch in der gesendeten Note weg
+- Notes hängen nicht mehr bei «Sende…»
+- Korrekturen

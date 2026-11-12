@@ -7,6 +7,7 @@ import com.monostr.app.data.TipSettingsStore
 import com.monostr.app.data.UiSettingsStore
 import com.monostr.app.session.NostrSession
 import com.monostr.app.session.SessionState
+import com.monostr.nostr.model.Profile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -29,13 +30,17 @@ class TipSheetFactory @Inject constructor(
 
     fun tipSheet(scope: CoroutineScope): TipSheetController {
         val r = session.requireReady()
-        return TipSheetController(r.tips, r.watchers, settings, pending, scope, r.authorRelays, { uiSettings.authorRelays.first() }, sendGate = r.sendGate, takeWalletNote = walletNoteOnce({ r.sendGate.viaTor }, hints, r.pubkey))
+        return TipSheetController(r.tips, r.watchers, settings, pending, scope, r.authorRelays, { uiSettings.authorRelays.first() }, sendGate = r.sendGate, takeWalletNote = walletNoteOnce({ r.sendGate.viaTor }, hints, r.pubkey), recipientName = { pk -> storedName(r.profiles.local(listOf(pk)).firstOrNull()) })
     }
 
     fun profileTipWatch(pubkey: String, scope: CoroutineScope): ProfileTipWatch =
         // follows the session: nothing at logout, the new repository after a Tor switch (the view model may outlive both)
         ProfileTipWatch(pubkey, session.state.map { (it as? SessionState.Active)?.ready?.tips }.distinctUntilChanged(), pending, scope, sendGate = sendGate)
 }
+
+/** Display name, then name; null without one (the payto title then has no name, not a shortened key). */
+internal fun storedName(profile: Profile?): String? =
+    profile?.displayName?.takeIf { it.isNotBlank() } ?: profile?.name?.takeIf { it.isNotBlank() }
 
 private const val HINT_TOR_WALLET = "tor-wallet"
 

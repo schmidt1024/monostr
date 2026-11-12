@@ -1,0 +1,8 @@
+- Touchez le point des relais pour voir lesquels sont connectés
+- Les profils affichent «Vous suit» ; la pièce de pourboire est plus facile à toucher
+- Galeries de 2, 3 et 4+ images en un seul bloc arrondi
+- Les vidéos sans aperçu en reçoivent un tiré de leur première image
+- Les zaps cités s’affichent comme cartes de zap
+- Une carte de lien retirée reste absente de la note envoyée
+- Les notes ne restent plus bloquées sur «Envoi…»
+- Corrections

@@ -80,6 +80,11 @@ interface TipsRepository {
      * [PaytoWrite.Published] when the entry already is [address]. [address] is expected trimmed.
      */
     suspend fun setOwnPayto(address: String?): PaytoWrite
+    /**
+     * How many times [setOwnPayto] published a change in this process: a screen that shows the own payto reads again
+     * when it changed since its last read, without waiting for its usual pause between reads.
+     */
+    val ownPaytoWrites: Int get() = 0
     /** Publishes an address-less payment info: "no Monero" (spec 6.5). */
     suspend fun disablePaymentInfo(): PublishResult
     /** Signs, stores and publishes a tip intent to the user's relays and to [watcherRelays] (spec 3.2). */
@@ -217,8 +222,12 @@ class NostrTipsRepository(
         // replaceable: the new event must be strictly newer than the one it replaces
         val createdAt = maxOf(now(), (base?.createdAt()?.asSecs()?.toLong() ?: 0L) + 1)
         val result = engine.signAndPublish(RustConvert.toBuilder(Payto.build(Payto.withMonero(tags, address), createdAt)))
+        if (result.sentToAny) paytoWriteCount.incrementAndGet()
         return if (result.sentToAny) PaytoWrite.Published else PaytoWrite.NotPublished
     }
+
+    private val paytoWriteCount = java.util.concurrent.atomic.AtomicInteger()
+    override val ownPaytoWrites: Int get() = paytoWriteCount.get()
 
     /** The tags of [event], read on the FFI dispatcher (rust-nostr call). */
     private suspend fun tipsTags(event: Event): List<List<String>> = withContext(engine.ffiDispatcher) { RustConvert.toTips(event).tags }

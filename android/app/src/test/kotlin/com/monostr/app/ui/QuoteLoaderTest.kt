@@ -1,8 +1,10 @@
 package com.monostr.app.ui
 
 import com.monostr.app.ui.common.QuoteLoader
+import com.monostr.app.ui.common.QuoteTap
 import com.monostr.app.ui.common.QuoteUi
 import com.monostr.nostr.model.Profile
+import com.monostr.nostr.model.ZapQuote
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -47,6 +49,41 @@ class QuoteLoaderTest {
         assertTrue(loader.load(quoted.id, emptyList()) is QuoteUi.Found)
         val fresh = QuoteLoader(FakeQuotes(mapOf(quoted.id to quoted)), FakeProfiles(), MutableStateFlow(setOf(alice)))
         assertEquals(QuoteUi.Muted, fresh.load(quoted.id, emptyList()))
+    }
+
+    @Test
+    fun `a quoted zap carries sender and recipient profiles and hides when the sender is muted`() = runTest {
+        val bob = "b".repeat(64)
+        val zap = ZapQuote("9".repeat(64), 1_000, sender = alice, comment = "nice", recipient = bob, zappedNote = null, createdAt = 100)
+        val muted = MutableStateFlow(emptySet<String>())
+        val profiles = FakeProfiles(mapOf(alice to Profile(alice, "alice", "Alice", null, null, null)))
+        val loader = QuoteLoader(FakeQuotes(zaps = mapOf(zap.id to zap)), profiles, muted)
+        val ui = loader.load(zap.id, emptyList()) as QuoteUi.Zap
+        assertEquals(zap, ui.zap)
+        assertEquals("Alice", ui.sender!!.shownName)
+        assertEquals(Profile.shortPubkey(bob), ui.recipient.shownName)
+        assertEquals(ui, loader.cached(zap.id))
+        muted.value = setOf(alice)
+        assertEquals(QuoteUi.MutedZap(null), loader.cached(zap.id))
+        val anonymous = zap.copy(id = "8".repeat(64), sender = null)
+        val other = QuoteLoader(FakeQuotes(zaps = mapOf(anonymous.id to anonymous)), FakeProfiles(), muted).load(anonymous.id, emptyList()) as QuoteUi.Zap
+        assertNull(other.sender)
+    }
+
+    @Test
+    fun `a muted zap opens the zapped note or nothing, never the receipt`() = runTest {
+        val bob = "b".repeat(64)
+        val zapped = "7".repeat(64)
+        val zap = ZapQuote("9".repeat(64), 1_000, sender = alice, comment = "", recipient = bob, zappedNote = zapped, createdAt = 100)
+        val loader = QuoteLoader(FakeQuotes(zaps = mapOf(zap.id to zap)), FakeProfiles(), MutableStateFlow(setOf(alice)))
+        val ui = loader.load(zap.id, emptyList())
+        assertEquals(QuoteUi.MutedZap(zapped), ui)
+        assertEquals(QuoteTap.Note(zapped), QuoteTap.of(ui, zap.id))
+        assertEquals(QuoteTap.None, QuoteTap.of(QuoteUi.MutedZap(null), zap.id))
+        // muted notes keep opening their thread; an unmuted zap without a note opens the sender
+        assertEquals(QuoteTap.Note("1".repeat(64)), QuoteTap.of(QuoteUi.Muted, "1".repeat(64)))
+        val open = QuoteUi.Zap(zap.copy(zappedNote = null), null, Profile.empty(bob))
+        assertEquals(QuoteTap.Profile(alice), QuoteTap.of(open, zap.id))
     }
 
     @Test

@@ -61,6 +61,8 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.monostr.app.R
 import com.monostr.app.ui.common.Avatar
@@ -92,6 +94,8 @@ fun SettingsOverview(
     onShowKey: () -> Unit = {},
 ) {
     var redirected by rememberSaveable { mutableStateOf(false) }
+    // the Monero chip names the public address: another client may have changed it while the app was away
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.monero.resumed() }
     LaunchedEffect(section) {
         if (redirected) return@LaunchedEffect
         redirected = true

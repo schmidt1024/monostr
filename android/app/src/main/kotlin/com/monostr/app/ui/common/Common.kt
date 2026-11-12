@@ -87,9 +87,9 @@ fun Avatar(url: String?, modifier: Modifier = Modifier, size: Dp = 40.dp, conten
     if (url.isNullOrBlank()) Box(m) else AsyncImage(model = url, contentDescription = null, modifier = m)
 }
 
-/** Relay connectivity dot for the top bar (spec 5.9: no dialogs). */
+/** Relay connectivity dot for the top bar; a tap ([onClick]) shows the relays one by one (owner 2026-11-12). */
 @Composable
-fun RelayDot(states: List<RelayState>) {
+fun RelayDot(states: List<RelayState>, onClick: (() -> Unit)? = null) {
     val bestState = when {
         states.any { it == RelayState.CONNECTED } -> RelayState.CONNECTED
         states.any { it == RelayState.CONNECTING } -> RelayState.CONNECTING
@@ -97,15 +97,21 @@ fun RelayDot(states: List<RelayState>) {
     }
     val color = bestState.statusColor()
     val description = stringResource(R.string.relay_status, bestState.label().asString())
+    val dot = Modifier
+        .size(10.dp)
+        .testTag("relay-dot")
+        .clip(CircleShape)
+        .background(color)
+    if (onClick == null) {
+        Box(Modifier.padding(horizontal = Spacing.m).then(dot).semantics { contentDescription = description })
+        return
+    }
+    // a 48 dp touch target with the dot in its middle; the bar keeps its spacing
     Box(
-        Modifier
-            .padding(horizontal = Spacing.m)
-            .size(10.dp)
-            .testTag("relay-dot")
-            .clip(CircleShape)
-            .background(color)
+        Modifier.size(48.dp).clip(CircleShape).clickable(onClickLabel = null, role = Role.Button, onClick = onClick)
             .semantics { contentDescription = description },
-    )
+        contentAlignment = Alignment.Center,
+    ) { Box(dot) }
 }
 
 /** Green / grey / red for a relay state, fixed whatever accent is chosen (light and dark variants). */
@@ -291,7 +297,7 @@ private fun ListNoteCard(
                     }
                     NoteTranslateRow(translation, shown.id, belowText = true)
                     shown.quotedId?.let { qid ->
-                        QuoteCard(qid, ForeignRule.quoteHints(shown.quoteRelays, foreign), names, onOpenNote = onOpenNote, onOpenProfile = onOpenProfile, onHashtag = onHashtag, modifier = Modifier.padding(top = Spacing.s), author = ForeignRule.quoteAuthor(shown.quoteAuthor, foreign))
+                        QuoteCard(qid, ForeignRule.quoteHints(shown.quoteRelays, foreign), names, onOpenNote = onOpenNote, onOpenProfile = onOpenProfile, onHashtag = onHashtag, modifier = Modifier.padding(top = Spacing.s), author = ForeignRule.quoteAuthor(shown.quoteAuthor, foreign), guesses = if (foreign) shown.mentionedPubkeys else emptyList())
                     }
                     shown.addressRef?.let { val (ref, f) = ForeignRule.address(it, foreign); AddressCard(ref, names, onOpenProfile = onOpenProfile, modifier = Modifier.padding(top = Spacing.s), sensitive = shown.isSensitive, allowForeign = f) }
                     shown.invoice?.let { InvoiceCard(it, Modifier.padding(top = Spacing.s)) }
@@ -394,7 +400,7 @@ private fun DetailNoteCard(
         }
         NoteTranslateRow(translation, shown.id, belowText = true)
         shown.quotedId?.let { qid ->
-            QuoteCard(qid, ForeignRule.quoteHints(shown.quoteRelays, foreign), names, onOpenNote = onOpenNote, onOpenProfile = onOpenProfile, onHashtag = onHashtag, modifier = Modifier.padding(top = Spacing.s), author = ForeignRule.quoteAuthor(shown.quoteAuthor, foreign))
+            QuoteCard(qid, ForeignRule.quoteHints(shown.quoteRelays, foreign), names, onOpenNote = onOpenNote, onOpenProfile = onOpenProfile, onHashtag = onHashtag, modifier = Modifier.padding(top = Spacing.s), author = ForeignRule.quoteAuthor(shown.quoteAuthor, foreign), guesses = if (foreign) shown.mentionedPubkeys else emptyList())
         }
         shown.addressRef?.let { val (ref, f) = ForeignRule.address(it, foreign); AddressCard(ref, names, onOpenProfile = onOpenProfile, modifier = Modifier.padding(top = Spacing.s), sensitive = shown.isSensitive, allowForeign = f) }
         shown.invoice?.let { InvoiceCard(it, Modifier.padding(top = Spacing.s)) }

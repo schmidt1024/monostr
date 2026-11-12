@@ -25,6 +25,7 @@
     <string name="relay_not_connected">bağlı değil</string>
     <string name="relay_needs_tor">Tor gerekli</string>
     <string name="relay_resting">ulaşılamıyor, 10 dakikada bir yeniden deneniyor</string>
+    <string name="relay_sheet_manage">Relay\'leri yönet</string>
     <string name="relay_last_seen">son bağlantı: %1$s</string>
     <string name="relay_never_seen">henüz bağlanmadı</string>
     <string name="relays_none_found">Henüz röle listesi yayınlanmadı. Diğer uygulamalar ve bahşiş watcher\'ı seni bununla bulur. Yayınlamadan önce eski notlarının bulunduğu röleleri ekle.</string>
@@ -83,6 +84,7 @@
     <string name="media_tap_to_show">Göstermek için dokun</string>
     <string name="media_tap_to_load">Görselleri yüklemek için dokun</string>
     <string name="media_failed">Görsel yüklenemedi</string>
+    <string name="media_tor_blocked">Site Tor\'u engelliyor</string>
     <string name="media_video">Videoyu oynat</string>
     <string name="media_viewer_close">Kapat</string>
     <string name="media_copy_link">Bağlantıyı kopyala</string>
@@ -145,6 +147,7 @@
     <string name="profile_title_self">Profilim</string>
     <string name="profile_error_load">Profil yüklenemedi</string>
     <string name="profile_copy_npub">npub’u kopyala</string>
+    <string name="profile_follows_you">Seni takip ediyor</string>
     <string name="note_replying_one">Yanıtlanan: %1$s</string>
     <string name="note_replying_two">Yanıtlanan: %1$s ve %2$s</string>
     <plurals name="note_replying_more">
@@ -193,6 +196,7 @@
     <string name="tip_open_wallet_again">Cüzdanı tekrar aç</string>
     <string name="tip_sent">Cüzdan açıldı. Bahşiş, watcher onayını bekliyor.</string>
     <string name="tip_error_amount">Geçersiz tutar (ör. 0.005)</string>
+    <string name="tip_payto_title">Monero gönder: %1$s</string>
     <string name="tip_payto_title_plain">Monero gönder</string>
     <string name="tip_payto_note">Adrese gider, bu nota değil. Onay yok: Monostr ödeme yapıp yapmadığınızı göremez.</string>
     <string name="tip_payto_profile">Onay yok: Monostr ödeme yapıp yapmadığınızı göremez.</string>
@@ -503,8 +507,11 @@
     <string name="bookmarks_error_load">Yer imleri yüklenemedi</string>
     <string name="note_ref_label">not</string>
     <string name="quote_missing">Not bulunamadı</string>
-    <string name="quote_gone">Not artık relay\'lerde değil</string>
+    <string name="quote_gone">Not bulunamadı</string>
     <string name="mute_quote_placeholder">Sessize alınmış bir hesabın notu</string>
+    <string name="quote_zap_title">⚡ Lightning zap · %s sat</string>
+    <string name="quote_zap_from_to">gönderen %1$s, alan %2$s</string>
+    <string name="quote_zap_to">alan %s</string>
     <string name="address_ref_label">etkinlik</string>
     <string name="address_type_article">Makale</string>
     <string name="address_type_live">Canlı</string>

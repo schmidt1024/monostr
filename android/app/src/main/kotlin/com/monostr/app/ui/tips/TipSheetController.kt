@@ -40,8 +40,11 @@ sealed class TipPhase {
     data object Loading : TipPhase()
     /** Spec 5.5: the recipient has no valid payment info. */
     data object NoMonero : TipPhase()
-    /** The recipient has no payment info but a payto address: pay it by hand, nothing is published or tracked. [walletMissing] is null until the UI tried to open the wallet. */
-    data class PayTo(val address: String, val uri: String, val walletMissing: Boolean? = null) : TipPhase()
+    /**
+     * The recipient has no payment info but a payto address: pay it by hand, nothing is published or tracked. [walletMissing] is null until the UI tried to open the wallet.
+     * [name]: the recipient's stored display name for the title, null when none is known.
+     */
+    data class PayTo(val address: String, val uri: String, val walletMissing: Boolean? = null, val name: String? = null) : TipPhase()
     data object Ready : TipPhase()
     data object Sending : TipPhase()
     /** Tor is not connected and the payment info is not known: nothing can be said about the recipient, [TipSheetState.error] says why. */
@@ -95,6 +98,8 @@ class TipSheetController(
     private val sendGate: SendGate = SendGate.OPEN,
     /** True once: the one-time note about the wallet is due now. Asked only when the sheet reaches a phase that leads to the wallet. */
     private val takeWalletNote: suspend () -> Boolean = { false },
+    /** The recipient's stored name (no relay asked), for the payto title; owner 2026-11-12. */
+    private val recipientName: suspend (String) -> String? = { null },
     private val now: () -> Long = { System.currentTimeMillis() / 1000 },
 ) {
     private val _state = MutableStateFlow(TipSheetState())
@@ -152,7 +157,17 @@ class TipSheetController(
                         null
                     }
                     if (_state.value.target?.key != target.key) return@launch
-                    if (payto != null) TipPhase.PayTo(payto, "monero:$payto") else TipPhase.NoMonero
+                    if (payto == null) TipPhase.NoMonero else {
+                        val name = try {
+                            recipientName(target.recipient)?.takeIf { it.isNotBlank() }
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            null // the plain title then
+                        }
+                        if (_state.value.target?.key != target.key) return@launch
+                        TipPhase.PayTo(payto, "monero:$payto", name = name)
+                    }
                 }
                 PerfTrace.mark("tip sheet phase ${phase::class.simpleName}")
                 val walletNote = (phase == TipPhase.Ready || phase is TipPhase.PayTo) && try {

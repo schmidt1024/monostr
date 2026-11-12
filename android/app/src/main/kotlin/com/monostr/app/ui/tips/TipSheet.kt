@@ -126,7 +126,7 @@ fun TipSheetContent(
                 TextButton(onClick = onDone, modifier = Modifier.align(Alignment.End).testTag("tip-done")) { Text(stringResource(R.string.action_close)) }
             }
             is TipPhase.PayTo -> {
-                Text(stringResource(R.string.tip_payto_title_plain), style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("tip-payto"))
+                Text(phase.name?.let { stringResource(R.string.tip_payto_title, it) } ?: stringResource(R.string.tip_payto_title_plain), style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("tip-payto"))
                 WalletNote(state.walletNote)
                 Text(
                     stringResource(if (state.target is TipTarget.Note) R.string.tip_payto_note else R.string.tip_payto_profile),

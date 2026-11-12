@@ -29,6 +29,7 @@ object NoteMapper {
                     rootId = refs.rootId, replyToId = refs.replyToId, repostOf = null,
                     mentionedPubkeys = tags.filter { it.size >= 2 && it[0] == "p" }.map { it[1] },
                     media = parsed.media,
+                    noPreview = NoPreview.of(tags),
                     contentWarning = tags.firstOrNull { it.isNotEmpty() && it[0] == "content-warning" }?.let { it.getOrNull(1) ?: "" },
                     hashtags = tags.filter { it.size >= 2 && it[0] == "t" }.map { it[1].lowercase() }.distinct(),
                     displayContent = parsed.displayContent,

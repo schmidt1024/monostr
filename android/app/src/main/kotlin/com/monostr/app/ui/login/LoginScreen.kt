@@ -7,6 +7,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import com.monostr.app.ui.common.TorLoginRow
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.Alignment
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -82,26 +85,34 @@ fun LoginScreen(onCreate: () -> Unit = {}, vm: LoginViewModel = hiltViewModel())
     // scrolls once it no longer fits, as with a large font: the Tor row must stay reachable
     BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding()) {
       Column(Modifier.verticalScroll(rememberScrollState()).fillMaxWidth().heightIn(min = maxHeight).padding(Spacing.xl), verticalArrangement = Arrangement.Center) {
-        Image(
-            painter = painterResource(R.drawable.ic_logo_mark),
-            contentDescription = null, // decorative; the wordmark below carries the name
-            colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onBackground),
-            modifier = Modifier.height(52.dp), // the coin is square, larger than the old M to hold its weight
-        )
-        Spacer(Modifier.height(Spacing.xxl)) // gap = mark height / φ
-        Image(
-            painter = painterResource(R.drawable.ic_wordmark),
-            contentDescription = stringResource(R.string.app_name),
-            colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onBackground),
-            modifier = Modifier.height(40.dp),
-        )
-        Spacer(Modifier.height(Spacing.s))
-        Text(stringResource(R.string.login_tagline), style = MaterialTheme.typography.bodyMedium)
+        // owner 2026-11-12 (variant B): coin as the hero, close over the wordmark, claim centred; the same stacked lockup as monostr.com
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            Image(
+                painter = painterResource(R.drawable.ic_logo_mark),
+                contentDescription = null, // decorative; the wordmark below carries the name
+                colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onBackground),
+                modifier = Modifier.size(96.dp),
+            )
+            Spacer(Modifier.height(Spacing.l))
+            Image(
+                painter = painterResource(R.drawable.ic_wordmark),
+                contentDescription = stringResource(R.string.app_name),
+                colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onBackground),
+                modifier = Modifier.height(34.dp),
+            )
+            Spacer(Modifier.height(Spacing.m))
+            Text(
+                stringResource(R.string.login_tagline),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+        }
         state.notice?.let {
             Spacer(Modifier.height(Spacing.s))
             Text(it.asString(), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
         }
-        Spacer(Modifier.height(Spacing.xxl))
+        Spacer(Modifier.height(Spacing.xxxl)) // the lockup stands apart from the form
         if (state.amberAvailable) {
             Button(onClick = vm::loginWithAmber, enabled = !state.busy, modifier = Modifier.fillMaxWidth().testTag("login-amber"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.login_amber)) }
             Spacer(Modifier.height(Spacing.xl))

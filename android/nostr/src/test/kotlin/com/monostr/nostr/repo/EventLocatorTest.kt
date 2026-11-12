@@ -109,6 +109,22 @@ class EventLocatorTest {
     }
 
     @Test
+    fun `a quoted zap receipt on the author's write relay counts as found`() = runTest {
+        // owner 2026-11-12: the by-id fetch brought the kind 9735 home, but only kind 1 counted, so it was marked missing
+        val receipt = EventBuilder(Kind(9735u), "").signWithKeys(bob)
+        val id = receipt.id().toHex()
+        serving(receipt).use { f2 ->
+            indexer(relayList(bob, listOf("r", f2.url, "write"))).use { idx ->
+                setup(idx) { s ->
+                    assertEquals(setOf(id), s.locator.find(listOf(Wanted(id, authors = listOf(bob.publicKey().toHex())))))
+                    assertEquals(9735, s.engine.eventById(id)?.kind()?.asU16()?.toInt())
+                    assertTrue(s.locator.searchable(id)) // not marked "searched, not found"
+                }
+            }
+        }
+    }
+
+    @Test
     fun `hint is asked before the author lookup finishes`() = runTest {
         val ev = note("fast hint")
         val id = ev.id().toHex()

@@ -5,6 +5,7 @@ import com.monostr.tips.RelayHosts
 import com.monostr.nostr.Exit
 import com.monostr.nostr.NostrEngine
 import com.monostr.nostr.PerfTrace
+import com.monostr.nostr.model.ZapReceipts
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -44,7 +45,7 @@ interface EventLocator {
 }
 
 /**
- * Spec 2026-10-23 §4.2–4.4: stage 3 of the lookup ladder for missing kind-1 notes, after the database and the own
+ * Spec 2026-10-23 §4.2–4.4: stage 3 of the lookup ladder for missing kind-1 notes (and quoted zap receipts), after the database and the own
  * relays. Hint relays are asked at once while the authors' NIP-65 write relays are looked up in one batch (§10), then
  * the write relays are asked; at most [perId] foreign relays per id, all of them within the app-wide [foreign] budget,
  * one request per relay for every id it may have. An id still missing afterwards is marked for [missingSeconds]
@@ -191,9 +192,10 @@ class NostrEventLocator(
                         emptyMap()
                     }
                     val byRelay = LinkedHashMap<String, MutableList<String>>()
+                    val own = engine.readRelayUrls().map { it.trimEnd('/') }.toSet()
                     for (id in open.keys - inDatabase(open.keys)) {
                         val hinted = hints.getValue(id)
-                        val writes = authors.getValue(id).flatMap { lists[it].orEmpty() }.filter(relayFilter)
+                        val writes = WriteRanking.rank(authors.getValue(id).map { lists[it].orEmpty().filter(relayFilter) }, own)
                         val plan = (hinted + writes).distinct().take(perId)
                         // a failed author lookup leaves the plan unknown: such an id is never marked
                         if (!failed || authors.getValue(id).isEmpty()) synchronized(asked) { asked.planned[id] = plan }
@@ -258,9 +260,13 @@ class NostrEventLocator(
         return false
     }
 
-    /** Those of [ids] the database has as kind 1, in one read. */
+    /**
+     * Those of [ids] the database has as a kind the callers look for, in one read: notes and comments (threads,
+     * chains) and zap receipts (quotes, owner 2026-11-12). The relays are asked by id only; every caller reads the
+     * database again and handles each kind itself.
+     */
     private suspend fun inDatabase(ids: Collection<String>): Set<String> =
-        if (ids.isEmpty()) emptySet() else engine.queryDecoded(idsFilter(ids)).filter { it.kind == 1 || it.kind == Kinds.COMMENT }.mapTo(HashSet()) { it.id }
+        if (ids.isEmpty()) emptySet() else engine.queryDecoded(idsFilter(ids)).filter { it.kind in FOUND_KINDS }.mapTo(HashSet()) { it.id }
 
     /** The engine's form of a relay URL (as [ForeignRelays.lease] returns it), null when malformed. */
     private fun normalise(raw: String): String? =
@@ -270,5 +276,26 @@ class NostrEventLocator(
         val HEX = Regex("[0-9a-f]{64}")
         /** Candidate authors per wanted note that reach the batched kind 10002 lookup (spec §4.1). */
         const val MAX_AUTHORS = 3
+        val FOUND_KINDS = setOf(1, Kinds.COMMENT, ZapReceipts.RECEIPT)
+
+    }
+}
+
+/** See [rank]. */
+internal object WriteRanking {
+    /**
+     * Owner 2026-11-12: the write relays of several candidate authors, in the order the [perId] slots take them. Before,
+     * the first author's list filled every slot and a later author (the real one of a quote without author) was never
+     * asked. Now: relays the user reads anyway last (the normal fetch asked them already), then relays more candidates
+     * share first, then one of each author in turn.
+     */
+    fun rank(lists: List<List<String>>, own: Set<String>): List<String> {
+        val count = HashMap<String, Int>()
+        val turn = HashMap<String, Int>()
+        for (list in lists) list.map { it.trimEnd('/') }.distinct().forEachIndexed { i, r ->
+            count[r] = (count[r] ?: 0) + 1
+            turn[r] = minOf(turn[r] ?: Int.MAX_VALUE, i)
+        }
+        return count.keys.sortedWith(compareBy<String> { it in own }.thenByDescending { count.getValue(it) }.thenBy { turn.getValue(it) })
     }
 }

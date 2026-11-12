@@ -1023,6 +1023,55 @@ class MoneroSetupControllerTest {
     }
 
     @Test
+    fun prefillShowsStoredCopyBeforeTheRelayRead() = runTest {
+        // owner 2026-11-12: the relay read takes seconds; the stored copy fills the field at once
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val newer = "8" + "B".repeat(94)
+        val rig = Rig(tips = FakeTips().apply { paytos = mapOf(self to sub); own = OwnPayto.Known(newer); ownGate = gate })
+        val c = controller(rig)
+        assertEquals(SetupStep.Address(sub, known = true), c.state.value.step, "no wait for the relays")
+        gate.complete(Unit); advanceUntilIdle()
+        assertEquals(SetupStep.Address(newer, known = true), c.state.value.step, "the relays' answer replaces the untouched copy")
+    }
+
+    @Test
+    fun relayReadNeverOverwritesTypedInput() = runTest {
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val newer = "8" + "B".repeat(94)
+        val typed = "8" + "C".repeat(94)
+        val rig = Rig(tips = FakeTips().apply { paytos = mapOf(self to sub); own = OwnPayto.Known(newer); ownGate = gate })
+        val c = controller(rig)
+        c.setAddress(typed)
+        gate.complete(Unit); advanceUntilIdle()
+        assertEquals(SetupStep.Address(typed, known = true), c.state.value.step)
+    }
+
+    @Test
+    fun relaysWithoutPaytoEmptyTheStoredCopy() = runTest {
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val rig = Rig(tips = FakeTips().apply { paytos = mapOf(self to sub); own = OwnPayto.Known(null); ownGate = gate })
+        val c = controller(rig)
+        assertEquals(sub, (c.state.value.step as SetupStep.Address).input)
+        gate.complete(Unit); advanceUntilIdle()
+        assertEquals(SetupStep.Address(""), c.state.value.step)
+        // unknown relays keep the stored copy
+        val g2 = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val d = controller(Rig(tips = FakeTips().apply { paytos = mapOf(self to sub); own = OwnPayto.Unknown; ownGate = g2 }))
+        g2.complete(Unit); advanceUntilIdle()
+        assertEquals(SetupStep.Address(sub, known = true), d.state.value.step)
+    }
+
+    @Test
+    fun introClosesOnlyOnTheRelayRead() = runTest {
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val rig = Rig(tips = FakeTips().apply { paytos = mapOf(self to sub); own = OwnPayto.Known(sub); ownGate = gate })
+        val c = controller(rig, intro = true)
+        assertFalse(c.state.value.finished, "a stored copy may be stale: not counted as set up yet")
+        gate.complete(Unit); advanceUntilIdle()
+        assertTrue(c.state.value.finished)
+    }
+
+    @Test
     fun publishTrimsAddress() = runTest {
         val rig = Rig()
         val c = controller(rig, intro = true)
@@ -1283,11 +1332,12 @@ class MoneroSetupControllerTest {
         // the relays answer completely by the time of the write
         rig.tips.own = OwnPayto.Known(sub)
         c.confirm(); advanceUntilIdle()
-        assertEquals(SetupStep.Done(address, null, paytoFailed = true), c.state.value.step)
+        // owner 2026-11-12: asked on the done step instead of a retry that could never succeed
+        assertEquals(SetupStep.Done(address, null, paytoConflict = sub), c.state.value.step)
         assertTrue(rig.tips.paytoWrites.isEmpty(), "no write over an address nobody was asked about")
         assertTrue(rig.settings.setupState.value != null)
         c.retryPayto(); advanceUntilIdle()
-        assertTrue(rig.tips.paytoWrites.isEmpty(), "the retry is guarded too")
+        assertTrue(rig.tips.paytoWrites.isEmpty(), "no retry without a failure")
         assertEquals(OwnPayto.Known(sub), rig.tips.own)
         // unknown at the question, but no entry at the write: the tip address is written
         val d = Rig(tips = FakeTips().apply { own = OwnPayto.Unknown })
@@ -1297,6 +1347,64 @@ class MoneroSetupControllerTest {
         e.confirm(); advanceUntilIdle()
         assertEquals(SetupStep.Done(other, null), e.state.value.step)
         assertEquals(listOf<String?>(other), d.tips.paytoWrites)
+    }
+
+    @Test
+    fun unaskedDifferingPaytoReplacedOnceAnswered() = runTest {
+        val rig = Rig(tips = FakeTips().apply { own = OwnPayto.Unknown })
+        val c = controller(rig, upgrade = true)
+        val address = toConfirm(c)
+        rig.tips.own = OwnPayto.Known(sub)
+        c.confirm(); advanceUntilIdle()
+        assertEquals(sub, (c.state.value.step as SetupStep.Done).paytoConflict)
+        c.answerPayto(true); advanceUntilIdle()
+        assertEquals(SetupStep.Done(address, null), c.state.value.step)
+        assertEquals(listOf<String?>(address), rig.tips.paytoWrites)
+        assertEquals(OwnPayto.Known(address), rig.tips.own)
+    }
+
+    @Test
+    fun unaskedDifferingPaytoKeptOnKeep() = runTest {
+        val rig = Rig(tips = FakeTips().apply { own = OwnPayto.Unknown })
+        val c = controller(rig, upgrade = true)
+        val address = toConfirm(c)
+        rig.tips.own = OwnPayto.Known(sub)
+        c.confirm(); advanceUntilIdle()
+        c.answerPayto(false); advanceUntilIdle()
+        assertEquals(SetupStep.Done(address, null), c.state.value.step)
+        assertTrue(rig.tips.paytoWrites.isEmpty())
+        assertEquals(OwnPayto.Known(sub), rig.tips.own)
+    }
+
+    @Test
+    fun replaceAnswerNeverOverwritesAThirdAddress() = runTest {
+        val third = "8" + "C".repeat(94)
+        val rig = Rig(tips = FakeTips().apply { own = OwnPayto.Unknown })
+        val c = controller(rig, upgrade = true)
+        val address = toConfirm(c)
+        rig.tips.own = OwnPayto.Known(sub)
+        c.confirm(); advanceUntilIdle()
+        // another client changed it meanwhile: that one is asked about, not replaced
+        rig.tips.own = OwnPayto.Known(third)
+        c.answerPayto(true); advanceUntilIdle()
+        assertEquals(SetupStep.Done(address, null, paytoConflict = third), c.state.value.step)
+        assertTrue(rig.tips.paytoWrites.isEmpty())
+    }
+
+    @Test
+    fun failedReplaceAnswerRetriesWithoutAskingAgain() = runTest {
+        val rig = Rig(tips = FakeTips().apply { own = OwnPayto.Unknown })
+        val c = controller(rig, upgrade = true)
+        val address = toConfirm(c)
+        rig.tips.own = OwnPayto.Known(sub)
+        c.confirm(); advanceUntilIdle()
+        rig.tips.paytoResult = PaytoWrite.NotPublished
+        c.answerPayto(true); advanceUntilIdle()
+        assertEquals(SetupStep.Done(address, null, paytoFailed = true), c.state.value.step)
+        rig.tips.paytoResult = PaytoWrite.Published
+        c.retryPayto(); advanceUntilIdle()
+        assertEquals(SetupStep.Done(address, null), c.state.value.step)
+        assertEquals(OwnPayto.Known(address), rig.tips.own)
     }
 
     @Test

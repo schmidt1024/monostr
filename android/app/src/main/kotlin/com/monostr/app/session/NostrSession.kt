@@ -744,7 +744,7 @@ class NostrSession @Inject constructor(
             // followers = the largest NIP-45 COUNT of the relays (0.22.4: no proprietary index any more)
             // spec perf2 A6: one COUNT cap per relay for the note and the follower counts
             val countLimiter = CountLimiter()
-            val followCounts = NostrFollowCountsRepository(engine, limiter = countLimiter)
+            val followCounts = NostrFollowCountsRepository(engine, limiter = countLimiter, viewer = signer.pubkey)
             // a follow or unfollow changes the own Following number and the target's Followers: counted afresh
             engine.backgroundScope.launch { follows.changes.collect { followCounts.invalidateAll() } }
             // the user's own list and the lists of whom they follow stay stored; other followers' lists are passing

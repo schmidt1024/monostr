@@ -5,6 +5,7 @@ import com.monostr.nostr.NostrEngine
 import com.monostr.nostr.SilentWsRelay
 import com.monostr.nostr.awaitTrue
 import com.monostr.nostr.model.NoteMapper
+import com.monostr.tips.RelayHosts
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -86,11 +87,52 @@ class PublishQuoteTest {
             val e = engine(listOf(relay.url))
             e.connect()
             assertTrue(awaitTrue { e.connectedNormalRelayUrls().isNotEmpty() }, "loopback relay never connected")
-            val r = NostrPublishRepository(e).quote("x", quoted())
+            val r = NostrPublishRepository(e, hintAllowed = { true }).quote("x", quoted())
             assertTrue(r.sentToAny)
             assertEquals(relay.url, tags(e, r.eventId).first { it[0] == "q" }[2])
             val nevent = Nip19Event.fromNostrUri(e.eventById(r.eventId)!!.content().substringAfterLast("\n"))
             assertEquals(listOf(relay.url), nevent.relays().map { it.toString().trimEnd('/') })
+            e.close()
+        }
+    }
+
+    @Test
+    fun `a shared note link names no private relay`() = runTest {
+        SilentWsRelay(acceptEvents = true).use { relay ->
+            val e = engine(listOf(relay.url))
+            e.connect()
+            assertTrue(awaitTrue { e.connectedNormalRelayUrls().isNotEmpty() }, "loopback relay never connected")
+            val note = quoted()
+            // review 2026-11-12: the loopback relay is connected, but a link the user shares must not carry it
+            assertTrue(Nip19Event.fromNostrUri(NostrPublishRepository(e).noteLink(note)).relays().isEmpty())
+            val allowed = Nip19Event.fromNostrUri(NostrPublishRepository(e, hintAllowed = { true }).noteLink(note))
+            assertEquals(listOf(relay.url), allowed.relays().map { it.toString().trimEnd('/') })
+            e.close()
+        }
+    }
+
+    @Test
+    fun `the default hint filter refuses private hosts`() {
+        val refused = listOf(
+            "ws://192.168.1.5:7777", "wss://10.0.0.2", "ws://127.0.0.1:4869", "wss://localhost", "wss://relay.local",
+            "wss://[::1]", "wss://[fd00::1]", "wss://172.16.0.1", "ws://abcdefghijklmnop.onion", "ws://relay.example.com",
+        )
+        refused.forEach { assertTrue(!RelayHosts.isPublicWss(it), it) }
+        assertTrue(RelayHosts.isPublicWss("wss://relay.example.com"))
+    }
+
+    @Test
+    fun `a loopback or LAN relay is never named as hint`() = runTest {
+        SilentWsRelay(acceptEvents = true).use { relay ->
+            val e = engine(listOf(relay.url))
+            e.connect()
+            assertTrue(awaitTrue { e.connectedNormalRelayUrls().isNotEmpty() }, "loopback relay never connected")
+            // the default filter: the connected relay is ws://127.0.0.1, so no hint at all
+            val r = NostrPublishRepository(e).quote("x", quoted())
+            assertTrue(r.sentToAny)
+            assertEquals("", tags(e, r.eventId).first { it[0] == "q" }[2])
+            val nevent = Nip19Event.fromNostrUri(e.eventById(r.eventId)!!.content().substringAfterLast("\n"))
+            assertTrue(nevent.relays().isEmpty())
             e.close()
         }
     }

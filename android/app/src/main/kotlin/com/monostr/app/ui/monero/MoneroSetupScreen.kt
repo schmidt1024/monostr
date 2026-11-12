@@ -437,6 +437,15 @@ private fun ColumnScope.DoneStep(step: SetupStep.Done, c: MoneroSetupController)
         Text(stringResource(R.string.setup_payto_failed), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("setup-payto-failed"))
         OutlinedButton(onClick = c::retryPayto, modifier = Modifier.testTag("setup-payto-retry"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.setup_payto_retry)) }
     }
+    step.paytoConflict?.let { current ->
+        // a differing own payto turned up only at the write: asked here, never replaced unasked
+        Spacer(Modifier.height(Spacing.s))
+        Text(stringResource(R.string.setup_payto_replace, current.take(8), current.takeLast(6)), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("setup-done-payto-question"))
+        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.s)) {
+            OutlinedButton(onClick = { c.answerPayto(true) }, modifier = Modifier.testTag("setup-done-payto-replace"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.setup_payto_replace_yes)) }
+            TextButton(onClick = { c.answerPayto(false) }, modifier = Modifier.testTag("setup-done-payto-keep")) { Text(stringResource(R.string.setup_payto_replace_keep)) }
+        }
+    }
     Spacer(Modifier.height(Spacing.m))
     QrCode(step.address, Modifier.size(220.dp).align(Alignment.CenterHorizontally))
     Spacer(Modifier.height(Spacing.s))

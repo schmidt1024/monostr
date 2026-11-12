@@ -29,6 +29,8 @@ data class Note(
     val quotedId: String? = null,
     /** Relay hints for [quotedId] from the `q` tags and the `nevent`; may be empty. */
     val quoteRelays: List<String> = emptyList(),
+    /** [NoPreview]: the author put the link card away; the first link stays text. */
+    val noPreview: Boolean = false,
     /** NIP-89: the name in the first `client` tag (trimmed, at most [CLIENT_MAX] characters), null without one. */
     val client: String? = null,
     /** Relay/author hint of the [rootId] `e` tag (spec 2026-10-23 §4.1), null without one. */

@@ -163,7 +163,7 @@ import androidx.compose.material3.OutlinedIconButton
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import com.monostr.app.ui.theme.Spacing
-import com.monostr.app.ui.theme.TipCoinOutline
+import com.monostr.app.ui.theme.TipCoinFilled
 import com.monostr.app.ui.tips.TipTarget
 import javax.inject.Inject
 
@@ -834,7 +834,11 @@ fun ProfileScreen(
                                     Icon(Icons.Outlined.ChatBubbleOutline, contentDescription = stringResource(R.string.profile_message), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                                 ProfileTipButton(pending = pendingTip, onClick = { vm.tipSheet.open(TipTarget.Profile(state.profile.pubkey)) })
-                                FollowButton(state.follow, busy = state.followBusy, onFollow = vm.controller::follow, onUnfollow = vm.controller::askUnfollow)
+                                // the icon buttons draw 40 dp in a 48 dp touch box, the Follow button fills its width: 4 dp more before it
+                                // keeps every visible gap at 16 dp (owner 2026-11-12)
+                                Box(Modifier.padding(start = Spacing.xs)) {
+                                    FollowButton(state.follow, busy = state.followBusy, onFollow = vm.controller::follow, onUnfollow = vm.controller::askUnfollow)
+                                }
                             }
                         }
                     }
@@ -842,7 +846,7 @@ fun ProfileScreen(
                         Text(state.profile.shownName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         // three sizes: name, then the NIP-05 address, then the npub (smaller and grey)
                         state.profile.nip05?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
-                        NpubLine(state.profile.pubkey)
+                        NpubLine(state.profile.pubkey, followsYou = !state.isSelf && state.followCounts?.followsYou == true)
                         // the bio links like a note: URLs, nostr: mentions and hashtags open
                         state.profile.about?.takeIf { it.isNotBlank() }?.let {
                             Spacer(Modifier.height(Spacing.s))
@@ -1034,7 +1038,7 @@ fun ProfileScreen(
 
 /** The shortened npub with a button that copies the whole one (launch feedback 2026-10-09: "copy your npub from your profile"). */
 @Composable
-private fun NpubLine(pubkey: String) {
+private fun NpubLine(pubkey: String, followsYou: Boolean = false) {
     val context = LocalContext.current
     val copied = stringResource(R.string.note_copied)
     val npub = remember(pubkey) { runCatching { Npub.encode(pubkey) }.getOrNull() }
@@ -1044,6 +1048,18 @@ private fun NpubLine(pubkey: String) {
             IconButton(onClick = { copyToClipboard(context, npub, copied) }, modifier = Modifier.size(32.dp).testTag("profile-copy-npub")) {
                 Icon(Icons.Outlined.ContentCopy, contentDescription = stringResource(R.string.profile_copy_npub), tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
             }
+        }
+        // like X: a small grey label beside the npub, read from the profile's own contact list (owner 2026-11-12)
+        if (followsYou) {
+            Text(
+                stringResource(R.string.profile_follows_you),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .background(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.shapes.extraSmall)
+                    .padding(horizontal = Spacing.xs + Spacing.xxs, vertical = Spacing.xxs)
+                    .testTag("profile-follows-you"),
+            )
         }
     }
 }
@@ -1069,13 +1085,16 @@ private fun FollowButton(follow: FollowState, busy: Boolean, onFollow: () -> Uni
 @Composable
 private fun ProfileTipButton(pending: Boolean, onClick: () -> Unit) {
     val pendingLabel = stringResource(R.string.note_tip_pending)
-    OutlinedIconButton(
+    // owner 2026-11-12: the coin itself is the button, filled and without a second ring around it, as large as the message button
+    IconButton(
         onClick = onClick,
         modifier = Modifier.testTag("profile-tip").semantics { if (pending) stateDescription = pendingLabel },
     ) {
         Icon(
-            TipCoinOutline, contentDescription = stringResource(R.string.note_tip),
+            TipCoinFilled, contentDescription = stringResource(R.string.note_tip),
             tint = if (pending) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            // 42 dp: a filled grey disc reads smaller than the message button's light 40 dp ring (owner 2026-11-12, Pixel)
+            modifier = Modifier.size(42.dp),
         )
     }
 }

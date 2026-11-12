@@ -1,0 +1,8 @@
+- Tocca il punto dei relay per vedere quali sono connessi
+- I profili mostrano «Ti segue»; la moneta per le mance è più facile da toccare
+- Gallerie di 2, 3 e 4+ immagini in un unico blocco arrotondato
+- I video senza anteprima ne ricevono una dal primo fotogramma
+- Gli zap citati appaiono come schede zap
+- Una scheda link rimossa resta assente anche nella nota inviata
+- Le note non si bloccano più su «Invio…»
+- Correzioni

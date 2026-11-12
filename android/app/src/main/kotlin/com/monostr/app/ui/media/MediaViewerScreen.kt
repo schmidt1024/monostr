@@ -71,6 +71,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import coil3.compose.AsyncImage
 import com.monostr.app.R
+import com.monostr.app.ui.common.LocalTorActive
 import com.monostr.app.media.PictureFiles
 import com.monostr.app.media.PictureSaver
 import com.monostr.app.media.PictureSharer
@@ -285,8 +286,19 @@ private fun ZoomableImage(m: NoteMedia, onDismiss: () -> Unit, onLongPress: () -
     var dragY by remember { mutableFloatStateOf(0f) }
     // opened on purpose: a GIF loops here, unless GIFs are off
     val animate = GifPlayback.isGif(m.url, m.mime) && LocalMediaSettings.current.gifMode != GifMode.OFF
+    // owner 2026-11-12: a failed picture shows the same mark as in the feed, with the Tor hint when the site refused Tor
+    val torActive = LocalTorActive.current
+    var failure by remember(m.url) { mutableStateOf<MediaFailure?>(null) }
+    failure?.let { f ->
+        Box(
+            Modifier.fillMaxSize().pointerInput(m.url) { detectTapGestures(onLongPress = { onLongPress() }) }.testTag("media-viewer-failed"),
+            contentAlignment = Alignment.Center,
+        ) { MediaFailedMark(f) }
+        return
+    }
     AsyncImage(
         model = if (animate) rememberGifRequest(m.url) else m.url, contentDescription = m.alt, contentScale = ContentScale.Fit,
+        onError = { failure = MediaFailures.of(it.result.throwable, torActive) },
         modifier = Modifier
             .fillMaxSize()
             .pointerInput(m.url) {

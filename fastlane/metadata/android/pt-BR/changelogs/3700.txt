@@ -1,0 +1,8 @@
+- Toque no ponto dos relays para ver quais estão conectados
+- Perfis mostram «Segue você»; a moeda de gorjeta é mais fácil de tocar
+- Galerias de 2, 3 e 4+ imagens em um único bloco arredondado
+- Vídeos sem imagem de prévia ganham uma do primeiro quadro
+- Zaps citados aparecem como cartões de zap
+- Um cartão de link removido fica fora também na nota enviada
+- Notas não travam mais em «Enviando…»
+- Correções

@@ -5,6 +5,7 @@ import com.monostr.nostr.ClientTag
 import com.monostr.nostr.NOTE_NOT_IN_DATABASE
 import com.monostr.nostr.NostrEngine
 import com.monostr.nostr.PublishResult
+import com.monostr.nostr.model.NoPreview
 import com.monostr.nostr.model.HashtagTags
 import com.monostr.nostr.model.MentionTags
 import com.monostr.nostr.model.Note
@@ -24,8 +25,9 @@ import rust.nostr.sdk.Tag
 /** Writes: posts, replies, likes (kind 7 "+") and reposts (kind 6). */
 interface PublishRepository {
     /** [attachments] are appended to the text as URLs and described by `imeta` tags (spec 5.2); [sensitive] marks a note with pictures by a `content-warning` tag. */
-    suspend fun post(text: String, attachments: List<NoteAttachment> = emptyList(), sensitive: Boolean = false): PublishResult
-    suspend fun reply(text: String, to: Note, attachments: List<NoteAttachment> = emptyList(), sensitive: Boolean = false): PublishResult
+    /** [noPreview]: the author put the link card away while writing; the note carries [NoPreview.TAG] (owner 2026-11-12). */
+    suspend fun post(text: String, attachments: List<NoteAttachment> = emptyList(), sensitive: Boolean = false, noPreview: Boolean = false): PublishResult
+    suspend fun reply(text: String, to: Note, attachments: List<NoteAttachment> = emptyList(), sensitive: Boolean = false, noPreview: Boolean = false): PublishResult
     /** NIP-18 quote (spec 4.1): [text], the pictures, a blank line and `nostr:nevent…` of [of]; tags `q` and `p` plus the text's mentions. An empty [text] is allowed. */
     suspend fun quote(text: String, of: Note, attachments: List<NoteAttachment> = emptyList(), sensitive: Boolean = false): PublishResult
     suspend fun like(note: Note): PublishResult = react(note, LIKE)
@@ -36,7 +38,7 @@ interface PublishRepository {
      * NIP-22 comment (kind 1111) on the article [article] (a kind 30023 note): top level, or a reply to the comment
      * [parent]. Tags and attachments as in [reply].
      */
-    suspend fun comment(text: String, article: Note, parent: Note? = null, attachments: List<NoteAttachment> = emptyList(), sensitive: Boolean = false): PublishResult
+    suspend fun comment(text: String, article: Note, parent: Note? = null, attachments: List<NoteAttachment> = emptyList(), sensitive: Boolean = false, noPreview: Boolean = false): PublishResult
     /**
      * Unlike (kind 7) or undo repost (kind 6): a NIP-09 request naming every own event of [kind] that targets
      * [noteId]. Stored locally only once a relay accepted it, like [delete]. Null when the database holds none.
@@ -79,6 +81,8 @@ class NostrPublishRepository(
     private val clientTag: suspend () -> Boolean = { false },
     /** NIP-13 proof of work for notes, replies and quotes, in leading zero bits; 0 = off (the default, and the user's setting). */
     private val powBits: suspend () -> Int = { 0 },
+    /** Which relay may be named as a hint in a public event; tests open it for their loopback relay. A `.onion` never is. */
+    private val hintAllowed: (String) -> Boolean = RelayHosts::isPublicWss,
 ) : PublishRepository {
     /** [b] with the user's proof of work: rust-nostr mines the nonce when the event is built, before any signer sees it. */
     private suspend fun withPow(b: EventBuilder): EventBuilder = powBits().takeIf { it > 0 }?.let { b.pow(it.coerceAtMost(MAX_POW).toUByte()) } ?: b
@@ -86,17 +90,17 @@ class NostrPublishRepository(
     private suspend fun viaTag(): List<Tag> = if (clientTag()) listOf(ClientTag.tag()) else emptyList()
 
     // raw kind 1 builder: the tags are exactly the mentions, the hashtags and the attachments, nothing else is extracted from the content
-    override suspend fun post(text: String, attachments: List<NoteAttachment>, sensitive: Boolean): PublishResult =
-        engine.signAndSend(withPow(EventBuilder(Kind(1u), NoteAttachment.content(text, attachments)).tags(MentionTags.from(text) + HashtagTags.from(text) + attachmentTags(attachments, sensitive) + viaTag())))
+    override suspend fun post(text: String, attachments: List<NoteAttachment>, sensitive: Boolean, noPreview: Boolean): PublishResult =
+        engine.signAndSend(withPow(EventBuilder(Kind(1u), NoteAttachment.content(text, attachments)).tags(MentionTags.from(text) + HashtagTags.from(text) + attachmentTags(attachments, sensitive) + previewTag(noPreview) + viaTag())))
 
-    override suspend fun reply(text: String, to: Note, attachments: List<NoteAttachment>, sensitive: Boolean): PublishResult {
+    override suspend fun reply(text: String, to: Note, attachments: List<NoteAttachment>, sensitive: Boolean, noPreview: Boolean): PublishResult {
         val parent = requireNotNull(engine.eventById(to.id)) { NOTE_NOT_IN_DATABASE }
         // NIP-10: the root is marked "root"; when replying to the root itself it is the only e tag.
         val root = to.rootId?.takeIf { it != to.id }?.let { engine.eventById(it) } ?: parent
         // the reply builder tags only the parent's author (not the parent's other p tags); every mention is added and dedupTags collapses repeats
         val mentions = MentionTags.pubkeys(text).map { Tag.parse(listOf("p", it)) }
         return engine.signAndSend(
-            withPow(EventBuilder.textNoteReply(NoteAttachment.content(text, attachments), parent, root, null).tags(mentions + HashtagTags.from(text) + attachmentTags(attachments, sensitive) + viaTag()).dedupTags()),
+            withPow(EventBuilder.textNoteReply(NoteAttachment.content(text, attachments), parent, root, null).tags(mentions + HashtagTags.from(text) + attachmentTags(attachments, sensitive) + previewTag(noPreview) + viaTag()).dedupTags()),
         )
     }
 
@@ -110,13 +114,19 @@ class NostrPublishRepository(
         return engine.signAndSend(withPow(EventBuilder(Kind(1u), content).tags(tags.map { Tag.parse(it) } + HashtagTags.from(text) + attachmentTags(attachments, sensitive) + viaTag())))
     }
 
+    private fun previewTag(noPreview: Boolean): List<Tag> = if (noPreview) listOf(Tag.parse(NoPreview.TAG)) else emptyList()
+
     private fun attachmentTags(attachments: List<NoteAttachment>, sensitive: Boolean): List<Tag> =
         NoteAttachment.tags(attachments, sensitive).map { Tag.parse(it) }
 
-    /** First normal relay that is connected; rust-nostr keeps no "seen on" relays, so connected stands in for "knows the note". */
+    /**
+     * First normal relay that is connected; rust-nostr keeps no "seen on" relays, so connected stands in for "knows the note".
+     * The hint goes into public events: a hidden service, a LAN, loopback or `.local` relay (or plain ws) would only leak the
+     * user's setup and help no one, so only a public wss relay is named, else none.
+     */
     private suspend fun relayHint(): String? {
         val connected = engine.connectedNormalRelayUrls()
-        return engine.relayUrls().firstOrNull { it in connected && !RelayHosts.isOnionHost(it) }
+        return engine.relayUrls().firstOrNull { it in connected && !RelayHosts.isOnionHost(it) && hintAllowed(it) }
     }
 
     override suspend fun profile(json: String): PublishResult = engine.signAndPublish(EventBuilder(Kind(0u), json))
@@ -135,7 +145,7 @@ class NostrPublishRepository(
         return engine.signAndSend(EventBuilder.repost(target, null).tags(viaTag()))
     }
 
-    override suspend fun comment(text: String, article: Note, parent: Note?, attachments: List<NoteAttachment>, sensitive: Boolean): PublishResult {
+    override suspend fun comment(text: String, article: Note, parent: Note?, attachments: List<NoteAttachment>, sensitive: Boolean, noPreview: Boolean): PublishResult {
         val ref = requireNotNull(article.addressRef?.takeIf { article.kind == ARTICLE_KIND }) { "comment needs an article" }
         val root = listOf(listOf("A", ref.coordinate), listOf("E", article.id), listOf("K", ARTICLE_KIND.toString()), listOf("P", article.author))
         val scope = if (parent == null) {
@@ -146,7 +156,7 @@ class NostrPublishRepository(
         }
         val mentions = MentionTags.pubkeys(text).map { listOf("p", it) }
         return engine.signAndSend(
-            withPow(EventBuilder(Kind(COMMENT_KIND.toUShort()), NoteAttachment.content(text, attachments)).tags((scope + mentions).distinct().map { Tag.parse(it) } + HashtagTags.from(text) + attachmentTags(attachments, sensitive) + viaTag())),
+            withPow(EventBuilder(Kind(COMMENT_KIND.toUShort()), NoteAttachment.content(text, attachments)).tags((scope + mentions).distinct().map { Tag.parse(it) } + HashtagTags.from(text) + attachmentTags(attachments, sensitive) + previewTag(noPreview) + viaTag())),
         )
     }
 
@@ -170,7 +180,7 @@ class NostrPublishRepository(
 
     override suspend fun noteLink(note: Note): String {
         val connected = engine.connectedNormalRelayUrls()
-        val hints = engine.relayUrls().filter { it in connected && !RelayHosts.isOnionHost(it) }.take(2)
+        val hints = engine.relayUrls().filter { it in connected && !RelayHosts.isOnionHost(it) && hintAllowed(it) }.take(2)
         return Nip19Event(EventId.parse(note.id), PublicKey.parse(note.author), Kind(1u), hints.map { RelayUrl.parse(it) }).toNostrUri()
     }
 

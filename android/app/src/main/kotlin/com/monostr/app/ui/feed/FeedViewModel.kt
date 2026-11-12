@@ -174,6 +174,8 @@ class FeedController(
     private val reopened: Flow<Unit> = emptyFlow(),
     /** Whether anything may leave now; open only in tests. */
     private val sendGate: SendGate = SendGate.OPEN,
+    /** See [scheduleLateRetry]; null = off (tests that count walks), the session passes [LATE_RETRY_MS]. */
+    private val lateRetryMs: Long? = null,
 ) {
     val names: StateFlow<Map<String, String>> get() = mentions.names
     private val _state = MutableStateFlow(FeedUiState())
@@ -203,6 +205,14 @@ class FeedController(
             profiles.updates.collect { byKey ->
                 allAncestors.replaceAll { _, ui -> ui.withProfiles(byKey) }
                 _state.update { s -> s.mapAll { ui -> ui.withProfiles(byKey) } }
+            }
+        }
+        // owner 2026-11-12: a bare repost showed «not available» until the list was read again, although its original had
+        // come meanwhile; the cards whose original arrived are swapped in place, the flags stay
+        // one failing swap (a profile read) must not end the collector for the screen's life (review 2026-11-12)
+        scope.launch {
+            feed.repostOriginals.collect { found ->
+                try { swapFoundOriginals(found) } catch (e: CancellationException) { throw e } catch (_: Exception) {}
             }
         }
         if (snapshot != null) scope.launch { showSnapshot(snapshot) }
@@ -463,7 +473,27 @@ class FeedController(
                 // a retry signal or refresh that came in while this job held the entries walks them once more
                 val again = ids.filter { retryAgain.remove(it) }
                 if (again.isNotEmpty()) resolveChains(_state.value.notes.filter { it.note.id in again })
+                else scheduleLateRetry(ids)
             }
+        }
+    }
+
+    /** Entries whose missing ancestor was asked again once after [LATE_RETRY_MS]. */
+    private val lateRetried = HashSet<String>()
+
+    /**
+     * Owner 2026-11-12 (Reza's reply to T-W-Rabbit): an ancestor whose author has no relay list lives only on the own
+     * relays; when the one holding it (relay.primal.net over Tor) was still connecting, the chain stayed «unavailable»
+     * until a network change or refresh. Entries of [ids] that still miss an ancestor are walked once more, later.
+     */
+    private fun scheduleLateRetry(ids: List<String>) {
+        val wait = lateRetryMs ?: return
+        val s = _state.value
+        val late = ids.filter { id -> s.chains[id]?.ancestors?.any { it !in allAncestors && it !in s.articles } == true && lateRetried.add(id) }
+        if (late.isEmpty()) return
+        scope.launch {
+            delay(wait)
+            resolveChains(_state.value.notes.filter { it.note.id in late })
         }
     }
 
@@ -622,6 +652,17 @@ class FeedController(
      * profiles are queued in the repository and arrive through [ProfileRepository.updates] (collected in [start]):
      * a page waiting for the relays' profiles took seconds on a cold start (Pixel, 2026-10-19).
      */
+    private suspend fun swapFoundOriginals(found: Set<String>) {
+        val s = _state.value
+        val stale = (s.notes + s.newAbove).map { it.note }.filter { it.isRepost && it.repostOf == null && it.repostedId in found }.distinctBy { it.id }
+        if (stale.isEmpty()) return
+        val byId = decorate(stale.mapNotNull { feed.reloaded(it) }).associateBy { it.note.id }
+        if (byId.isEmpty()) return
+        val swap = { ui: NoteUi -> byId[ui.note.id]?.let(::flagged) ?: ui }
+        // the original's author was not known before: mutes, deletions and the PoW filter are applied again (security review)
+        _state.update { st -> st.mapAll(swap).let { it.copy(notes = visibility.visible(it.notes), newAbove = visibility.visible(it.newAbove.map(swap))) } }
+    }
+
     private suspend fun decorate(notes: List<Note>): List<NoteUi> {
         val pubkeys = notes.flatMap { listOfNotNull(it.author, it.repostOf?.author) }.distinct()
         val stored = profiles.local(pubkeys).associateBy { it.pubkey }
@@ -640,6 +681,8 @@ class FeedController(
         /** Older pages that follow on their own while the proof of work filter leaves fewer than [FILL_TARGET] notes. */
         const val FILL_PAGES = 3
         const val FILL_TARGET = 10
+        /** When an entry with a missing ancestor is walked once more (relays still connecting over Tor have come by then). */
+        const val LATE_RETRY_MS = 45_000L
     }
 }
 
@@ -663,6 +706,7 @@ fun Ready.listFeed(factory: TipSheetFactory, source: FeedSource.Authors, scope: 
     forgetMisses = { locator?.forget(notify = false) },
     reopened = engine.reopened,
     sendGate = sendGate,
+    lateRetryMs = FeedController.LATE_RETRY_MS,
 )
 
 @HiltViewModel
@@ -670,7 +714,7 @@ class FeedViewModel @Inject constructor(session: NostrSession, private val facto
     private val ready = session.requireReady()
     val decorations = factory.decorations(viewModelScope)
     val bookmarks = BookmarkActions(ready.bookmarks, viewModelScope, background = ready.engine.backgroundScope, sendGate = ready.sendGate)
-    val controller = FeedController(ready.feed, ready.profiles, ready.publish, decorations, bookmarks, ready.counts, viewModelScope, conversations = ready.conversations, mentions = MentionResolver(ready.profiles, viewModelScope, Dispatchers.Default), followChanges = ready.follows.changes, deletions = ready.deletions, visibility = ready.visibility, afterDelete = ready.afterNoteDelete, own = ready.ownReactions, mute = ready.mute, muteScope = ready.engine.backgroundScope, snapshot = ready.feedSnapshot, forgetMisses = { ready.locator?.forget(notify = false) }, onFirstFresh = { ready.startupGate.open("feed fresh page") }, reopened = ready.engine.reopened, sendGate = ready.sendGate)
+    val controller = FeedController(ready.feed, ready.profiles, ready.publish, decorations, bookmarks, ready.counts, viewModelScope, conversations = ready.conversations, mentions = MentionResolver(ready.profiles, viewModelScope, Dispatchers.Default), followChanges = ready.follows.changes, deletions = ready.deletions, visibility = ready.visibility, afterDelete = ready.afterNoteDelete, own = ready.ownReactions, mute = ready.mute, muteScope = ready.engine.backgroundScope, snapshot = ready.feedSnapshot, forgetMisses = { ready.locator?.forget(notify = false) }, onFirstFresh = { ready.startupGate.open("feed fresh page") }, reopened = ready.engine.reopened, sendGate = ready.sendGate, lateRetryMs = FeedController.LATE_RETRY_MS)
     val deletions = ready.deletions
     val menu = ready.noteMenu(delete = controller::delete, mute = controller::mute)
 

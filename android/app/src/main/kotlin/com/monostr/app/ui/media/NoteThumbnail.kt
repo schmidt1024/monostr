@@ -25,13 +25,17 @@ import com.monostr.app.ui.theme.PlainShapes
 import com.monostr.nostr.model.Note
 import com.monostr.nostr.model.NoteMedia
 
-/** What a thumbnail of [note] shows: its first picture, or the poster of its first video; null without either. */
+/**
+ * What a thumbnail of [note] shows: its first picture or video poster, else the frame derived from its first video (spec
+ * 2026-11-12, only then: a picture costs no extraction); null without media.
+ */
 object Thumbnails {
-    data class Source(val url: String, val blurhash: String?, val video: Boolean)
+    /** [model] is what Coil loads: a URL or a [com.monostr.app.media.VideoFrame]. */
+    data class Source(val model: Any, val blurhash: String?, val video: Boolean)
 
     fun source(note: Note): Source? {
-        val m = note.media.firstOrNull { it.kind == NoteMedia.Kind.IMAGE || it.poster != null } ?: return null
-        return if (m.kind == NoteMedia.Kind.IMAGE) Source(m.url, m.blurhash, video = false) else Source(m.poster!!, m.blurhash, video = true)
+        val m = note.media.firstOrNull { it.kind == NoteMedia.Kind.IMAGE || it.poster != null } ?: note.media.firstOrNull() ?: return null
+        return Source(MediaModels.cell(m), m.blurhash, video = m.kind == NoteMedia.Kind.VIDEO)
     }
 }
 
@@ -55,7 +59,7 @@ fun NoteThumbnail(note: Note, size: Dp = 48.dp) {
             if (covered) Icon(Icons.Filled.VisibilityOff, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
         } else {
             AsyncImage(
-                model = source.url, contentDescription = null, contentScale = ContentScale.Crop,
+                model = source.model, contentDescription = null, contentScale = ContentScale.Crop,
                 placeholder = placeholder?.let { BitmapPainter(it) }, modifier = Modifier.fillMaxSize(),
             )
         }

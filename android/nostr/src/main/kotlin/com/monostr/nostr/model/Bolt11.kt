@@ -17,6 +17,8 @@ data class LightningInvoice(
     /** Seconds after [timestamp]; BOLT11's default is one hour. */
     val expiry: Long,
     val description: String?,
+    /** Tag `h`: SHA-256 of the long description, hex; NIP-57 binds a zap receipt's request to its invoice with it. */
+    val descriptionHash: String? = null,
 ) {
     enum class Network { MAINNET, TESTNET, SIGNET, REGTEST }
 
@@ -37,6 +39,9 @@ object Bolt11 {
     /** Tag types, as their bech32 character's value. */
     private const val TAG_DESCRIPTION = 13 // 'd'
     private const val TAG_EXPIRY = 6 // 'x'
+    private const val TAG_DESCRIPTION_HASH = 23 // 'h'
+    /** 256 bits in 5-bit words. */
+    private const val HASH_WORDS = 52
     /** No real invoice is longer; protects the decoder from a megabyte of bech32 characters. */
     private const val MAX_LENGTH = 7089
 
@@ -86,6 +91,7 @@ object Bolt11 {
         for (i in 0 until TIMESTAMP_WORDS) timestamp = (timestamp shl 5) or data[i].toLong()
         var expiry = DEFAULT_EXPIRY
         var description: String? = null
+        var descriptionHash: String? = null
         var i = TIMESTAMP_WORDS
         while (i + 3 <= data.size) {
             val type = data[i]
@@ -95,11 +101,12 @@ object Bolt11 {
             val field = data.copyOfRange(start, start + len)
             when (type) {
                 TAG_DESCRIPTION -> if (description == null) description = toBytes(field)?.toString(Charsets.UTF_8)
+                TAG_DESCRIPTION_HASH -> if (descriptionHash == null && len == HASH_WORDS) descriptionHash = toBytes(field)?.takeIf { it.size == 32 }?.joinToString("") { "%02x".format(it) }
                 TAG_EXPIRY -> if (len in 1..12) expiry = field.fold(0L) { acc, w -> (acc shl 5) or w.toLong() }
             }
             i = start + len
         }
-        return LightningInvoice(s, network, amountMsat, timestamp, expiry, description?.trim()?.takeIf { it.isNotEmpty() })
+        return LightningInvoice(s, network, amountMsat, timestamp, expiry, description?.trim()?.takeIf { it.isNotEmpty() }, descriptionHash)
     }
 
     /** `lnbc`, `lntb`, `lntbs`, `lnbcrt` and what follows them (the amount). */

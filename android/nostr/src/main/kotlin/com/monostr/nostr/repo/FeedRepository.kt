@@ -1,5 +1,6 @@
 package com.monostr.nostr.repo
 
+import kotlinx.coroutines.flow.emptyFlow
 import com.monostr.nostr.NostrEngine
 import com.monostr.nostr.RefreshGate
 import com.monostr.nostr.model.AddressableEvent
@@ -36,6 +37,10 @@ import rust.nostr.sdk.Timestamp
 
 /** Home feed and per-author timelines. */
 interface FeedRepository {
+    /** Backlog 60 / owner 2026-11-12: ids of reposted originals that arrived after their list was read (a bare kind 6 showed «not available»). */
+    val repostOriginals: Flow<Set<String>> get() = emptyFlow()
+    /** [repost] (a kind 6 whose original was missing) mapped again from the database; null while the original is still missing. */
+    suspend fun reloaded(repost: Note): Note? = null
     suspend fun follows(): List<String>
     /** Like [follows] but from the database only: never a relay fetch, empty when no kind 3 is stored (no network while typing). */
     suspend fun followsLocal(): List<String>
@@ -158,6 +163,13 @@ class NostrFeedRepository(
      */
     private val marks: com.monostr.nostr.SyncMarks? = null,
 ) : FeedRepository {
+    override val repostOriginals: Flow<Set<String>> get() = NoteLoader.found
+
+    override suspend fun reloaded(repost: Note): Note? {
+        val ev = runCatching { engine.eventById(repost.id) }.getOrNull() ?: return null
+        return NoteLoader.notes(engine, listOf(ev)).firstOrNull()?.takeIf { it.repostOf != null }
+    }
+
     private val pubkey = requireNotNull(engine.pubkey) { "feed needs a logged-in user" }
     /** When the deletion requests of an author set (hashed, see [deletionKey]) were last fetched for the newest page. */
     private val deletionsAnswered = java.util.concurrent.ConcurrentHashMap<String, Long>()
@@ -629,16 +641,28 @@ internal object NoteLoader {
         return events.filterNot { it.second.id in withdrawn }.mapNotNull { (_, ev) -> NoteMapper.note(ev) { id -> referenced[id] } }
     }
 
+    private val _found = kotlinx.coroutines.flow.MutableSharedFlow<Set<String>>(extraBufferCapacity = 16)
+    /** Originals [askMissing] found: the lists that showed «not available» swap in their cards. */
+    val found: kotlinx.coroutines.flow.SharedFlow<Set<String>> = _found
+
     /** Ids [askMissing] asked this process (bounded: cleared when full). */
     private val asked: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
 
+    /** Ids a first ask did not find: asked once more on a later read, then left (review 2026-11-12). */
+    private val missedOnce: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
     private fun askMissing(engine: NostrEngine, ids: Collection<String>) {
         if (asked.size > ASKED_CAP) asked.clear()
+        if (missedOnce.size > ASKED_CAP) missedOnce.clear()
         val fresh = ids.filter { it.matches(HEX64_ID) && asked.add(it) }
         if (fresh.isEmpty()) return
         engine.backgroundScope.launch {
             fresh.chunked(DELETION_IDS_CHUNK).forEach { chunk ->
                 quietly { engine.fetch(Filter().ids(chunk.map { EventId.parse(it) }), REPOST_FETCH_TIMEOUT, Exit.AllIds(chunk.toSet())) }
+                val got = chunk.filter { id -> runCatching { engine.eventById(id) }.getOrNull() != null }
+                // asked while the relays were still connecting (Tor) finds nothing: the next read of a list asks once more
+                chunk.filter { it !in got && missedOnce.add(it) }.forEach { asked.remove(it) }
+                if (got.isNotEmpty()) _found.emit(got.toSet())
             }
         }
     }

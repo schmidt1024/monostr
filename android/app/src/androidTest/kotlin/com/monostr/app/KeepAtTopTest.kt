@@ -6,7 +6,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Text
+import android.view.View
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.snapshots.Snapshot
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.ViewRootForTest
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -29,7 +33,10 @@ class KeepAtTopTest {
 
     private val rows = mutableStateOf((1..30).map { "old $it" })
 
+    private lateinit var view: View
+
     private fun show() = rule.setContent {
+        view = LocalView.current
         val state = rememberLazyListState()
         KeepAtTop(state, rows.value.firstOrNull())
         LazyColumn(state = state, modifier = Modifier.fillMaxSize().testTag("list")) {
@@ -41,6 +48,25 @@ class KeepAtTopTest {
     fun atTheTopANewFirstRowIsShown() {
         show()
         rule.runOnIdle { rows.value = listOf("new 1") + rows.value }
+        rule.onNodeWithText("new 1").assertIsDisplayed()
+    }
+
+    /**
+     * The root cause of the flaky run above (69 of 120 failed on 2026-11-07): the rows are read inside the list's
+     * content lambda, so a layout pass can measure the new first row before the composition that runs KeepAtTop; the
+     * key anchor then already stands at index 1. Forced here: frames held, one layout pass, then the frames.
+     */
+    @Test
+    fun aLayoutBeforeTheCompositionStillShowsTheNewFirstRow() {
+        show()
+        rule.waitForIdle()
+        rule.mainClock.autoAdvance = false
+        rule.runOnUiThread {
+            rows.value = listOf("new 1") + rows.value
+            Snapshot.sendApplyNotifications()
+            (view as ViewRootForTest).measureAndLayoutForTest()
+        }
+        rule.mainClock.autoAdvance = true
         rule.onNodeWithText("new 1").assertIsDisplayed()
     }
 

@@ -1326,7 +1326,7 @@ class NostrEngine private constructor(
         val kind = event.kind().asU16().toInt()
         val set = snapshot()
         val all = targetsWithout(set, readOnly)
-        wake(set.parsed, needed = all)
+        wakeForSend(set, all) // a delete or withdraw must not hang on a stuck wake either (review 2026-11-12)
         val connected = connectedOnceSettled(all)
         val (ready, skipped) = all.partition { it.toString().trimEnd('/') in connected }
         val notSent = skipped.associate { it.toString() to NOT_CONNECTED }
@@ -1541,22 +1541,44 @@ class NostrEngine private constructor(
     private suspend fun send(event: Event): PublishResult = try {
         val set = snapshot()
         val all = targetsWithout(set, readOnly)
-        wake(set.parsed, needed = all)
+        val t0 = System.nanoTime()
+        if (PerfTrace.enabled) PerfTrace.mark("send ${event.kind().asU16()} begin, targets=${all.size}")
+        val woke = wakeForSend(set, all)
+        if (PerfTrace.enabled) PerfTrace.mark("send ${event.kind().asU16()} woke ${(System.nanoTime() - t0) / 1_000_000}ms${if (woke) "" else " (gave up)"}")
         // A relay that is not connected only makes the publish wait for its timeout (about 10 s) and
         // fails anyway: leave it out while another relay is there. With none connected the event goes
         // to all of them as before, and the caller gets rust-nostr's own failure per relay.
-        val connected = connectedOnceSettled(all)
+        // 2026-11-12: only a replaceable event waits for a relay still connecting (its newest version must reach every
+        // relay); anything else goes to the connected ones at once, and [deliverLater] brings it to the others
+        val kind = event.kind().asU16().toInt()
+        val connected = if (replaceable(kind)) connectedOnceSettled(all) else connectedNow(all).ifEmpty { connectedOnceSettled(all) }
         val (ready, skipped) = all.partition { it.toString().trimEnd('/') in connected }
         val targets = if (ready.isEmpty()) all else ready
+        if (PerfTrace.enabled) PerfTrace.mark("send ${event.kind().asU16()} settled ${(System.nanoTime() - t0) / 1_000_000}ms, ready=${ready.size} skipped=${skipped.map { it.toString() }}")
         val sendStart = System.nanoTime()
         val (ok, failed) = sendEach(targets, event)
         if (PerfTrace.enabled) PerfTrace.mark("send kind ${event.kind().asU16()} ${(System.nanoTime() - sendStart) / 1_000_000}ms, ${ok.size} ok, failed=$failed")
         val notSent = if (ready.isEmpty()) emptyMap() else skipped.associate { it.toString() to NOT_CONNECTED }
+        if (ready.isNotEmpty()) deliverLater(event, skipped)
         PublishResult(event.id().toHex(), event.kind().asU16().toInt(), ok, failed + notSent).also { logFailures(it) }
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
         PublishResult(event.id().toHex(), event.kind().asU16().toInt(), emptyList(), mapOf("*" to (e.message ?: "send failed"))).also { logFailures(it) }
+    }
+
+    /**
+     * 2026-11-12 (Pixel, a note with a picture stuck on «Sending…» for minutes, the last mark «begin»): the wake a return
+     * to the app starts (picker, Amber) held [wakeMutex] and did not come back. A send waits for its own wake at most
+     * [SEND_WAKE_WAIT] and goes on with what is connected; the wake runs on, the next one waits for it as before.
+     * False when it gave up.
+     */
+    private suspend fun wakeForSend(set: RelaySet, needed: List<RelayUrl>): Boolean {
+        val waking = scope.async { wake(set.parsed, needed = needed) }
+        // on [ffiDispatcher]: real time also under a test's virtual clock, which would skip the wait while sockets work
+        val woke = withContext(ffiDispatcher) { withTimeoutOrNull(SEND_WAKE_WAIT.toMillis()) { waking.await() } } != null
+        if (!woke) waking.cancel()
+        return woke
     }
 
     /**
@@ -1585,9 +1607,10 @@ class NostrEngine private constructor(
         val failed = LinkedHashMap<String, String>()
         var deadline = 0L
         while (ok.size + failed.size < targets.size) {
-            val next = if (deadline == 0L) answers.receive()
+            val next = if (deadline == 0L) withContext(ffiDispatcher) { withTimeoutOrNull(FIRST_ANSWER_WAIT.toMillis()) { answers.receive() } } ?: break
             else withTimeoutOrNull(((deadline - System.nanoTime()) / 1_000_000).coerceAtLeast(0)) { answers.receive() } ?: break
             val error = next.second
+            if (PerfTrace.enabled) PerfTrace.mark("send answer ${next.first} ${error ?: "OK"}")
             if (error == null) {
                 ok += next.first
                 if (deadline == 0L) deadline = System.nanoTime() + OK_GRACE.toNanos()
@@ -1607,6 +1630,42 @@ class NostrEngine private constructor(
      */
     private suspend fun connectedOnceSettled(targets: List<RelayUrl>): Set<String> =
         settledStates(targets).filterValues { it == RelayStatus.CONNECTED.name }.keys
+
+    /** The relays of [targets] connected right now, without waiting. */
+    private suspend fun connectedNow(targets: List<RelayUrl>): Set<String> {
+        val wanted = targets.map { it.toString().trimEnd('/') }.toSet()
+        return ffi { snapshot().pool.filterKeys { it in wanted }.filterValues { it.status().name == RelayStatus.CONNECTED.name }.keys }
+    }
+
+    /**
+     * 2026-11-12 (owner: on Tor nos.lol and nostr.mom are mostly still connecting): [relays] were left out of a send because
+     * they were not connected; each gets [event] once it connects, for [LATE_DELIVERY] at most. Stops when the event is no
+     * longer stored (withdrawn, or a replaceable one superseded) or the engine closes; a relay removed from the pool is dropped.
+     */
+    private fun deliverLater(event: Event, relays: List<RelayUrl>) {
+        if (relays.isEmpty()) return
+        val id = event.id().toHex()
+        scope.launch {
+            val left = relays.map { it.toString().trimEnd('/') }.toMutableSet()
+            val deadline = System.nanoTime() + LATE_DELIVERY.toNanos()
+            while (left.isNotEmpty() && System.nanoTime() < deadline) {
+                delay(LATE_DELIVERY_POLL_MS)
+                if (closing) return@launch
+                if (!route.value) continue
+                val states = ffi { snapshot().pool.filterKeys { it in left }.mapValues { (_, relay) -> relay.status().name } }
+                left.retainAll(states.keys)
+                val now = states.filterValues { it == RelayStatus.CONNECTED.name }.keys
+                if (now.isEmpty()) continue
+                // the store is read only when a relay is there to get the event (perf review 2026-11-12: every poll read it)
+                if (runCatching { eventById(id) }.getOrNull() == null) return@launch
+                for (key in now) {
+                    left -= key
+                    launch { ignoringErrors { ffi { client.sendEventTo(listOf(RelayUrl.parse(key)), event) } } }
+                    if (PerfTrace.enabled) PerfTrace.mark("send late ${event.kind().asU16()} to $key")
+                }
+            }
+        }
+    }
 
     /**
      * [targets] without the relays whose connection failed (DISCONNECTED, TERMINATED, SLEEPING): rust-nostr 0.44 keeps
@@ -1682,8 +1741,12 @@ class NostrEngine private constructor(
         val neededKeys = if (needed === targets) wanted else needed.map { it.toString().trimEnd('/') }.toSet()
         // a network change racing logout: no relay is renewed or connected while (or after) close() shuts the client down
         if (wanted.isEmpty() || neededKeys.isEmpty() || closing || !route.value) return
+        val t0 = System.nanoTime()
+        fun ms() = (System.nanoTime() - t0) / 1_000_000
+        if (PerfTrace.enabled && wakeMutex.isLocked) PerfTrace.mark("wake waits for another wake, force=$force")
         wakeMutex.withLock {
             if (closing || !route.value) return
+            if (PerfTrace.enabled) PerfTrace.mark("wake locked ${ms()}ms, force=$force")
             ffi {
                 val pool = snapshot().pool
                 val mine = pool.filterKeys { it in wanted }.values
@@ -1696,14 +1759,18 @@ class NostrEngine private constructor(
                 // a relay waiting for its next retry ignores a connect request: end that wait first
                 // (one that is connecting right now is left alone, unless forced)
                 val lost = mine.filter { it.status().name in LOST }
+                if (PerfTrace.enabled) PerfTrace.mark("wake ${ms()}ms: lost=${lost.size}/${mine.size} ${mine.map { it.status().name.take(4) }}")
+                poolProbe?.invoke("waking")
                 // From here on the caller's cancellation has to wait (at most RECONNECT_WAIT): a relay whose
                 // retry wait was ended has no retry of its own until connect() hands it back to the pool,
                 // and a tryConnect dropped half way leaves the relay stuck in CONNECTING for good.
                 withContext(NonCancellable) {
                     if (force) renew(mine.filter { it.status().name !in LOST }, held)
                     lost.forEach { runCatching { it.disconnect() } }
+                    if (PerfTrace.enabled) PerfTrace.mark("wake ${ms()}ms: disconnected the lost ones")
                     try {
                         dial { ignoringErrors { client.tryConnect(RECONNECT_WAIT) } }
+                        if (PerfTrace.enabled) PerfTrace.mark("wake ${ms()}ms: tryConnect back")
                         // unlike the pool's own reconnect, tryConnect does not ask the relay's subscriptions
                         // again (they are still stored in the relay)
                         for (relay in lost) {
@@ -1720,6 +1787,7 @@ class NostrEngine private constructor(
                         }
                     } finally {
                         dial { runCatching { client.connect() } }
+                        if (PerfTrace.enabled) PerfTrace.mark("wake ${ms()}ms: done")
                     }
                 }
             }
@@ -1867,8 +1935,20 @@ class NostrEngine private constructor(
         internal val EARLY_EXIT_CAP: Duration? = Duration.ofSeconds(5)
         /** How long a publish waits for lost relay connections to come back before it sends. */
         private val RECONNECT_WAIT: Duration = Duration.ofSeconds(5)
+
+        /** How long a send waits for its wake ([RECONNECT_WAIT] and a little): longer, and a wake that hangs holds the send up with it. */
+        internal val SEND_WAKE_WAIT: Duration = RECONNECT_WAIT.plusSeconds(2)
+
+        /** How long a send waits for the first relay to answer at all; then every relay not heard from counts as [NO_ANSWER]. */
+        internal val FIRST_ANSWER_WAIT: Duration = Duration.ofSeconds(30)
         /** How long a publish waits for a relay that is setting its connection up right now. */
         private val CONNECT_GRACE: Duration = Duration.ofSeconds(2)
+        /** How long [deliverLater] waits for a left-out relay to connect. */
+        private val LATE_DELIVERY: Duration = Duration.ofMinutes(3)
+        private const val LATE_DELIVERY_POLL_MS = 3_000L
+
+        /** NIP-01 replaceable and addressable kinds: only the newest version counts, so a send waits for every relay. */
+        internal fun replaceable(kind: Int): Boolean = kind == 0 || kind == 3 || kind in 10_000..19_999 || kind in 30_000..39_999
         private const val CONNECT_POLL_MS = 50L
         private const val REACHABLE_POLL_MS = 100L
         /** Three failed attempts: rust-nostr retries after 10 s, then longer, so a relay rests about half a minute after the start. */

@@ -116,6 +116,20 @@ class FollowCountsRepositoryTest {
     }
 
     @Test
+    fun `follows you comes from the profile's own list, nothing else is asked`() = runTest {
+        val me = "d".repeat(64)
+        val e = engine()
+        e.save(contacts(me, "e".repeat(64), at = 10))
+        SilentWsRelay().use { silent ->
+            val yes = NostrFollowCountsRepository(e, countRelays = emptyList(), indexRelays = listOf(silent.url), timeout = Duration.ofSeconds(5), now = { 10L * 86_400 }, viewer = me)
+            assertEquals(true, withContext(Dispatchers.Default) { withTimeout(1_500) { yes.counts(pk).first() } }.followsYou)
+            val no = NostrFollowCountsRepository(e, countRelays = emptyList(), indexRelays = listOf(silent.url), timeout = Duration.ofSeconds(5), now = { 10L * 86_400 }, viewer = "f".repeat(64))
+            assertEquals(false, withContext(Dispatchers.Default) { withTimeout(1_500) { no.counts(pk).first() } }.followsYou)
+        }
+        e.close()
+    }
+
+    @Test
     fun `a stored list shows its following at once, also when it is old and the index relay is slow`() = runTest {
         // backlog 41: the followers came at once, the following only after the index relays' timeout
         val e = engine()

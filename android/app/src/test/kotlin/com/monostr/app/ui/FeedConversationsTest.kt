@@ -25,6 +25,8 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import com.monostr.nostr.model.NoteCounts
 import org.junit.jupiter.api.Test
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class FeedConversationsTest {
@@ -42,9 +44,10 @@ class FeedConversationsTest {
         muted: StateFlow<Set<String>> = MutableStateFlow(emptySet()),
         tips: FakeTips = FakeTips(),
         counts: FakeCounts = FakeCounts(),
+        lateRetryMs: Long? = null,
     ) = FeedController(
         feed, profiles, FakePublish(), decorations(tips), BookmarkActions(FakeBookmarks(), eager()), counts, eager(),
-        conversations = conversations, visibility = NoteVisibility(NoteDeletions(), muted),
+        conversations = conversations, visibility = NoteVisibility(NoteDeletions(), muted), lateRetryMs = lateRetryMs,
     )
 
     @Test
@@ -55,6 +58,26 @@ class FeedConversationsTest {
         c.start(); advanceUntilIdle()
         assertEquals(ChainUi(listOf(root.id), cut = false), c.state.value.chains[reply.id])
         assertEquals(root, c.state.value.ancestors[root.id]?.note)
+    }
+
+    @Test
+    fun `a missing ancestor is asked once more later and then shown`() = runTest {
+        // owner 2026-11-12: the parent lived only on a relay still connecting over Tor when the chain was first walked
+        val feed = FakeFeed().apply { current = listOf(reply) }
+        val convs = FakeConversations(mapOf(reply.id to Chain(listOf(Slot.Unavailable(root.id)), cut = false)))
+        val c = controller(feed, conversations = convs, lateRetryMs = FeedController.LATE_RETRY_MS)
+        c.start(); runCurrent()
+        assertNull(c.state.value.ancestors[root.id])
+        val asked = convs.calls.size
+        convs.chains = mapOf(reply.id to Chain(listOf(Slot.Shown(root)), cut = false))
+        advanceTimeBy(FeedController.LATE_RETRY_MS + 1); runCurrent()
+        assertEquals(root, c.state.value.ancestors[root.id]?.note)
+        // once only: no further rounds for that entry
+        val after = convs.calls.size
+        convs.chains = mapOf(reply.id to Chain(listOf(Slot.Unavailable(root.id)), cut = false))
+        advanceTimeBy(FeedController.LATE_RETRY_MS * 3); runCurrent()
+        assertTrue(after > asked)
+        assertEquals(after, convs.calls.size)
     }
 
     @Test

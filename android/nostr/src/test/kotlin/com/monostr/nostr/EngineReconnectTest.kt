@@ -130,7 +130,7 @@ class EngineReconnectTest {
     }
 
     @Test
-    fun `a relay that is still connecting is waited for, not skipped`() = runTest {
+    fun `a relay that is still connecting is waited for by a replaceable event, not skipped`() = runTest {
         // back from the background one relay is often there already while the others are in their handshake:
         // a replaceable event (follow list, profile, payment info) must not end up on that one relay only
         SilentWsRelay(acceptEvents = true).use { good ->
@@ -139,9 +139,31 @@ class EngineReconnectTest {
                 try {
                     e.connect()
                     assertTrue(awaitTrue { e.connectedRelayUrls().isNotEmpty() })
-                    val result = e.signAndPublish(EventBuilder.textNote("both relays get it"))
+                    val result = e.signAndPublish(EventBuilder(Kind(0u), "{\"name\":\"both relays get it\"}"))
                     assertTrue(result.successRelays.any { it.contains(":${slow.port}") }, "sent to ${result.successRelays}, failed ${result.failedRelays}")
                     assertTrue(result.successRelays.any { it.contains(":${good.port}") })
+                } finally {
+                    e.close()
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `a note does not wait for a relay still connecting, that relay gets it once connected`() = runTest {
+        // owner 2026-11-12: over Tor nos.lol and nostr.mom are mostly still connecting; every send waited 2 s for them
+        SilentWsRelay(acceptEvents = true).use { good ->
+            SilentWsRelay(acceptEvents = true, handshakeDelayMs = 1_500).use { slow ->
+                val e = NostrEngine.create(dir.resolve("lmdb").toString(), LocalSigner(sk), listOf(good.url, slow.url))
+                try {
+                    e.connect()
+                    assertTrue(awaitTrue { e.connectedRelayUrls().isNotEmpty() })
+                    val started = System.currentTimeMillis()
+                    val result = withContext(Dispatchers.Default) { e.signAndSend(EventBuilder.textNote("late but there")) }
+                    val took = System.currentTimeMillis() - started
+                    assertTrue(result.successRelays.any { it.contains(":${good.port}") }, "$result")
+                    assertTrue(took < 1_000, "the note waited for the connecting relay: $took ms")
+                    assertTrue(awaitTrue(15_000) { slow.events.any { it.contains("late but there") } }, "the left-out relay never got the note")
                 } finally {
                     e.close()
                 }

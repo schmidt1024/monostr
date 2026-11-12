@@ -26,6 +26,7 @@
     <string name="relay_not_connected">not connected</string>
     <string name="relay_needs_tor">needs Tor</string>
     <string name="relay_resting">unreachable, tried again every 10 minutes</string>
+    <string name="relay_sheet_manage">Manage relays</string>
     <string name="relay_last_seen">last connected: %1$s</string>
     <string name="relay_never_seen">never connected yet</string>
     <string name="relays_none_found">No relay list published yet. Other apps and the tip watcher find you through it. Before you publish, add the relays that hold your older notes.</string>
@@ -84,6 +85,7 @@
     <string name="media_tap_to_show">Tap to show</string>
     <string name="media_tap_to_load">Tap to load pictures</string>
     <string name="media_failed">Picture could not be loaded</string>
+    <string name="media_tor_blocked">Site blocks Tor</string>
     <string name="media_video">Play video</string>
     <string name="media_viewer_close">Close</string>
     <string name="media_viewer_position" translatable="false">%1$d/%2$d</string>
@@ -148,6 +150,7 @@
     <string name="profile_title_self">My profile</string>
     <string name="profile_error_load">Profile could not be loaded</string>
     <string name="profile_copy_npub">Copy npub</string>
+    <string name="profile_follows_you">Follows you</string>
     <string name="note_replying_one">Replying to %1$s</string>
     <string name="note_replying_two">Replying to %1$s and %2$s</string>
     <plurals name="note_replying_more">
@@ -196,6 +199,7 @@
     <string name="tip_open_wallet_again">Open wallet again</string>
     <string name="tip_sent">Wallet opened. The tip is waiting for the watcher\'s confirmation.</string>
     <string name="tip_error_amount">Invalid amount (e.g. 0.005)</string>
+    <string name="tip_payto_title">Send Monero to %1$s</string>
     <string name="tip_payto_title_plain">Send Monero</string>
     <string name="tip_payto_note">Goes to their address, not to this note. No confirmation: Monostr can\'t see whether you paid.</string>
     <string name="tip_payto_profile">No confirmation: Monostr can\'t see whether you paid.</string>
@@ -508,8 +512,11 @@
     <string name="bookmarks_error_load">Bookmarks could not be loaded</string>
     <string name="note_ref_label">note</string>
     <string name="quote_missing">Note not found</string>
-    <string name="quote_gone">Note no longer on the relays</string>
+    <string name="quote_gone">Note not found</string>
     <string name="mute_quote_placeholder">Note from a muted account</string>
+    <string name="quote_zap_title">⚡ Lightning zap · %s sats</string>
+    <string name="quote_zap_from_to">from %1$s to %2$s</string>
+    <string name="quote_zap_to">to %s</string>
     <string name="address_ref_label">event</string>
     <string name="address_type_article">Article</string>
     <string name="address_type_live">Live</string>

@@ -9,10 +9,16 @@ import android.app.ActivityManager
 import android.app.Application
 import android.os.Process
 import android.os.SystemClock
+import com.monostr.app.media.VideoFrameExtractor
+import com.monostr.app.media.VideoFrameFetcher
+import com.monostr.app.media.VideoFrameKeyer
+import com.monostr.app.media.VideoFrameStore
 import com.monostr.app.work.BackgroundCheckWorker
 import com.monostr.app.work.StartQueue
 import com.monostr.nostr.PerfTrace
 import com.monostr.app.net.TorSwitchStore
+import com.monostr.app.media.StaleMediaCheck
+import com.monostr.app.media.StaleMediaListener
 import com.monostr.app.net.currentProcessName
 import com.monostr.app.net.isTorProcessName
 import com.monostr.nostr.net.NetworkGate
@@ -32,12 +38,38 @@ class MonostrApp : Application(), SingletonImageLoader.Factory {
     /** Lazy: building a client is not for the main thread at start; the loader asks for it with the first picture. */
     @Inject lateinit var http: dagger.Lazy<okhttp3.OkHttpClient>
 
+    /** Lazy as [http]: read only once the first picture loads. */
+    @Inject lateinit var uiSettings: dagger.Lazy<com.monostr.app.data.UiSettingsStore>
+    @Volatile private var uploadServer: String? = null
+    private val pictureScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     /**
      * No service loader: coil-gif would register itself and every avatar, banner and thumbnail would animate without end.
      * Only a note's GIF cell and the viewer ask for animation, per request (see GifImage).
+     * The listener drops pictures our media hosts no longer have (see StaleMediaCheck, owner 2026-11-12).
      */
-    override fun newImageLoader(context: PlatformContext): ImageLoader =
-        ImageLoader.Builder(context).serviceLoaderEnabled(false).components { add(OkHttpNetworkFetcherFactory(callFactory = { http.get() })) }.build()
+    override fun newImageLoader(context: PlatformContext): ImageLoader {
+        pictureScope.launch { uiSettings.get().mediaServer.collect { uploadServer = it } }
+        lateinit var loader: ImageLoader
+        val check = StaleMediaCheck(
+            pictureScope,
+            origins = { StaleMediaCheck.ownOrigins(uploadServer) },
+            status = { url -> StaleMediaCheck.headStatus(http.get(), url) },
+            evict = { url, diskKey -> StaleMediaCheck.evictFrom(loader, url, diskKey) },
+        )
+        // builder and client on one line: NoBareClientsTest reads them so
+        loader = ImageLoader.Builder(context).serviceLoaderEnabled(false).components { add(OkHttpNetworkFetcherFactory(callFactory = { http.get() })); addVideoFrames() }
+            .eventListener(StaleMediaListener(check)).build()
+        return loader
+    }
+
+    /** Spec 2026-11-12: a video without a poster gets one from its first frame, read through the same gated client. */
+    private val videoFrames by lazy { VideoFrameExtractor({ http.get() }, VideoFrameStore(java.io.File(cacheDir, "video_frames"))) }
+
+    private fun coil3.ComponentRegistry.Builder.addVideoFrames() {
+        add(VideoFrameFetcher.Factory { videoFrames })
+        add(VideoFrameKeyer())
+    }
 
     override fun onCreate() {
         super.onCreate()

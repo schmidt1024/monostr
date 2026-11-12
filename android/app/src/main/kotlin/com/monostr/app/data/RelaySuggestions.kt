@@ -10,10 +10,12 @@ object RelaySuggestions {
         RelaySuggestion("wss://nostr.xmr.rocks", "0.01"),
         RelaySuggestion("wss://nerostr.xmr.rocks", "0.01"),
         RelaySuggestion("wss://xmr.ithurtswhenip.ee", "0.007"),
+        // owner 2026-11-12; NIP-11 admission 8e9 piconero, Nerostr v2, payment page on the same host
+        RelaySuggestion("wss://nerostr.hanshan.io", "0.008"),
     )
 
     /**
-     * The page where a paid Monero relay takes the payment that adds an npub to its write list (all four run
+     * The page where a paid Monero relay takes the payment that adds an npub to its write list (all of them run
      * Nerostr, the page is the relay's host over https); null for any other relay. Launch feedback 2026-10-09.
      */
     fun signupUrl(relayUrl: String): String? {
