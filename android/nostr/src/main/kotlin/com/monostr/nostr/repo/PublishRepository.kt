@@ -1,5 +1,6 @@
 package com.monostr.nostr.repo
 
+import com.monostr.tips.Kinds
 import rust.nostr.sdk.Filter
 import com.monostr.nostr.ClientTag
 import com.monostr.nostr.NOTE_NOT_IN_DATABASE
@@ -35,10 +36,10 @@ interface PublishRepository {
     suspend fun react(note: Note, content: String): PublishResult
     suspend fun repost(note: Note): PublishResult
     /**
-     * NIP-22 comment (kind 1111) on the article [article] (a kind 30023 note): top level, or a reply to the comment
+     * NIP-22 comment (kind 1111) on [root], an article (kind 30023) or a poll (kind 1068): top level, or a reply to the comment
      * [parent]. Tags and attachments as in [reply].
      */
-    suspend fun comment(text: String, article: Note, parent: Note? = null, attachments: List<NoteAttachment> = emptyList(), sensitive: Boolean = false, noPreview: Boolean = false): PublishResult
+    suspend fun comment(text: String, root: Note, parent: Note? = null, attachments: List<NoteAttachment> = emptyList(), sensitive: Boolean = false, noPreview: Boolean = false): PublishResult
     /**
      * Unlike (kind 7) or undo repost (kind 6): a NIP-09 request naming every own event of [kind] that targets
      * [noteId]. Stored locally only once a relay accepted it, like [delete]. Null when the database holds none.
@@ -141,18 +142,21 @@ class NostrPublishRepository(
         val target = requireNotNull(engine.eventById(note.id)) { NOTE_NOT_IN_DATABASE }
         // NIP-18: a repost of anything but kind 1 is kind 16. An article can be far larger than a relay takes in one event
         // (relay.monostr.com: 64 KiB), so the content stays empty and the e and a tags carry a relay hint instead (final review I2)
-        articleTags(note, relayHint())?.let { return engine.signAndSend(EventBuilder(Kind(16u), "").tags(it.map { t -> Tag.parse(t) } + viaTag())) }
+        (articleTags(note, relayHint()) ?: pollTags(note, relayHint()))?.let { return engine.signAndSend(EventBuilder(Kind(16u), "").tags(it.map { t -> Tag.parse(t) } + viaTag())) }
         return engine.signAndSend(EventBuilder.repost(target, null).tags(viaTag()))
     }
 
-    override suspend fun comment(text: String, article: Note, parent: Note?, attachments: List<NoteAttachment>, sensitive: Boolean, noPreview: Boolean): PublishResult {
-        val ref = requireNotNull(article.addressRef?.takeIf { article.kind == ARTICLE_KIND }) { "comment needs an article" }
-        val root = listOf(listOf("A", ref.coordinate), listOf("E", article.id), listOf("K", ARTICLE_KIND.toString()), listOf("P", article.author))
+    override suspend fun comment(text: String, root: Note, parent: Note?, attachments: List<NoteAttachment>, sensitive: Boolean, noPreview: Boolean): PublishResult {
+        // an article is the root by its coordinate too (`A`); a poll (polls task 4) has no address, only its id
+        val ref = root.addressRef?.takeIf { root.kind == ARTICLE_KIND }
+        require(ref != null || root.kind == Kinds.POLL) { "comment needs an article or a poll" }
+        val rootKind = if (ref != null) ARTICLE_KIND else Kinds.POLL
+        val rootTags = listOfNotNull(ref?.let { listOf("A", it.coordinate) }, listOf("E", root.id), listOf("K", rootKind.toString()), listOf("P", root.author))
         val scope = if (parent == null) {
-            root + listOf(listOf("a", ref.coordinate), listOf("e", article.id), listOf("k", ARTICLE_KIND.toString()), listOf("p", article.author))
+            rootTags + listOfNotNull(ref?.let { listOf("a", it.coordinate) }, listOf("e", root.id), listOf("k", rootKind.toString()), listOf("p", root.author))
         } else {
             // the parent's own kind: a comment (1111) or an old-style kind 1 reply under the article (final review I6)
-            root + listOf(listOf("e", parent.id), listOf("k", parent.kind.toString()), listOf("p", parent.author))
+            rootTags + listOf(listOf("e", parent.id), listOf("k", parent.kind.toString()), listOf("p", parent.author))
         }
         val mentions = MentionTags.pubkeys(text).map { listOf("p", it) }
         return engine.signAndSend(
@@ -176,7 +180,7 @@ class NostrPublishRepository(
     }
 
     override suspend fun delete(note: Note): PublishResult =
-        engine.signAndPublishUnstored(EventBuilder(Kind(5u), "").tags(listOf(Tag.parse(listOf("e", note.id)), Tag.parse(listOf("k", "1")))))
+        engine.signAndPublishUnstored(EventBuilder(Kind(5u), "").tags(listOf(Tag.parse(listOf("e", note.id)), Tag.parse(listOf("k", note.kind.toString())))))
 
     override suspend fun noteLink(note: Note): String {
         val connected = engine.connectedNormalRelayUrls()
@@ -241,6 +245,15 @@ private const val COMMENT_KIND = 1111
 internal fun articleTags(note: Note, hint: String? = null): List<List<String>>? {
     val ref = note.addressRef?.takeIf { note.kind == ARTICLE_KIND } ?: return null
     return listOf(listOfNotNull("e", note.id, hint), listOfNotNull("a", ref.coordinate, hint), listOf("p", note.author), listOf("k", ARTICLE_KIND.toString()))
+}
+
+/**
+ * The tags of a repost of a poll (kind 16, empty content, polls task 4): `e` with the relay [hint], `p`, `k` = 1068.
+ * Null when [note] is no poll.
+ */
+internal fun pollTags(note: Note, hint: String? = null): List<List<String>>? {
+    if (note.kind != Kinds.POLL) return null
+    return listOf(listOfNotNull("e", note.id, hint), listOf("p", note.author), listOf("k", Kinds.POLL.toString()))
 }
 
 /** The content of a plain like (NIP-25). */

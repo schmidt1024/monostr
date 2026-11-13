@@ -245,7 +245,7 @@ class OwnEventsWriteOnlyTest {
         val own = event(1, "mine, from the read relay", at = 900u)
         val hers = event(1, "hers", at = 900u, by = alice)
         SilentWsRelay(answerEose = true).use { a ->
-            SilentWsRelay(serveFor = { if ("until" in it && "\"kinds\":[1,6]" in it.replace(" ", "")) listOf(own.asJson(), hers.asJson()) else emptyList() }).use { b ->
+            SilentWsRelay(serveFor = { if ("until" in it && "\"kinds\":[1,6,1068]" in it.replace(" ", "")) listOf(own.asJson(), hers.asJson()) else emptyList() }).use { b ->
                 val e = oneWay(a, b)
                 following(e).loadMore(FeedSource.Following, before = 1_000, limit = 20)
                 assertTrue(awaitTrue { a.asked(5) }, "own deletions asked: ${a.requests}")

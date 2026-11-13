@@ -1,0 +1,6 @@
+- Encuestas: vota en encuestas y crea las tuyas (2–4 opciones, hasta 7 días)
+- Las tarjetas de encuesta funcionan con lectores de pantalla
+- Una sola fila cuando alguien republica la misma nota dos veces
+- Las imágenes muestran su vista previa difuminada hasta que cargan
+- Moneda más pequeña al iniciar
+- Correcciones

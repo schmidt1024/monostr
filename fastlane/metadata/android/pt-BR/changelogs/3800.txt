@@ -1,0 +1,6 @@
+- Enquetes: vote em enquetes e crie as suas (2–4 opções, até 7 dias)
+- Cartões de enquete funcionam com leitores de tela
+- Uma só linha quando alguém republica a mesma nota duas vezes
+- Imagens mostram a prévia desfocada até carregar
+- Moeda menor ao iniciar
+- Correções

@@ -2,6 +2,7 @@
 <!--
   Owner 2026-11-12 (start variant C), Pixel: the Android 12+ splash draws an icon without background on a 288 dp canvas and cuts
   it to a 192 dp circle, so a full-bleed coin lost its ring and dots («the old M»). With 20 % inset on every side the coin is
-  0.6 × 288 ≈ 173 dp and sits wholly inside the circle. StartScreen uses the same size (START_COIN_DP).
+  0.6 × 288 ≈ 173 dp and sits wholly inside the circle. Owner 2026-11-13: «ziemlich gross, bitte dezenter» → 33.3 % inset,
+  0.334 × 288 ≈ 96 dp. StartScreen uses the same size (START_COIN).
 -->
-<inset xmlns:android="http://schemas.android.com/apk/res/android" android:drawable="@drawable/splash_coin_mark" android:inset="20%" />
+<inset xmlns:android="http://schemas.android.com/apk/res/android" android:drawable="@drawable/splash_coin_mark" android:inset="33.3%" />

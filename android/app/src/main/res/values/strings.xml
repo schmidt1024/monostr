@@ -911,4 +911,29 @@
     <string name="relay_remove_named">Remove %1$s</string>
     <string name="settings_chip_relays_spoken">%1$d of %2$d connected</string>
     <string name="settings_tip_amounts">Tip amounts</string>
+    <plurals name="poll_votes">
+        <item quantity="one">%1$d vote</item>
+        <item quantity="other">%1$d votes</item>
+    </plurals>
+    <string name="poll_left">%1$s left</string>
+    <string name="poll_final">Final results</string>
+    <string name="poll_multiple">Multiple choice</string>
+    <string name="poll_vote">Vote</string>
+    <string name="poll_all">All</string>
+    <string name="poll_following">Following</string>
+    <string name="poll_of_votes">%1$d of %2$d votes</string>
+    <string name="poll_public_title">Your vote is public</string>
+    <string name="poll_public_text">A vote is a signed note: anyone can see which option this account chose. It cannot be changed or taken back.</string>
+    <string name="poll_public_vote">Vote «%1$s»</string>
+    <string name="poll_vote_failed">Vote not sent. Check your connection.</string>
+    <string name="poll_your_vote">Your vote</string>
+    <string name="compose_poll">Poll</string>
+    <string name="poll_choice">Choice %d</string>
+    <string name="poll_choice_optional">Choice %d (optional)</string>
+    <string name="poll_add_choice">Add choice</string>
+    <string name="poll_length">Poll length</string>
+    <string name="poll_days">Days</string>
+    <string name="poll_hours">Hours</string>
+    <string name="poll_minutes">Minutes</string>
+    <string name="poll_remove">Remove poll</string>
 </resources>

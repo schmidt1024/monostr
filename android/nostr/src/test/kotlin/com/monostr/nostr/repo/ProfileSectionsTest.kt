@@ -86,7 +86,7 @@ class ProfileSectionsTest {
             val e = engine(relay)
             val hex = alice.publicKey().toHex()
             NostrFeedRepository(e).moreProfileNotes(hex, ProfileSection.POSTS, before = 5000)
-            val pages = relay.requests.filter { "\"kinds\":[1]" in it }
+            val pages = relay.requests.filter { "\"kinds\":[1,1068]" in it.replace(" ", "") }
             assertTrue(pages.any { "\"until\":5000" in it && hex in it }, "no author page below 5000: $pages")
             e.close()
         }
@@ -114,16 +114,18 @@ class ProfileSectionsTest {
             var clock = 1_000L
             val repo = NostrFeedRepository(e, now = { clock })
             val hex = alice.publicKey().toHex()
-            fun asked(kind: Int) = relay.requests.count { "\"kinds\":[$kind]" in it && hex in it }
+            fun asked(kind: Int) = relay.requests.count { "\"kinds\":[$kind]" in it.replace(" ", "") && hex in it }
+            // the posts page asks for notes and polls together (polls task 4)
+            fun askedPosts() = relay.requests.count { "\"kinds\":[1,1068]" in it.replace(" ", "") && hex in it }
             repo.profileNotes(hex, ProfileSection.POSTS)
             repo.profileNotes(hex, ProfileSection.REPLIES)
             repo.profileNotes(hex, ProfileSection.REPOSTS)
-            assertEquals(1, asked(1), "requests: ${relay.requests}")
+            assertEquals(1, askedPosts(), "requests: ${relay.requests}")
             assertEquals(1, asked(6))
             assertEquals(1, asked(5))
             clock += 61
             repo.profileNotes(hex, ProfileSection.POSTS)
-            assertEquals(2, asked(1))
+            assertEquals(2, askedPosts())
             e.close()
         }
     }

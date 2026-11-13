@@ -912,4 +912,29 @@
     <string name="relay_remove_named">Retirer %1$s</string>
     <string name="settings_chip_relays_spoken">%1$d sur %2$d connectés</string>
     <string name="settings_tip_amounts">Montants de pourboire</string>
+    <plurals name="poll_votes">
+        <item quantity="one">%1$d vote</item>
+        <item quantity="other">%1$d votes</item>
+    </plurals>
+    <string name="poll_left">encore %1$s</string>
+    <string name="poll_final">Résultats finaux</string>
+    <string name="poll_multiple">Choix multiple</string>
+    <string name="poll_vote">Voter</string>
+    <string name="poll_all">Tous</string>
+    <string name="poll_following">Abonnements</string>
+    <string name="poll_of_votes">%1$d sur %2$d votes</string>
+    <string name="poll_public_title">Ton vote est public</string>
+    <string name="poll_public_text">Un vote est une note signée : tout le monde peut voir quelle option ce compte a choisie. Il ne peut être ni modifié ni retiré.</string>
+    <string name="poll_public_vote">Voter «%1$s»</string>
+    <string name="poll_vote_failed">Vote non envoyé. Vérifie ta connexion.</string>
+    <string name="poll_your_vote">Ton vote</string>
+    <string name="compose_poll">Sondage</string>
+    <string name="poll_choice">Choix %d</string>
+    <string name="poll_choice_optional">Choix %d (facultatif)</string>
+    <string name="poll_add_choice">Ajouter un choix</string>
+    <string name="poll_length">Durée du sondage</string>
+    <string name="poll_days">Jours</string>
+    <string name="poll_hours">Heures</string>
+    <string name="poll_minutes">Minutes</string>
+    <string name="poll_remove">Supprimer le sondage</string>
 </resources>

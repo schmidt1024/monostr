@@ -187,6 +187,8 @@ class Ready(
     val dmStore: DmStore,
     val dmRelays: DmRelaysRepository,
     val quotes: QuoteRepository,
+    /** Spec 2026-11-12 polls: votes, own vote, new poll. */
+    val polls: com.monostr.nostr.repo.PollRepository,
     /** Spec 2026-10-29 naddr: the event behind a `nostr:naddr1…` card. */
     val addresses: AddressableRepository,
     /** Spec 2026-10-29 article reader: the replies under an article. */
@@ -810,6 +812,7 @@ class NostrSession @Inject constructor(
                 authorRelays = authorRelays,
                 dms = dms, dmStore = dmStore, dmRelays = dmRelays,
                 quotes = NostrQuoteRepository(engine, locator = locator, foreign = foreign),
+                polls = com.monostr.nostr.repo.NostrPollRepository(engine, powBits = { uiSettings.powBits.first() }, clientTag = { uiSettings.clientTag.first() }, foreign = foreign),
                 addresses = NostrAddressableRepository(engine, foreign = foreign, locator = locator),
                 articleReplies = com.monostr.nostr.repo.NostrArticleRepliesRepository(engine, foreign = foreign),
                 follows = follows,

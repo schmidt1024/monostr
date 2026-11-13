@@ -567,7 +567,7 @@ class FeedController(
         } else emptyList()
         val heldIds = held.mapTo(HashSet()) { it.note.id }
         val taken = if (held.isEmpty()) decorated else decorated.filterNot { it.note.id in heldIds }
-        _state.update { s -> s.copy(newAbove = if (held.isEmpty() && !live) emptyList() else visibility.visible((held + s.newAbove).distinctBy { it.note.id }.map(::flagged))) }
+        _state.update { s -> s.copy(newAbove = if (held.isEmpty() && !live) emptyList() else visibility.visible(Reposts.collapsed((held + s.newAbove).distinctBy { it.note.id }).map(::flagged))) }
         setNotes(loading = false, refreshing = refreshing) { s -> merge(taken, if (stale.isEmpty()) s.notes else s.notes.filterNot { it.note.id in stale }) }
         fillUp()
         val snap = snapshot ?: return
@@ -579,7 +579,7 @@ class FeedController(
     }
 
     private fun setNotes(loading: Boolean? = null, refreshing: Boolean? = null, f: (FeedUiState) -> List<NoteUi>) {
-        _state.update { s -> s.copy(notes = visibility.visible(f(s).map(::flagged)), loading = loading ?: s.loading, refreshing = refreshing ?: s.refreshing) }
+        _state.update { s -> s.copy(notes = visibility.visible(Reposts.collapsed(f(s)).map(::flagged)), loading = loading ?: s.loading, refreshing = refreshing ?: s.refreshing) }
         if (!firstNotesMarked && source == FeedSource.Following && _state.value.notes.isNotEmpty()) {
             firstNotesMarked = true
             PerfTrace.mark("feed first notes")

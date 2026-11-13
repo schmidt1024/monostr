@@ -1,5 +1,6 @@
 package com.monostr.nostr.repo
 
+import com.monostr.tips.Kinds
 import kotlinx.coroutines.flow.emptyFlow
 import com.monostr.nostr.NostrEngine
 import com.monostr.nostr.RefreshGate
@@ -79,7 +80,7 @@ interface FeedRepository {
 
 /** The tabs of a profile, like X: "Posts" the author's own root notes, "Replies" their replies, "Reposts" what they reposted. */
 enum class ProfileSection(internal val kinds: List<Int>) {
-    POSTS(listOf(1)),
+    POSTS(listOf(1, Kinds.POLL)),
     REPLIES(listOf(1)),
     REPOSTS(listOf(6)),
     /** Long-form articles; read through [FeedRepository.profileArticles], not as notes. */
@@ -110,8 +111,8 @@ internal const val COVER_LIMIT = 500
 
 private val HEX64 = Regex("[0-9a-f]{64}")
 
-/** The home feed's kinds: notes and reposts. */
-private val FEED_KINDS = listOf(1, 6)
+/** The home feed's kinds: notes, reposts and polls (kind 1068, polls task 4). */
+private val FEED_KINDS = listOf(1, 6, Kinds.POLL)
 
 /** A root note: neither a reply nor a repost of one (the profile's "Posts" section). */
 internal fun isRoot(note: Note): Boolean = !(note.isReply || note.repostOf?.isReply == true)
@@ -247,7 +248,7 @@ class NostrFeedRepository(
      * so that a withdrawn note leaves the local database. The database is never queried with this
      * filter: the requests would take places in the page.
      */
-    private fun liveFilter(authors: List<String>) = authorsFilter(authors, listOf(1, 6, 5))
+    private fun liveFilter(authors: List<String>) = authorsFilter(authors, listOf(1, 6, 5, Kinds.POLL))
 
     /**
      * Fetches a page of notes and, apart from it, the same authors' deletion requests. Two requests and
@@ -451,7 +452,7 @@ class NostrFeedRepository(
                     val kind = inc.json.kind
                     // any subscription's or fetch's event, not only this subscription's: rust-nostr reports an event once,
                     // under the subscription it came on first, so an overlapping one (notifications, a thread) may carry it
-                    (kind == 1 || kind == 6 || kind == 5) && inc.json.pubkey in wanted
+                    (kind == 1 || kind == 6 || kind == 5 || kind == Kinds.POLL) && inc.json.pubkey in wanted
                 }
                 .conflate()
                 .collect { emit(notes(source, limit)) }
@@ -481,12 +482,12 @@ class NostrFeedRepository(
         val authors = listOf(author)
         coroutineScope {
             val own = if (!engine.hasWriteOnly || !author.equals(pubkey, ignoreCase = true)) emptyList() else listOf(
-                async { quietly { engine.fetchWriteOnly(authorsFilter(listOf(pubkey), listOf(1)).limit(limit.toULong())) } },
+                async { quietly { engine.fetchWriteOnly(authorsFilter(listOf(pubkey), listOf(1, Kinds.POLL)).limit(limit.toULong())) } },
                 async { quietly { engine.fetchWriteOnly(authorsFilter(listOf(pubkey), listOf(6)).limit(limit.toULong())) } },
                 async { quietly { engine.fetchWriteOnly(ownDeletionsFilter()) } },
             )
             (listOf(
-                async { quietly { engine.fetch(authorsFilter(authors, listOf(1)).limit(limit.toULong())) } },
+                async { quietly { engine.fetch(authorsFilter(authors, listOf(1, Kinds.POLL)).limit(limit.toULong())) } },
                 async { quietly { engine.fetch(authorsFilter(authors, listOf(6)).limit(limit.toULong())) } },
                 async { fetchDeletions(authors, null) },
             ) + own).awaitAll()
@@ -506,7 +507,7 @@ class NostrFeedRepository(
         val kept = ArrayList<Note>()
         var before: Long? = null
         repeat(POSTS_ROUNDS) {
-            val decoded = engine.query(pageFilter(listOf(author), POSTS_SCAN, before, listOf(1))).map { it to NoteMapper.decoded(it) }
+            val decoded = engine.query(pageFilter(listOf(author), POSTS_SCAN, before, listOf(1, Kinds.POLL))).map { it to NoteMapper.decoded(it) }
             if (decoded.isEmpty()) return@withContext kept.sortedByDescending { it.createdAt }
             val roots = decoded.filter { (_, ev) -> Nip10.parse(ev.tags).replyToId == null }.sortedByDescending { it.second.createdAt }
             val taken = roots.take(limit - kept.size + POSTS_SLACK)

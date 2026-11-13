@@ -270,7 +270,7 @@ class NostrThreadRepository(
 
     private suspend fun rootAuthor(s: ThreadState): String? {
         if (s.rootId == s.focused.id) return s.focused.author
-        val stored = if (HEX_ID.matches(s.rootId)) engine.queryDecoded(idsFilter(listOf(s.rootId))).firstOrNull { it.kind == 1 || it.kind == Kinds.COMMENT }?.pubkey else null
+        val stored = if (HEX_ID.matches(s.rootId)) engine.queryDecoded(idsFilter(listOf(s.rootId))).firstOrNull { it.kind == 1 || it.kind == Kinds.POLL || it.kind == Kinds.COMMENT }?.pubkey else null
         return stored ?: s.focused.rootHint?.author
     }
 

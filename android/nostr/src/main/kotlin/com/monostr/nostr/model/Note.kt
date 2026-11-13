@@ -54,7 +54,12 @@ data class Note(
     val language: String? = null,
     /** NIP-13 difficulty the note can claim, see [Nip13.effectiveBits]; 0 in snapshots written before it existed. */
     val powBits: Int = 0,
+    /** NIP-88 poll of a kind 1068, null for anything else and for a 1068 without two usable options. */
+    val poll: Poll? = null,
+    /** Polls task 4: the poll a NIP-22 comment (kind 1111) sits under, from its root tags `E` and `K` = 1068; null for any other note. */
+    val pollRootId: String? = null,
 ) {
+    val isPoll: Boolean get() = poll != null
     val isReply: Boolean get() = replyToId != null
     val isRepost: Boolean get() = kind == 6
     /** Spec 3.1: NIP-36 tag, `t` tag nsfw, or `#nsfw` in the text. */

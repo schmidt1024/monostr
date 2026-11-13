@@ -107,7 +107,7 @@ class DeletionFetchTest {
             val repo = NostrFeedRepository(e)
             repo.refresh(limit = 50)
             val kinds = relay.requests.map { it.substringAfter("\"kinds\":[").substringBefore("]").split(",").map(String::trim).toSet() }
-            assertTrue(setOf("1", "6") in kinds, "no REQ for exactly kinds 1 and 6: ${relay.requests}")
+            assertTrue(setOf("1", "6", "1068") in kinds, "no REQ for exactly kinds 1, 6 and 1068: ${relay.requests}")
             assertTrue(setOf("5") in kinds, "no REQ for exactly kind 5: ${relay.requests}")
             assertEquals(setOf("note 1", "note 2", "note 3"), repo.notes().map { it.content }.toSet())
             e.close()

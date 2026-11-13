@@ -1,0 +1,6 @@
+- Sondages : votez et créez les vôtres (2 à 4 choix, jusqu’à 7 jours)
+- Les cartes de sondage fonctionnent avec les lecteurs d’écran
+- Une seule ligne quand quelqu’un republie deux fois la même note
+- Les images affichent leur aperçu flou jusqu’à leur chargement
+- Pièce plus petite au démarrage
+- Corrections

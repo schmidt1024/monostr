@@ -77,7 +77,7 @@ class FeedSourceTest {
             val filters: List<JsonObject> = relay.requests.flatMap { req -> Json.parseToJsonElement(req).jsonArray.drop(2).map { it.jsonObject } }
                 .filter { it["authors"] != null }
             fun kinds(f: JsonObject) = f["kinds"]?.jsonArray?.map { it.jsonPrimitive.int }?.toSet()
-            val noteFilters = filters.filter { kinds(it) == setOf(1, 6) }
+            val noteFilters = filters.filter { kinds(it) == setOf(1, 6, 1068) }
             val deletionFilters = filters.filter { kinds(it) == setOf(5) }
             assertEquals(3, noteFilters.size)
             assertEquals(3, deletionFilters.size)

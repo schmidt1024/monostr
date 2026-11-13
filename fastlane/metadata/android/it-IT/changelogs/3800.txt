@@ -1,0 +1,6 @@
+- Sondaggi: vota nei sondaggi e creane di tuoi (2–4 scelte, fino a 7 giorni)
+- Le schede dei sondaggi funzionano con i lettori di schermo
+- Una sola riga quando qualcuno ripubblica due volte la stessa nota
+- Le immagini mostrano l’anteprima sfocata finché non sono caricate
+- Moneta più piccola all’avvio
+- Correzioni

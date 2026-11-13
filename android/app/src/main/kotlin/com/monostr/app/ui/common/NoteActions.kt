@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.monostr.tips.Kinds
 
 /**
  * Like, repost and deletion for the note lists: like and repost mark the target optimistically,
@@ -59,8 +60,8 @@ class NoteActions(
         if (target.id in own.reposted.value) withdraw(target, repostKind(target), onResult)
         else act(target, repostKind(target), onResult) { publish.repost(target) }
 
-    /** A repost of an article is a generic repost (kind 16, NIP-18); of anything else kind 6. */
-    private fun repostKind(target: Note) = if (target.kind == 30023) 16 else 6
+    /** A repost of an article or a poll is a generic repost (kind 16, NIP-18, as [PublishRepository.repost] sends it); of anything else kind 6. */
+    private fun repostKind(target: Note) = if (target.kind == 30023 || target.kind == Kinds.POLL) 16 else 6
 
     /**
      * NIP-09 for the user's own reaction ([kind] 7) or repost (6) of [target]: unmarked at once, a request names

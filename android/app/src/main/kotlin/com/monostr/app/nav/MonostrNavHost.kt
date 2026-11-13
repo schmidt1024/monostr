@@ -40,6 +40,12 @@ import com.monostr.nostr.model.AddressRef
 import com.monostr.app.ui.common.AddressLoader
 import com.monostr.app.ui.common.LocalAddressLoader
 import com.monostr.app.ui.common.LocalQuoteLoader
+import com.monostr.app.ui.common.LocalPollLoader
+import com.monostr.app.ui.common.PollLoader
+import com.monostr.app.ui.common.PrefsPollSettings
+import com.monostr.app.data.monostrPrefs
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.monostr.app.ui.common.LocalNoteTranslator
 import com.monostr.app.ui.common.NoteTranslationViewModel
@@ -233,6 +239,12 @@ private fun LoggedInNavHost(
     val quoteLoader = remember(ready) { QuoteLoader(ready.quotes, ready.profiles, ready.muted) }
     val addressLoader = remember(ready) { AddressLoader(ready.addresses, ready.profiles, ready.muted) }
     val linkPreviewLoader = remember(ready) { LinkPreviewLoader(media.linkPreviews, ready.muted, ready.mute.state) }
+    // polls spec 2026-11-12: votes fetched once per poll while this account is logged in; fetches and votes run in the host's scope
+    val pollScope = rememberCoroutineScope()
+    val appContext = LocalContext.current.applicationContext
+    val pollLoader = remember(ready) {
+        PollLoader(ready.polls, ready.follows.followed(), ready.muted, ready.pubkey, PrefsPollSettings(appContext.monostrPrefs), { System.currentTimeMillis() / 1000 }, pollScope)
+    }
     var introShown by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(showIntro) {
         if (showIntro == true && !introShown) {
@@ -273,7 +285,7 @@ private fun LoggedInNavHost(
             onSettings = { translation.dismissConsent(); nav.navigate(Routes.settings(SettingsSection.TRANSLATION)) },
         )
     }
-    CompositionLocalProvider(LocalMediaSettings provides mediaSettings, LocalQuoteLoader provides quoteLoader, LocalAddressLoader provides addressLoader, LocalOpenArticle provides openArticle, LocalOpenList provides openList, LocalLinkPreviewLoader provides linkPreviewLoader, LocalPreviewImageLoader provides media.previewImages.loader, LocalNoteTranslator provides translation) {
+    CompositionLocalProvider(LocalMediaSettings provides mediaSettings, LocalQuoteLoader provides quoteLoader, LocalPollLoader provides pollLoader, LocalAddressLoader provides addressLoader, LocalOpenArticle provides openArticle, LocalOpenList provides openList, LocalLinkPreviewLoader provides linkPreviewLoader, LocalPreviewImageLoader provides media.previewImages.loader, LocalNoteTranslator provides translation) {
         NavHost(navController = nav, startDestination = Routes.FEED) {
             composable(Routes.FEED) {
                 FeedScreen(

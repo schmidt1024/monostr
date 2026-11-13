@@ -1,0 +1,6 @@
+- Umfragen: in Umfragen abstimmen und eigene erstellen (2–4 Antworten, bis 7 Tage)
+- Umfrage-Karten funktionieren mit Screenreadern
+- Eine Zeile, wenn jemand dieselbe Note zweimal repostet
+- Bilder zeigen ihre unscharfe Vorschau, bis sie geladen sind
+- Kleinere Münze beim Start
+- Korrekturen

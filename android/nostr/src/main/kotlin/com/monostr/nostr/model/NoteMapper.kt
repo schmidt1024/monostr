@@ -20,7 +20,7 @@ object NoteMapper {
         return when (event.kind) {
             // a NIP-22 comment reads like a note: its lowercase `e` is the parent; directly under an article that `e` (when there is one)
             // names the article's version, so [articleParent] marks the comment and the walks stop there instead of loading it
-            1, Kinds.COMMENT -> {
+            1, Kinds.COMMENT, Kinds.POLL -> {
                 val refs = Nip10.parse(tags)
                 val parsed = NoteMedia.parse(event.content, tags, withQuote)
                 Note(
@@ -42,6 +42,8 @@ object NoteMapper {
                     invoice = parsed.invoice,
                     articleParent = if (event.kind == Kinds.COMMENT) articleParent(tags) else null,
                     language = LanguageLabel.of(tags),
+                    poll = if (event.kind == Kinds.POLL) Polls.parse(tags) else null,
+                    pollRootId = if (event.kind == Kinds.COMMENT) pollRoot(tags) else null,
                 )
             }
             6 -> {
@@ -72,6 +74,12 @@ object NoteMapper {
         val parentCoordinate = tags.firstOrNull { it.size >= 2 && it[0] == "a" }?.get(1)
         val parentKind = tags.firstOrNull { it.size >= 2 && it[0] == "k" }?.get(1)
         return ref.takeIf { parentCoordinate == root || (parentCoordinate == null && parentKind == Article.KIND.toString()) }
+    }
+
+    /** The id in the root tag `E` of a NIP-22 comment whose root kind `K` is a poll (1068); null otherwise or for a malformed id. */
+    internal fun pollRoot(tags: List<List<String>>): String? {
+        if (tags.firstOrNull { it.size >= 2 && it[0] == "K" }?.get(1) != Kinds.POLL.toString()) return null
+        return tags.firstOrNull { it.size >= 2 && it[0] == "E" }?.get(1)?.takeIf { it.length == 64 && it.all { c -> c in '0'..'9' || c in 'a'..'f' } }
     }
 
     /** The first `client` tag's name, trimmed and cut to [Note.CLIENT_MAX]; null for no tag, a bare tag or a blank name. */

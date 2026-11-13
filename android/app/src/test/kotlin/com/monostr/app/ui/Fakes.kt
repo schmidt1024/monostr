@@ -309,7 +309,7 @@ class FakePublish(var relaysOk: Boolean = true, private val fail: Boolean = fals
     override suspend fun profile(json: String) = result(0).also { calls += "profile"; profileJson += json }
     override suspend fun react(note: Note, content: String) = result(7).also { calls += if (content == "+") "like:${note.id.take(4)}" else "react:${note.id.take(4)}:$content" }
     override suspend fun repost(note: Note) = result(6).also { calls += "repost:${note.id.take(4)}" }
-    override suspend fun comment(text: String, article: Note, parent: Note?, attachments: List<NoteAttachment>, sensitive: Boolean, noPreview: Boolean) = result(1111).also { calls += "comment:${article.id.take(4)}:${parent?.id?.take(4) ?: "-"}:$text" }
+    override suspend fun comment(text: String, root: Note, parent: Note?, attachments: List<NoteAttachment>, sensitive: Boolean, noPreview: Boolean) = result(1111).also { calls += "comment:${root.id.take(4)}:${parent?.id?.take(4) ?: "-"}:$text" }
     val withdrawKinds = ArrayList<Int>()
     override suspend fun withdraw(noteId: String, kind: Int) = result(5).also { withdrawKinds += kind; calls += (if (kind == 7) "unlike:" else "unrepost:") + noteId.take(4) }
     override suspend fun delete(note: Note) = result(5).also { calls += "delete:${note.id.take(4)}" }

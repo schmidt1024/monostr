@@ -506,6 +506,13 @@ class NostrEngine private constructor(
     /** Currently configured relay URLs without the temporary search relays, trailing slash normalised: the cached set, no FFI (spec wave 2 B1). */
     suspend fun relayUrls(): List<String> = snapshot().normal
 
+    /** [relayUrls] without the read-only relays: where the user's own events go (what [signAndPublish] targets). No FFI. */
+    suspend fun writeRelayUrls(): List<String> {
+        val left = readOnly
+        val normal = snapshot().normal
+        return if (left.isEmpty()) normal else normal.filter { it !in left }
+    }
+
     /** Normalised URLs the user only writes to: nothing here reads from them, except [fetchWriteOnly] (spec 2026-11-05). Empty by default. */
     @Volatile private var writeOnly: Set<String> = emptySet()
 

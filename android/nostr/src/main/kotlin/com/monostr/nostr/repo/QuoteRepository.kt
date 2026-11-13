@@ -1,5 +1,6 @@
 package com.monostr.nostr.repo
 
+import com.monostr.tips.Kinds
 import com.monostr.tips.RelayHosts
 import com.monostr.nostr.Exit
 import com.monostr.nostr.NostrEngine
@@ -152,7 +153,7 @@ class NostrQuoteRepository(
             }
             val relays = (held + engine.readRelayUrls()).distinct()
             if (relays.isNotEmpty()) {
-                quietly { engine.fetchFrom(relays, Filter().kinds(listOf(Kind(1u), Kind(ZapReceipts.RECEIPT.toUShort()))).id(EventId.parse(id)).limit(1u), timeout, attach = false, exit = Exit.AllIds(setOf(id))) }
+                quietly { engine.fetchFrom(relays, Filter().kinds(listOf(Kind(1u), Kind(Kinds.POLL.toUShort()), Kind(ZapReceipts.RECEIPT.toUShort()))).id(EventId.parse(id)).limit(1u), timeout, attach = false, exit = Exit.AllIds(setOf(id))) }
             }
         } finally {
             if (foreign != null) foreign.release(held) else engine.detachTemporary(held)
@@ -166,11 +167,11 @@ class NostrQuoteRepository(
         return QuoteResult.Missing
     }
 
-    /** A stored kind 1 note or kind 9735 zap receipt; a malformed receipt counts as not there. */
+    /** A stored kind 1 note, kind 1068 poll or kind 9735 zap receipt; a malformed receipt counts as not there. */
     private suspend fun local(id: String): QuoteResult? {
         val event = engine.eventById(id) ?: return null
         return when (event.kind().asU16().toInt()) {
-            1 -> event.takeIf { !Withdrawn.isWithdrawn(engine, it) }?.let { NoteMapper.note(it, withQuote = false) }?.let(QuoteResult::Found)
+            1, Kinds.POLL -> event.takeIf { !Withdrawn.isWithdrawn(engine, it) }?.let { NoteMapper.note(it, withQuote = false) }?.let(QuoteResult::Found)
             ZapReceipts.RECEIPT -> event.takeIf { !Withdrawn.isWithdrawn(engine, it) }?.let(ZapReceipts::parse)?.let(QuoteResult::Zap)
             else -> null
         }

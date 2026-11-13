@@ -12,4 +12,8 @@ object Kinds {
     const val COMMENT = 1111
     /** NIP-A3 payto: payment targets by type, here the Monero address without a watcher. */
     const val PAYTO = 10133
+    /** NIP-88 poll. */
+    const val POLL = 1068
+    /** NIP-88 poll response (a vote). */
+    const val POLL_RESPONSE = 1018
 }

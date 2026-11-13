@@ -1,5 +1,6 @@
 package com.monostr.nostr.repo
 
+import com.monostr.tips.Kinds
 import com.monostr.tips.RelayHosts
 import com.monostr.nostr.Exit
 import com.monostr.nostr.NostrEngine
@@ -148,7 +149,7 @@ class NostrAuthorRelaysRepository(
         var ids: Set<String> = emptySet()
         try {
             quietly {
-                val filter = Filter().kinds(listOf(Kind(1u), Kind(6u))).author(PublicKey.parse(pubkey)).limit(limit.toULong())
+                val filter = Filter().kinds(listOf(Kind(1u), Kind(6u), Kind(Kinds.POLL.toUShort()))).author(PublicKey.parse(pubkey)).limit(limit.toULong())
                 ids = engine.fetchFrom(relays, filter, notesFetchTimeout).map { it.id().toHex() }.toSet()
             }
         } finally {

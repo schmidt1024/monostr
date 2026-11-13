@@ -904,4 +904,29 @@
     <string name="relay_remove_named">%1$s kaldır</string>
     <string name="settings_chip_relays_spoken">%2$d röleden %1$d bağlı</string>
     <string name="settings_tip_amounts">Bahşiş tutarları</string>
+    <plurals name="poll_votes">
+        <item quantity="one">%1$d oy</item>
+        <item quantity="other">%1$d oy</item>
+    </plurals>
+    <string name="poll_left">%1$s kaldı</string>
+    <string name="poll_final">Kesin sonuçlar</string>
+    <string name="poll_multiple">Çoklu seçim</string>
+    <string name="poll_vote">Oy ver</string>
+    <string name="poll_all">Tümü</string>
+    <string name="poll_following">Takip edilenler</string>
+    <string name="poll_of_votes">%1$d / %2$d oy</string>
+    <string name="poll_public_title">Oyun herkese açık</string>
+    <string name="poll_public_text">Oy imzalı bir nottur: bu hesabın hangi seçeneği seçtiğini herkes görebilir. Değiştirilemez ve geri alınamaz.</string>
+    <string name="poll_public_vote">«%1$s» için oy ver</string>
+    <string name="poll_vote_failed">Oy gönderilmedi. Bağlantını kontrol et.</string>
+    <string name="poll_your_vote">Oyun</string>
+    <string name="compose_poll">Anket</string>
+    <string name="poll_choice">Seçenek %d</string>
+    <string name="poll_choice_optional">Seçenek %d (isteğe bağlı)</string>
+    <string name="poll_add_choice">Seçenek ekle</string>
+    <string name="poll_length">Anket süresi</string>
+    <string name="poll_days">Gün</string>
+    <string name="poll_hours">Saat</string>
+    <string name="poll_minutes">Dakika</string>
+    <string name="poll_remove">Anketi kaldır</string>
 </resources>

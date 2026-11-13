@@ -242,19 +242,25 @@ private fun MediaCell(
         .testTag("note-media-$tag-$index")
     Box(base, contentAlignment = Alignment.Center) {
         val source: Any? = MediaModels.cell(m)
+        // owner 2026-11-12: the 32x32 blurhash went through Coil as the placeholder and was drawn with the picture's own scale
+        // (Fit for most), a square with bars in a box of another shape. It lies under the picture now, always cropped to the
+        // whole cell, until the picture is there.
+        var loaded by remember(source) { mutableStateOf(false) }
+        if (placeholder != null && !placeholderOnly && source != null && !loaded) {
+            Image(placeholder, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        }
         when {
             placeholder != null && (placeholderOnly || source == null) -> Image(placeholder, contentDescription = m.alt, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             placeholderOnly || source == null -> Unit
             m.kind == NoteMedia.Kind.IMAGE && GifPlayback.isGif(m.url, m.mime) -> GifImage(
                 m.url, key = "$tag-$index", contentDescription = m.alt, contentScale = contentScale, alignment = alignment,
-                placeholder = remember(placeholder) { placeholder?.let { androidx.compose.ui.graphics.painter.BitmapPainter(it) } },
-                onSize = onSize, onError = { e -> failure = MediaFailures.of(e, torActive) },
+                placeholder = null,
+                onSize = { w, h -> loaded = true; onSize?.invoke(w, h) }, onError = { e -> failure = MediaFailures.of(e, torActive) },
             )
             // AsyncImage, not SubcomposeAsyncImage: no subcomposition per loading state in a scrolling list (Coil's advice)
             else -> AsyncImage(
                 model = source, contentDescription = m.alt, contentScale = contentScale, alignment = alignment, modifier = Modifier.fillMaxSize(),
-                placeholder = remember(placeholder) { placeholder?.let { androidx.compose.ui.graphics.painter.BitmapPainter(it) } },
-                onSuccess = { s -> onSize?.invoke(s.result.image.width, s.result.image.height) },
+                onSuccess = { s -> loaded = true; onSize?.invoke(s.result.image.width, s.result.image.height) },
                 onError = { e -> failure = MediaFailures.of(e.result.throwable, torActive) },
             )
         }

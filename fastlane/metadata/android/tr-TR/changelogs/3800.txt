@@ -1,0 +1,6 @@
+- Anketler: anketlerde oy ver ve kendi anketini oluştur (2–4 seçenek, 7 güne kadar)
+- Anket kartları ekran okuyucularla çalışır
+- Biri aynı notu iki kez yeniden paylaştığında tek satır
+- Görseller yüklenene kadar bulanık önizlemelerini gösterir
+- Başlangıçta daha küçük para
+- Düzeltmeler

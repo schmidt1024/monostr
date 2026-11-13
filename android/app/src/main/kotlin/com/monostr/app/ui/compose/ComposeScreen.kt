@@ -34,6 +34,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Poll
+import androidx.compose.ui.draw.rotate
 import androidx.compose.material.icons.outlined.VideoLibrary
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -107,6 +109,7 @@ import com.monostr.nostr.repo.AddressableRepository
 import com.monostr.nostr.model.NoteMedia
 import com.monostr.nostr.model.MentionTags
 import com.monostr.nostr.model.Profile
+import com.monostr.nostr.repo.PollRepository
 import com.monostr.nostr.repo.PublishRepository
 import com.monostr.nostr.repo.ThreadRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -162,15 +165,21 @@ data class ComposeUiState(
     val article: Note? = null,
     val articleTitle: String? = null,
     val articleUnresolved: Boolean = false,
+    /** Polls task 6: the poll being written, or null for a plain note. Not part of the stored draft: leaving the composer drops it. */
+    val poll: PollDraft? = null,
+    /** Polls task 6: only the plain new-note composer offers the poll tool; set by the controller. */
+    val pollOffered: Boolean = false,
 ) {
     /** Every picture is on the server: nothing uploading, nothing failed. */
     val attachmentsReady: Boolean get() = attachments.all { it.uploaded != null }
     /** Room for another picture, and the note is not frozen. */
-    val canAttach: Boolean get() = attachments.size < NoteMedia.MAX_ATTACH && !sending && !pendingResend
+    val canAttach: Boolean get() = attachments.size < NoteMedia.MAX_ATTACH && !sending && !pendingResend && poll == null
     /** Spec 2026-10-27 video §3: pictures, unless the note has its video. */
     val canAttachPictures: Boolean get() = canAttach && attachments.none { it.video }
     /** Spec 2026-10-27 video §3: one video, on a note without pictures. */
-    val canAttachVideo: Boolean get() = attachments.isEmpty() && !sending && !pendingResend
+    val canAttachVideo: Boolean get() = attachments.isEmpty() && !sending && !pendingResend && poll == null
+    /** Polls task 6: the poll tool, on a plain new note without pictures or video and without a poll yet. */
+    val canAddPoll: Boolean get() = pollOffered && poll == null && attachments.isEmpty() && !sending && !pendingResend
 }
 
 class ComposeController(
@@ -203,8 +212,10 @@ class ComposeController(
     private val addresses: AddressableRepository? = null,
     /** Whether anything may leave now; open only in tests. */
     private val sendGate: SendGate = SendGate.OPEN,
+    /** Polls task 6: creates the poll; null in tests without polls (then no poll tool). */
+    private val polls: PollRepository? = null,
 ) {
-    private val _state = MutableStateFlow(ComposeUiState())
+    private val _state = MutableStateFlow(ComposeUiState(pollOffered = polls != null && replyToId == null && quoteId == null && articleRef == null))
     val state: StateFlow<ComposeUiState> = _state.asStateFlow()
 
     /** The event stored by an offline send; while set, [send] re-sends it instead of signing a new note. */
@@ -225,6 +236,8 @@ class ComposeController(
     private var saveJob: Job? = null
     /** The SHA-256s the stored draft names, as last read or written: a failed leave-save must not delete them. */
     @Volatile private var stored: Set<String> = emptySet()
+    /** Polls task 4: the poll the answered comment sits under, once loaded; null when the target is no such comment or the poll did not load. */
+    @Volatile private var pollRoot: Note? = null
 
     fun start() {
         prefill?.takeIf { it.isNotEmpty() }?.let { p ->
@@ -247,8 +260,20 @@ class ComposeController(
         if (replyToId != null) scope.launch {
             try {
                 // spec perf2 C6: the reply target is one note; the thread's root, walk and replies are not needed for it
-                threads.note(replyToId)?.let { n -> _state.update { it.copy(replyTo = n) } }
-                if (_state.value.replyTo == null) {
+                val n = threads.note(replyToId)
+                // polls task 4: an answer to a comment under a poll stays a NIP-22 comment of that poll, when the poll loads.
+                // Resolved before replyTo is shown: the send waits for replyTo, so it never goes out as kind 1 meanwhile
+                n?.pollRootId?.let { rootId ->
+                    pollRoot = try {
+                        threads.note(rootId)?.takeIf { it.isPoll }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        null // the poll does not load: an ordinary reply, as when it is unknown
+                    }
+                }
+                n?.let { _state.update { s -> s.copy(replyTo = it) } }
+                if (n == null) {
                     _state.update { it.copy(replyUnresolved = true, error = uiText(R.string.compose_error_reply_target)) }
                 }
             } catch (e: CancellationException) {
@@ -299,7 +324,8 @@ class ComposeController(
         stored = draft?.attachments.orEmpty().mapTo(HashSet()) { it.sha256 }
         if (draft != null) {
             _state.update { s ->
-                if (s.attachments.isNotEmpty()) s // the user was faster than the disk: keep what is on screen
+                // the user was faster than the disk: keep what is on screen (pictures, or a poll, which takes none)
+                if (s.attachments.isNotEmpty() || s.poll != null) s
                 else {
                     // only the server copy is kept: the tile shows the uploaded picture, a local copy is long gone
                     val restored = draft.attachments.map { m -> Attachment(nextAttachmentId++, m.url, progress = 1f, uploaded = m, video = m.isVideo) }
@@ -574,6 +600,21 @@ class ComposeController(
         }
     }
 
+    /** Polls task 6: starts a poll under the text, if the tool is offered and nothing is attached. */
+    fun addPoll() = _state.update { if (it.canAddPoll) it.copy(poll = PollDraft(), error = null) else it }
+
+    /** Polls task 6: back to the plain note. */
+    fun removePoll() = _state.update { if (it.sending || it.pendingResend) it else it.copy(poll = null, error = null) }
+
+    /** Polls task 6: the text of choice [i], cut to 25 characters (the field refuses more). */
+    fun setChoice(i: Int, text: String) = changePoll { p -> if (i in p.choices.indices) p.copy(choices = p.choices.toMutableList().also { it[i] = PollDraft.limit(text) }) else p }
+
+    fun addChoice() = changePoll { p -> if (p.choices.size < PollDraft.MAX_CHOICES) p.copy(choices = p.choices + "") else p }
+
+    fun setLength(days: Int, hours: Int, minutes: Int) = changePoll { it.withLength(days, hours, minutes) }
+
+    private fun changePoll(change: (PollDraft) -> PollDraft) = _state.update { s -> if (s.sending || s.pendingResend) s else s.poll?.let { s.copy(poll = change(it)) } ?: s }
+
     /** [noPreview]: the link card was put away while writing (owner 2026-11-12): the note says so with [com.monostr.nostr.model.NoPreview]. */
     fun send(text: String, noPreview: Boolean = false) {
         if (_state.value.sending) return
@@ -581,6 +622,11 @@ class ComposeController(
         val attachments = _state.value.attachments
         if (attachments.any { it.uploaded == null }) {
             _state.update { it.copy(error = uiText(R.string.compose_error_uploads)) }
+            return
+        }
+        val poll = _state.value.poll
+        if (poll != null && (text.isBlank() || !poll.valid())) {
+            _state.update { it.copy(error = uiText(R.string.compose_error_empty)) }
             return
         }
         if (text.isBlank() && !quoting && attachments.isEmpty()) {
@@ -619,7 +665,12 @@ class ComposeController(
                 val sensitive = _state.value.sensitive
                 val result = when {
                     pending != null -> publish.resend(pending)
+                    // polls task 6: the end counts from the moment of sending
+                    poll != null -> checkNotNull(polls).create(text, poll.filled(), now() + poll.seconds, noPreview)
                     articleRef != null -> publish.comment(text, checkNotNull(_state.value.article), parent, media, sensitive, noPreview)
+                    // polls task 4: a reply to a poll is a comment (NIP-22), also one to a comment under it when the poll is known
+                    parent != null && parent.isPoll -> publish.comment(text, parent, null, media, sensitive, noPreview)
+                    parent != null && pollRoot != null -> publish.comment(text, checkNotNull(pollRoot), parent, media, sensitive, noPreview)
                     parent != null -> publish.reply(text, parent, media, sensitive, noPreview)
                     quoted != null -> publish.quote(text, quoted, media, sensitive)
                     else -> publish.post(text, media, sensitive, noPreview)
@@ -675,6 +726,7 @@ class ComposeViewModel @Inject constructor(
         commentParentId = handle["parent"],
         addresses = ready.addresses,
         sendGate = ready.sendGate,
+        polls = ready.polls,
     )
     val prefill: String? = handle["text"]
     /** The user's own picture beside the text, like X's editor (2026-10-30). */
@@ -756,6 +808,7 @@ fun ComposeScreen(onDone: () -> Unit, vm: ComposeViewModel = hiltViewModel()) {
     // the link whose card was put away with its X: the sent note then says «no card» too (owner 2026-11-12)
     var dismissedLink by rememberSaveable { mutableStateOf<String?>(null) }
     val canSend = !state.sending && (field.text.isNotBlank() || vm.quoteId != null || state.attachments.isNotEmpty()) &&
+        (state.poll?.let { it.valid() && field.text.isNotBlank() } ?: true) &&
         state.attachmentsReady && !state.replyUnresolved && !state.quoteUnresolved && !state.articleUnresolved
     // 2026-10-30, like X's editor: close left, a small «Post» pill right, the picture beside a frameless text, the tools above the keyboard
     Scaffold(
@@ -851,6 +904,14 @@ fun ComposeScreen(onDone: () -> Unit, vm: ComposeViewModel = hiltViewModel()) {
                 // spec 4.1: shown, not editable; taps on the card do nothing here
                 Box(Modifier.testTag("compose-quote")) { QuoteCard(id, hints = emptyList(), names = emptyMap(), onOpenNote = {}, onOpenProfile = {}) }
             }
+            state.poll?.let { poll ->
+                Spacer(Modifier.height(Spacing.m))
+                PollBlock(
+                    poll, enabled = !state.sending && !state.pendingResend,
+                    onChoice = vm.controller::setChoice, onAdd = vm.controller::addChoice,
+                    onLength = vm.controller::setLength, onRemove = vm.controller::removePoll,
+                )
+            }
             if (state.attachments.isNotEmpty()) {
                 Spacer(Modifier.height(Spacing.m))
                 AttachmentTiles(
@@ -889,6 +950,14 @@ fun ComposeScreen(onDone: () -> Unit, vm: ComposeViewModel = hiltViewModel()) {
                     modifier = Modifier.testTag("compose-attach-video"),
                 ) {
                     Icon(Icons.Outlined.VideoLibrary, contentDescription = stringResource(R.string.compose_add_video), tint = if (state.canAttachVideo) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f))
+                }
+                if (state.pollOffered) IconButton(
+                    onClick = vm.controller::addPoll,
+                    enabled = state.canAddPoll,
+                    modifier = Modifier.testTag("compose-poll-tool"),
+                ) {
+                    // rotated right: the bars grow from the left like the poll card's result bars (owner 2026-11-13)
+                    Icon(Icons.Outlined.Poll, contentDescription = stringResource(R.string.compose_poll), modifier = Modifier.rotate(90f), tint = if (state.canAddPoll) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f))
                 }
             }
             }

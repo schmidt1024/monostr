@@ -1,0 +1,6 @@
+- Polls: vote in polls and create your own (2–4 choices, up to 7 days)
+- Poll cards work with screen readers
+- One row when someone reposts the same note twice
+- Pictures show their blurred preview until they load
+- Smaller coin on the start screen
+- Fixes

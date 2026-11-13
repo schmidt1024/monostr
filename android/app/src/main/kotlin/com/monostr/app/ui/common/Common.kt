@@ -296,6 +296,8 @@ private fun ListNoteCard(
                         NoteText(text, onOpen = onOpen, onHashtag = onHashtag, onOpenProfile = onOpenProfile, onOpenNote = onOpenNote, names = names, collapsible = collapsed, stateKey = shown.id, modifier = Modifier.fillMaxWidth().testTag("note-text-$id8"))
                     }
                     NoteTranslateRow(translation, shown.id, belowText = true)
+                    // polls spec 2026-11-12: the options right under the text, before quote, invoice and media
+                    if (shown.isPoll) PollCard(shown, Modifier.padding(top = Spacing.xxs))
                     shown.quotedId?.let { qid ->
                         QuoteCard(qid, ForeignRule.quoteHints(shown.quoteRelays, foreign), names, onOpenNote = onOpenNote, onOpenProfile = onOpenProfile, onHashtag = onHashtag, modifier = Modifier.padding(top = Spacing.s), author = ForeignRule.quoteAuthor(shown.quoteAuthor, foreign), guesses = if (foreign) shown.mentionedPubkeys else emptyList())
                     }
@@ -399,6 +401,7 @@ private fun DetailNoteCard(
             NoteText(text, onOpen = onOpen, onHashtag = onHashtag, onOpenProfile = onOpenProfile, onOpenNote = onOpenNote, names = names, style = MaterialTheme.typography.bodyLarge, selectable = true, modifier = Modifier.fillMaxWidth().testTag("note-text-$id8"))
         }
         NoteTranslateRow(translation, shown.id, belowText = true)
+        if (shown.isPoll) PollCard(shown, Modifier.padding(top = Spacing.xs))
         shown.quotedId?.let { qid ->
             QuoteCard(qid, ForeignRule.quoteHints(shown.quoteRelays, foreign), names, onOpenNote = onOpenNote, onOpenProfile = onOpenProfile, onHashtag = onHashtag, modifier = Modifier.padding(top = Spacing.s), author = ForeignRule.quoteAuthor(shown.quoteAuthor, foreign), guesses = if (foreign) shown.mentionedPubkeys else emptyList())
         }

@@ -26,8 +26,8 @@ import kotlinx.coroutines.delay
 
 /** Spec 3: after this long without a session the start screen shows a spinner. */
 const val START_SPINNER_DELAY_MS = 1_500L
-/** The coin as the Android 12+ splash draws it: 288 dp canvas, 20 % inset on each side (res/drawable/splash_coin.xml). */
-private val START_COIN = 173.dp
+/** The coin as the Android 12+ splash draws it: 288 dp canvas, 33.3 % inset on each side (res/drawable/splash_coin.xml). */
+private val START_COIN = 96.dp
 
 /**
  * Spec 3, owner 2026-11-12 (start variant C): shown while the session restores ([com.monostr.app.session.SessionState.Loading]).

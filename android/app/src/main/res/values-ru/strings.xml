@@ -938,4 +938,31 @@
     <string name="relay_remove_named">Удалить %1$s</string>
     <string name="settings_chip_relays_spoken">подключено %1$d из %2$d</string>
     <string name="settings_tip_amounts">Суммы чаевых</string>
+    <plurals name="poll_votes">
+        <item quantity="one">%1$d голос</item>
+        <item quantity="few">%1$d голоса</item>
+        <item quantity="many">%1$d голосов</item>
+        <item quantity="other">%1$d голоса</item>
+    </plurals>
+    <string name="poll_left">осталось %1$s</string>
+    <string name="poll_final">Итоговые результаты</string>
+    <string name="poll_multiple">Несколько вариантов</string>
+    <string name="poll_vote">Голосовать</string>
+    <string name="poll_all">Все</string>
+    <string name="poll_following">Подписки</string>
+    <string name="poll_of_votes">%1$d из %2$d голосов</string>
+    <string name="poll_public_title">Ваш голос публичен</string>
+    <string name="poll_public_text">Голос — это подписанная заметка: любой может увидеть, какой вариант выбрал этот аккаунт. Его нельзя изменить или отозвать.</string>
+    <string name="poll_public_vote">Голосовать «%1$s»</string>
+    <string name="poll_vote_failed">Голос не отправлен. Проверьте подключение.</string>
+    <string name="poll_your_vote">Ваш голос</string>
+    <string name="compose_poll">Опрос</string>
+    <string name="poll_choice">Вариант %d</string>
+    <string name="poll_choice_optional">Вариант %d (необязательно)</string>
+    <string name="poll_add_choice">Добавить вариант</string>
+    <string name="poll_length">Длительность опроса</string>
+    <string name="poll_days">Дни</string>
+    <string name="poll_hours">Часы</string>
+    <string name="poll_minutes">Минуты</string>
+    <string name="poll_remove">Удалить опрос</string>
 </resources>
