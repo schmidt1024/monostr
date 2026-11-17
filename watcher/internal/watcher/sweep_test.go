@@ -442,3 +442,35 @@ func TestPendingRescanClampsToDaemonHeightAndRetriesOnce(t *testing.T) {
 		t.Fatal("pending rescan should be cleared after a successful retry")
 	}
 }
+
+// TestMigrateHookURLMovesLiveWebhooks: on the first start with a hook secret
+// every webhook still registered under the old URL is deleted and registered
+// again under the new one, once.
+func TestMigrateHookURLMovesLiveWebhooks(t *testing.T) {
+	e := newEnv(t, monero.Mainnet)
+	rpk := e.register(t, nostr.GeneratePrivateKey())
+	ev := intentEvent(t, nostr.GeneratePrivateKey(), rpk, "0123456789abcdef", 5, t0)
+	if err := e.svc.HandleIntent(context.Background(), ev); err != nil {
+		t.Fatal(err)
+	}
+	e.svc.cfg.HookURL = hookURL + "/s3cret"
+	if err := e.svc.MigrateHookURL(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(e.lws.deleted) != 1 || e.lws.deleted[0] != "event1" {
+		t.Fatalf("deleted %v", e.lws.deleted)
+	}
+	if len(e.lws.hooks) != 2 || !strings.Contains(e.lws.hooks[1], hookURL+"/s3cret") {
+		t.Fatalf("hooks %v", e.lws.hooks)
+	}
+	if row, _, _ := e.st.GetIntent(ev.ID); row.LWSEventID != "event2" {
+		t.Fatalf("webhook id %q", row.LWSEventID)
+	}
+	// a second start with the same URL changes nothing
+	if err := e.svc.MigrateHookURL(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(e.lws.hooks) != 2 || len(e.lws.deleted) != 1 {
+		t.Fatalf("migrated twice: %v %v", e.lws.hooks, e.lws.deleted)
+	}
+}

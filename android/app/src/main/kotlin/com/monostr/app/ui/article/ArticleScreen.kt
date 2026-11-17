@@ -306,6 +306,7 @@ private fun Reader(
             text = ArticleTextStyle(link, noteLabel, addressLabel, names, codeBg, invoiceLabel),
             actions = ArticleLinkActions(
                 onUrl = { runCatching { uriHandler.openUri(it) } },
+                onUrlAsk = { u -> runCatching { (uriHandler as? com.monostr.app.ui.common.GuardedUriHandler)?.openUriAsking(u) ?: uriHandler.openUri(u) } },
                 onHashtag = onHashtag,
                 onProfile = onOpenProfile,
                 onNote = onOpenThread,

@@ -14,7 +14,7 @@ const (
 
 // Version is the tip protocol version this watcher implements
 // (docs/protocol/monostr-tips.md).
-const Version = "0.5"
+const Version = "0.6"
 
 func isLowerHex(s string, n int) bool {
 	if len(s) != n {

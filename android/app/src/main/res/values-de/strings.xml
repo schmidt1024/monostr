@@ -144,6 +144,8 @@
     <string name="feed_new_note">Neue Note</string>
     <string name="feed_empty">Noch keine Notes. Folge jemandem oder schreib die erste.</string>
     <string name="feed_new_notes">Neue Notes</string>
+    <string name="feed_nothing_new">Keine neuen Notes</string>
+    <string name="feed_nothing_new_discover">Leute entdecken</string>
     <string name="feed_error_load">Feed konnte nicht geladen werden</string>
     <string name="feed_error_more">Weitere Notes konnten nicht geladen werden</string>
 
@@ -357,7 +359,7 @@
     <string name="link_preview_cd">Linkvorschau: %1$s, %2$s</string>
     <string name="link_preview_remove">Vorschau entfernen</string>
     <string name="settings_author_relays">Relays des Autors temporär verbinden</string>
-    <string name="settings_author_relays_hint">Notes werden auch von den eigenen Relays anderer Leute geholt: wenn du ein Profil öffnest und wenn eine Note auf eine antwortet oder eine zitiert, die deine Relays nicht haben. Diese Relays sehen deine IP-Adresse und welche Notes du anschaust.</string>
+    <string name="settings_author_relays_hint">Notes werden auch von den eigenen Relays anderer Leute und von Relays geholt, die eine Note nennt: wenn du ein Profil öffnest, wenn eine Note auf eine antwortet oder eine zitiert, die deine Relays nicht haben, und für Umfragen und verlinkte Artikel. Diese Relays sehen deine IP-Adresse und welche Notes du anschaust.</string>
     <string name="settings_pow">Proof of Work beim Senden</string>
     <string name="settings_pow_hint">Manche Relays nehmen nur Notes mit Proof of Work an (NIP-13). Mehr Bits werden eher angenommen, das Senden dauert aber länger.</string>
     <string name="settings_pow_off">Aus</string>

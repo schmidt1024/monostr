@@ -66,6 +66,8 @@ class MainActivity : ComponentActivity() {
 
         /** Intent extra of the "waiting for the signer" summary: `true` opens the Messages tab. */
         const val EXTRA_OPEN_MESSAGES = "open_messages"
+        /** The [com.monostr.app.work.OpenToken] of a DM notification's intent: without it the two extras above are ignored. */
+        const val EXTRA_OPEN_TOKEN = "open_token"
 
         /** A chat a notification asked to open; the logged-in nav host navigates there once and resets it. */
         val pendingDm = MutableStateFlow<String?>(null)
@@ -82,6 +84,13 @@ class MainActivity : ComponentActivity() {
      */
     private fun takeOpenDm(intent: Intent?) {
         if (intent == null) return
+        val token = intent.getStringExtra(EXTRA_OPEN_TOKEN)
+        intent.removeExtra(EXTRA_OPEN_TOKEN)
+        if (!com.monostr.app.work.OpenToken.matches(this, token)) {
+            intent.removeExtra(EXTRA_OPEN_MESSAGES)
+            intent.removeExtra(EXTRA_OPEN_DM)
+            return
+        }
         if (intent.hasExtra(EXTRA_OPEN_MESSAGES)) {
             // getBooleanExtra yields false for a value of any other type
             val open = intent.getBooleanExtra(EXTRA_OPEN_MESSAGES, false)

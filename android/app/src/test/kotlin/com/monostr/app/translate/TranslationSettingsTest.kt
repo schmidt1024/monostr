@@ -36,6 +36,20 @@ class TranslationSettingsTest {
     }
 
     @Test
+    fun `a consent holds for its server only`() = runTest {
+        val s = PrefsTranslationSettingsStore(store())
+        s.setConsentGiven(); assertTrue(s.consentGiven.first())
+        // another server: asked again
+        assertTrue(s.setCustomUrl("https://other.example"))
+        s.setMode(TranslationMode.CUSTOM)
+        assertFalse(s.consentGiven.first())
+        s.setConsentGiven(); assertTrue(s.consentGiven.first())
+        // back to the Monostr server: that consent was replaced
+        s.setMode(TranslationMode.MONOSTR)
+        assertFalse(s.consentGiven.first())
+    }
+
+    @Test
     fun `invalid custom url stores nothing`() = runTest {
         val s = PrefsTranslationSettingsStore(store())
         s.setCustomUrl("https://a.example")

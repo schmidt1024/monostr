@@ -98,7 +98,7 @@ class EarlyExitIdSitesTest {
         val note = EventBuilder.textNote("tip me").signWithKeys(alice)
         val noteId = note.id().toHex()
         val enabled = PaymentInfo.parse(RustConvert.toTips(info)) as PaymentInfo.Enabled
-        val intent = RustConvert.toBuilder(TipRequest.prepare(enabled, aliceHex, noteId, 1_000_000_000, TipType.LIKE, "hi", clock).unsignedEvent).signWithKeys(me)
+        val intent = RustConvert.toBuilder(TipRequest.prepare(enabled, aliceHex, noteId, 1_000_000_000, TipType.LIKE, "hi", clock, sender = com.monostr.tips.TipSender(me.publicKey().toHex())).unsignedEvent).signWithKeys(me)
         val receipt = RustConvert.toBuilder(TipReceipt.build(noteId, aliceHex, meHex, 1_000_000_000, intent.id().toHex(), TipType.LIKE, clock + 1)).signWithKeys(watcher)
         SilentWsRelay(serve = listOf(intent.asJson())).use { fast ->
             SilentWsRelay().use { silent ->

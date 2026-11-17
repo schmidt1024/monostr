@@ -47,7 +47,8 @@ object ZapReceipts {
         // security review: a signed request copied into a foreign receipt must not lend it a sender and a comment. It must name
         // the receipt's recipient and exactly the zapped note the receipt names. Then: an invoice with a description hash binds
         // the request by it (NIP-57); an invoice without one (Fountain writes «PODCAST_ZAP_INVOICE») only when the request
-        // states an amount and it is the invoice's. Without an invoice amount nothing binds it: no sender, no comment.
+        // states an amount and it is the invoice's; with one, the request's amount must be the invoice's too. Without an invoice
+        // amount nothing binds it: no sender, no comment.
         val request = signed?.takeIf { r ->
             val amount = r.firstTagValue("amount")?.toLongOrNull()
             r.firstTagValue("p")?.lowercase() == recipient &&
@@ -55,7 +56,9 @@ object ZapReceipts {
                 invoiceMsat != null &&
                 when (val hash = invoice.descriptionHash) {
                     null -> amount == invoiceMsat
-                    else -> hash == sha256Hex(requestJson) && (amount == null || amount == invoiceMsat)
+                    // the request must state the invoice's amount: a bolt11 signature is not checked, so a forger can pair a real
+                    // request without amount with an invoice of any amount and its description hash ("Alice zapped 1M sats")
+                    else -> hash == sha256Hex(requestJson) && amount == invoiceMsat
                 }
         }
         val msat = invoiceMsat

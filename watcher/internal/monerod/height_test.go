@@ -104,3 +104,53 @@ func TestHeightRPCErrorKeepsLastValue(t *testing.T) {
 		t.Fatalf("missing height not surfaced: %d %v", h, err)
 	}
 }
+
+// TestHeightRemembersFailure: while monerod is down, repeated GET /v1/info
+// must not each start a fresh request; after failureTTL it tries again.
+func TestHeightRemembersFailure(t *testing.T) {
+	var calls, up int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		if atomic.LoadInt32(&up) == 0 {
+			w.WriteHeader(503)
+			return
+		}
+		w.Write([]byte(`{"result":{"height":12}}`))
+	}))
+	defer srv.Close()
+	c := NewHeightClient(srv.URL)
+	now := time.Unix(1700000000, 0)
+	c.now = func() time.Time { return now }
+	for i := 0; i < 5; i++ {
+		if _, err := c.Height(context.Background()); err == nil {
+			t.Fatal("error expected")
+		}
+	}
+	if n := atomic.LoadInt32(&calls); n != 1 {
+		t.Fatalf("failure not remembered: %d calls", n)
+	}
+	atomic.StoreInt32(&up, 1)
+	now = now.Add(failureTTL)
+	if h, err := c.Height(context.Background()); err != nil || h != 12 {
+		t.Fatalf("after failureTTL: %d %v", h, err)
+	}
+	if n := atomic.LoadInt32(&calls); n != 2 {
+		t.Fatalf("calls %d", n)
+	}
+}
+
+func TestHeightDoesNotRememberCancelledCaller(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"result":{"height":12}}`))
+	}))
+	defer srv.Close()
+	c := NewHeightClient(srv.URL)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := c.Height(ctx); err == nil {
+		t.Fatal("cancelled context must fail")
+	}
+	if h, err := c.Height(context.Background()); err != nil || h != 12 {
+		t.Fatalf("cancelled caller poisoned the cache: %d %v", h, err)
+	}
+}

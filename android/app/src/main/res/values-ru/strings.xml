@@ -150,6 +150,8 @@
     <string name="feed_new_note">Новая заметка</string>
     <string name="feed_empty">Заметок пока нет. Подпишитесь на кого-нибудь или напишите первую.</string>
     <string name="feed_new_notes">Новые заметки</string>
+    <string name="feed_nothing_new">Новых заметок нет</string>
+    <string name="feed_nothing_new_discover">Найти людей</string>
     <string name="feed_error_load">Не удалось загрузить ленту</string>
     <string name="feed_error_more">Не удалось загрузить больше заметок</string>
 
@@ -365,7 +367,7 @@
     <string name="link_preview_cd">Превью ссылки: %1$s, %2$s</string>
     <string name="link_preview_remove">Убрать превью</string>
     <string name="settings_author_relays">Временно подключать релеи автора</string>
-    <string name="settings_author_relays_hint">Заметки берутся и с собственных релеев других людей: при открытии профиля и когда заметка отвечает на заметку или цитирует ту, которой нет на ваших релеях. Эти релеи видят ваш IP-адрес и какие заметки вы смотрите.</string>
+    <string name="settings_author_relays_hint">Заметки берутся и с собственных релеев других людей, и с релеев, указанных в заметке: при открытии профиля, когда заметка отвечает на заметку или цитирует ту, которой нет на ваших релеях, а также для опросов и связанных статей. Эти релеи видят ваш IP-адрес и какие заметки вы смотрите.</string>
     <string name="settings_pow">Доказательство работы при отправке</string>
     <string name="settings_pow_hint">Некоторые релеи принимают заметки только с доказательством работы (NIP-13). Больше бит — шире приём, но отправка дольше.</string>
     <string name="settings_pow_off">Выкл.</string>

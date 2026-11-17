@@ -56,45 +56,52 @@ func Build(secretKey, url, method string, body []byte, createdAt int64) (string,
 func invalid(reason string) error { return fmt.Errorf("%w: %s", ErrInvalid, reason) }
 
 // Verify checks header against the request (url = public URL incl. path,
-// method, raw body) and returns the signing pubkey.
+// method, raw body) and returns the signing pubkey. It does not detect
+// replays; servers use VerifyEvent with a ReplayCache.
 func Verify(header, url, method string, body []byte, now int64) (string, error) {
+	pubkey, _, err := VerifyEvent(header, url, method, body, now)
+	return pubkey, err
+}
+
+// VerifyEvent is Verify that also returns the event id, for a ReplayCache.
+func VerifyEvent(header, url, method string, body []byte, now int64) (pubkey, eventID string, err error) {
 	if !strings.HasPrefix(header, scheme) {
-		return "", ErrMissing
+		return "", "", ErrMissing
 	}
 	raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(header[len(scheme):]))
 	if err != nil {
-		return "", invalid("base64")
+		return "", "", invalid("base64")
 	}
 	var ev nostr.Event
 	if err := json.Unmarshal(raw, &ev); err != nil {
-		return "", invalid("json")
+		return "", "", invalid("json")
 	}
 	if ev.Kind != protocol.KindHTTPAuth {
-		return "", invalid("kind")
+		return "", "", invalid("kind")
 	}
 	if !protocol.IsHex64(ev.PubKey) || !ev.CheckID() {
-		return "", invalid("id")
+		return "", "", invalid("id")
 	}
 	if ok, err := ev.CheckSignature(); err != nil || !ok {
-		return "", invalid("signature")
+		return "", "", invalid("signature")
 	}
 	delta := now - int64(ev.CreatedAt)
 	if delta > MaxSkew || delta < -MaxSkew {
-		return "", invalid("created_at outside window")
+		return "", "", invalid("created_at outside window")
 	}
 	if u := ev.Tags.Find("u"); u == nil || len(u) < 2 || u[1] != url {
-		return "", invalid("u tag")
+		return "", "", invalid("u tag")
 	}
 	if m := ev.Tags.Find("method"); m == nil || len(m) < 2 || !strings.EqualFold(m[1], method) {
-		return "", invalid("method tag")
+		return "", "", invalid("method tag")
 	}
 	p := ev.Tags.Find("payload")
 	switch {
 	case len(body) == 0 && p == nil:
 	case len(body) == 0 && p != nil:
-		return "", invalid("payload tag without body")
+		return "", "", invalid("payload tag without body")
 	case p == nil || len(p) < 2 || p[1] != payloadHash(body):
-		return "", invalid("payload hash")
+		return "", "", invalid("payload hash")
 	}
-	return ev.PubKey, nil
+	return ev.PubKey, ev.ID, nil
 }

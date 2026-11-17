@@ -1,0 +1,7 @@
+- «Nenhuma nota nova» quando uma atualização não traz nada, com «Descobrir pessoas» se você segue poucos
+- Gorjetas: ID de pagamento ligado ao remetente, ninguém pode se atribuir sua gorjeta
+- Gorjetas anônimas consultam o destinatário por uma conexão separada
+- O ajuste de relays do autor vale também para relays citados numa nota
+- Links enganosos perguntam antes; domínios parecidos em punycode
+- Tema escolhido visível de novo nos ajustes
+- Correções de segurança e privacidade

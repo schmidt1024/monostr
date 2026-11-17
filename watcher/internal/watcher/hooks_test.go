@@ -2,12 +2,14 @@ package watcher
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/nbd-wtf/go-nostr"
 
+	"monostr.com/watcher/internal/lws"
 	"monostr.com/watcher/internal/monero"
 	"monostr.com/watcher/internal/protocol"
 	"monostr.com/watcher/internal/store"
@@ -136,10 +138,18 @@ func TestHookRejectsMismatch(t *testing.T) {
 		"unknown token":  {strings.Repeat("0", 64), "0123456789abcdef", "event1"},
 		"wrong pid":      {h.intent.ID, "ffffffffffffffff", "event1"},
 		"wrong event id": {h.intent.ID, "0123456789abcdef", "event9"},
+		"no event id":    {h.intent.ID, "0123456789abcdef", ""},
 	}
 	for name, c := range cases {
 		if err := h.svc.HandleHook(context.Background(), hook(c[0], c[1], c[2], tx, 0, 10)); err != nil {
 			t.Errorf("%s: %v", name, err)
+		}
+	}
+	// an intent that holds no webhook accepts no hook, whatever its event id
+	h.st.ClearIntentWebhook(h.intent.ID)
+	for _, id := range []string{"", "event1"} {
+		if err := h.svc.HandleHook(context.Background(), hook(h.intent.ID, "0123456789abcdef", id, tx, 0, 10)); err != nil {
+			t.Fatal(err)
 		}
 	}
 	if len(h.relays.published) != 0 {
@@ -147,6 +157,152 @@ func TestHookRejectsMismatch(t *testing.T) {
 	}
 	if rows, _ := h.st.UnpublishedReceipts(); len(rows) != 0 {
 		t.Fatal("receipt stored")
+	}
+}
+
+// TestHookIgnoresPaymentOlderThanIntent: a new intent that re-uses the pid of
+// an old, uncredited payment must not claim it. The intent was stored at
+// height 3200000: 30 blocks of slack give 3199970 as the lowest block.
+func TestHookIgnoresPaymentOlderThanIntent(t *testing.T) {
+	h := newHookEnv(t)
+	row, _, _ := h.st.GetIntent(h.intent.ID)
+	if row.ChainHeight != 3200000 || row.MinPaymentBlock() != 3199970 {
+		t.Fatalf("chain height %d, min %d", row.ChainHeight, row.MinPaymentBlock())
+	}
+	old := hook(h.intent.ID, "0123456789abcdef", "event1", strings.Repeat("6", 64), 5, 10)
+	old.Block = 3199969
+	if err := h.svc.HandleHook(context.Background(), old); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.relays.published) != 0 {
+		t.Fatal("old payment credited")
+	}
+	edge := hook(h.intent.ID, "0123456789abcdef", "event1", strings.Repeat("7", 64), 1, 10)
+	edge.Block = 3199970
+	pool := hook(h.intent.ID, "0123456789abcdef", "event1", strings.Repeat("8", 64), 0, 10)
+	pool.Block = 0
+	for i, hk := range []lws.Hook{edge, pool} {
+		h.now = t0 + 60*int64(i+1) // distinct receipt events
+		if err := h.svc.HandleHook(context.Background(), hk); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(h.relays.published) != 2 {
+		t.Fatalf("published %d, want the edge block and the pool tx", len(h.relays.published))
+	}
+}
+
+// TestPaymentBoundIgnoresFrozenSeenHeight: a seen height that stopped
+// advancing (stuck rescan, sweep failing) cannot move the bound further back
+// than an intent's lifetime.
+func TestPaymentBoundIgnoresFrozenSeenHeight(t *testing.T) {
+	e := newEnv(t, monero.Mainnet)
+	rpk := e.register(t, nostr.GeneratePrivateKey())
+	if err := e.st.SetMeta(metaLastSeenHeight, "3000000"); err != nil {
+		t.Fatal(err)
+	}
+	ev := intentEvent(t, nostr.GeneratePrivateKey(), rpk, "0123456789abcdef", 5, t0)
+	if err := e.svc.HandleIntent(context.Background(), ev); err != nil {
+		t.Fatal(err)
+	}
+	row, _, _ := e.st.GetIntent(ev.ID)
+	if want := uint64(3200000) - maxBackfillBlocks; row.ChainHeight != want {
+		t.Fatalf("bound height %d, want %d", row.ChainHeight, want)
+	}
+	old := hook(ev.ID, "0123456789abcdef", "event1", strings.Repeat("6", 64), 10, 5)
+	old.Block = 3100000
+	if err := e.svc.HandleHook(context.Background(), old); err != nil {
+		t.Fatal(err)
+	}
+	if len(e.relays.published) != 0 {
+		t.Fatal("frozen seen height let an old payment match")
+	}
+}
+
+// TestRecordHeightAdvancesSeenHeightDuringRescan: last_height stays put
+// while a rescan is pending, last_seen_height does not.
+func TestRecordHeightAdvancesSeenHeightDuringRescan(t *testing.T) {
+	e := newEnv(t, monero.Mainnet)
+	e.st.SetMeta(metaPendingRescan, "100")
+	e.st.SetMeta(MetaLastHeight, "100")
+	if err := e.svc.recordHeight(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	last, _, _ := e.st.GetMeta(MetaLastHeight)
+	seen, _, _ := e.st.GetMeta(metaLastSeenHeight)
+	if last != "100" || seen != "3200000" {
+		t.Fatalf("last %s seen %s", last, seen)
+	}
+}
+
+// TestIntentWithoutChainHeightIsNotStored: no height at all means no bound;
+// the intent is left for a later backfill instead of being stored unbounded.
+func TestIntentWithoutChainHeightIsNotStored(t *testing.T) {
+	e := newEnv(t, monero.Mainnet)
+	rpk := e.register(t, nostr.GeneratePrivateKey())
+	e.svc.deps.Height = &fakeHeight{err: errors.New("monerod down")}
+	ev := intentEvent(t, nostr.GeneratePrivateKey(), rpk, "0123456789abcdef", 5, t0)
+	if err := e.svc.HandleIntent(context.Background(), ev); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, _ := e.st.GetIntent(ev.ID); ok {
+		t.Fatal("intent stored without a payment bound")
+	}
+	e.svc.deps.Height = &fakeHeight{h: 3200000}
+	if err := e.svc.HandleIntent(context.Background(), ev); err != nil {
+		t.Fatal(err)
+	}
+	if row, ok, _ := e.st.GetIntent(ev.ID); !ok || row.ChainHeight != 3200000 {
+		t.Fatalf("retry: %+v %v", row, ok)
+	}
+}
+
+// TestHookBackdatedIntentDoesNotWidenBound: created_at is the sender's
+// choice; an intent claiming to be 30 days old but stored now must not
+// match a payment from before it was stored.
+func TestHookBackdatedIntentDoesNotWidenBound(t *testing.T) {
+	h := newHookEnv(t)
+	pid := "00000000000000aa"
+	in := protocol.Intent{ID: strings.Repeat("d", 64), Sender: h.sender, Recipient: h.rpk, PID: pid, Type: "tip",
+		Amount: 5, CreatedAt: t0 - 30*86400, Expiration: t0 + 3600}
+	if ok, err := h.st.InsertIntentAt(in, t0, 3200000); err != nil || !ok {
+		t.Fatalf("insert %v %v", ok, err)
+	}
+	h.st.SetIntentWebhook(in.ID, "event9")
+	old := hook(in.ID, pid, "event9", strings.Repeat("6", 64), 10, 5)
+	old.Block = 3200000 - 2*720 // two days before the intent was stored
+	if err := h.svc.HandleHook(context.Background(), old); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.relays.published) != 0 {
+		t.Fatal("backdated intent claimed an old payment")
+	}
+}
+
+// TestIntentAfterDowntimeKeepsDowntimePayments: the bound starts at the
+// height the sweep recorded before the outage, so an intent backfilled after
+// a restart still matches a payment made while the watcher was down.
+func TestIntentAfterDowntimeKeepsDowntimePayments(t *testing.T) {
+	e := newEnv(t, monero.Mainnet)
+	rpk := e.register(t, nostr.GeneratePrivateKey())
+	if err := e.st.SetMeta(MetaLastHeight, "3199000"); err != nil {
+		t.Fatal(err)
+	}
+	ev := intentEvent(t, nostr.GeneratePrivateKey(), rpk, "0123456789abcdef", 5, t0)
+	if err := e.svc.HandleIntent(context.Background(), ev); err != nil {
+		t.Fatal(err)
+	}
+	row, _, _ := e.st.GetIntent(ev.ID)
+	if row.ChainHeight != 3199000 {
+		t.Fatalf("bound height %d, want the recorded one", row.ChainHeight)
+	}
+	during := hook(ev.ID, "0123456789abcdef", "event1", strings.Repeat("7", 64), 1, 5)
+	during.Block = 3199100
+	if err := e.svc.HandleHook(context.Background(), during); err != nil {
+		t.Fatal(err)
+	}
+	if len(e.relays.published) != 1 {
+		t.Fatal("payment made during the downtime not credited")
 	}
 }
 

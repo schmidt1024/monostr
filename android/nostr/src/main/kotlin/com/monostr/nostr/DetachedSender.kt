@@ -108,6 +108,26 @@ class DetachedSender(private val ffi: CoroutineDispatcher = Dispatchers.IO, priv
     }.flowOn(ffi)
 
     /**
+     * A one-off read over a connection of its own, like [subscribe]: no identity, no AUTH, under Tor its own circuit, nothing
+     * stored. Waits up to [connectTimeout] for the relays, then up to [timeout] for their answers (EOSE); empty when no relay
+     * could be reached. Throws [IOException] while the mode is unknown or Tor is not ready.
+     */
+    suspend fun fetch(filter: Filter, relays: List<String>, connectTimeout: Duration, timeout: Duration): List<Event> = withContext(ffi) {
+        val targets = relays.mapNotNull { runCatching { RelayUrl.parse(it.trim()) }.getOrNull() }.filterNot { RelayHosts.isOnionHost(it.toString()) }
+        if (targets.isEmpty()) return@withContext emptyList()
+        withClient { client, port, ensureRoute ->
+            targets.forEach { ignoringFailure { client.addRoutedReadRelay(it, port) } }
+            ensureRoute()
+            ignoringFailure { client.connect() }
+            awaitConnected(targets, connectTimeout) { url -> runCatching { client.relay(url).isConnected() }.getOrDefault(false) }
+            val connected = targets.filter { url -> runCatching { client.relay(url).isConnected() }.getOrDefault(false) }
+            if (connected.isEmpty()) return@withClient emptyList()
+            ensureRoute()
+            client.fetchEventsFrom(connected, filter, timeout).toVec()
+        }
+    }
+
+    /**
      * Waits until [subscribe] can run, so that a caller who retries does not do so while the mode is unknown. Never times out:
      * a mode that stays unknown keeps everything blocked, and the wait ends with the caller.
      */

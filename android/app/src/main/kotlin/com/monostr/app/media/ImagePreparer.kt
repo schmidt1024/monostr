@@ -114,7 +114,9 @@ class ImagePreparer(private val resolver: ContentResolver) : PicturePreparer {
         return opts
     }
 
-    private fun gif(raw: ByteArray): PreparedImage {
+    private fun gif(source: ByteArray): PreparedImage {
+        // the bytes go up unchanged otherwise: comments and editor data (XMP) must not travel with them
+        val raw = GifMetadata.strip(source) ?: source
         if (raw.size > ImageSizing.MAX_UPLOAD_BYTES) throw UploadException.TooLarge()
         val size = bounds(raw)
         val sample = BitmapFactory.Options().apply { inSampleSize = ImageSizing.sampleSize(size.outWidth, size.outHeight, BLURHASH_EDGE) }

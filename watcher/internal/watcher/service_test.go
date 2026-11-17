@@ -5,12 +5,14 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nbd-wtf/go-nostr"
 
 	"monostr.com/watcher/internal/api"
 	"monostr.com/watcher/internal/monero"
 	"monostr.com/watcher/internal/protocol"
+	"monostr.com/watcher/internal/ratelimit"
 )
 
 func TestInfo(t *testing.T) {
@@ -152,6 +154,62 @@ func TestUnregister(t *testing.T) {
 	e.svc.HandleIntent(context.Background(), intentEvent(t, sender, rpk, "0123456789abcdee", 5, t0))
 	if len(e.lws.hooks) != 1 {
 		t.Fatal("intent accepted after unregister")
+	}
+}
+
+// TestNewAccountsCap: new pubkeys are capped globally; re-registering a known
+// one is not, and failed attempts do not count.
+func TestNewAccountsCap(t *testing.T) {
+	e := newEnv(t, monero.Mainnet)
+	e.svc.newAccounts = ratelimit.New(2, time.Hour)
+	ctx := context.Background()
+	e.lws.failEnsure = errors.New("lws down")
+	for i := 0; i < 3; i++ {
+		pk, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+		e.svc.Register(ctx, pk, mainnetAddr, viewKey)
+	}
+	e.lws.failEnsure = nil
+	first := e.register(t, nostr.GeneratePrivateKey())
+	e.register(t, nostr.GeneratePrivateKey())
+	pk, _ := nostr.GetPublicKey(nostr.GeneratePrivateKey())
+	err := e.svc.Register(ctx, pk, mainnetAddr, viewKey)
+	var herr *api.HTTPError
+	if !errors.As(err, &herr) || herr.Status != 429 {
+		t.Fatalf("third new account: %v", err)
+	}
+	if err := e.svc.Register(ctx, first, mainnetAddr, viewKey); err != nil {
+		t.Fatalf("known account re-registering: %v", err)
+	}
+}
+
+// TestSharedAddressStaysActiveAndPidsDoNotCross: two npubs registered with
+// the same address. Unregistering one must not deactivate the address the
+// other still uses, and a pid taken by one account's intent cannot be taken
+// by the other (LWS keys webhooks by address and pid, so its hook would
+// fire for the first account's payment too).
+func TestSharedAddressStaysActiveAndPidsDoNotCross(t *testing.T) {
+	e := newEnv(t, monero.Mainnet)
+	a := e.register(t, nostr.GeneratePrivateKey())
+	b := e.register(t, nostr.GeneratePrivateKey())
+	ctx := context.Background()
+	evA := intentEvent(t, nostr.GeneratePrivateKey(), a, "0123456789abcdef", 5, t0)
+	evB := intentEvent(t, nostr.GeneratePrivateKey(), b, "0123456789abcdef", 5, t0)
+	e.svc.HandleIntent(ctx, evA)
+	e.svc.HandleIntent(ctx, evB)
+	if _, ok, _ := e.st.GetIntent(evB.ID); ok {
+		t.Fatal("second account took a pid already used on the same address")
+	}
+	if err := e.svc.Unregister(ctx, b); err != nil {
+		t.Fatal(err)
+	}
+	if len(e.lws.status) != 0 {
+		t.Fatalf("address deactivated while still in use: %v", e.lws.status)
+	}
+	if err := e.svc.Unregister(ctx, a); err != nil {
+		t.Fatal(err)
+	}
+	if len(e.lws.status) != 1 || e.lws.status[0] != "inactive "+mainnetAddr {
+		t.Fatalf("last user gone, status %v", e.lws.status)
 	}
 }
 

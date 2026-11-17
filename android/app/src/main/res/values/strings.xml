@@ -147,6 +147,8 @@
     <string name="feed_new_note">New note</string>
     <string name="feed_empty">No notes yet. Follow someone or write the first one.</string>
     <string name="feed_new_notes">New notes</string>
+    <string name="feed_nothing_new">No new notes</string>
+    <string name="feed_nothing_new_discover">Discover people</string>
     <string name="feed_error_load">Feed could not be loaded</string>
     <string name="feed_error_more">More notes could not be loaded</string>
 
@@ -361,7 +363,7 @@
     <string name="link_preview_cd">Link preview: %1$s, %2$s</string>
     <string name="link_preview_remove">Remove preview</string>
     <string name="settings_author_relays">Connect the author\'s relays temporarily</string>
-    <string name="settings_author_relays_hint">Notes are also fetched from other people\'s own relays: when you open a profile, and when a note answers or quotes one your relays don\'t have. Those relays see your IP address and which notes you look at.</string>
+    <string name="settings_author_relays_hint">Notes are also fetched from other people\'s own relays and from relays a note names: when you open a profile, when a note answers or quotes one your relays don\'t have, and for polls and linked articles. Those relays see your IP address and which notes you look at.</string>
     <string name="settings_pow">Proof of work when sending</string>
     <string name="settings_pow_hint">Some relays only take notes with proof of work (NIP-13). More bits are accepted more widely but take longer to send.</string>
     <string name="settings_pow_off">Off</string>

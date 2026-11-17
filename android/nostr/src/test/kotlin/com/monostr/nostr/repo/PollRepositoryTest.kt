@@ -145,6 +145,17 @@ class PollRepositoryTest {
     }
 
     @Test
+    fun `with the author relays switch off the poll's relays are not asked`() = runTest {
+        SilentWsRelay(serveFor = { emptyList() }, recordRequests = true).use { relay ->
+            val p = poll(listOf("relay", relay.url))
+            val e = engine()
+            NostrPollRepository(e, powBits = { 0 }, hintAllowed = { true }, hintsAllowed = { false }).votes(p)
+            assertTrue(relay.requests.isEmpty(), relay.requests.toString())
+            e.close()
+        }
+    }
+
+    @Test
     fun `votes returns what the local database has when the relays say nothing`() = runTest {
         val p = poll()
         val vote = EventBuilder(Kind(1018u), "").tags(listOf(Tag.parse(listOf("e", p.id)), Tag.parse(listOf("response", "a")))).signWithKeys(alice)

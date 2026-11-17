@@ -15,6 +15,45 @@ import (
 
 func timeOf(unix int64) time.Time { return time.Unix(unix, 0) }
 
+// maxBackfillBlocks is how far below the current height a payment bound may
+// start: an intent lives at most protocol.MaxIntentTTL (120 s blocks), so a
+// genuine payment is never older than that, however long the watcher was down.
+const maxBackfillBlocks = uint64(protocol.MaxIntentTTL / 120)
+
+// paymentBoundHeight is the chain height an intent's payment bound starts
+// from (store.IntentRow.MinPaymentBlock), taken only from what the watcher
+// itself observed, never from the sender's created_at: the current height,
+// or the height last seen by the sweep if that is lower (after downtime it
+// dates from before the outage, so payments made while the watcher was down
+// still count), but never more than maxBackfillBlocks below the current
+// height, so a seen height that stopped advancing cannot open the bound.
+// Without a current height the last seen one is used; 0 = no height at all.
+func (s *Service) paymentBoundHeight(ctx context.Context) uint64 {
+	seen := s.lastSeenHeight()
+	cur, err := s.deps.Height.Height(ctx)
+	if err != nil || cur == 0 {
+		return seen
+	}
+	if seen == 0 || seen >= cur {
+		return cur
+	}
+	return max(seen, cur-min(cur, maxBackfillBlocks))
+}
+
+// lastSeenHeight is the height the sweep saw last (last_seen_height, which
+// advances even while a rescan is pending), or last_height on a database
+// from before that key existed; 0 = none.
+func (s *Service) lastSeenHeight() uint64 {
+	for _, key := range []string{metaLastSeenHeight, metaLastHeight} {
+		if v, ok, _ := s.deps.Store.GetMeta(key); ok {
+			if h, err := strconv.ParseUint(v, 10, 64); err == nil && h > 0 {
+				return h
+			}
+		}
+	}
+	return 0
+}
+
 // HandleHook turns an LWS tx-confirmation callback into a receipt (first
 // sighting) or a confirmation. Hooks that do not match a stored intent are
 // ignored with nil.
@@ -23,8 +62,15 @@ func (s *Service) HandleHook(ctx context.Context, h lws.Hook) error {
 	if err != nil {
 		return err
 	}
-	if !ok || row.PID != h.PaymentID || (row.LWSEventID != "" && row.LWSEventID != h.EventID) {
+	// the hook must come from the webhook this intent holds: an intent
+	// without one (deleted, not yet registered) accepts no hook
+	if !ok || row.PID != h.PaymentID || h.EventID == "" || row.LWSEventID != h.EventID {
 		s.log.Warn("hook ignored", "token", h.Token)
+		return nil
+	}
+	// Block 0: still in the pool (or no height reported), so made after the intent anyway
+	if minBlock := row.MinPaymentBlock(); h.Block != 0 && h.Block < minBlock {
+		s.log.Warn("hook ignored, payment older than the intent", "token", h.Token, "block", h.Block, "min_block", minBlock)
 		return nil
 	}
 	existing, found, err := s.deps.Store.ReceiptByTx(row.ID, h.TxHash)

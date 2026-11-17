@@ -13,7 +13,7 @@ import (
 // RestoreMargin is how many blocks (about one day) before the current height a new wallet starts scanning.
 const RestoreMargin = 720
 
-// MaxRestoreLookback is how far (7 days of blocks, the lifetime of an intent)
+// MaxRestoreLookback is how far (7 days of blocks, more than an intent's 48 h lifetime)
 // a new wallet may start before the current height.
 const MaxRestoreLookback = 7 * RestoreMargin
 

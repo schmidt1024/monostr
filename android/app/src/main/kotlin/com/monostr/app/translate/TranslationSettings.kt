@@ -44,7 +44,19 @@ class PrefsTranslationSettingsStore(private val store: DataStore<Preferences>) :
         p[MODE]?.let { n -> TranslationMode.entries.firstOrNull { it.name == n } } ?: TranslationMode.MONOSTR
     }
     override val customUrl: Flow<String> = store.data.map { it[CUSTOM_URL] ?: "" }
-    override val consentGiven: Flow<Boolean> = store.data.map { it[CONSENT] ?: false }
+    /**
+     * The consent names the server it was given for: the sheet shows that host, so switching to another server asks
+     * again before any note goes there. A consent stored before the host was kept counts for the Monostr server only.
+     */
+    override val consentGiven: Flow<Boolean> = store.data.map { p ->
+        (p[CONSENT] ?: false) && (p[CONSENT_HOST] ?: TranslateServer.MONOSTR.host) == currentHost(p)
+    }
+
+    private fun currentHost(p: Preferences): String {
+        val mode = p[MODE]?.let { n -> TranslationMode.entries.firstOrNull { it.name == n } } ?: TranslationMode.MONOSTR
+        val url = p[CUSTOM_URL] ?: ""
+        return if (mode == TranslationMode.CUSTOM && url.isNotBlank()) TranslateServer(url).host else TranslateServer.MONOSTR.host
+    }
 
     override suspend fun setMode(m: TranslationMode) { store.edit { it[MODE] = m.name } }
 
@@ -55,11 +67,12 @@ class PrefsTranslationSettingsStore(private val store: DataStore<Preferences>) :
         return true
     }
 
-    override suspend fun setConsentGiven() { store.edit { it[CONSENT] = true } }
+    override suspend fun setConsentGiven() { store.edit { it[CONSENT] = true; it[CONSENT_HOST] = currentHost(it) } }
 
     companion object {
         private val MODE = stringPreferencesKey("translate.mode")
         private val CUSTOM_URL = stringPreferencesKey("translate.custom_url")
         private val CONSENT = booleanPreferencesKey("translate.consent")
+        private val CONSENT_HOST = stringPreferencesKey("translate.consent_host")
     }
 }

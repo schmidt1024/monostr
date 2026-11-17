@@ -59,6 +59,8 @@ class NostrQuoteRepository(
     private val locator: EventLocator? = null,
     /** Spec 2026-10-23 §3/§4.4: when set, the hint relays are leased from the app-wide budget (no wait) instead of attached on the side. */
     private val foreign: ForeignRelays? = null,
+    /** The user's «Author relays» switch, read at use time: off, no relay a stranger's event names is contacted (owner 2026-11-17). */
+    private val hintsAllowed: suspend () -> Boolean = { true },
 ) : QuoteRepository {
     private val lock = Any()
     /** Found notes and zaps; never [QuoteResult.Missing]. */
@@ -142,7 +144,7 @@ class NostrQuoteRepository(
     private suspend fun lookup(id: String, hints: List<String>, authors: List<String>, short: () -> Unit): QuoteResult {
         local(id)?.let { return it }
         loadCount.incrementAndGet()
-        val hinted = hints.filter(relayFilter).take(MAX_HINTS)
+        val hinted = if (hintsAllowed()) hints.filter(relayFilter).take(MAX_HINTS) else emptyList()
         // a full budget leaves the hints out: the own relays and the locator still look (final review M2)
         val held = if (foreign != null) foreign.lease(hinted) else engine.attachTemporary(hinted)
         // a hint the user only writes to is no slot the lease came short of

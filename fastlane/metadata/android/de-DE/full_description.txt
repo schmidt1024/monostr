@@ -5,6 +5,7 @@ Monostr ist ein Nostr-Client für Android mit Tips in Monero.
 • Liken, reposten, zitieren, antworten; Erwähnungen, Hashtags und Links zum Antippen
 • Bilder und Videos bis 2 Minuten in Notes und eigene Uploads (Blossom), sensible Inhalte verschwommen
 • Lange Artikel (NIP-23) direkt in der App lesen, mit Likes, Reposts, Antworten, Lesezeichen und Tips; Links zu Artikeln, Livestreams und anderen Events erscheinen als Karten
+• Umfragen (NIP-88): abstimmen und Resultate sehen oder eigene erstellen, mit 2 bis 4 Antworten für bis zu 7 Tage
 • Private Nachrichten (NIP-17), private Lesezeichen und Stummschaltungen (NIP-51)
 • Suche nach Personen und Notes (NIP-50), Mitteilungen zu Likes, Reposts, Antworten und Tips
 • Deine Relay-Liste (NIP-65); die Schreib-Relays eines Autors kommen dazu, solange sein Profil offen ist

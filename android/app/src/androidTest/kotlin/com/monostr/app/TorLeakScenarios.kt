@@ -229,7 +229,7 @@ class TorLeakScenarios {
             step(label, "anon-tip-intent", 60_000) {
                 val address = MoneroKeys.generate().address(Network.MAINNET)
                 val info = PaymentInfo.Enabled(address, Watcher.Http(DEFAULT_WATCHER, watcherKey))
-                val prepared = TipRequest.prepare(info, recipient, null, 1_000_000_000L, TipType.TIP, "monostr Tor test, please ignore", System.currentTimeMillis() / 1000, anonymous = true)
+                val prepared = TipRequest.prepare(info, recipient, null, 1_000_000_000L, TipType.TIP, "monostr Tor test, please ignore", System.currentTimeMillis() / 1000, sender = ready.tips.tipSender(true), anonymous = true)
                 val sent = ready.tips.sendAnonymousIntent(prepared, listOf("wss://relay.monostr.com"), torOnly = viaTor)
                 "accepted ${sent.result.successRelays.size} failed ${sent.result.failedRelays.keys.size}"
             }
@@ -476,8 +476,9 @@ class TorLeakScenarios {
         val info = PaymentInfo.Enabled(address, Watcher.Http(DEFAULT_WATCHER, Keys.generate().publicKey().toHex()))
         val recipient = Keys.generate().publicKey().toHex()
         val now = System.currentTimeMillis() / 1000
-        val prepared = TipRequest.prepare(info, recipient, null, 1_000_000_000L, TipType.TIP, "monostr Tor test, must never arrive", now, anonymous = true)
-        val signed = EventBuilder(Kind(prepared.unsignedEvent.kind.toUShort()), prepared.unsignedEvent.content).tags(prepared.unsignedEvent.tags.map { rust.nostr.sdk.Tag.parse(it) }).signWithKeys(Keys.generate())
+        val oneTime = Keys.generate()
+        val prepared = TipRequest.prepare(info, recipient, null, 1_000_000_000L, TipType.TIP, "monostr Tor test, must never arrive", now, sender = com.monostr.tips.TipSender(oneTime.publicKey().toHex(), oneTime.secretKey().toHex()), anonymous = true)
+        val signed = EventBuilder(Kind(prepared.unsignedEvent.kind.toUShort()), prepared.unsignedEvent.content).tags(prepared.unsignedEvent.tags.map { rust.nostr.sdk.Tag.parse(it) }).signWithKeys(oneTime)
         val tips = PrefsPendingTipStore(app.monostrPrefs)
         tips.add(
             PendingTip(
@@ -648,8 +649,9 @@ class TorLeakScenarios {
         val info = PaymentInfo.Enabled(address, Watcher.Http(DEFAULT_WATCHER, Keys.generate().publicKey().toHex()))
         val recipient = Keys.generate().publicKey().toHex()
         val now = System.currentTimeMillis() / 1000
-        val prepared = TipRequest.prepare(info, recipient, null, 1_000_000_000L, TipType.TIP, "monostr Tor test, please ignore", now, anonymous = true)
-        val signed = EventBuilder(Kind(prepared.unsignedEvent.kind.toUShort()), prepared.unsignedEvent.content).tags(prepared.unsignedEvent.tags.map { rust.nostr.sdk.Tag.parse(it) }).signWithKeys(Keys.generate())
+        val oneTime = Keys.generate()
+        val prepared = TipRequest.prepare(info, recipient, null, 1_000_000_000L, TipType.TIP, "monostr Tor test, please ignore", now, sender = com.monostr.tips.TipSender(oneTime.publicKey().toHex(), oneTime.secretKey().toHex()), anonymous = true)
+        val signed = EventBuilder(Kind(prepared.unsignedEvent.kind.toUShort()), prepared.unsignedEvent.content).tags(prepared.unsignedEvent.tags.map { rust.nostr.sdk.Tag.parse(it) }).signWithKeys(oneTime)
         PrefsPendingTipStore(app.monostrPrefs).add(
             PendingTip(
                 intentId = signed.id().toHex(), noteId = null, amount = 1_000_000_000L, createdAt = now, recipient = recipient,

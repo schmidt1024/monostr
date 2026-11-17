@@ -147,7 +147,8 @@ type Transfer struct {
 	Amount        uint64 `json:"amount"`
 	Height        uint64 `json:"height"`
 	Confirmations uint64 `json:"confirmations"`
-	Pool          bool   `json:"-"` // listed under "pool" (not yet in a block)
+	Timestamp     uint64 `json:"timestamp"` // block timestamp (pool: when the wallet saw it)
+	Pool          bool   `json:"-"`         // listed under "pool" (not yet in a block)
 }
 
 // IncomingTransfers returns confirmed incoming transfers and those still in the pool.

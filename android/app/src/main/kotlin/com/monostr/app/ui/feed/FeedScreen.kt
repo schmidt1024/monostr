@@ -3,6 +3,7 @@ package com.monostr.app.ui.feed
 import com.monostr.app.ui.common.GuardedAlertDialog
 import com.monostr.app.ui.common.LocalCanSend
 import com.monostr.app.ui.discover.DiscoverFollowAllHost
+import com.monostr.app.ui.discover.DiscoverVisibility
 import com.monostr.app.ui.common.asString
 import com.monostr.app.ui.discover.discoverItems
 import com.monostr.nostr.PerfTrace
@@ -121,6 +122,7 @@ fun FeedScreen(
     val self by vm.self.collectAsStateWithLifecycle()
     val supportHint by vm.supportHint.collectAsStateWithLifecycle()
     val discoverShown by vm.discoverShown.collectAsStateWithLifecycle()
+    val followCount by vm.followCount.collectAsStateWithLifecycle()
     val discoverUi by vm.discover.state.collectAsStateWithLifecycle()
     if (discoverShown && discoverUi.sections.any { it.rows.isNotEmpty() }) LaunchedEffect(Unit) { PerfTrace.mark("discover block shown") }
     val amountsPrompt by vm.amountsPrompt.collectAsStateWithLifecycle()
@@ -217,6 +219,7 @@ fun FeedScreen(
                         },
                         headerWhenEmpty = pinned == null && discoverShown,
                         headerTopKey = if (pinned == null && discoverShown) "discover-hint" else null,
+                        onDiscover = if (pinned == null && !discoverShown && (followCount ?: Int.MAX_VALUE) < DiscoverVisibility.CTA_THRESHOLD) vm::openDiscover else null,
                     )
                 }
             }

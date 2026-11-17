@@ -36,6 +36,10 @@ class DmNotifier(private val context: Context) {
         ensureChannel()
         val intent = Intent(context, MainActivity::class.java)
         if (n.peer.isNotEmpty()) intent.putExtra(MainActivity.EXTRA_OPEN_DM, n.peer) else intent.putExtra(MainActivity.EXTRA_OPEN_MESSAGES, true)
+        // only our own notifications may open a chat: another app could start the exported activity with any pubkey
+        intent.putExtra(MainActivity.EXTRA_OPEN_TOKEN, OpenToken.get(context))
+        // one PendingIntent per peer: the request code is a 32-bit hash, and two peers sharing it shared the tap target
+        intent.data = android.net.Uri.parse("monostr-dm:" + n.peer.ifEmpty { "messages" })
         // the summary has no peer; its own request code keeps it from sharing a PendingIntent slot
         val requestCode = if (n.peer.isNotEmpty()) n.peer.hashCode() else DmNotificationPlanner.PENDING_ID
         val open = PendingIntent.getActivity(context, requestCode, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)

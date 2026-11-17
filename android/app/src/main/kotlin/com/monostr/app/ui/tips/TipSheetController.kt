@@ -124,7 +124,9 @@ class TipSheetController(
             // the middle preset (0.001 XMR by default) is the sensible starting point, not the smallest
             _state.update { it.copy(presets = presets, selected = presets.getOrNull(presets.size / 2), anonymous = anonymous, unit = unit) }
             // Amethyst/Ditto users keep their payto (kind 10133) on their own write relays only: asked alongside the payment info
-            val outbox = async { fetchOutboxPayto(target.recipient) }
+            // anonymous: no lookup of this recipient over the session (see TipsRepository.paymentInfoUnlinked); the outbox payto
+            // would attach their relays to it, so only a stored one is used then
+            val outbox = async { if (!anonymous) fetchOutboxPayto(target.recipient) }
             try {
                 val info = try {
                     var fresh: PaymentInfo? = null
@@ -132,7 +134,8 @@ class TipSheetController(
                     withTimeoutOrNull(FRESH_INFO_TIMEOUT_MS) {
                         // ask the relays first: a cached copy may still say "enabled" after the recipient disabled tips
                         fresh = try {
-                            tips.paymentInfo(target.recipient, maxAgeSeconds = 0)
+                            if (anonymous) tips.paymentInfoUnlinked(target.recipient) ?: tips.cachedPaymentInfo(target.recipient)
+                            else tips.paymentInfo(target.recipient, maxAgeSeconds = 0)
                         } catch (e: CancellationException) {
                             throw e
                         } catch (e: Exception) {
@@ -244,7 +247,9 @@ class TipSheetController(
             if (_state.value.target?.key != key) return@launch // dismissed or reopened meanwhile
             _state.update { it.copy(phase = TipPhase.Sending, error = null) }
             try {
-                val prepared = TipRequest.prepare(info, target.recipient, target.noteId, amount, TipType.TIP, "", now(), anonymous = anonymous)
+                // tips 0.6: the pid is derived from the signing key, so the key (own or one-time) comes first
+                val sender = tips.tipSender(anonymous)
+                val prepared = TipRequest.prepare(info, target.recipient, target.noteId, amount, TipType.TIP, "", now(), sender = sender, anonymous = anonymous)
                 val watcherRelays = watcherRelays(info)
                 if (!sendGate.canSend.value) return@launch refused(key)
                 val sentToAny: Boolean
@@ -348,7 +353,10 @@ class TipSheetController(
     private suspend fun watcherRelays(info: PaymentInfo.Enabled): List<String> = when (val w = info.watcher) {
         is Watcher.Personal -> w.relays
         is Watcher.Http -> if (!watcherAllowed(w.url)) emptyList() else try {
-            withTimeoutOrNull(WATCHER_TIMEOUT_MS) { watchers.info(w.url).relays.filter(RelayHosts::isPublicWss) } ?: emptyList()
+            withTimeoutOrNull(WATCHER_TIMEOUT_MS) {
+            // capped like a personal watcher's tag: a recipient's own "watcher" must not make every tipper dial hundreds of relays
+            watchers.info(w.url).relays.filter(RelayHosts::isPublicWss).distinct().take(Watcher.MAX_RELAYS)
+        } ?: emptyList()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

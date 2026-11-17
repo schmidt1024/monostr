@@ -76,6 +76,14 @@ class Nip49Test {
         assertEquals(Nip49.Decrypted.Key::class, Nip49.decrypt(withLogN(vector, 16), "nostr")::class)
     }
 
+    @Test
+    fun moreScryptMemoryThanFreeIsRefused() = runBlocking {
+        // log_n 16 needs 64 MiB
+        assertEquals(64L * 1024 * 1024, Nip49.scryptBytes(16))
+        assertEquals(Nip49.Decrypted.TooStrong, Nip49.decrypt(vector, "nostr", memoryBytes = 32L * 1024 * 1024))
+        assertEquals(Nip49.Decrypted.Key::class, Nip49.decrypt(vector, "nostr", memoryBytes = 128L * 1024 * 1024)::class)
+    }
+
     // test-only bech32 (BIP-173) to re-encode the vector with another log_n and a valid checksum
     private val cs = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
 

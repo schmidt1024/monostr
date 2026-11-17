@@ -50,8 +50,14 @@ object Nip49 {
         }
     }
 
-    /** Decrypts an ncryptsec string. A failure after a successful parse reads as a wrong password. */
-    suspend fun decrypt(input: String, password: String): Decrypted = withContext(Dispatchers.Default) {
+    /** scrypt's memory for [logN] (r = 8): 128 * r * 2^logN bytes. */
+    fun scryptBytes(logN: Int): Long = 1024L shl logN
+
+    /**
+     * Decrypts an ncryptsec string. A failure after a successful parse reads as a wrong password. [memoryBytes]: what the
+     * device can spare now; a log_n whose scrypt would not fit is refused like one above [MAX_LOG_N] instead of crashing.
+     */
+    suspend fun decrypt(input: String, password: String, memoryBytes: Long = Long.MAX_VALUE): Decrypted = withContext(Dispatchers.Default) {
         PerfTrace.mark("ncryptsec decrypt start")
         try {
             val enc = try {
@@ -60,7 +66,7 @@ object Nip49 {
                 return@withContext Decrypted.Invalid
             }
             val logN = logN(input)
-            if (logN != null && logN > MAX_LOG_N) return@withContext Decrypted.TooStrong
+            if (logN != null && (logN > MAX_LOG_N || scryptBytes(logN) > memoryBytes)) return@withContext Decrypted.TooStrong
             enc.use {
                 try {
                     it.decrypt(password).use { sk -> Decrypted.Key(sk.toHex()) }
@@ -80,7 +86,7 @@ object Nip49 {
         data object WrongPassword : Decrypted
         data object Invalid : Decrypted
 
-        /** log_n above [MAX_LOG_N]: refused before scrypt runs, it could exhaust the phone's memory. */
+        /** log_n above [MAX_LOG_N] or more scrypt memory than the device has free: refused before scrypt runs. */
         data object TooStrong : Decrypted
     }
 }

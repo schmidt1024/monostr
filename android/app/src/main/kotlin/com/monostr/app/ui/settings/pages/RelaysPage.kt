@@ -75,6 +75,7 @@ import com.monostr.app.ui.theme.Spacing
 import com.monostr.app.ui.settings.SettingsCard
 import com.monostr.app.ui.settings.SettingsCardDivider
 import com.monostr.app.ui.settings.SettingsGroup
+import com.monostr.app.ui.settings.settingsSegmentColors
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.unit.dp
 import com.monostr.nostr.model.RelayInfo
@@ -130,7 +131,7 @@ fun RelaysPage(vm: SettingsViewModel, focus: String?, onBack: () -> Unit, onOpen
                     POW_CHOICES.forEachIndexed { i, bits ->
                         SegmentedButton(
                             selected = pow == bits, onClick = { vm.setPowBits(bits) },
-                            shape = SegmentedButtonDefaults.itemShape(i, POW_CHOICES.size, baseShape = MaterialTheme.shapes.medium), modifier = Modifier.testTag("settings-pow-$bits"),
+                            shape = SegmentedButtonDefaults.itemShape(i, POW_CHOICES.size, baseShape = MaterialTheme.shapes.medium), colors = settingsSegmentColors(), modifier = Modifier.testTag("settings-pow-$bits"),
                         ) { Text(if (bits == 0) stringResource(R.string.settings_pow_off) else stringResource(R.string.settings_pow_bits, bits)) }
                     }
                 }

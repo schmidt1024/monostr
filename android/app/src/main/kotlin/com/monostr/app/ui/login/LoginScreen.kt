@@ -69,6 +69,11 @@ class LoginViewModel @Inject constructor(
         bridge = session.bridge,
         amberAvailable = AmberSigner.isInstalled(context),
         restoreMessage = (session.state.value as? SessionState.LoggedOut)?.message,
+        scryptMemory = {
+            val info = android.app.ActivityManager.MemoryInfo()
+            context.getSystemService(android.app.ActivityManager::class.java)?.getMemoryInfo(info)
+            if (info.availMem > 0) info.availMem / 2 else Long.MAX_VALUE
+        },
     )
 
     fun loginWithSecret(input: String, password: String = "") = viewModelScope.launch { controller.loginWithSecret(input, password) }

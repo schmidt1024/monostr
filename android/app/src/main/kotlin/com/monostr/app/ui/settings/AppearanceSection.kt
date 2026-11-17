@@ -72,7 +72,7 @@ fun ThemeModeControl(mode: ThemeMode, onMode: (ThemeMode) -> Unit, modifier: Mod
         modes.forEachIndexed { i, (m, label) ->
             SegmentedButton(
                 selected = mode == m, onClick = { onMode(m) },
-                shape = SegmentedButtonDefaults.itemShape(index = i, count = modes.size, baseShape = MaterialTheme.shapes.medium),
+                shape = SegmentedButtonDefaults.itemShape(index = i, count = modes.size, baseShape = MaterialTheme.shapes.medium), colors = settingsSegmentColors(),
                 modifier = Modifier.testTag("appearance-mode-${m.name.lowercase()}"),
                 // no check mark: the filled segment shows the choice, and four labels need the width (backlog 70)
                 icon = {},

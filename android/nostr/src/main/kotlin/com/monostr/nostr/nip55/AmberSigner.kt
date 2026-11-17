@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import com.monostr.nostr.Nip44UnsupportedException
+import com.monostr.nostr.RustConvert
 import com.monostr.nostr.Signer
 import com.monostr.nostr.SigningRejectedException
 import com.monostr.nostr.SilentSignUnavailable
@@ -30,11 +31,11 @@ class AmberSigner(
 
     override suspend fun sign(event: UnsignedEvent): Event {
         val json = unsignedJson(event)
-        viaContentResolver(json)?.let { return it }
+        viaContentResolver(json)?.let { return checked(event, it) }
         val request = Nip55.signEvent(json, pubkey, packageName, java.util.UUID.randomUUID().toString())
         val (ok, response) = bridge.request(request)
         return when (val outcome = Nip55.parseSignResponse(ok, response)) {
-            is Nip55.Outcome.Signed -> EventJson.decode(outcome.eventJson)
+            is Nip55.Outcome.Signed -> checked(event, EventJson.decode(outcome.eventJson))
             Nip55.Outcome.Rejected -> throw SigningRejectedException()
             is Nip55.Outcome.Failed -> throw IllegalStateException("signer failed: ${outcome.reason}")
             is Nip55.Outcome.Pubkey -> throw IllegalStateException("unexpected pubkey response")
@@ -44,7 +45,19 @@ class AmberSigner(
 
     /** ContentResolver only: never opens the signer activity (NIP-42 AUTH must not pop up Amber). */
     override suspend fun signEventSilent(event: UnsignedEvent): Event =
-        viaContentResolver(unsignedJson(event)) ?: throw SilentSignUnavailable()
+        checked(event, viaContentResolver(unsignedJson(event)) ?: throw SilentSignUnavailable())
+
+    /**
+     * What the signer app returns is stored and published as the user's own event: it must be the event that was asked
+     * for (same account, kind, content and tags; a multi-account signer that ignores current_user, or a faulty one,
+     * must not publish under another identity or with other content) and carry a valid id and signature.
+     */
+    private fun checked(request: UnsignedEvent, signed: Event): Event {
+        check(signed.pubkey.equals(pubkey, ignoreCase = true)) { "signer used another account" }
+        check(signed.kind == request.kind && signed.content == request.content && signed.tags == request.tags) { "signer returned another event" }
+        check(runCatching { RustConvert.toRust(signed).verify() }.getOrDefault(false)) { "signer returned an invalid signature" }
+        return signed
+    }
 
     private suspend fun viaContentResolver(json: String): Event? = withContext(Dispatchers.IO) {
         val q = Nip55.signEventQuery(packageName, json, pubkey)

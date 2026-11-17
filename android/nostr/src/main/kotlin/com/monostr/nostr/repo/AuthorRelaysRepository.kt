@@ -1,5 +1,7 @@
 package com.monostr.nostr.repo
 
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.NonCancellable
 import com.monostr.tips.Kinds
 import com.monostr.tips.RelayHosts
 import com.monostr.nostr.Exit
@@ -147,13 +149,16 @@ class NostrAuthorRelaysRepository(
     override suspend fun fetchNotes(relays: List<String>, pubkey: String, limit: Int): Set<String> {
         if (relays.isEmpty()) return emptySet()
         var ids: Set<String> = emptySet()
+        // held, not fetchFrom's own attach: fetchFrom returns before attaching while the route is held (Tor not ready),
+        // and releasing an attach never taken would drop another holder's relay; NonCancellable keeps `held` on cancel
+        val held = withContext(NonCancellable) { engine.attachTemporary(relays) }
         try {
             quietly {
                 val filter = Filter().kinds(listOf(Kind(1u), Kind(6u), Kind(Kinds.POLL.toUShort()))).author(PublicKey.parse(pubkey)).limit(limit.toULong())
-                ids = engine.fetchFrom(relays, filter, notesFetchTimeout).map { it.id().toHex() }.toSet()
+                ids = engine.fetchFrom(relays, filter, notesFetchTimeout, attach = false).map { it.id().toHex() }.toSet()
             }
         } finally {
-            engine.detachTemporary(relays)
+            withContext(NonCancellable) { engine.detachTemporary(held) }
         }
         return ids
     }
@@ -161,13 +166,16 @@ class NostrAuthorRelaysRepository(
     override suspend fun fetchArticles(relays: List<String>, pubkey: String, limit: Int): Boolean {
         if (relays.isEmpty()) return false
         var any = false
+        // held, not fetchFrom's own attach: fetchFrom returns before attaching while the route is held (Tor not ready),
+        // and releasing an attach never taken would drop another holder's relay; NonCancellable keeps `held` on cancel
+        val held = withContext(NonCancellable) { engine.attachTemporary(relays) }
         try {
             quietly {
                 val filter = Filter().kind(Kind(30023u)).author(PublicKey.parse(pubkey)).limit(limit.toULong())
-                any = engine.fetchFrom(relays, filter, notesFetchTimeout).isNotEmpty()
+                any = engine.fetchFrom(relays, filter, notesFetchTimeout, attach = false).isNotEmpty()
             }
         } finally {
-            engine.detachTemporary(relays)
+            withContext(NonCancellable) { engine.detachTemporary(held) }
         }
         return any
     }

@@ -1,0 +1,7 @@
+- «No hay notas nuevas» si una actualización no trae nada, con «Descubrir personas» si sigues a pocos
+- Propinas: el ID de pago está ligado al remitente, nadie puede atribuirse tu propina
+- Las propinas anónimas consultan al destinatario por una conexión aparte
+- El ajuste de relays del autor cubre también los relays que nombra una nota
+- Los enlaces engañosos preguntan antes; dominios parecidos en punycode
+- El tema elegido vuelve a verse en ajustes
+- Correcciones de seguridad y privacidad

@@ -19,6 +19,8 @@ data class TipIntent(
     val anonymous: Boolean = false,
     /** Protocol 0.5: the `amount` tag is left out because the recipient hides amounts. */
     val hideAmount: Boolean = false,
+    /** Tips 0.6: the 32 hex chars [paymentId] is derived from with the signing key; null for an unbound intent. */
+    val pidNonce: String? = null,
 ) {
     fun isExpired(now: Long): Boolean = now >= expiration
 
@@ -30,6 +32,7 @@ data class TipIntent(
             add(listOf("p", recipientPubkey))
             if (!hideAmount) add(listOf("amount", amount.toString()))
             add(listOf("pid", paymentId.hex))
+            if (pidNonce != null) add(listOf("pid_nonce", pidNonce))
             add(listOf("type", type.tag))
             add(listOf("expiration", expiration.toString()))
             if (anonymous) add(listOf("anon"))
@@ -38,6 +41,8 @@ data class TipIntent(
     )
 
     companion object {
+        private fun isNonceHex(s: String): Boolean = s.length == 2 * PaymentId.NONCE_SIZE && s.all { it in '0'..'9' || it in 'a'..'f' }
+
         /** Lifetime of an intent (spec 3.2 / 5.5): 24 hours. */
         const val TTL_SECONDS = 86_400L
 
@@ -51,11 +56,13 @@ data class TipIntent(
             createdAt: Long,
             anonymous: Boolean = false,
             hideAmount: Boolean = false,
+            pidNonce: String? = null,
         ): TipIntent {
             require(noteId == null || isHex64(noteId)) { "note id must be 64 lowercase hex chars" }
             require(isHex64(recipientPubkey)) { "recipient pubkey must be 64 lowercase hex chars" }
             require(amount > 0) { "amount must be positive" }
-            return TipIntent(noteId, recipientPubkey, amount, paymentId, type, comment, createdAt, createdAt + TTL_SECONDS, anonymous, hideAmount)
+            require(pidNonce == null || isNonceHex(pidNonce)) { "pid nonce must be 32 lowercase hex chars" }
+            return TipIntent(noteId, recipientPubkey, amount, paymentId, type, comment, createdAt, createdAt + TTL_SECONDS, anonymous, hideAmount, pidNonce)
         }
 
         /** Parses a kind 9738 event; null when malformed. A present but malformed `e` is malformed, not a profile tip. */
@@ -68,7 +75,9 @@ data class TipIntent(
             val paymentId = event.firstTagValue("pid")?.let(PaymentId::parse) ?: return null
             val type = if (event.firstTag("type") != null) (event.firstTagValue("type")?.let(TipType::fromTag) ?: return null) else TipType.TIP
             val expiration = event.firstTagValue("expiration")?.toLongOrNull() ?: return null
-            return TipIntent(noteId, recipient, amount, paymentId, type, event.content, event.createdAt, expiration, event.firstTag("anon") != null, hideAmount = !hasAmount)
+            // a present but malformed nonce makes the intent invalid, as at the watcher
+            val pidNonce = if (event.firstTag("pid_nonce") != null) (event.firstTagValue("pid_nonce")?.takeIf(::isNonceHex) ?: return null) else null
+            return TipIntent(noteId, recipient, amount, paymentId, type, event.content, event.createdAt, expiration, event.firstTag("anon") != null, hideAmount = !hasAmount, pidNonce = pidNonce)
         }
     }
 }

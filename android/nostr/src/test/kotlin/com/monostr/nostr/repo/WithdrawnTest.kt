@@ -55,6 +55,21 @@ class WithdrawnTest {
     }
 
     @Test
+    fun `a tip receipt its watcher retracted is left out, a stranger's retraction is not`() = runTest {
+        val e = engine()
+        val watcher = alice
+        fun receipt(n: String) = EventBuilder(Kind(com.monostr.tips.Kinds.TIP_RECEIPT.toUShort()), "")
+            .tags(listOf(Tag.parse(listOf("p", bob.publicKey().toHex())), Tag.parse(listOf("bolt", n)))).signWithKeys(watcher)
+        val retracted = receipt("1")
+        val strangerTried = receipt("2")
+        e.save(deletion(watcher, retracted.id().toHex())) // the watcher's kind 5 first, as when the receipt comes in late
+        e.save(deletion(bob, strangerTried.id().toHex()))
+        e.save(retracted); e.save(strangerTried)
+        assertEquals(listOf(strangerTried.id().toHex()), Withdrawn.filter(e, listOf(retracted, strangerTried)).map { it.id().toHex() })
+        e.close()
+    }
+
+    @Test
     fun `a bare repost of a withdrawn note is dropped, a repost of a kept note survives`() = runTest {
         val e = engine()
         e.save(EventBuilder.contactList(listOf(Contact(bob.publicKey(), null, null))).signWithKeys(me))

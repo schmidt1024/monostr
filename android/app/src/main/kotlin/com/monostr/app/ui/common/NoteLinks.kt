@@ -53,7 +53,7 @@ object NoteLinks {
      * ("paypal.com@evil.example") is never cut at all. A tap still opens the full URL.
      */
     fun shownUrl(url: String): String {
-        val bare = url.replaceFirst(SCHEME, "").removePrefix("www.")
+        val bare = asciiHost(url.replaceFirst(SCHEME, "")).removePrefix("www.")
         val shown = if (bare.indexOf('/') == bare.length - 1) bare.dropLast(1) else bare
         if (shown.length <= MAX_SHOWN) return shown
         val hostEnd = shown.indexOfFirst { it == '/' || it == '?' || it == '#' }.let { if (it < 0) shown.length else it }
@@ -64,6 +64,21 @@ object NoteLinks {
     }
 
     const val MAX_SHOWN = 32
+
+    /**
+     * A host with non-ASCII letters in its punycode form, as browsers show it: "pаypal.com" with a Cyrillic "а" must not
+     * read as paypal.com. Left as it is when it cannot be converted.
+     */
+    private fun asciiHost(bare: String): String {
+        val end = bare.indexOfFirst { it == '/' || it == '?' || it == '#' }.let { if (it < 0) bare.length else it }
+        val authority = bare.substring(0, end)
+        if (authority.all { it.code < 128 }) return bare
+        val at = authority.lastIndexOf('@')
+        val hostPort = authority.substring(at + 1)
+        val colon = hostPort.lastIndexOf(':').takeIf { it > 0 && hostPort.substring(it + 1).all(Char::isDigit) } ?: hostPort.length
+        val ascii = runCatching { java.net.IDN.toASCII(hostPort.substring(0, colon), java.net.IDN.ALLOW_UNASSIGNED) }.getOrNull() ?: return bare
+        return authority.substring(0, at + 1) + ascii + hostPort.substring(colon) + bare.substring(end)
+    }
 
     private val SCHEME = Regex("^https?://", RegexOption.IGNORE_CASE) // regex
 

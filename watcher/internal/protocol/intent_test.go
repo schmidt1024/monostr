@@ -1,6 +1,7 @@
 package protocol
 
 import (
+	"encoding/hex"
 	"errors"
 	"strconv"
 	"strings"
@@ -185,6 +186,25 @@ func TestParseIntentDuplicateTagsUseFirst(t *testing.T) {
 	}
 }
 
+// TestMaxIntentTTLIs48Hours: the app's 24 h intents fit, a week does not.
+func TestMaxIntentTTLIs48Hours(t *testing.T) {
+	if MaxIntentTTL != 48*3600 {
+		t.Fatalf("MaxIntentTTL %d", MaxIntentTTL)
+	}
+	for ttl, ok := range map[int64]bool{86400: true, 7 * 86400: false} {
+		ev := validIntentEvent(t, func(ev *nostr.Event) {
+			for i, tag := range ev.Tags {
+				if tag[0] == "expiration" {
+					ev.Tags[i] = nostr.Tag{"expiration", strconv.FormatInt(now+ttl, 10)}
+				}
+			}
+		})
+		if _, err := ParseIntent(ev, now+10); (err == nil) != ok {
+			t.Errorf("ttl %d: %v", ttl, err)
+		}
+	}
+}
+
 func TestParseIntentAcceptsMaxTTL(t *testing.T) {
 	ev := validIntentEvent(t, func(ev *nostr.Event) {
 		for i, tag := range ev.Tags {
@@ -195,7 +215,7 @@ func TestParseIntentAcceptsMaxTTL(t *testing.T) {
 	})
 	in, err := ParseIntent(ev, now+10)
 	if err != nil || in.Expiration != now+MaxIntentTTL {
-		t.Fatalf("created_at + 7d must be accepted: %+v %v", in, err)
+		t.Fatalf("created_at + 48h must be accepted: %+v %v", in, err)
 	}
 }
 
@@ -207,5 +227,72 @@ func TestParseIntentWithoutAmount(t *testing.T) {
 	}
 	if in.Amount != 0 {
 		t.Fatalf("amount %d", in.Amount)
+	}
+}
+
+// boundIntentEvent signs an intent whose pid is bound to the signing key with nonceHex; mutate may break it afterwards.
+func boundIntentEvent(t *testing.T, nonceHex string, mutate func(ev *nostr.Event)) *nostr.Event {
+	t.Helper()
+	sk := nostr.GeneratePrivateKey()
+	pub, _ := nostr.GetPublicKey(sk)
+	nonce, _ := hex.DecodeString("000102030405060708090a0b0c0d0e0f")
+	pid, err := BoundPID(pub, nonce)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ev := &nostr.Event{
+		Kind:      KindTipIntent,
+		CreatedAt: nostr.Timestamp(now),
+		Tags: nostr.Tags{
+			{"p", strings.Repeat("c", 64)},
+			{"amount", "5000000000"},
+			{"pid", pid},
+			{"pid_nonce", nonceHex},
+			{"type", "tip"},
+			{"expiration", strconv.FormatInt(now+86400, 10)},
+		},
+	}
+	if mutate != nil {
+		mutate(ev)
+	}
+	if err := ev.Sign(sk); err != nil {
+		t.Fatal(err)
+	}
+	return ev
+}
+
+func TestParseIntentBound(t *testing.T) {
+	in, err := ParseIntent(boundIntentEvent(t, "000102030405060708090a0b0c0d0e0f", nil), now+10)
+	if err != nil || !in.Bound {
+		t.Fatalf("bound intent: %+v, %v", in, err)
+	}
+}
+
+func TestParseIntentBoundMismatch(t *testing.T) {
+	// the pid of another key: what a copier would publish under their own key
+	ev := boundIntentEvent(t, "000102030405060708090a0b0c0d0e0f", func(ev *nostr.Event) {
+		for _, tag := range ev.Tags {
+			if tag[0] == "pid" {
+				tag[1] = "bc14ada49f3e78d6"
+			}
+		}
+	})
+	if _, err := ParseIntent(ev, now+10); !errors.Is(err, ErrInvalidIntent) {
+		t.Fatalf("copied pid accepted: %v", err)
+	}
+}
+
+func TestParseIntentNonceMalformed(t *testing.T) {
+	for _, n := range []string{"000102030405060708090A0B0C0D0E0F", "000102030405060708090a0b0c0d0e0", "000102030405060708090a0b0c0d0e0f0"} {
+		if _, err := ParseIntent(boundIntentEvent(t, n, nil), now+10); !errors.Is(err, ErrInvalidIntent) {
+			t.Fatalf("nonce %q accepted: %v", n, err)
+		}
+	}
+}
+
+func TestParseIntentUnbound(t *testing.T) {
+	in, err := ParseIntent(validIntentEvent(t, nil), now+10)
+	if err != nil || in.Bound {
+		t.Fatalf("unbound intent: %+v, %v", in, err)
 	}
 }

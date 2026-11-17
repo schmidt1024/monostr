@@ -2,14 +2,19 @@ package watcher
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/nbd-wtf/go-nostr"
 
 	"monostr.com/watcher/internal/monero"
+	"monostr.com/watcher/internal/protocol"
+	"monostr.com/watcher/internal/ratelimit"
 	"monostr.com/watcher/internal/store"
 )
 
@@ -90,6 +95,41 @@ func TestHandleIntentRecipientCap(t *testing.T) {
 	e.svc.HandleIntent(ctx, intentEvent(t, nostr.GeneratePrivateKey(), rpk, "ffffffffffffffff", 5, t0))
 	if n, _ := e.st.CountOpenIntents(rpk); n != MaxOpenIntentsPerRecipient {
 		t.Fatalf("cap not enforced: %d", n)
+	}
+}
+
+// TestHandleIntentSenderCap: one sender cannot fill the recipient's cap.
+func TestHandleIntentSenderCap(t *testing.T) {
+	e := newEnv(t, monero.Mainnet)
+	e.svc.deps.IntentLimit = ratelimit.New(1000, time.Hour)
+	rpk := e.register(t, nostr.GeneratePrivateKey())
+	ctx := context.Background()
+	spammer := nostr.GeneratePrivateKey()
+	spk, _ := nostr.GetPublicKey(spammer)
+	for i := 0; i < MaxOpenIntentsPerSender+5; i++ {
+		if err := e.svc.HandleIntent(ctx, intentEvent(t, spammer, rpk, fmt.Sprintf("%016x", i), 5, t0)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n, _ := e.st.CountOpenIntentsFrom(rpk, spk); n != MaxOpenIntentsPerSender {
+		t.Fatalf("sender cap not enforced: %d", n)
+	}
+	// intents turned away by the cap did not count against the rate limit
+	limited := ratelimit.New(MaxOpenIntentsPerSender+1, time.Hour)
+	e.svc.deps.IntentLimit = limited
+	for i := 0; i < MaxOpenIntentsPerSender; i++ {
+		limited.Allow(spk, timeOf(t0))
+	}
+	e.svc.HandleIntent(ctx, intentEvent(t, spammer, rpk, "eeeeeeeeeeeeeeee", 5, t0))
+	if !limited.Allowed(spk, timeOf(t0)) {
+		t.Fatal("capped intent recorded by the rate limiter")
+	}
+	// another sender still gets through
+	if err := e.svc.HandleIntent(ctx, intentEvent(t, nostr.GeneratePrivateKey(), rpk, "ffffffffffffffff", 5, t0)); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := e.st.CountOpenIntents(rpk); n != MaxOpenIntentsPerSender+1 {
+		t.Fatalf("open %d", n)
 	}
 }
 
@@ -189,5 +229,129 @@ func TestHandleIntentRejectsDuplicatePidForRecipient(t *testing.T) {
 	}
 	if _, ok, _ := e.st.GetIntent(spoof.ID); ok {
 		t.Fatal("duplicate-pid intent stored")
+	}
+}
+
+// boundIntentEvent is an intent whose pid is bound to senderSK (tips 0.6); it returns the event and its pid.
+func boundIntentEvent(t *testing.T, senderSK, recipientPK string, createdAt int64) (*nostr.Event, string) {
+	t.Helper()
+	pub, _ := nostr.GetPublicKey(senderSK)
+	nonce := make([]byte, protocol.PIDNonceSize)
+	nonce[0] = 7
+	pid, err := protocol.BoundPID(pub, nonce)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ev := intentEvent(t, senderSK, recipientPK, pid, 5, createdAt)
+	ev.Tags = append(ev.Tags, nostr.Tag{"pid_nonce", hex.EncodeToString(nonce)})
+	if err := ev.Sign(senderSK); err != nil {
+		t.Fatal(err)
+	}
+	return ev, pid
+}
+
+func TestBoundIntentTakesOverCopiedPid(t *testing.T) {
+	e := newEnv(t, monero.Mainnet)
+	rpk := e.register(t, nostr.GeneratePrivateKey())
+	ctx := context.Background()
+	real, pid := boundIntentEvent(t, nostr.GeneratePrivateKey(), rpk, t0-10)
+	// the copier saw the pid and got to the watcher first, unbound
+	copied := intentEvent(t, nostr.GeneratePrivateKey(), rpk, pid, 5, t0-9)
+	if err := e.svc.HandleIntent(ctx, copied); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.svc.HandleIntent(ctx, real); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, _ := e.st.GetIntent(copied.ID); ok {
+		t.Fatal("copied intent kept")
+	}
+	row, ok, _ := e.st.GetIntent(real.ID)
+	if !ok || !row.Bound || row.LWSEventID != "event2" {
+		t.Fatalf("bound intent %+v %v", row, ok)
+	}
+	if len(e.lws.deleted) != 1 || e.lws.deleted[0] != "event1" {
+		t.Fatalf("old webhook not removed: %v", e.lws.deleted)
+	}
+	if len(e.lws.hooks) != 2 || e.lws.hooks[1] != mainnetAddr+" "+pid+" "+real.ID+" "+hookURL+" 1" {
+		t.Fatalf("hooks %v", e.lws.hooks)
+	}
+}
+
+func TestUnboundAfterBoundIsDropped(t *testing.T) {
+	e := newEnv(t, monero.Mainnet)
+	rpk := e.register(t, nostr.GeneratePrivateKey())
+	ctx := context.Background()
+	real, pid := boundIntentEvent(t, nostr.GeneratePrivateKey(), rpk, t0-10)
+	e.svc.HandleIntent(ctx, real)
+	copied := intentEvent(t, nostr.GeneratePrivateKey(), rpk, pid, 5, t0-9)
+	e.svc.HandleIntent(ctx, copied)
+	if _, ok, _ := e.st.GetIntent(copied.ID); ok {
+		t.Fatal("unbound copy stored over a bound intent")
+	}
+	if row, ok, _ := e.st.GetIntent(real.ID); !ok || !row.Bound {
+		t.Fatalf("bound intent lost %+v %v", row, ok)
+	}
+}
+
+func TestBoundAfterPaidUnboundIsDropped(t *testing.T) {
+	e := newEnv(t, monero.Mainnet)
+	rpk := e.register(t, nostr.GeneratePrivateKey())
+	ctx := context.Background()
+	real, pid := boundIntentEvent(t, nostr.GeneratePrivateKey(), rpk, t0-10)
+	unbound := intentEvent(t, nostr.GeneratePrivateKey(), rpk, pid, 5, t0-9)
+	e.svc.HandleIntent(ctx, unbound)
+	e.st.InsertReceipt(store.Receipt{ID: strings.Repeat("9", 64), IntentID: unbound.ID, TxHash: strings.Repeat("7", 64), Amount: 5, CreatedAt: t0, SeenAt: t0, State: store.ReceiptSeen})
+	e.svc.HandleIntent(ctx, real)
+	if _, ok, _ := e.st.GetIntent(real.ID); ok {
+		t.Fatal("bound intent replaced a paid one")
+	}
+	if len(e.lws.deleted) != 0 {
+		t.Fatalf("webhook of the paid intent removed: %v", e.lws.deleted)
+	}
+}
+
+func TestReplacedWebhookDeleteIsRetriedBySweep(t *testing.T) {
+	e := newEnv(t, monero.Mainnet)
+	rpk := e.register(t, nostr.GeneratePrivateKey())
+	ctx := context.Background()
+	real, pid := boundIntentEvent(t, nostr.GeneratePrivateKey(), rpk, t0-10)
+	e.svc.HandleIntent(ctx, intentEvent(t, nostr.GeneratePrivateKey(), rpk, pid, 5, t0-9))
+	e.lws.failDelete = errors.New("lws busy")
+	if err := e.svc.HandleIntent(ctx, real); err != nil {
+		t.Fatal(err)
+	}
+	if len(e.lws.deleted) != 0 {
+		t.Fatalf("deleted %v", e.lws.deleted)
+	}
+	e.lws.failDelete = nil
+	if err := e.svc.Sweep(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if len(e.lws.deleted) != 1 || e.lws.deleted[0] != "event1" {
+		t.Fatalf("orphan webhook not retried: %v", e.lws.deleted)
+	}
+	e.svc.Sweep(ctx)
+	if len(e.lws.deleted) != 1 {
+		t.Fatalf("orphan deleted twice: %v", e.lws.deleted)
+	}
+}
+
+func TestMalformedNonceThroughHandleIntentIsIgnored(t *testing.T) {
+	e := newEnv(t, monero.Mainnet)
+	rpk := e.register(t, nostr.GeneratePrivateKey())
+	sk := nostr.GeneratePrivateKey()
+	ev, _ := boundIntentEvent(t, sk, rpk, t0-10)
+	for _, tag := range ev.Tags {
+		if tag[0] == "pid_nonce" {
+			tag[1] = tag[1][:31] // 31 chars: malformed
+		}
+	}
+	ev.Sign(sk)
+	if err := e.svc.HandleIntent(context.Background(), ev); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, _ := e.st.GetIntent(ev.ID); ok {
+		t.Fatal("intent with a malformed nonce stored")
 	}
 }

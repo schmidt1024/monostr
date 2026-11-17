@@ -81,7 +81,8 @@ func (f *fakeHandler) HandleHook(_ context.Context, h lws.Hook) error {
 }
 
 func intent() store.IntentRow {
-	return store.IntentRow{Intent: protocol.Intent{ID: "intent1", PID: pid}, LWSEventID: walletrpc.EventID(pid)}
+	// stored at chain height 50: payments from block 20 on count
+	return store.IntentRow{Intent: protocol.Intent{ID: "intent1", PID: pid}, LWSEventID: walletrpc.EventID(pid), ChainHeight: 50}
 }
 
 // transfer is a pool transfer of the test pid.
@@ -125,6 +126,55 @@ func TestPollerPoolThenConfirmed(t *testing.T) {
 	p.Poll(context.Background())
 	if len(h.hooks) != 2 || h.hooks[1].Confirmations != 1 || h.hooks[1].Block != 77 {
 		t.Fatalf("hooks %+v", h.hooks)
+	}
+}
+
+// TestPollerSkipsPaymentOlderThanIntent: a new intent re-using the pid of an
+// old payment must not claim it; pool transfers and payments within the slack
+// are handed on. The bound comes from the chain height the watcher stored
+// with the intent; a backdated created_at (30 days ago) changes nothing.
+func TestPollerSkipsPaymentOlderThanIntent(t *testing.T) {
+	const stored = int64(1700000000)
+	old := walletrpc.Transfer{TxID: "old", PaymentID: pid, Amount: 5, Confirmations: 50, Height: 1000 - store.PaymentSlackBlocks - 1}
+	edge := walletrpc.Transfer{TxID: "edge", PaymentID: pid, Amount: 6, Confirmations: 2, Height: 1000 - store.PaymentSlackBlocks}
+	pool := walletrpc.Transfer{TxID: "pool", PaymentID: pid, Amount: 7, Pool: true}
+	row := intent()
+	row.CreatedAt, row.StoredAt, row.ChainHeight = stored-30*86400, stored, 1000
+	w := &fakeWallet{transfers: []walletrpc.Transfer{old, edge, pool}}
+	p, _, h := newPoller(w, &fakeNodes{}, fakeIntents{row})
+	p.Poll(context.Background())
+	p.Poll(context.Background())
+	if len(h.hooks) != 2 || h.hooks[0].TxHash != "edge" || h.hooks[1].TxHash != "pool" {
+		t.Fatalf("hooks %+v", h.hooks)
+	}
+}
+
+// TestPollerFailsClosedWithoutBound: a row stored without a chain height
+// (before the bound existed) falls back to the block timestamp against the
+// watcher's stored_at; a confirmed transfer without height or timestamp is
+// never credited.
+func TestPollerFailsClosedWithoutBound(t *testing.T) {
+	const stored = int64(1700000000)
+	row := intent()
+	row.ChainHeight, row.StoredAt = 0, stored
+	unknown := walletrpc.Transfer{TxID: "unknown", PaymentID: pid, Amount: 5, Confirmations: 3}
+	old := walletrpc.Transfer{TxID: "old", PaymentID: pid, Amount: 5, Confirmations: 3, Height: 70,
+		Timestamp: uint64(stored - paymentTimeSlack - 1)}
+	recent := walletrpc.Transfer{TxID: "recent", PaymentID: pid, Amount: 5, Confirmations: 3, Height: 80,
+		Timestamp: uint64(stored - paymentTimeSlack)}
+	w := &fakeWallet{transfers: []walletrpc.Transfer{unknown, old, recent}}
+	p, _, h := newPoller(w, &fakeNodes{}, fakeIntents{row})
+	p.Poll(context.Background())
+	if len(h.hooks) != 1 || h.hooks[0].TxHash != "recent" {
+		t.Fatalf("hooks %+v", h.hooks)
+	}
+	// with a bound, a confirmed transfer of unknown height fails too
+	bounded := intent()
+	w2 := &fakeWallet{transfers: []walletrpc.Transfer{unknown}}
+	p2, _, h2 := newPoller(w2, &fakeNodes{}, fakeIntents{bounded})
+	p2.Poll(context.Background())
+	if len(h2.hooks) != 0 {
+		t.Fatalf("hooks %+v", h2.hooks)
 	}
 }
 

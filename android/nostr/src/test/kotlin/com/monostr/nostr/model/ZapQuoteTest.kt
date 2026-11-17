@@ -89,6 +89,10 @@ class ZapQuoteTest {
         assertEquals("", z.comment)
         // an amount that is not the invoice's: the request belongs to another zap
         assertNull(ZapReceipts.parse(receipt(request("other zap", amountMsat = 1_000)))!!.sender)
+        // a request without amount cannot vouch for the invoice's: amount shown, no sender, no comment
+        val noAmount = ZapReceipts.parse(receipt(request("hi", amountMsat = null)))!!
+        assertNull(noAmount.sender)
+        assertEquals("", noAmount.comment)
     }
 
     /** Juraj's real receipt (relay.primal.net, 2026-11-10): its invoice's description hash binds the request. */

@@ -144,6 +144,8 @@
     <string name="feed_new_note">Nova nota</string>
     <string name="feed_empty">Ainda não há notas. Siga alguém ou escreva a primeira.</string>
     <string name="feed_new_notes">Notas novas</string>
+    <string name="feed_nothing_new">Nenhuma nota nova</string>
+    <string name="feed_nothing_new_discover">Descobrir pessoas</string>
     <string name="feed_error_load">Não foi possível carregar o feed</string>
     <string name="feed_error_more">Não foi possível carregar mais notas</string>
 
@@ -358,7 +360,7 @@
     <string name="link_preview_cd">Pré-visualização do link: %1$s, %2$s</string>
     <string name="link_preview_remove">Remover pré-visualização</string>
     <string name="settings_author_relays">Conectar temporariamente os relays do autor</string>
-    <string name="settings_author_relays_hint">As notas também são buscadas nos próprios relays de outras pessoas: ao abrir um perfil e quando uma nota responde ou cita uma que seus relays não têm. Esses relays veem seu endereço IP e quais notas você olha.</string>
+    <string name="settings_author_relays_hint">As notas também são buscadas nos próprios relays de outras pessoas e nos relays que uma nota indica: ao abrir um perfil, quando uma nota responde ou cita uma que seus relays não têm, e para enquetes e artigos vinculados. Esses relays veem seu endereço IP e quais notas você olha.</string>
     <string name="settings_pow">Prova de trabalho ao enviar</string>
     <string name="settings_pow_hint">Alguns relays só aceitam notas com prova de trabalho (NIP-13). Mais bits são mais aceitos, mas o envio demora mais.</string>
     <string name="settings_pow_off">Não</string>

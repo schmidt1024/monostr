@@ -131,4 +131,21 @@ class TipIntentTest {
         val good = signer.sign(intent().toUnsignedEvent())
         assertNull(TipIntent.parse(good.copy(tags = good.tags.map { if (it[0] == "amount") listOf("amount", "0") else it })))
     }
+
+    @Test
+    fun `intent writes pid_nonce right after pid`() {
+        val i = TipIntent.create(note, recipient, 1_000, TipType.TIP, "", pid, createdAt = 1700000000, pidNonce = "000102030405060708090a0b0c0d0e0f")
+        val tags = i.toUnsignedEvent().tags
+        val at = tags.indexOfFirst { it[0] == "pid" }
+        assertEquals(listOf("pid_nonce", "000102030405060708090a0b0c0d0e0f"), tags[at + 1])
+    }
+
+    @Test
+    fun `parse keeps the nonce and still reads intents without it`() = runTest {
+        val bound = TipIntent.create(note, recipient, 1_000, TipType.TIP, "", pid, createdAt = 1700000000, pidNonce = "000102030405060708090a0b0c0d0e0f")
+        assertEquals(bound, TipIntent.parse(signer.sign(bound.toUnsignedEvent())))
+        assertNull(TipIntent.parse(signer.sign(intent().toUnsignedEvent()))!!.pidNonce)
+        val broken = bound.toUnsignedEvent().let { u -> u.copy(tags = u.tags.map { if (it[0] == "pid_nonce") listOf("pid_nonce", "XYZ") else it }) }
+        assertNull(TipIntent.parse(signer.sign(broken)))
+    }
 }

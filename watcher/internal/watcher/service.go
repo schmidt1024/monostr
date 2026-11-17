@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
@@ -52,7 +53,13 @@ type Config struct {
 	HookURL         string
 	Version         string
 	Now             func() int64
+	// MaxNewAccountsPerHour caps registrations of pubkeys without an account
+	// across all clients; 0 = DefaultMaxNewAccountsPerHour, < 0 = no cap.
+	MaxNewAccountsPerHour int
 }
+
+// DefaultMaxNewAccountsPerHour is the global cap on new accounts per hour.
+const DefaultMaxNewAccountsPerHour = 100
 
 type Deps struct {
 	Store       *store.Store
@@ -65,6 +72,7 @@ type Deps struct {
 
 const (
 	MaxOpenIntentsPerRecipient = 500
+	MaxOpenIntentsPerSender    = 20 // per (recipient, sender)
 	ReceiptTimeoutSeconds      = 3600
 	RelayCacheTTLSeconds       = 86400
 	IntentLookbackSeconds      = 3600
@@ -73,6 +81,7 @@ const (
 	metaLastSeenIntent = "last_seen_intent_ts"
 	metaLastHeight     = MetaLastHeight
 	metaPendingRescan  = "pending_rescan_height"
+	metaLastSeenHeight = "last_seen_height"
 )
 
 // MetaLastHeight is the store meta key of the chain height the sweep last
@@ -86,6 +95,11 @@ type Service struct {
 	log    *slog.Logger
 	// startedAt: intents older than this may have receipts from a run whose database is gone
 	startedAt int64
+	// accountMu serialises Register and Unregister, so an address is never
+	// deactivated at LWS while a concurrent registration adds a user of it
+	accountMu sync.Mutex
+	// newAccounts counts new registrations under one key (nil: no cap)
+	newAccounts *ratelimit.Window
 }
 
 func New(cfg Config, deps Deps) (*Service, error) {
@@ -105,8 +119,17 @@ func New(cfg Config, deps Deps) (*Service, error) {
 	if deps.Store == nil || deps.LWS == nil || deps.Relays == nil || deps.Height == nil {
 		return nil, errors.New("watcher: missing dependency")
 	}
-	return &Service{cfg: cfg, deps: deps, pubkey: pubkey, log: deps.Logger, startedAt: cfg.Now()}, nil
+	s := &Service{cfg: cfg, deps: deps, pubkey: pubkey, log: deps.Logger, startedAt: cfg.Now()}
+	switch n := cfg.MaxNewAccountsPerHour; {
+	case n == 0:
+		s.newAccounts = ratelimit.New(DefaultMaxNewAccountsPerHour, time.Hour)
+	case n > 0:
+		s.newAccounts = ratelimit.New(n, time.Hour)
+	}
+	return s, nil
 }
+
+const newAccountsKey = "new-accounts"
 
 func (s *Service) Pubkey() string { return s.pubkey }
 
@@ -128,6 +151,8 @@ func badRequest(msg string) error { return &api.HTTPError{Status: 400, Message: 
 // active and stores the mapping. The view key is forwarded once and never
 // kept.
 func (s *Service) Register(ctx context.Context, pubkey, address, viewKeyHex string) error {
+	s.accountMu.Lock()
+	defer s.accountMu.Unlock()
 	addr, err := monero.ParseStandardAddress(address)
 	if errors.Is(err, monero.ErrNotStandardAddress) {
 		return badRequest("address must be a standard (primary) address")
@@ -142,6 +167,18 @@ func (s *Service) Register(ctx context.Context, pubkey, address, viewKeyHex stri
 	if err != nil || !monero.ViewKeyMatches(viewKey, addr.View) {
 		return badRequest("view key does not match address")
 	}
+	// a new pubkey counts against the global cap; it is checked before LWS
+	// is touched and recorded only once the account exists, so failed
+	// attempts (e.g. the personal watcher's startup retries) cost nothing
+	_, known, err := s.deps.Store.GetAccount(pubkey)
+	if err != nil {
+		return err
+	}
+	isNew := !known && s.newAccounts != nil
+	if isNew && !s.newAccounts.Allowed(newAccountsKey, timeOf(s.cfg.Now())) {
+		s.log.Warn("new accounts cap reached")
+		return &api.HTTPError{Status: 429, Message: "too many new accounts, try again later"}
+	}
 	if err := s.deps.LWS.EnsureAccount(ctx, address, viewKeyHex); err != nil {
 		s.log.Error("lws ensure account failed", "err", err.Error())
 		return &api.HTTPError{Status: 502, Message: "watcher backend unavailable"}
@@ -149,6 +186,9 @@ func (s *Service) Register(ctx context.Context, pubkey, address, viewKeyHex stri
 	prev, err := s.deps.Store.PutAccount(store.Account{Pubkey: pubkey, Address: address, CreatedAt: s.cfg.Now()})
 	if err != nil {
 		return err
+	}
+	if isNew {
+		s.newAccounts.Allow(newAccountsKey, timeOf(s.cfg.Now()))
 	}
 	if prev != nil && prev.Address != address {
 		s.retireAddress(ctx, pubkey, prev.Address)
@@ -160,6 +200,8 @@ func (s *Service) Register(ctx context.Context, pubkey, address, viewKeyHex stri
 // Unregister removes the account, deactivates it at LWS and drops the
 // recipient's open intents and webhooks. It is idempotent.
 func (s *Service) Unregister(ctx context.Context, pubkey string) error {
+	s.accountMu.Lock()
+	defer s.accountMu.Unlock()
 	acc, ok, err := s.deps.Store.DeleteAccount(pubkey)
 	if err != nil {
 		return err
@@ -171,11 +213,17 @@ func (s *Service) Unregister(ctx context.Context, pubkey string) error {
 	return nil
 }
 
-// retireAddress deactivates an address at LWS and removes the recipient's
-// webhooks; open intents are deleted, seen/confirmed rows are kept.
+// retireAddress removes the recipient's webhooks and deactivates the address
+// at LWS unless another account still uses it (accounts.address is not
+// unique: one wallet may serve several npubs); open intents are deleted,
+// seen/confirmed rows are kept.
 func (s *Service) retireAddress(ctx context.Context, pubkey, address string) {
-	if err := s.deps.LWS.ModifyAccountStatus(ctx, "inactive", []string{address}); err != nil {
-		s.log.Error("lws deactivate failed", "err", err.Error())
+	if users, err := s.deps.Store.CountAccountsWithAddress(address); err != nil {
+		s.log.Error("count address users failed, address left active", "err", err.Error())
+	} else if users == 0 {
+		if err := s.deps.LWS.ModifyAccountStatus(ctx, "inactive", []string{address}); err != nil {
+			s.log.Error("lws deactivate failed", "err", err.Error())
+		}
 	}
 	rows, err := s.deps.Store.IntentsForRecipient(pubkey)
 	if err != nil {

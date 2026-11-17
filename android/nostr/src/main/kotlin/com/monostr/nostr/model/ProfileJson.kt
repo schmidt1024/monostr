@@ -31,8 +31,13 @@ object ProfileJson {
     fun profile(pubkey: String, content: String): Profile? {
         val o = runCatching { Json.parseToJsonElement(content) as? JsonObject }.getOrNull() ?: return null
         fun s(vararg keys: String): String? = keys.firstNotNullOfOrNull { k -> (o[k] as? JsonPrimitive)?.takeIf { it.isString }?.content }
-        return Profile(pubkey, s("name"), s("display_name", "displayName"), s("picture"), s("about"), s("nip05"), banner = s("banner"), website = s("website"))
+        return Profile(pubkey, s("name")?.let(::plainName), s("display_name", "displayName")?.let(::plainName), s("picture"), s("about"), s("nip05"), banner = s("banner"), website = s("website"))
     }
+
+    /** Direction overrides and isolates (U+202A-202E, U+2066-2069) let a name read backwards or pose as someone else's; joiners stay (emoji). */
+    private val DIRECTION_CONTROLS = Regex("[\\u202A-\\u202E\\u2066-\\u2069]") // regex
+
+    private fun plainName(raw: String): String = raw.replace(DIRECTION_CONTROLS, "")
 
     private fun obj(raw: String?): Map<String, JsonElement> =
         raw?.let { runCatching { Json.parseToJsonElement(it) as? JsonObject }.getOrNull() } ?: emptyMap()

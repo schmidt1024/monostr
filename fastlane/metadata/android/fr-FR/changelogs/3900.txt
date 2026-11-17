@@ -1,0 +1,7 @@
+- «Pas de nouvelles notes» si une actualisation n'apporte rien, avec «Découvrir des personnes» si vous suivez peu
+- Pourboires : ID de paiement lié à l'expéditeur, personne ne peut s'attribuer le vôtre
+- Les pourboires anonymes consultent le destinataire via une connexion séparée
+- Le réglage des relais de l'auteur couvre aussi les relais cités par une note
+- Les liens trompeurs demandent d'abord ; domaines ressemblants en punycode
+- Thème choisi de nouveau visible
+- Correctifs de sécurité

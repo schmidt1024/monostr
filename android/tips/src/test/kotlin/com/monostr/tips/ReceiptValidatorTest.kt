@@ -47,4 +47,9 @@ class ReceiptValidatorTest {
     fun `total ignores receipts without amount`() {
         assertEquals(1500L, ReceiptValidator.total(listOf(receipt(amount = 1000), receipt(amount = 500), receipt().copy(amount = null))))
     }
+
+    @Test
+    fun `total stops at the largest value instead of wrapping`() {
+        assertEquals(Long.MAX_VALUE, ReceiptValidator.total(listOf(receipt(amount = Long.MAX_VALUE), receipt(amount = Long.MAX_VALUE))))
+    }
 }

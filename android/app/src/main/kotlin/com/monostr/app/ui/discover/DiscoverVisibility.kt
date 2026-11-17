@@ -9,6 +9,8 @@ import kotlinx.coroutines.flow.update
 /** Spec 2026-10-27 §4: the home feed shows the discover block to accounts that follow fewer than [THRESHOLD] people. */
 object DiscoverVisibility {
     const val THRESHOLD = 10
+    /** Below this many follows the "No new notes" pill offers "Discover people" (owner 2026-11-17). */
+    const val CTA_THRESHOLD = 20
     /** The [com.monostr.app.data.HintStore] key of the dismissed block. */
     const val HINT = "discover"
 
@@ -45,5 +47,10 @@ class DiscoverDecision {
 
     fun dismiss() {
         _shown.value = false
+    }
+
+    /** The user asked for suggestions ("Discover people"): shown for this session, a stored dismissal stays. */
+    fun reopen() {
+        _shown.value = true
     }
 }

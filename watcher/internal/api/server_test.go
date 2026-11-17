@@ -55,6 +55,7 @@ type env struct {
 	log *bytes.Buffer
 	sk  string
 	pk  string
+	n   int // authorizations built so far: each gets its own created_at, so no two share an id
 }
 
 func newEnv(t *testing.T) *env {
@@ -68,7 +69,7 @@ func newEnvAllowing(t *testing.T, allowed func(pk string) []string) *env {
 	e.sk = nostr.GeneratePrivateKey()
 	e.pk, _ = nostr.GetPublicKey(e.sk)
 	logger := slog.New(slog.NewTextHandler(e.log, nil))
-	h := New(e.svc, publicURL, ratelimit.New(2, time.Hour), allowed(e.pk), logger)
+	h := New(e.svc, publicURL, ratelimit.New(2, time.Hour), allowed(e.pk), testHookSecret, logger)
 	e.srv = httptest.NewServer(h)
 	t.Cleanup(e.srv.Close)
 	return e
@@ -81,7 +82,8 @@ func (e *env) do(t *testing.T, method, path string, body []byte, auth bool, head
 		req.Header.Set("Content-Type", "application/json")
 	}
 	if auth {
-		h, err := nip98.Build(e.sk, publicURL+path, method, body, time.Now().Unix())
+		e.n++
+		h, err := nip98.Build(e.sk, publicURL+path, method, body, time.Now().Unix()-int64(e.n%50))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -109,7 +111,7 @@ func TestInfo(t *testing.T) {
 	if resp.StatusCode != 200 || out["pubkey"] != strings.Repeat("a", 64) || out["network"] != "stagenet" || out["height"] != float64(42) {
 		t.Fatalf("%d %v", resp.StatusCode, out)
 	}
-	if out["protocol"] != "0.5" {
+	if out["protocol"] != "0.6" {
 		t.Fatalf("protocol %v", out["protocol"])
 	}
 	if resp.Header.Get("Content-Type") != "application/json" {
@@ -243,6 +245,53 @@ func TestRegisterRateLimitPerIP(t *testing.T) {
 	}
 }
 
+func TestClientIPAndLimitKey(t *testing.T) {
+	req := func(remote string, xff ...string) *http.Request {
+		r := httptest.NewRequest("POST", "/v1/accounts", nil)
+		r.RemoteAddr = remote
+		for _, v := range xff {
+			r.Header.Add("X-Forwarded-For", v)
+		}
+		return r
+	}
+	cases := []struct {
+		r    *http.Request
+		want string
+	}{
+		{req("203.0.113.9:1", "198.51.100.1"), "203.0.113.9"},                  // direct: header ignored
+		{req("10.0.0.2:1", "203.0.113.5"), "203.0.113.5"},                      // Caddy
+		{req("10.0.0.2:1", "1.2.3.4, 203.0.113.5"), "203.0.113.5"},             // spoofed left entry ignored
+		{req("10.0.0.2:1", "1.2.3.4", "203.0.113.5, 10.0.0.7"), "203.0.113.5"}, // internal hops skipped
+		{req("10.0.0.2:1", "garbage, 203.0.113.5"), "203.0.113.5"},
+		{req("10.0.0.2:1", "203.0.113.5, garbage"), "10.0.0.2"},
+		{req("10.0.0.2:1"), "10.0.0.2"},
+	}
+	for i, c := range cases {
+		if got := clientIP(c.r); got != c.want {
+			t.Errorf("case %d: %q, want %q", i, got, c.want)
+		}
+	}
+	if limitKey("2001:db8:1:2:aaaa::1") != limitKey("2001:db8:1:2:bbbb::9") || limitKey("2001:db8:1:2::1") == limitKey("2001:db8:1:3::1") {
+		t.Fatal("IPv6 not bucketed by /64")
+	}
+	if limitKey("203.0.113.5") != "203.0.113.5" {
+		t.Fatal("IPv4 key changed")
+	}
+}
+
+func TestRegisterRateLimitBucketsIPv6(t *testing.T) {
+	e := newEnv(t)
+	body := []byte(`{"address":"4A","view_key":"` + strings.Repeat("c", 64) + `"}`)
+	for i, ip := range []string{"2001:db8::1", "2001:db8::2"} {
+		if resp, _ := e.do(t, "POST", "/v1/accounts", body, true, map[string]string{"X-Forwarded-For": ip}); resp.StatusCode != 200 {
+			t.Fatalf("call %d: %d", i, resp.StatusCode)
+		}
+	}
+	if resp, _ := e.do(t, "POST", "/v1/accounts", body, true, map[string]string{"X-Forwarded-For": "2001:db8::3"}); resp.StatusCode != 429 {
+		t.Fatalf("same /64 not limited: %d", resp.StatusCode)
+	}
+}
+
 func TestRegisterAllowlist(t *testing.T) {
 	body := []byte(`{"address":"4A","view_key":"` + strings.Repeat("c", 64) + `"}`)
 	listed := newEnvAllowing(t, func(pk string) []string { return []string{strings.Repeat("b", 64), pk} })
@@ -277,20 +326,73 @@ func TestUnregister(t *testing.T) {
 	}
 }
 
+// TestAuthorizationCannotBeReplayed: a captured DELETE header works once.
+func TestAuthorizationCannotBeReplayed(t *testing.T) {
+	e := newEnv(t)
+	h, err := nip98.Build(e.sk, publicURL+"/v1/accounts", "DELETE", nil, time.Now().Unix())
+	if err != nil {
+		t.Fatal(err)
+	}
+	headers := map[string]string{"Authorization": h}
+	if resp, _ := e.do(t, "DELETE", "/v1/accounts", nil, false, headers); resp.StatusCode != 204 {
+		t.Fatalf("first: %d", resp.StatusCode)
+	}
+	if resp, _ := e.do(t, "DELETE", "/v1/accounts", nil, false, headers); resp.StatusCode != 401 {
+		t.Fatalf("replay: %d", resp.StatusCode)
+	}
+	if len(e.svc.unregistered) != 1 {
+		t.Fatalf("unregistered %v", e.svc.unregistered)
+	}
+}
+
+const testHookSecret = "0123456789abcdef0123456789abcdef"
+
+var hookPath = HookPath(testHookSecret)
+
+// TestHookNeedsSecretPath: the hook URL carries a secret; the bare path,
+// a wrong or shortened secret are refused even from an internal address,
+// and the secret never reaches the log.
+func TestHookNeedsSecretPath(t *testing.T) {
+	e := newEnv(t)
+	hook := []byte(`{"event":"tx-confirmation","payment_id":"a","token":"t","confirmations":0,"id":"x","tx_info":{"amount":5,"tx_hash":"h"}}`)
+	for _, path := range []string{"/internal/lws-hook", HookPath("0123456789abcdef0123456789abcdee"), HookPath(testHookSecret[:31])} {
+		if resp, _ := e.do(t, "POST", path, hook, false, nil); resp.StatusCode == 200 {
+			t.Errorf("%s accepted", path)
+		}
+	}
+	if len(e.svc.hooks) != 0 {
+		t.Fatal("hook handled without the secret")
+	}
+	if resp, _ := e.do(t, "POST", hookPath, hook, false, nil); resp.StatusCode != 200 {
+		t.Fatalf("secret path: %d", resp.StatusCode)
+	}
+	if strings.Contains(e.log.String(), testHookSecret) {
+		t.Fatal("hook secret logged")
+	}
+	disabled := New(e.svc, publicURL, ratelimit.New(2, time.Hour), nil, "", slog.New(slog.DiscardHandler))
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", HookPath(""), bytes.NewReader(hook))
+	req.RemoteAddr = "127.0.0.1:1"
+	disabled.ServeHTTP(rec, req)
+	if rec.Code == 200 {
+		t.Fatal("hook accepted with no secret configured")
+	}
+}
+
 func TestHookOnlyFromInternalNetwork(t *testing.T) {
 	e := newEnv(t)
 	hook := []byte(`{"event":"tx-confirmation","payment_id":"a","token":"t","confirmations":0,"id":"x","tx_info":{"amount":5,"tx_hash":"h"}}`)
 	// httptest client connects from 127.0.0.1 → allowed
-	resp, _ := e.do(t, "POST", "/internal/lws-hook", hook, false, nil)
+	resp, _ := e.do(t, "POST", hookPath, hook, false, nil)
 	if resp.StatusCode != 200 || len(e.svc.hooks) != 1 || e.svc.hooks[0].Amount != 5 {
 		t.Fatalf("hook: %d %v", resp.StatusCode, e.svc.hooks)
 	}
 	// X-Forwarded-For must NOT grant or revoke access; source address decides
-	resp, _ = e.do(t, "POST", "/internal/lws-hook", hook, false, map[string]string{"X-Forwarded-For": "203.0.113.5"})
+	resp, _ = e.do(t, "POST", hookPath, hook, false, map[string]string{"X-Forwarded-For": "203.0.113.5"})
 	if resp.StatusCode != 200 {
 		t.Fatalf("xff ignored: %d", resp.StatusCode)
 	}
-	resp, _ = e.do(t, "POST", "/internal/lws-hook", []byte(`garbage`), false, nil)
+	resp, _ = e.do(t, "POST", hookPath, []byte(`garbage`), false, nil)
 	if resp.StatusCode != 400 {
 		t.Fatalf("bad payload: %d", resp.StatusCode)
 	}
@@ -304,7 +406,7 @@ func TestHookServiceErrorIs500ButPayloadNotLogged(t *testing.T) {
 	e := newEnv(t)
 	e.svc.hookErr = io.ErrUnexpectedEOF
 	hook := []byte(`{"event":"tx-confirmation","payment_id":"a","token":"secret-token","confirmations":0,"id":"x","tx_info":{"amount":5,"tx_hash":"h"}}`)
-	resp, _ := e.do(t, "POST", "/internal/lws-hook", hook, false, nil)
+	resp, _ := e.do(t, "POST", hookPath, hook, false, nil)
 	if resp.StatusCode != 500 {
 		t.Fatalf("%d", resp.StatusCode)
 	}

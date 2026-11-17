@@ -5,6 +5,7 @@ Monostr, Monero ile bahşiş verilebilen bir Android Nostr istemcisidir.
 • Beğen, yeniden paylaş, alıntıla, yanıtla; dokunulabilir bahsetmeler, etiketler ve bağlantılar
 • Notlarda 2 dakikaya kadar görseller ve videolar ile kendi yüklemelerin (Blossom), hassas içerik bulanık
 • Uzun makaleleri (NIP-23) doğrudan uygulamada oku; beğeni, paylaşım, yanıt, yer imi ve bahşiş desteğiyle; makalelere, canlı yayınlara ve diğer olaylara giden bağlantılar kart olarak görünür
+• Anketler (NIP-88): oy ver ve sonuçları gör ya da 2–4 seçenekli, en fazla 7 gün süren kendi anketini oluştur
 • Özel mesajlar (NIP-17), özel yer imleri ve sessize alınanlar (NIP-51)
 • Kişi ve not arama (NIP-50), beğeni, paylaşım, yanıt ve bahşiş bildirimleri
 • Relay listen (NIP-65); bir yazarın yazma relay'leri profili açıkken eklenir

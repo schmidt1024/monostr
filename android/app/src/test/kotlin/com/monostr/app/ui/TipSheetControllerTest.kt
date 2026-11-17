@@ -32,6 +32,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runTest
+import com.monostr.monero.hexToBytes
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -284,6 +285,9 @@ class TipSheetControllerTest {
         advanceUntilIdle()
         assertTrue(rig.tips.sentIntents.isEmpty(), "nothing goes over the user's own connection")
         val sent = rig.tips.anonymousIntents.single()
+        // tips 0.6: prepared for a one-time key, the pid derived from it
+        assertNotNull(sent.sender.secretHex)
+        assertEquals(com.monostr.tips.PaymentId.bound(sent.sender.pubkey, sent.intent.pidNonce!!.hexToBytes()), sent.intent.paymentId)
         assertNull(sent.intent.noteId)
         assertTrue(sent.intent.anonymous)
         assertEquals("", sent.intent.comment)

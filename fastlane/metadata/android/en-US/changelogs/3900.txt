@@ -1,0 +1,7 @@
+- «No new notes» when a refresh brings nothing, with «Discover people» if you follow few
+- Tips: payment id bound to the sender, so nobody can take credit for your tip
+- Anonymous tips look up the recipient over a separate connection
+- The author relays switch also covers relays a note names
+- Misleading links ask first; look-alike domains shown as punycode
+- Selected theme visible again in settings
+- Security and privacy fixes

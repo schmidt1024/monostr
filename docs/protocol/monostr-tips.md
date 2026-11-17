@@ -1,7 +1,7 @@
 # Monostr Tips – Monero-Zahlungen für Nostr-Notes und -Profile
 
 Status: Draft
-Version: 0.5
+Version: 0.6
 
 ## Zusammenfassung
 
@@ -76,6 +76,7 @@ Autor: Sender.
     ["p", "<empfänger-pubkey>"],
     ["amount", "5000000000"],
     ["pid", "a1b2c3d4e5f60718"],
+    ["pid_nonce", "000102030405060708090a0b0c0d0e0f"],
     ["type", "tip"],
     ["expiration", "<unix-timestamp>"]
   ]
@@ -92,12 +93,27 @@ Autor: Sender.
   Empfängers aus `p`. Ein vorhandenes, aber ungültiges `e` (nicht 64
   Hex-Zeichen klein) macht den Intent ungültig; er gilt nicht als Profil-Tip.
 - `pid`: 8 Byte, 16 Hex-Zeichen. Wird zur Payment-ID der Integrated Address.
-  Der Sender MUSS `pid` aus einem kryptografisch sicheren Zufallsgenerator
-  (CSPRNG) erzeugen und für jeden Intent neu ziehen. Der Watcher ordnet eine
+  Ab 0.6 leitet der Sender `pid` aus seinem Signaturschlüssel ab (siehe
+  `pid_nonce`); Sender vor 0.6 MUSSTEN `pid` aus einem kryptografisch
+  sicheren Zufallsgenerator (CSPRNG) erzeugen und für jeden Intent neu ziehen. Der Watcher ordnet eine
   Zahlung allein über `pid` einem Intent zu und akzeptiert pro Empfänger und
   `pid` nur den ersten Intent. Wer eine `pid` vorhersagen kann, kann deshalb
   vor dem echten Sender einen eigenen Intent veröffentlichen und dessen
   Zahlung für sich quittieren lassen.
+- `pid_nonce` (ab 0.6, Sender MUSS es setzen): 16 Byte aus einem CSPRNG, 32
+  Hex-Zeichen klein, für jeden Intent neu. Damit gilt
+  `pid = hex(sha256(utf8("monostr-tips/pid") || pubkey || nonce)[0..8])`, wobei
+  `pubkey` die 32 Byte des Schlüssels sind, der den Intent signiert (bei
+  `anon` der Einmal-Schlüssel), und `nonce` die 16 Byte aus `pid_nonce`. Ein
+  Intent mit fehlerhaftem `pid_nonce` oder mit einer `pid`, die nicht so
+  entsteht, ist ungültig. Wer eine fremde `pid` kopiert, kann sie unter dem
+  eigenen Schlüssel nicht gültig machen. Ein Intent ohne `pid_nonce` heisst
+  ungebunden (Verhalten vor 0.6) und bleibt gültig.
+  Ein Watcher ab 0.6 bevorzugt pro `pid` den gebundenen Intent: Kommt ein
+  gebundener Intent nach einem ungebundenen mit derselben `pid`, ersetzt er
+  ihn, solange dieser noch offen ist und kein Receipt hat. Ein ungebundener
+  Intent ersetzt nie einen gebundenen; unter ungebundenen bleibt der erste.
+  Watcher vor 0.6 ignorieren `pid_nonce` und ordnen weiter über `pid` zu.
 - `type`: `tip` (eigenständiger Tip, Standard in Monostr), `like` oder
   `boost` (Tip, den der Client an einen Like bzw. Repost koppelt). Der Wert
   dient nur der Anzeige: Clients können gekoppelte Tips am Like- bzw.
@@ -106,7 +122,8 @@ Autor: Sender.
   kopieren den Wert unverändert in das Receipt. Sender und Watcher schreiben
   `type` weiterhin immer, weil Implementierungen vor Version 0.3 das Tag
   verlangen.
-- `expiration` (NIP-40): empfohlen `created_at + 86400`.
+- `expiration` (NIP-40): empfohlen `created_at + 86400`. Ab 0.5.1 verwirft
+  ein Watcher Intents mit `expiration` mehr als 48 Stunden nach `created_at`.
 - `["anon"]` (optional): der Sender will nicht genannt werden. Ein solcher
   Intent ist mit einem Einmal-Schlüssel signiert, der nur für diesen Intent
   erzeugt und danach verworfen wird, und geht nur an die Relays des Watchers,
@@ -129,7 +146,16 @@ Zahlung per URI: `monero:<integrated>?tx_amount=<xmr-dezimal>&tx_description=<te
 
 Der Intent wird auf die Write-Relays des Senders und auf die Relays des
 Watchers veröffentlicht: URL-Form aus `GET /v1/info`, Pubkey-Form aus dem
-`watcher`-Tag.
+`watcher`-Tag. Ab 0.5.1 gehen die Relays des Watchers zuerst: Die `pid` steht
+offen im Intent, und der Watcher behält pro `pid` den ersten Intent. Wer die
+Write-Relays des Senders liest, soll die `pid` nicht in einen eigenen Intent
+kopieren und vor dem echten beim Watcher sein können (die Bindung der `pid`
+an den Sender folgt in 0.6). Ein Client nutzt höchstens 4 Relays aus
+`GET /v1/info`.
+
+Grenzen ab 0.5.1 (Watcher): höchstens 500 offene Intents pro Empfänger und
+höchstens 20 pro Empfänger und Sender; darüber hinaus wird ein Intent
+verworfen.
 
 ## Tip-Receipt – kind 9739 (regular)
 
@@ -162,13 +188,23 @@ Autor: Watcher.
 - Mehrere Zahlungen mit derselben `pid` erzeugen je ein Receipt mit
   derselben `intent`-Referenz.
 - Der Watcher veröffentlicht auf seinen Relays und den Write-Relays des
-  Empfängers (NIP-65).
+  Empfängers (NIP-65). Ab 0.5.1 nur auf `wss://`-Relays mit öffentlicher
+  Adresse; `ws://`, Namen ohne Punkt und lokale Endungen (`.local`, `.lan`, …)
+  übergeht er.
+- Ab 0.5.1 quittiert ein Watcher nur Zahlungen in Blöcken ab der Höhe, die er
+  selbst sah, als er den Intent zum ersten Mal speicherte (abzüglich 30 Blöcke
+  Spielraum), oder im Mempool. Ältere Zahlungen mit derselben `pid` erzeugen
+  kein Receipt: Sonst könnte ein neuer Intent mit einer kopierten `pid` eine
+  frühere Zahlung für sich beanspruchen. `created_at` des Intents zählt dafür
+  nicht, ihn wählt der Absender.
 - Der Watcher veröffentlicht das Receipt bereits bei Sichtung der Transaktion
   im Mempool (0 Bestätigungen).
 - Wird die Transaktion innerhalb von 60 Minuten nach dem Receipt nicht in
   einen Block aufgenommen, veröffentlicht der Watcher ein kind 5 (Deletion)
   auf das Receipt. Clients müssen kind 5 des Watcher-Pubkeys auf Receipts
-  respektieren.
+  respektieren: Sie fragen kind 5 mit `#e` der geladenen Receipt-IDs ab und
+  zählen ein zurückgenommenes Receipt weder in Anzahl noch Summe. Nur ein
+  kind 5 vom Autor des Receipts (dem Watcher) zählt.
 
 ## Watcher-Status – kind 10038 (replaceable)
 
@@ -208,6 +244,12 @@ danach alle 5 Minuten auf seinen Relays.
    passt.
 3. Ungültige Receipts werden nicht angezeigt. Intents ohne Receipt zählen
    nicht.
+4. Ab 0.5.1: Ein Mainnet-Client behandelt eine Payment-Info mit `network`
+   ungleich `mainnet` als deaktiviert (kein Tip, keine Anzeige von Receipts):
+   Testnet-Münzen sind wertlos und sollen nicht als echte Tips erscheinen.
+5. Eine Summe über alle Receipts sättigt beim grössten darstellbaren Wert,
+   statt überzulaufen: Der Watcher des Empfängers kann jeden Betrag
+   signieren.
 
 ## Watcher-HTTP-API
 
@@ -227,6 +269,13 @@ Protokollversion des Watchers. Fehlt `protocol`, ist der Watcher älter als
 Der Watcher prüft bei `POST /v1/accounts`, dass `view_key · G` dem
 öffentlichen View-Key der Adresse entspricht, und lehnt Subadressen und
 Integrated Addresses ab (400).
+
+Ab 0.5.1: Ein NIP-98-Header gilt einmal; derselbe Event noch einmal innerhalb
+des Zeitfensters ergibt 401. Registrierungen sind pro Client-Adresse begrenzt
+(IPv6 pro /64) und zusätzlich insgesamt pro Stunde (Betreiber-Einstellung,
+Standard 100); darüber antwortet der Watcher 429. Teilen sich mehrere Pubkeys
+dieselbe Adresse, bleibt sie beobachtet, solange einer sie noch registriert
+hat; eine `pid` ist pro Adresse eindeutig.
 
 ## Privacy
 
@@ -255,10 +304,12 @@ nachdem dort ein anonymer Profil-Tip angekündigt wurde, gibt sich dem Relay
 zu erkennen. Clients fragen das Receipt eines anonymen Profil-Tips deshalb
 ebenfalls über eine eigene Verbindung ohne Anmeldung ab, nur bei den Relays
 des Watchers. Receipts zu Notes fallen in der allgemeinen Abfrage für alle
-angezeigten Notes nicht auf. Was bleibt: Ein Relay sieht, wer kurz vor einem
-anonymen Tip die Payment-Info des Empfängers abgefragt hat; das ist ein
-Hinweis, kein Beleg – dieselbe Abfrage entsteht bei jedem geöffneten
-Tip-Dialog.
+angezeigten Notes nicht auf. Ab 0.5.1 holt ein Client auch die Payment-Info
+des Empfängers für einen anonymen Tip über eine eigene Verbindung ohne
+Anmeldung (unter Tor über einen eigenen Circuit) und fragt dann nicht nach
+den Outbox-Relays des Empfängers: Sonst sähe ein Relay, wer kurz vor dem
+anonymen Intent nach genau diesem Empfänger gefragt hat. Ohne Tor oder VPN
+bleibt die IP-Adresse dieselbe.
 
 Ein persönlicher Watcher (Pubkey-Form) hält den View-Key beim Empfänger. Er
 scannt über öffentliche Nodes: Die Node sieht, dass Blöcke geladen werden,
@@ -268,3 +319,40 @@ View-only-Wallet, die über eine andere Node synchronisiert, jede Zahlung mit
 gleichem Betrag bestätigen. Ausgeben kann keine Node etwas. Der Status zeigt,
 wann der Rechner des Watchers läuft. Relays sehen die IP des Watchers, die
 über kind 10037 dauerhaft mit dem Empfänger verbunden ist; dagegen hilft Tor.
+
+## Änderungen
+
+### 0.5.1 (2026-11-17)
+
+Keine neuen Kinds, Tags oder Felder; Watcher und Clients von 0.5 bleiben
+kompatibel. Festgeschrieben werden Regeln, die Missbrauch erschweren:
+
+- Watcher: Intents leben höchstens 48 Stunden; höchstens 20 offene Intents
+  pro Empfänger und Sender.
+- Watcher: nur Zahlungen ab der beim Speichern des Intents gesehenen
+  Blockhöhe werden quittiert.
+- Watcher: Receipts nur an öffentliche `wss://`-Relays des Empfängers.
+- Watcher-API: NIP-98 ohne Wiederholung; Registrierungen pro /64 und
+  insgesamt begrenzt; geteilte Adressen bleiben aktiv.
+- Clients: Intent zuerst an die Relays des Watchers; höchstens 4 Relays aus
+  `GET /v1/info`.
+- Clients: kind 5 des Watchers auf Receipts aktiv abfragen und anwenden.
+- Clients: Payment-Info für anonyme Tips über eine eigene Verbindung.
+- Clients: Testnet-Payment-Info gilt in Mainnet-Clients als deaktiviert;
+  Summen sättigen.
+
+### 0.6 (2026-11-17)
+
+- Neues Intent-Tag `pid_nonce`; `pid` ist an den Signaturschlüssel gebunden
+  (Regel beim Intent). Ein gebundener Intent ersetzt einen noch offenen,
+  unbezahlten ungebundenen mit derselben `pid`.
+- Abwärtskompatibel: ungebundene Intents bleiben gültig; Watcher vor 0.6
+  ignorieren das Tag.
+- `protocol` in `/v1/info` und im Watcher-Status: `"0.6"`.
+
+Prüfwerte (`nonce = 000102030405060708090a0b0c0d0e0f`):
+
+| pubkey | pid |
+|---|---|
+| `79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798` | `bc14ada49f3e78d6` |
+| `c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5` | `4b827455c05329d0` |

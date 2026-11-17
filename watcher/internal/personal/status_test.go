@@ -45,7 +45,7 @@ func TestStatusPublisherSignsAndPublishes(t *testing.T) {
 	if tag == nil || tag.Value() != "42" {
 		t.Fatalf("height tag %v", tag)
 	}
-	if tag := ev.Tags.GetFirst([]string{"protocol"}); tag == nil || tag.Value() != "0.5" {
+	if tag := ev.Tags.GetFirst([]string{"protocol"}); tag == nil || tag.Value() != "0.6" {
 		t.Fatalf("protocol tag %v", tag)
 	}
 	if len(pub.urls) != 1 || pub.urls[0] != "wss://r1" {

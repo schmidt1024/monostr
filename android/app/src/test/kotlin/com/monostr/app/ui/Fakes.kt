@@ -483,6 +483,12 @@ class FakeTips(
     val anonymousResends = ArrayList<Pair<String, List<String>>>()
     /** The torOnly of every send and resend over the anonymous path, in order. */
     val anonymousTorOnly = ArrayList<Boolean>()
+    /** The session's key for a public tip; a fresh fake one-time key per anonymous tip (64 hex chars, as the pid rule needs). */
+    override suspend fun tipSender(anonymous: Boolean): com.monostr.tips.TipSender =
+        if (!anonymous) com.monostr.tips.TipSender("a".repeat(64))
+        else (++senders).toString(16).padStart(64, '0').let { com.monostr.tips.TipSender(it, secretHex = "e".repeat(64)) }
+    private var senders = 0
+
     override suspend fun sendAnonymousIntent(prepared: PreparedTip, watcherRelays: List<String>, torOnly: Boolean): AnonymousIntent {
         sendGate?.await()
         if (failSend) throw IllegalStateException("boom")

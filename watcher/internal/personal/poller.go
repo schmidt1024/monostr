@@ -83,6 +83,7 @@ type Poller struct {
 	heldSince map[string]time.Time // txid → first time the check wallet did not back it
 	warned    map[string]bool
 	disagreed map[string]bool // txid → mismatch already logged
+	tooOld    map[string]bool // txid → payment before its intent already logged
 	checkDown bool            // check wallet outage already logged
 }
 
@@ -116,7 +117,7 @@ func (p *Poller) Poll(ctx context.Context) error {
 	}
 	if p.forwarded == nil {
 		p.forwarded, p.heldSince = map[string]int{}, map[string]time.Time{}
-		p.warned, p.disagreed = map[string]bool{}, map[string]bool{}
+		p.warned, p.disagreed, p.tooOld = map[string]bool{}, map[string]bool{}, map[string]bool{}
 	}
 	// each wallet fails over within its own node group only; a node whose
 	// wallet is stalled gets no success, so stall failures add up to a failover
@@ -174,6 +175,15 @@ func (p *Poller) Poll(ctx context.Context) error {
 		pid := NormalizePID(tr.PaymentID)
 		row, ok := byPID[pid]
 		if !ok {
+			continue
+		}
+		// a confirmed payment that predates the intent is not credited; pool
+		// transfers (0 confirmations) are accepted: they cannot be old
+		if tr.Confirmations >= 1 && predatesIntent(tr, row) {
+			if !p.tooOld[tr.TxID] {
+				p.tooOld[tr.TxID] = true
+				p.Log.Warn("payment older than its intent, not credited", "tx", tr.TxID, "intent", row.ID)
+			}
 			continue
 		}
 		want := levelPool
@@ -249,6 +259,24 @@ func (p *Poller) watchStall(ctx context.Context, name string, w Wallet, st *wall
 		return
 	}
 	st.pendingDaemon = ""
+}
+
+// paymentTimeSlack is how far a block timestamp may lie before the intent's
+// stored_at (server time) for rows without a chain height: a miner may stamp
+// a block about an hour in the past, plus margin for a late relay backfill.
+const paymentTimeSlack = 2 * 3600
+
+// predatesIntent reports whether a confirmed transfer may have been made
+// before the intent; it fails closed. With a chain height bound the block
+// height decides (height 0 is unknown and fails); a row without one (stored
+// before the bound existed) falls back to the block timestamp against the
+// watcher's own stored_at (timestamp 0 fails). created_at, which the sender
+// chooses, is never used.
+func predatesIntent(tr walletrpc.Transfer, row store.IntentRow) bool {
+	if minBlock := row.MinPaymentBlock(); minBlock > 0 {
+		return tr.Height == 0 || tr.Height < minBlock
+	}
+	return tr.Timestamp == 0 || int64(tr.Timestamp) < row.StoredAt-paymentTimeSlack
 }
 
 // perTx folds the transfers into one per txid, in first-seen order. wallet2

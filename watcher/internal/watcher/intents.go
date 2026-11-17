@@ -30,10 +30,6 @@ func (s *Service) HandleIntent(ctx context.Context, ev *nostr.Event) error {
 	if _, exists, err := s.deps.Store.GetIntent(in.ID); err != nil || exists {
 		return err
 	}
-	if !s.deps.IntentLimit.Allow(in.Sender, timeOf(now)) {
-		s.log.Warn("intent rate limit", "sender", in.Sender)
-		return nil
-	}
 	open, err := s.deps.Store.CountOpenIntents(in.Recipient)
 	if err != nil {
 		return err
@@ -42,9 +38,60 @@ func (s *Service) HandleIntent(ctx context.Context, ev *nostr.Event) error {
 		s.log.Warn("open intents cap", "recipient", in.Recipient)
 		return nil
 	}
-	inserted, err := s.deps.Store.InsertIntent(in, now)
+	// one sender (throwaway keys are free, but each needs its own events)
+	// must not fill the recipient's whole cap
+	fromSender, err := s.deps.Store.CountOpenIntentsFrom(in.Recipient, in.Sender)
 	if err != nil {
 		return err
+	}
+	if fromSender >= MaxOpenIntentsPerSender {
+		s.log.Warn("open intents per sender cap", "recipient", in.Recipient, "sender", in.Sender)
+		return nil
+	}
+	// fail closed: without any chain height there is no payment bound, so the
+	// intent is not stored now; Backfill fetches it again on a later run
+	bound := s.paymentBoundHeight(ctx)
+	if bound == 0 {
+		s.log.Warn("no chain height, intent left for a later backfill", "intent", in.ID)
+		return nil
+	}
+	// recorded last: an intent turned away by the cheap checks above costs
+	// the sender nothing and the limiter no memory
+	if !s.deps.IntentLimit.Allow(in.Sender, timeOf(now)) {
+		s.log.Warn("intent rate limit", "sender", in.Sender)
+		return nil
+	}
+	inserted, err := s.deps.Store.InsertIntentAt(in, now, bound)
+	if err != nil {
+		return err
+	}
+	if !inserted && in.Bound {
+		// tips 0.6: someone copied this sender's pid into an unbound intent and
+		// got here first; the bound one takes the pid while that one is unpaid
+		old, replaced, err := s.deps.Store.ReplaceUnboundIntent(in, now, bound)
+		if err != nil {
+			return err
+		}
+		if replaced {
+			var hooks []string
+			for _, r := range old {
+				s.log.Warn("unbound intent replaced", "old", r.ID, "new", in.ID, "recipient", in.Recipient)
+				if r.LWSEventID != "" {
+					hooks = append(hooks, r.LWSEventID)
+				}
+			}
+			// an old webhook carries the old intent id as its token: its hook would
+			// find no intent. One LWS could not remove now is retried by the sweep.
+			if len(hooks) > 0 {
+				if err := s.deps.LWS.WebhookDeleteUUID(ctx, hooks); err != nil {
+					s.log.Warn("old webhooks not removed, sweep retries", "event_ids", hooks, "err", err.Error())
+					if err := s.deps.Store.AddOrphanWebhooks(hooks); err != nil {
+						s.log.Warn("orphan webhooks not recorded", "err", err.Error())
+					}
+				}
+			}
+			inserted = true
+		}
 	}
 	if !inserted {
 		// the id was checked above, so the (recipient, pid) pair is taken:

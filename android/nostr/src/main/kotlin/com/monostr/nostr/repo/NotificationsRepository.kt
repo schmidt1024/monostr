@@ -90,9 +90,15 @@ class NostrNotificationsRepository(
 ) : NotificationsRepository {
     private val me = requireNotNull(engine.pubkey) { "notifications need a logged-in user" }
 
-    private fun filter(limit: Int, since: Long?): Filter {
+    /**
+     * [until] defaults to a little past now: events dated in the future (a spammer's year 2099 mentions) would otherwise
+     * hold the newest [limit] places for good and push every real notification out. The live subscription passes null:
+     * a fixed upper bound would end it after [FUTURE_SKEW_SECONDS].
+     */
+    private fun filter(limit: Int, since: Long?, until: Long? = now() + FUTURE_SKEW_SECONDS): Filter {
         var f = Filter().kinds(KINDS.map { Kind(it.toUShort()) }).pubkey(PublicKey.parse(me)).limit(limit.toULong())
         if (since != null) f = f.since(Timestamp.fromSecs(since.toULong()))
+        if (until != null) f = f.until(Timestamp.fromSecs(until.toULong()))
         return f
     }
 
@@ -189,9 +195,9 @@ class NostrNotificationsRepository(
         // notifications fetch: a user without a stored info makes it wait up to its fetch timeout
         val info = async { quietly { tips.paymentInfo(me) } }
         quietly { engine.fetch(filter(limit, since)) }
-        // A deletion request (un-like, un-repost, withdrawn reply) carries no `#p`: asked for by the ids held, the newest
-        // [limit] of them whatever [since] (an un-like may come long after the like)
-        val ids = engine.query(filter(limit, null)).map { NoteMapper.decoded(it) }.filter { it.kind != Kinds.TIP_RECEIPT }.map { it.id }
+        // A deletion request (un-like, un-repost, withdrawn reply, a watcher's retracted tip receipt) carries no `#p`: asked
+        // for by the ids held, the newest [limit] of them whatever [since] (an un-like may come long after the like)
+        val ids = engine.query(filter(limit, null)).map { NoteMapper.decoded(it) }.map { it.id }
         for (chunk in ids.chunked(100)) quietly { engine.fetch(deletionsFilter(chunk), DELETIONS_TIMEOUT) }
         info.await()
     }
@@ -218,7 +224,7 @@ class NostrNotificationsRepository(
     }.flowOn(Dispatchers.IO)
 
     private suspend fun subscribeLive(): String? = try {
-        engine.subscribe(filter(LIVE_LIMIT, now()))
+        engine.subscribe(filter(LIVE_LIMIT, now(), until = null))
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
@@ -268,6 +274,8 @@ class NostrNotificationsRepository(
         val KINDS = listOf(1, 6, 7, Kinds.TIP_RECEIPT, Kinds.COMMENT, Kinds.POLL)
         const val MEMO_CAPACITY = 200
         const val LIVE_LIMIT = 100
+        /** How far ahead of the clock a notification may be dated (clock drift between devices); later ones are left out. */
+        const val FUTURE_SKEW_SECONDS = 900L
         /** Deletion requests are rare: a short wait keeps the refresh from doubling on a slow relay. */
         val DELETIONS_TIMEOUT: Duration = Duration.ofSeconds(3)
         val HEX64 = Regex("[0-9a-f]{64}")

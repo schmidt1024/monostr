@@ -158,6 +158,6 @@ class TipSheetTest {
             }
         }
         rule.onNodeWithText("Empfänger hat kein Monero eingerichtet").assertIsDisplayed()
-        rule.onNodeWithText("Schließen").assertIsDisplayed()
+        rule.onNodeWithText("Schliessen").assertIsDisplayed()
     }
 }

@@ -21,6 +21,7 @@ import com.monostr.tips.Watcher
 import com.monostr.tips.WatcherStatus
 import com.monostr.tips.TipReceipt
 import com.monostr.tips.TipRequest
+import com.monostr.tips.TipSender
 import com.monostr.tips.TipType
 import com.monostr.tips.event.UnsignedEvent
 import kotlinx.coroutines.Dispatchers
@@ -29,6 +30,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
+import com.monostr.monero.hexToBytes
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNull
@@ -72,7 +74,7 @@ class TipsRepositoryTest {
         val note = EventBuilder.textNote("tip me").signWithKeys(alice); e.save(note)
         val noteId = note.id().toHex()
         val aliceHex = alice.publicKey().toHex()
-        val intent = e.signAndSend(TipRequest.prepare(PaymentInfo.parse(RustConvert.toTips(alicePaymentInfo())) as PaymentInfo.Enabled, aliceHex, noteId, 1_000_000_000, TipType.LIKE, "hi", clock).unsignedEvent)
+        val intent = e.signAndSend(TipRequest.prepare(PaymentInfo.parse(RustConvert.toTips(alicePaymentInfo())) as PaymentInfo.Enabled, aliceHex, noteId, 1_000_000_000, TipType.LIKE, "hi", clock, sender = TipSender(me.publicKey().toHex())).unsignedEvent)
         e.save(receipt(watcher, noteId, aliceHex, 1_000_000_000, intent.eventId, clock + 1))
         val repo = NostrTipsRepository(e) { clock }
         assertEquals(repo.observeReceipts(mapOf(noteId to aliceHex)).first(), repo.localReceipts(mapOf(noteId to aliceHex)))
@@ -94,6 +96,14 @@ class TipsRepositoryTest {
         val bob = Keys.generate()
         e.save(signed(bob, PaymentInfo.buildDisabled(clock)))
         assertEquals(PaymentInfo.Disabled, repo.paymentInfo(bob.publicKey().toHex()))
+    }
+
+    @Test
+    fun `stagenet payment info counts only where test networks are allowed`() = runTest {
+        val e = engine()
+        e.save(signed(alice, PaymentInfo.build(aliceWallet.address(Network.STAGENET), Watcher.Http("https://watcher.example", watcher.publicKey().toHex()), clock)))
+        assertTrue(NostrTipsRepository(e) { clock }.paymentInfo(alice.publicKey().toHex()) is PaymentInfo.Enabled)
+        assertEquals(PaymentInfo.Disabled, NostrTipsRepository(e, testNetworks = false) { clock }.paymentInfo(alice.publicKey().toHex()))
     }
 
     @Test
@@ -153,7 +163,7 @@ class TipsRepositoryTest {
         val repo = NostrTipsRepository(e) { clock }
         val info = PaymentInfo.parse(RustConvert.toTips(alicePaymentInfo())) as PaymentInfo.Enabled
         val noteId = "1".repeat(64)
-        val prepared = TipRequest.prepare(info, alice.publicKey().toHex(), noteId, 5_000_000_000, TipType.BOOST, "danke", clock, PaymentId.parse("a1b2c3d4e5f60718")!!)
+        val prepared = TipRequest.prepare(info, alice.publicKey().toHex(), noteId, 5_000_000_000, TipType.BOOST, "danke", clock, sender = TipSender(me.publicKey().toHex()))
         val result = repo.sendIntent(prepared, listOf("not a relay url", "wss://watcher-relay.invalid"))
         assertEquals(Kinds.TIP_INTENT, result.kind)
         val stored = e.eventById(result.eventId)!!
@@ -163,7 +173,8 @@ class TipsRepositoryTest {
         assertEquals(noteId, tags.first { it[0] == "e" }[1])
         assertEquals(alice.publicKey().toHex(), tags.first { it[0] == "p" }[1])
         assertEquals("5000000000", tags.first { it[0] == "amount" }[1])
-        assertEquals("a1b2c3d4e5f60718", tags.first { it[0] == "pid" }[1])
+        assertEquals(prepared.intent.paymentId.hex, tags.first { it[0] == "pid" }[1])
+        assertEquals(prepared.intent.pidNonce, tags.first { it[0] == "pid_nonce" }[1])
         assertEquals("boost", tags.first { it[0] == "type" }[1])
         assertEquals((clock + 86_400).toString(), tags.first { it[0] == "expiration" }[1])
         assertEquals("danke", stored.content())
@@ -179,7 +190,7 @@ class TipsRepositoryTest {
         val note = EventBuilder.textNote("tip me").signWithKeys(alice); e.save(note)
         val noteId = note.id().toHex()
         val aliceHex = alice.publicKey().toHex()
-        val intent = e.signAndSend(TipRequest.prepare(PaymentInfo.parse(RustConvert.toTips(alicePaymentInfo())) as PaymentInfo.Enabled, aliceHex, noteId, 1_000_000_000, TipType.LIKE, "hi", clock).unsignedEvent)
+        val intent = e.signAndSend(TipRequest.prepare(PaymentInfo.parse(RustConvert.toTips(alicePaymentInfo())) as PaymentInfo.Enabled, aliceHex, noteId, 1_000_000_000, TipType.LIKE, "hi", clock, sender = TipSender(me.publicKey().toHex())).unsignedEvent)
         e.save(receipt(watcher, noteId, aliceHex, 1_000_000_000, intent.eventId, clock + 1))
         e.save(receipt(watcher, noteId, aliceHex, 2_000_000_000, intent.eventId, clock + 2))       // second payment, same intent: summed
         e.save(receipt(otherWatcher, noteId, aliceHex, 9_000_000_000, intent.eventId, clock + 3))  // foreign watcher: ignored
@@ -209,7 +220,7 @@ class TipsRepositoryTest {
         val note = EventBuilder.textNote("tip me").signWithKeys(alice); e.save(note)
         val noteId = note.id().toHex()
         val aliceHex = alice.publicKey().toHex()
-        val intent = e.signAndSend(TipRequest.prepare(PaymentInfo.parse(RustConvert.toTips(alicePaymentInfo())) as PaymentInfo.Enabled, aliceHex, noteId, 1_000_000_000, TipType.LIKE, "hi", clock).unsignedEvent)
+        val intent = e.signAndSend(TipRequest.prepare(PaymentInfo.parse(RustConvert.toTips(alicePaymentInfo())) as PaymentInfo.Enabled, aliceHex, noteId, 1_000_000_000, TipType.LIKE, "hi", clock, sender = TipSender(me.publicKey().toHex())).unsignedEvent)
         e.save(receipt(watcher, noteId, aliceHex, 1_000_000_000, intent.eventId, clock + 1))
         e.save(receipt(watcher, noteId, aliceHex, null, intent.eventId, clock + 2))
         val s = NostrTipsRepository(e) { clock }.observeReceipts(mapOf(noteId to aliceHex)).first().getValue(noteId)
@@ -229,6 +240,24 @@ class TipsRepositoryTest {
     }
 
     @Test
+    fun `the unlinked payment info comes over a connection of its own and is stored`() = runTest {
+        val info = alicePaymentInfo()
+        SilentWsRelay(serveFor = { listOf(info.asJson()) }, recordRequests = true).use { relay ->
+            // the session never connects: whatever the relay hears comes from the detached client
+            val e = NostrEngine.create(dir.resolve("lmdb").toString(), LocalSigner(me.secretKey().toHex()), listOf(relay.url))
+            try {
+                val repo = NostrTipsRepository(e, DetachedSender(gate = directGate())) { clock }
+                val got = repo.paymentInfoUnlinked(alice.publicKey().toHex())
+                assertTrue(got is PaymentInfo.Enabled, "got $got")
+                assertTrue(relay.requests.any { it.contains(alice.publicKey().toHex()) }, relay.requests.toString())
+                assertTrue(repo.cachedPaymentInfo(alice.publicKey().toHex()) is PaymentInfo.Enabled)
+            } finally {
+                e.close()
+            }
+        }
+    }
+
+    @Test
     fun `an anonymous intent is signed by a one-time key, goes to the watcher relays only and is not stored`() = runTest {
         SilentWsRelay(acceptEvents = true).use { watcherRelay ->
             SilentWsRelay(acceptEvents = true).use { ownRelay ->
@@ -238,7 +267,7 @@ class TipsRepositoryTest {
                     val repo = NostrTipsRepository(e, DetachedSender(gate = directGate())) { clock }
                     val info = PaymentInfo.parse(RustConvert.toTips(alicePaymentInfo())) as PaymentInfo.Enabled
                     val aliceHex = alice.publicKey().toHex()
-                    fun prepared() = TipRequest.prepare(info, aliceHex, null, 1_000_000_000, TipType.TIP, "", clock, anonymous = true)
+                    suspend fun prepared() = TipRequest.prepare(info, aliceHex, null, 1_000_000_000, TipType.TIP, "", clock, sender = repo.tipSender(true), anonymous = true)
 
                     val first = repo.sendAnonymousIntent(prepared(), listOf(watcherRelay.url))
                     assertTrue(first.result.sentToAny, "failed: ${first.result.failedRelays}")
@@ -276,8 +305,8 @@ class TipsRepositoryTest {
         val repo = NostrTipsRepository(engine()) { clock }
         val info = PaymentInfo.parse(RustConvert.toTips(alicePaymentInfo())) as PaymentInfo.Enabled
         val aliceHex = alice.publicKey().toHex()
-        val anonymous = TipRequest.prepare(info, aliceHex, null, 1, TipType.TIP, "", clock, anonymous = true)
-        val public = TipRequest.prepare(info, aliceHex, null, 1, TipType.TIP, "", clock)
+        val anonymous = TipRequest.prepare(info, aliceHex, null, 1, TipType.TIP, "", clock, sender = repo.tipSender(true), anonymous = true)
+        val public = TipRequest.prepare(info, aliceHex, null, 1, TipType.TIP, "", clock, sender = TipSender(me.publicKey().toHex()))
         assertTrue(runCatching { repo.sendAnonymousIntent(anonymous, emptyList()) }.exceptionOrNull() is IllegalArgumentException)
         assertTrue(runCatching { repo.sendAnonymousIntent(public, listOf("wss://w.example")) }.exceptionOrNull() is IllegalArgumentException)
     }
@@ -400,11 +429,44 @@ class TipsRepositoryTest {
     }
 
     @Test
+    fun `an anonymous intent is signed by the key its pid came from`() = runTest {
+        SilentWsRelay(acceptEvents = true).use { watcherRelay ->
+            val e = engine()
+            try {
+                val repo = NostrTipsRepository(e, DetachedSender(gate = directGate())) { clock }
+                val info = PaymentInfo.parse(RustConvert.toTips(alicePaymentInfo())) as PaymentInfo.Enabled
+                val sender = repo.tipSender(true)
+                assertNotEquals(me.publicKey().toHex(), sender.pubkey)
+                val prepared = TipRequest.prepare(info, alice.publicKey().toHex(), null, 1_000_000_000, TipType.TIP, "", clock, sender = sender, anonymous = true)
+                val sent = Event.fromJson(repo.sendAnonymousIntent(prepared, listOf(watcherRelay.url)).eventJson)
+                assertEquals(sender.pubkey, sent.author().toHex())
+                val tags = sent.tags().toVec().map { it.asVec() }
+                val nonce = tags.first { it[0] == "pid_nonce" }[1].hexToBytes()
+                assertEquals(PaymentId.bound(sent.author().toHex(), nonce).hex, tags.first { it[0] == "pid" }[1])
+                assertNotEquals(sender.pubkey, repo.tipSender(true).pubkey, "a fresh key per tip")
+            } finally {
+                e.close()
+            }
+        }
+    }
+
+    @Test
+    fun `a public intent refuses a sender that is not the session`() = runTest {
+        val e = engine()
+        val repo = NostrTipsRepository(e) { clock }
+        assertEquals(TipSender(me.publicKey().toHex()), repo.tipSender(false))
+        val info = PaymentInfo.parse(RustConvert.toTips(alicePaymentInfo())) as PaymentInfo.Enabled
+        val stranger = TipRequest.prepare(info, alice.publicKey().toHex(), null, 1, TipType.TIP, "", clock, sender = TipSender(alice.publicKey().toHex()))
+        assertTrue(runCatching { repo.sendIntent(stranger, emptyList()) }.exceptionOrNull() is IllegalArgumentException)
+        assertTrue(e.query(Filter().kind(Kind(Kinds.TIP_INTENT.toUShort()))).isEmpty(), "nothing signed")
+    }
+
+    @Test
     fun `a public send refuses an intent marked anonymous`() = runTest {
         val e = engine()
         val repo = NostrTipsRepository(e) { clock }
         val info = PaymentInfo.parse(RustConvert.toTips(alicePaymentInfo())) as PaymentInfo.Enabled
-        val anonymous = TipRequest.prepare(info, alice.publicKey().toHex(), null, 1, TipType.TIP, "", clock, anonymous = true)
+        val anonymous = TipRequest.prepare(info, alice.publicKey().toHex(), null, 1, TipType.TIP, "", clock, sender = repo.tipSender(true), anonymous = true)
         assertTrue(runCatching { repo.sendIntent(anonymous, emptyList()) }.exceptionOrNull() is IllegalArgumentException)
         assertTrue(e.query(Filter().kind(Kind(Kinds.TIP_INTENT.toUShort()))).isEmpty(), "nothing signed under the user's key")
     }

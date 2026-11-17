@@ -54,6 +54,8 @@ class NostrPollRepository(
     private val clientTag: suspend () -> Boolean = { false },
     /** The app-wide budget for relays a stranger's poll names; they are leased for one fetch and released again. Null: attached and detached directly. */
     private val foreign: ForeignRelays? = null,
+    /** The user's «Author relays» switch, read at use time: off, no relay a stranger's event names is contacted (owner 2026-11-17). */
+    private val hintsAllowed: suspend () -> Boolean = { true },
 ) : PollRepository {
     private suspend fun viaTag(): List<Tag> = if (clientTag()) listOf(ClientTag.tag()) else emptyList()
 
@@ -75,7 +77,7 @@ class NostrPollRepository(
             var filter = Filter().kind(Kind(Kinds.POLL_RESPONSE.toUShort())).event(EventId.parse(poll.id))
             if (p.endsAt != null) filter = filter.until(Timestamp.fromSecs(p.endsAt.toULong()))
             take(engine.query(filter))
-            val named = pollRelays(poll)
+            val named = if (hintsAllowed()) pollRelays(poll) else emptyList()
             // the poll's relays are a stranger's choice: leased for this fetch only, never left attached
             val held = if (foreign != null) foreign.lease(named) else engine.attachTemporary(named)
             try {
@@ -99,7 +101,7 @@ class NostrPollRepository(
         val own = engine.signAndPublish(EventBuilder(Kind(Kinds.POLL_RESPONSE.toUShort()), "").tags(tags.map { Tag.parse(it) } + viaTag()))
         // a vote nobody accepted was rolled back by the engine and cannot be sent on
         if (!own.sentToAny) return own
-        val extra = pollRelays(poll) - engine.relayUrls().toSet()
+        val extra = if (hintsAllowed()) pollRelays(poll) - engine.relayUrls().toSet() else emptyList()
         if (extra.isEmpty()) return own
         val more = engine.sendTo(extra, own.eventId)
         return PublishResult(own.eventId, own.kind, (own.successRelays + more.successRelays).distinct(), own.failedRelays + more.failedRelays)

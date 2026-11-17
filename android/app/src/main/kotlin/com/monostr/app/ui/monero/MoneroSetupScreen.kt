@@ -58,6 +58,8 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -362,6 +364,8 @@ private fun ExistingStep(step: SetupStep.Existing, error: String?, c: MoneroSetu
     OutlinedTextField(
         value = step.viewKey, onValueChange = c::setViewKey, singleLine = true, label = { Text(stringResource(R.string.setup_view_key_label)) },
         visualTransformation = PasswordVisualTransformation(), isError = error != null, supportingText = { error?.let { Text(it) } },
+        // as the nsec field: a password field, so the keyboard neither learns nor syncs the key
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
         modifier = Modifier.fillMaxWidth().testTag("setup-view-key"),
         shape = MaterialTheme.shapes.medium,
     )

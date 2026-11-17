@@ -56,6 +56,11 @@ class GuardedUriHandler(
 
     /** No browser installed (or any refusal) must not crash the app. */
     fun openUriConfirmed(uri: String) { runCatching { delegate.openUri(uri) } }
+
+    /** Asks even when "Always open" is on: for a link whose shown text names another address than it goes to. */
+    fun openUriAsking(uri: String) {
+        if (LinkPromptRules.isWeb(uri)) ask(uri) else openUri(uri)
+    }
 }
 
 /** Wraps [content] so every link tap below goes through the prompt; [alwaysOpen] is state the caller already collects. */

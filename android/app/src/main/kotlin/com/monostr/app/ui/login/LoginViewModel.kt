@@ -30,6 +30,8 @@ class LoginController(
     private val bridge: SignerBridge,
     amberAvailable: Boolean,
     restoreMessage: UiText? = null,
+    /** Memory scrypt may use for an ncryptsec now (half of what the system has free); unlimited in tests. */
+    private val scryptMemory: () -> Long = { Long.MAX_VALUE },
 ) {
     private val _state = MutableStateFlow(LoginUiState(amberAvailable = amberAvailable, notice = restoreMessage))
     val state: StateFlow<LoginUiState> = _state.asStateFlow()
@@ -39,7 +41,7 @@ class LoginController(
         if (Nip49.isNcryptsec(input)) {
             // decrypt inside the busy state so a second tap cannot start a second scrypt run
             run(_state) {
-                when (val d = Nip49.decrypt(input, password)) {
+                when (val d = Nip49.decrypt(input, password, scryptMemory())) {
                     is Nip49.Decrypted.Key -> actions.loginLocal(LocalSigner(d.secretHex))
                     Nip49.Decrypted.WrongPassword -> throw LoginFailure(null, uiText(R.string.login_error_wrong_password))
                     Nip49.Decrypted.Invalid -> throw LoginFailure(uiText(R.string.login_error_invalid_key))

@@ -666,7 +666,8 @@ class NostrSession @Inject constructor(
     fun requireReady(): Ready = (_state.value as? SessionState.Active)?.ready ?: error("not logged in")
 
     private fun signerFor(info: SessionInfo): Signer? = when (info.signerType) {
-        SignerType.LOCAL -> secrets.get(KeystoreSecretStore.SECRET_NSEC)?.let { LocalSigner.parseOrNull(it) }
+        // getOrThrow: a passing Keystore error ends in RESTORE_FAILED (session and key kept), not in clearStaleSession
+        SignerType.LOCAL -> secrets.getOrThrow(KeystoreSecretStore.SECRET_NSEC)?.let { LocalSigner.parseOrNull(it) }
         SignerType.AMBER -> info.amberPackage?.let { AmberSigner(context, it, info.pubkey, bridge) }
     }
 
@@ -691,9 +692,13 @@ class NostrSession @Inject constructor(
         val dmStore = DmDatabase(context, signer.pubkey)
         // spec 7.3: whatever fails from here on, the DM database and the engine are closed again
         try {
-            val tips = NostrTipsRepository(engine, DetachedSender(engine.ffiDispatcher, networkGate, torReady = torConnected(tor)), gate = startupGate)
+            val tips = NostrTipsRepository(engine, DetachedSender(engine.ffiDispatcher, networkGate, torReady = torConnected(tor)), gate = startupGate, testNetworks = com.monostr.app.BuildConfig.DEBUG)
             // spec 2026-10-23 §3/§4.4: one budget of foreign relays for the whole session, the indexers included
             val foreign = ForeignRelays(engine)
+            // NIP-42: no AUTH (the user's pubkey) for relays borrowed for a lookup, unless one is also an own DM inbox
+            val dmInbox = java.util.concurrent.atomic.AtomicReference<Set<String>>(emptySet())
+            engine.backgroundScope.launch { dmSettings.relays.collect { list -> dmInbox.set(list.map { it.trim().trimEnd('/') }.toSet()) } }
+            engine.authPolicy.refuse = { url -> foreign.holds(url) && url !in dmInbox.get() }
             val authorRelays = NostrAuthorRelaysRepository(engine, foreign = foreign)
             // the switch is read at use time (no seeded stateIn), so a lookup never runs against the user's choice
             val locator = NostrEventLocator(engine, authorRelays, foreign, enabled = { uiSettings.authorRelays.first() })
@@ -811,10 +816,10 @@ class NostrSession @Inject constructor(
                 counts = NostrCountsRepository(engine, engine.backgroundScope, sessionRelays = { engine.readRelayUrls() }, limiter = countLimiter),
                 authorRelays = authorRelays,
                 dms = dms, dmStore = dmStore, dmRelays = dmRelays,
-                quotes = NostrQuoteRepository(engine, locator = locator, foreign = foreign),
-                polls = com.monostr.nostr.repo.NostrPollRepository(engine, powBits = { uiSettings.powBits.first() }, clientTag = { uiSettings.clientTag.first() }, foreign = foreign),
-                addresses = NostrAddressableRepository(engine, foreign = foreign, locator = locator),
-                articleReplies = com.monostr.nostr.repo.NostrArticleRepliesRepository(engine, foreign = foreign),
+                quotes = NostrQuoteRepository(engine, locator = locator, foreign = foreign, hintsAllowed = { uiSettings.authorRelays.first() }),
+                polls = com.monostr.nostr.repo.NostrPollRepository(engine, powBits = { uiSettings.powBits.first() }, clientTag = { uiSettings.clientTag.first() }, foreign = foreign, hintsAllowed = { uiSettings.authorRelays.first() }),
+                addresses = NostrAddressableRepository(engine, foreign = foreign, locator = locator, hintsAllowed = { uiSettings.authorRelays.first() }),
+                articleReplies = com.monostr.nostr.repo.NostrArticleRepliesRepository(engine, foreign = foreign, hintsAllowed = { uiSettings.authorRelays.first() }),
                 follows = follows,
                 followCounts = followCounts,
                 followLists = followLists,

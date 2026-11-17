@@ -33,6 +33,8 @@ class ArticleLinkActions(
     val onAddress: (AddressRef) -> Unit,
     /** Spec 2026-11-01: a BOLT11 invoice in the text, handed to the wallet. */
     val onInvoice: (String) -> Unit = {},
+    /** A link whose text names another host than its target (`[paypal.com](https://evil.example)`): always through the prompt. */
+    val onUrlAsk: (String) -> Unit = onUrl,
 )
 
 class ArticleTextStyle(
@@ -91,7 +93,8 @@ fun articleText(text: MdText, style: ArticleTextStyle, actions: ArticleLinkActio
                 map.add(a, piece.length, piece.length, linear = true)
             }
             link != null -> {
-                out.withLink(LinkAnnotation.Clickable("md-link", urlStyle) { open(link.url, actions) }) { append(piece) }
+                val shown = full.substring(link.start.coerceIn(0, full.length), link.end.coerceIn(0, full.length))
+                out.withLink(LinkAnnotation.Clickable("md-link", urlStyle) { open(link.url, actions, shown) }) { append(piece) }
                 map.add(a, piece.length, piece.length, linear = true)
             }
             else -> {
@@ -184,7 +187,7 @@ private class OffsetMap {
 }
 
 /** A Markdown link target: a `nostr:` reference goes where the same token goes in a note, anything else through the link path. */
-private fun open(url: String, actions: ArticleLinkActions) {
+private fun open(url: String, actions: ArticleLinkActions, shown: String? = null) {
     if (url.startsWith("nostr:", ignoreCase = true)) {
         when (val s = NoteLinks.annotate(url).singleOrNull()) {
             is NoteSpan.Mention -> return actions.onProfile(s.pubkey)
@@ -193,5 +196,26 @@ private fun open(url: String, actions: ArticleLinkActions) {
             else -> return
         }
     }
-    actions.onUrl(url)
+    if (shown != null && MisleadingLink.names(shown, url)) actions.onUrlAsk(url) else actions.onUrl(url)
+}
+
+/** A link text that reads like an address ("paypal.com", "https://bank.example/login") other than where the link goes. */
+object MisleadingLink {
+    private val HOST_LIKE = Regex("(?i)(?:https?://)?((?:[\\p{L}\\p{N}-]+\\.)+[\\p{L}]{2,})") // regex
+
+    /** Invisible format characters (zero-width, soft hyphen, direction marks): a text that hides them is not trusted. */
+    private val FORMAT = Regex("\\p{Cf}") // regex
+    /** Dots that read as "." (ideographic, fullwidth, halfwidth, one-dot leader). */
+    private val DOTS = Regex("[\\u3002\\uFF0E\\uFF61\\u2024]") // regex
+
+    fun names(text: String, url: String): Boolean {
+        val target = com.monostr.app.ui.common.LinkHost.of(url)?.lowercase()?.removePrefix("www.") ?: return false
+        // fail closed: hidden characters in a link text only serve to slip an address past this check
+        if (FORMAT.containsMatchIn(text)) return true
+        val plain = java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFKC).replace(DOTS, ".")
+        return HOST_LIKE.findAll(plain).any { m ->
+            val shown = runCatching { java.net.IDN.toASCII(m.groupValues[1].lowercase(), java.net.IDN.ALLOW_UNASSIGNED) }.getOrNull()?.removePrefix("www.")
+            shown != null && shown != target && !target.endsWith(".$shown")
+        }
+    }
 }

@@ -13,14 +13,19 @@ class TipRequestTest {
     private val info = PaymentInfo.Enabled(Address.parse(mainnet), Watcher.Http("https://watcher.monostr.com", "d".repeat(64)))
     private val note = "b".repeat(64)
     private val recipient = "c".repeat(64)
+    private val sender = TipSender("79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")
+    private val nonce = ByteArray(16) { it.toByte() }
 
     @Test
-    fun `prepare builds intent, integrated address and uri from the payment id`() {
-        val pid = PaymentId.parse("0123456789abcdef")!!
-        val p = TipRequest.prepare(info, recipient, note, 5_000_000_000L, TipType.LIKE, "danke", now = 1700000000, paymentId = pid)
+    fun `prepare derives the pid from the sender and builds intent, integrated address and uri`() {
+        val p = TipRequest.prepare(info, recipient, note, 5_000_000_000L, TipType.LIKE, "danke", now = 1700000000, sender = sender, nonce = nonce)
+        val pid = PaymentId.parse("bc14ada49f3e78d6")!!
+        val bound = info.address.integrated(pid.bytes)
 
-        assertEquals(integrated, p.integratedAddress)
-        assertEquals("monero:$integrated?tx_amount=0.005&tx_description=Monostr%20like%20bbbbbbbb", p.paymentUri)
+        assertEquals(bound, p.integratedAddress)
+        assertEquals("monero:$bound?tx_amount=0.005&tx_description=Monostr%20like%20bbbbbbbb", p.paymentUri)
+        assertEquals("000102030405060708090a0b0c0d0e0f", p.intent.pidNonce)
+        assertEquals(sender, p.sender)
         assertEquals(pid, p.intent.paymentId)
         assertEquals(note, p.intent.noteId)
         assertEquals(recipient, p.intent.recipientPubkey)
@@ -32,8 +37,8 @@ class TipRequestTest {
 
     @Test
     fun `prepare draws a fresh payment id by default`() {
-        val a = TipRequest.prepare(info, recipient, note, 1, TipType.BOOST, "", now = 1)
-        val b = TipRequest.prepare(info, recipient, note, 1, TipType.BOOST, "", now = 1)
+        val a = TipRequest.prepare(info, recipient, note, 1, TipType.BOOST, "", now = 1, sender = sender)
+        val b = TipRequest.prepare(info, recipient, note, 1, TipType.BOOST, "", now = 1, sender = sender)
         assertNotEquals(a.intent.paymentId, b.intent.paymentId)
         assertNotEquals(a.integratedAddress, b.integratedAddress)
         assertTrue(a.paymentUri.startsWith("monero:4"))
@@ -42,7 +47,7 @@ class TipRequestTest {
 
     @Test
     fun `a profile tip has no note, names the recipient in the wallet description and can be anonymous`() {
-        val p = TipRequest.prepare(info, recipient, null, 1_000_000_000L, TipType.TIP, "", now = 1700000000, anonymous = true)
+        val p = TipRequest.prepare(info, recipient, null, 1_000_000_000L, TipType.TIP, "", now = 1700000000, sender = sender, anonymous = true)
         assertNull(p.intent.noteId)
         assertTrue(p.intent.anonymous)
         assertTrue(p.paymentUri.contains("tx_description=Monostr%20tip%20cccccccc"), p.paymentUri)
@@ -54,7 +59,7 @@ class TipRequestTest {
     fun `hidden recipient gets an intent without amount`() {
         val hidden = info.copy(amountsHidden = true)
         for (anon in listOf(false, true)) {
-            val p = TipRequest.prepare(hidden, recipient, note, 5_000_000_000L, TipType.TIP, "", now = 1, anonymous = anon)
+            val p = TipRequest.prepare(hidden, recipient, note, 5_000_000_000L, TipType.TIP, "", now = 1, sender = sender, anonymous = anon)
             assertTrue(p.intent.hideAmount)
             assertTrue(p.unsignedEvent.tags.none { it[0] == "amount" })
             assertTrue(p.paymentUri.contains("tx_amount=0.005"), p.paymentUri)
@@ -63,7 +68,7 @@ class TipRequestTest {
 
     @Test
     fun `public recipient keeps amount`() {
-        val p = TipRequest.prepare(info, recipient, note, 5_000_000_000L, TipType.TIP, "", now = 1)
+        val p = TipRequest.prepare(info, recipient, note, 5_000_000_000L, TipType.TIP, "", now = 1, sender = sender)
         assertTrue(p.unsignedEvent.tags.contains(listOf("amount", "5000000000")))
     }
 }

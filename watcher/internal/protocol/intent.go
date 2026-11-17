@@ -1,6 +1,7 @@
 package protocol
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strconv"
@@ -21,6 +22,9 @@ type Intent struct {
 	CreatedAt  int64
 	Expiration int64
 	Anon       bool
+	// Bound: the pid is derived from the signing key and the pid_nonce tag
+	// (tips 0.6); a bound intent wins over an unbound one with the same pid.
+	Bound bool
 }
 
 var ErrInvalidIntent = errors.New("invalid tip intent")
@@ -29,8 +33,9 @@ var ErrInvalidIntent = errors.New("invalid tip intent")
 const MaxFutureSkew int64 = 300
 
 // MaxIntentTTL bounds expiration - created_at (seconds): an intent may keep
-// a webhook and a pid reservation alive for at most seven days.
-const MaxIntentTTL int64 = 7 * 86400
+// a webhook, a pid reservation and a slot of the recipient's open-intent cap
+// alive for at most 48 hours. The app sends 24 hours.
+const MaxIntentTTL int64 = 48 * 3600
 
 func invalid(reason string) error { return fmt.Errorf("%w: %s", ErrInvalidIntent, reason) }
 
@@ -103,6 +108,20 @@ func ParseIntent(ev *nostr.Event, now int64) (Intent, error) {
 	if !ok || !IsHex16(pid) {
 		return Intent{}, invalid("bad pid")
 	}
+	// tips 0.6: with pid_nonce the pid must come from the signing key, so a
+	// pid copied into an intent under another key is invalid
+	bound := false
+	if tag, present := firstTag(ev.Tags, "pid_nonce"); present {
+		if len(tag) < 2 || !isLowerHex(tag[1], 2*PIDNonceSize) {
+			return Intent{}, invalid("bad pid_nonce")
+		}
+		nonce, _ := hex.DecodeString(tag[1])
+		want, err := BoundPID(ev.PubKey, nonce)
+		if err != nil || want != pid {
+			return Intent{}, invalid("pid not bound to the signing key")
+		}
+		bound = true
+	}
 	typ := "tip"
 	if tag, present := firstTag(ev.Tags, "type"); present {
 		if len(tag) < 2 || (tag[1] != "like" && tag[1] != "boost" && tag[1] != "tip") {
@@ -126,6 +145,6 @@ func ParseIntent(ev *nostr.Event, now int64) (Intent, error) {
 	}
 	return Intent{
 		ID: ev.ID, Sender: ev.PubKey, Recipient: recipient, NoteID: noteID, PID: pid, Type: typ,
-		Amount: amount, CreatedAt: int64(ev.CreatedAt), Expiration: expiration, Anon: anon,
+		Amount: amount, CreatedAt: int64(ev.CreatedAt), Expiration: expiration, Anon: anon, Bound: bound,
 	}, nil
 }

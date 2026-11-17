@@ -58,9 +58,26 @@ class MonostrApp : Application(), SingletonImageLoader.Factory {
             evict = { url, diskKey -> StaleMediaCheck.evictFrom(loader, url, diskKey) },
         )
         // builder and client on one line: NoBareClientsTest reads them so
-        loader = ImageLoader.Builder(context).serviceLoaderEnabled(false).components { add(OkHttpNetworkFetcherFactory(callFactory = { http.get() })); addVideoFrames() }
+        loader = ImageLoader.Builder(context).serviceLoaderEnabled(false).components { add(OkHttpNetworkFetcherFactory(callFactory = { pictureHttp })); addVideoFrames() }
             .eventListener(StaleMediaListener(check)).build()
         return loader
+    }
+
+    /**
+     * The gated client with an address check: a stranger's picture or avatar URL must not make the app reach into the
+     * user's LAN or loopback (router pages, local services). The own media server is exempt, it may be self-hosted at
+     * home; debug builds allow any address for the loopback device tests.
+     */
+    private val pictureHttp by lazy {
+        val base = http.get()
+        val check = com.monostr.app.data.linkpreview.AddressCheckInterceptor(
+            if (BuildConfig.DEBUG) com.monostr.app.data.linkpreview.AddressPolicy.ANY else com.monostr.app.data.linkpreview.AddressPolicy.PUBLIC_ONLY,
+            base.dns,
+        )
+        base.newBuilder().addNetworkInterceptor { chain ->
+            val own = uploadServer?.let { runCatching { java.net.URI(it).host }.getOrNull() }
+            if (own != null && chain.request().url.host.equals(own, ignoreCase = true)) chain.proceed(chain.request()) else check.intercept(chain)
+        }.build()
     }
 
     /** Spec 2026-11-12: a video without a poster gets one from its first frame, read through the same gated client. */

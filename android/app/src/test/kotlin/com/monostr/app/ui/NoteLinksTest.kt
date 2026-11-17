@@ -187,4 +187,20 @@ class NoteLinksTest {
         }
         assertEquals(listOf(NoteSpan.Url("njump.me/" + n.take(22) + "…", "https://njump.me/$n")), NoteLinks.annotate("https://njump.me/$n"))
     }
+
+    @Test
+    fun `a host with look-alike letters shows in punycode`() {
+        // Cyrillic "а" (U+0430) in place of the Latin "a"
+        assertEquals("xn--pypal-4ve.com/login", NoteLinks.shownUrl("https://p\u0430ypal.com/login"))
+        assertEquals("paypal.com/login", NoteLinks.shownUrl("https://paypal.com/login"))
+    }
+
+    @Test
+    fun `a link ends at a direction control or zero-width character`() {
+        val spans = NoteLinks.annotate("https://good.example\u202Emoc.live")
+        val url = spans.filterIsInstance<NoteSpan.Url>().single()
+        assertEquals("https://good.example", url.url)
+        val zw = NoteLinks.annotate("https://bank.example\u200B.evil.example").filterIsInstance<NoteSpan.Url>().single()
+        assertEquals("https://bank.example", zw.url)
+    }
 }

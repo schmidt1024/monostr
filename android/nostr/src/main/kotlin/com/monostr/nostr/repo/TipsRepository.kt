@@ -10,6 +10,7 @@ import com.monostr.nostr.RustConvert
 import com.monostr.nostr.StartupGate
 import com.monostr.nostr.net.NetworkGate
 import com.monostr.tips.Kinds
+import com.monostr.tips.TipSender
 import com.monostr.tips.PaymentInfo
 import com.monostr.tips.Payto
 import com.monostr.tips.Watcher
@@ -61,6 +62,19 @@ interface TipsRepository {
     suspend fun paymentInfo(pubkey: String, maxAgeSeconds: Long = 3600): PaymentInfo
     /** The local copy only, no relay round trip: the fallback when the relays are too slow (spec 7.3). */
     suspend fun cachedPaymentInfo(pubkey: String): PaymentInfo
+
+    /**
+     * The newest payment info of [pubkey] read over a connection of its own (no session, no AUTH, under Tor its own circuit), for an
+     * anonymous tip: asking over the session right before an anonymous intent would let a relay link the two. Stored like a fetched
+     * one. Null when no relay answered in time or the route is not known yet; the caller falls back to the cached copy.
+     */
+    suspend fun paymentInfoUnlinked(pubkey: String): PaymentInfo? = null
+
+    /**
+     * Who signs the next intent (tips 0.6: the payment id is derived from this key, so it is chosen before the intent is
+     * prepared). Public: the session's key. Anonymous: a fresh one-time key per call, kept only in the returned value.
+     */
+    suspend fun tipSender(anonymous: Boolean): TipSender
     /**
      * Signs and publishes the user's own payment info (spec 3.1). It is kept locally only when a relay
      * accepted it: a copy nobody else can see would still make this device's tip sheet pay to it.
@@ -138,6 +152,11 @@ class NostrTipsRepository(
     private val fetchTimeout: Duration = Duration.ofSeconds(8),
     /** Spec perf2 A3: the receipts' relay part (fetch + subscription) waits until the home feed's first page is in. */
     private val gate: StartupGate = StartupGate.OPEN,
+    /**
+     * Whether stagenet/testnet payment info counts. Off in release builds: test coins are worthless, and a recipient
+     * with a stagenet watcher could otherwise show tip counts and totals as if they were real XMR and be tipped there.
+     */
+    private val testNetworks: Boolean = true,
     private val now: () -> Long = { System.currentTimeMillis() / 1000 },
 ) : TipsRepository {
     /** One payment info fetch per pubkey at a time, shared by every caller; its stamp is the freshness (spec perf 3.4). */
@@ -153,6 +172,15 @@ class NostrTipsRepository(
 
     private fun receiptFilter(noteIds: Collection<String>) =
         Filter().kind(Kind(Kinds.TIP_RECEIPT.toUShort())).events(noteIds.take(MAX_NOTES).map { EventId.parse(it) })
+
+    /**
+     * The watchers' retractions (kind 5) of the stored receipts [filter] finds: a watcher publishes a receipt when it sees
+     * the payment and withdraws it when the payment never confirms (protocol spec §3.4); [Withdrawn] then leaves it out.
+     */
+    private suspend fun fetchRetractions(filter: Filter) {
+        val ids = engine.query(filter).map { it.id() }
+        for (chunk in ids.chunked(MAX_NOTES)) quietly { engine.fetch(Filter().kind(Kind(5u)).events(chunk), fetchTimeout) }
+    }
 
     override suspend fun paymentInfo(pubkey: String, maxAgeSeconds: Long): PaymentInfo {
         val filter = infoFilter(pubkey)
@@ -174,6 +202,23 @@ class NostrTipsRepository(
     fun forgetFetched() = infoRefresh.forget()
 
     override suspend fun cachedPaymentInfo(pubkey: String): PaymentInfo = parsePaymentInfo(engine.query(infoFilter(pubkey)).firstOrNull())
+
+    override suspend fun paymentInfoUnlinked(pubkey: String): PaymentInfo? {
+        val relays = engine.readRelayUrls().take(UNLINKED_RELAYS)
+        if (relays.isEmpty()) return null
+        val filter = Filter().kind(Kind(Kinds.PAYMENT_INFO.toUShort())).author(PublicKey.parse(pubkey))
+        val events = try {
+            detached.fetch(filter, relays, UNLINKED_CONNECT, UNLINKED_ANSWER)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return null
+        }
+        val newest = events.filter { it.author().toHex() == pubkey && it.kind().asU16().toInt() == Kinds.PAYMENT_INFO }.maxByOrNull { it.createdAt().asSecs() } ?: return null
+        // the database keeps the newest of a replaceable kind: a stored newer one stays, and that is what counts
+        quietly { engine.save(newest) }
+        return parsePaymentInfo(engine.query(infoFilter(pubkey)).firstOrNull() ?: newest)
+    }
 
     override suspend fun cachedPayto(pubkey: String): String? =
         engine.query(paytoFilter(pubkey)).firstOrNull()?.let { Payto.moneroAddress(tipsTags(it)) }
@@ -233,8 +278,11 @@ class NostrTipsRepository(
     private suspend fun tipsTags(event: Event): List<List<String>> = withContext(engine.ffiDispatcher) { RustConvert.toTips(event).tags }
 
     /** [event] as payment info; missing or malformed ⇒ Disabled. `toTips` is a rust-nostr call: on the FFI dispatcher. */
-    private suspend fun parsePaymentInfo(event: Event?): PaymentInfo =
-        if (event == null) PaymentInfo.Disabled else withContext(engine.ffiDispatcher) { PaymentInfo.parse(RustConvert.toTips(event)) }
+    private suspend fun parsePaymentInfo(event: Event?): PaymentInfo {
+        if (event == null) return PaymentInfo.Disabled
+        val info = withContext(engine.ffiDispatcher) { PaymentInfo.parse(RustConvert.toTips(event)) }
+        return if (!testNetworks && info is PaymentInfo.Enabled && info.network != com.monostr.monero.Network.MAINNET) PaymentInfo.Disabled else info
+    }
 
     /** When the payment info of [pubkey] was last fetched from relays in this process; null if never (for tests). */
     internal fun lastFetchAt(pubkey: String): Long? = infoRefresh.fetchedAt(pubkey)
@@ -268,12 +316,20 @@ class NostrTipsRepository(
 
     override suspend fun disablePaymentInfo(): PublishResult = engine.signAndPublish(RustConvert.toBuilder(PaymentInfo.buildDisabled(now())))
 
+    override suspend fun tipSender(anonymous: Boolean): TipSender = if (!anonymous) {
+        TipSender(requireNotNull(engine.pubkey) { "a public tip needs a logged-in user" })
+    } else {
+        withContext(engine.ffiDispatcher) { Keys.generate().let { TipSender(it.publicKey().toHex(), it.secretKey().toHex()) } }
+    }
+
     override suspend fun sendIntent(prepared: PreparedTip, watcherRelays: List<String>): PublishResult {
         require(!prepared.intent.anonymous) { "an anonymous intent must not go out under the user's key" }
-        val own = engine.signAndSend(prepared.unsignedEvent)
-        if (watcherRelays.isEmpty()) return own
+        // the pid was derived from this key: signed by another (an account switch since prepare) it would be invalid
+        require(prepared.sender.secretHex == null && prepared.sender.pubkey == engine.pubkey) { "the intent was prepared for another key" }
+        if (watcherRelays.isEmpty()) return engine.signAndSend(prepared.unsignedEvent)
         val watcherStart = System.nanoTime()
-        val more = engine.sendTo(watcherRelays, own.eventId)
+        // the watcher's relays first: see NostrEngine.signAndSendFirstTo
+        val (own, more) = engine.signAndSendFirstTo(prepared.unsignedEvent, watcherRelays)
         if (com.monostr.nostr.PerfTrace.enabled) com.monostr.nostr.PerfTrace.mark("tip intent to watcher relays ${(System.nanoTime() - watcherStart) / 1_000_000}ms, ok=${more.successRelays} failed=${more.failedRelays}")
         return PublishResult(own.eventId, own.kind, (own.successRelays + more.successRelays).distinct(), own.failedRelays + more.failedRelays)
     }
@@ -281,9 +337,11 @@ class NostrTipsRepository(
     override suspend fun sendAnonymousIntent(prepared: PreparedTip, watcherRelays: List<String>, torOnly: Boolean): AnonymousIntent {
         require(watcherRelays.isNotEmpty()) { "an anonymous intent needs the watcher's relays" }
         require(prepared.intent.anonymous) { "the intent is not marked anonymous" }
-        // a fresh key per tip, never stored: nothing links two anonymous tips to each other or to the user
+        val secret = requireNotNull(prepared.sender.secretHex) { "an anonymous intent needs its one-time key" }
+        // the one-time key from tipSender, never stored: nothing links two anonymous tips to each other or to the user,
+        // and the pid was derived from exactly this key (tips 0.6)
         val (event, json) = withContext(engine.ffiDispatcher) {
-            val signed = RustConvert.toBuilder(prepared.unsignedEvent).signWithKeys(Keys.generate())
+            val signed = RustConvert.toBuilder(prepared.unsignedEvent).signWithKeys(Keys.parse(secret))
             signed to signed.asJson()
         }
         return AnonymousIntent(detached.send(event, watcherRelays, torOnly = torOnly), json)
@@ -308,6 +366,9 @@ class NostrTipsRepository(
         emit(summaries(notes))
         gate.await()
         quietly { engine.fetch(filter) }
+        emit(summaries(notes))
+        // after the receipts are shown: one more round trip, not a later first paint
+        fetchRetractions(filter)
         emit(summaries(notes))
         // best-effort: without relays the local receipts stay and no live updates arrive
         val subId = try {
@@ -336,6 +397,8 @@ class NostrTipsRepository(
         val filter = profileReceiptFilter(recipient, info, since)
         emit(profileIntentIds(filter, recipient, info))
         quietly { engine.fetch(filter) }
+        emit(profileIntentIds(filter, recipient, info))
+        fetchRetractions(filter)
         emit(profileIntentIds(filter, recipient, info))
         // best-effort: without relays the local receipts stay and no live updates arrive
         val subId = try {
@@ -378,7 +441,7 @@ class NostrTipsRepository(
             .limit(PROFILE_RECEIPTS.toULong())
 
     private suspend fun profileIntentIds(filter: Filter, recipient: String, info: PaymentInfo): Set<String> =
-        validProfileIntentIds(engine.query(filter), recipient, info)
+        validProfileIntentIds(Withdrawn.filter(engine, engine.query(filter)), recipient, info)
 
     /** Intent ids of the valid profile receipts (no `e`) to [recipient] among [events]. */
     private fun validProfileIntentIds(events: List<Event>, recipient: String, info: PaymentInfo): Set<String> =
@@ -408,7 +471,7 @@ class NostrTipsRepository(
 
     /** Local receipts for [notes], validated per spec 3.4 against each author's payment info. A receipt without `e` (a profile tip) counts for no note. */
     private suspend fun summaries(notes: Map<String, String>): Map<String, TipSummary> {
-        val receipts = engine.query(receiptFilter(notes.keys))
+        val receipts = Withdrawn.filter(engine, engine.query(receiptFilter(notes.keys)))
             .mapNotNull { TipReceipt.parse(RustConvert.toTips(it)) }
             .mapNotNull { r -> r.noteId?.takeIf { it in notes }?.let { it to r } }
         if (receipts.isEmpty()) return emptyMap()
@@ -425,6 +488,11 @@ class NostrTipsRepository(
     }
 
     companion object {
+        /** [paymentInfoUnlinked]: each relay is a connection of its own, so only a few of the read relays are asked. */
+        const val UNLINKED_RELAYS = 4
+        private val UNLINKED_CONNECT: Duration = Duration.ofMillis(1_500)
+        private val UNLINKED_ANSWER: Duration = Duration.ofMillis(1_200)
+
         /** Relays cap filter ids; a well-tipped note is fetched in slices of this many intents. */
         const val INTENT_CHUNK = 50
 

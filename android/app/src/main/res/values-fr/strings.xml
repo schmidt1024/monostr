@@ -144,6 +144,8 @@
     <string name="feed_new_note">Nouvelle note</string>
     <string name="feed_empty">Pas encore de notes. Suivez quelqu\'un ou écrivez la première.</string>
     <string name="feed_new_notes">Nouvelles notes</string>
+    <string name="feed_nothing_new">Pas de nouvelles notes</string>
+    <string name="feed_nothing_new_discover">Découvrir des personnes</string>
     <string name="feed_error_load">Impossible de charger le fil</string>
     <string name="feed_error_more">Impossible de charger plus de notes</string>
 
@@ -358,7 +360,7 @@
     <string name="link_preview_cd">Aperçu du lien : %1$s, %2$s</string>
     <string name="link_preview_remove">Retirer l’aperçu</string>
     <string name="settings_author_relays">Connecter temporairement les relais de l\'auteur</string>
-    <string name="settings_author_relays_hint">Les notes sont aussi récupérées depuis les relais propres d\'autres personnes : à l\'ouverture d\'un profil, et quand une note répond à une note ou en cite une que vos relais n\'ont pas. Ces relais voient votre adresse IP et quelles notes vous consultez.</string>
+    <string name="settings_author_relays_hint">Les notes sont aussi récupérées depuis les relais propres d\'autres personnes et depuis les relais qu\'une note indique : à l\'ouverture d\'un profil, quand une note répond à une note ou en cite une que vos relais n\'ont pas, et pour les sondages et les articles liés. Ces relais voient votre adresse IP et quelles notes vous consultez.</string>
     <string name="settings_pow">Preuve de travail à l\'envoi</string>
     <string name="settings_pow_hint">Certains relais n’acceptent que des notes avec preuve de travail (NIP-13). Plus de bits sont mieux acceptés mais l’envoi est plus long.</string>
     <string name="settings_pow_off">Non</string>

@@ -4,8 +4,11 @@ import rust.nostr.sdk.Tag
 
 /** Every `#hashtag` of a note's text becomes one `t` tag (lowercase, deduplicated, text order), so relays find the note by `#t`. */
 object HashtagTags {
-    /** A URL; scanned first so that a `#` inside a URL is never a tag. */
-    const val URL = "https?://[^\\s<>\"']+" // regex
+    /**
+     * A URL; scanned first so that a `#` inside a URL is never a tag. It ends at a zero-width or direction control
+     * character: inside a link those only serve to make it read as another address.
+     */
+    const val URL = "https?://[^\\s<>\"'\\u200B-\\u200F\\u202A-\\u202E\\u2060-\\u2069\\uFEFF]+" // regex
     /** A hashtag not glued to a word, with a letter somewhere; group 1 is the name. */
     const val HASHTAG = "(?<![\\p{L}\\p{N}_])#((?=[\\p{N}_]*\\p{L})[\\p{L}\\p{N}_]+)" // regex
 

@@ -44,6 +44,8 @@ class NostrArticleRepliesRepository(
     private val timeout: Duration = Duration.ofSeconds(8),
     private val relayFilter: (String) -> Boolean = RelayHosts::isPublicWss,
     private val foreign: ForeignRelays? = null,
+    /** The user's «Author relays» switch, read at use time: off, no relay a stranger's event names is contacted (owner 2026-11-17). */
+    private val hintsAllowed: suspend () -> Boolean = { true },
     private val windowMs: Long = WINDOW_MS,
     private val now: () -> Long = { System.currentTimeMillis() / 1000 },
 ) : ArticleRepliesRepository {
@@ -80,7 +82,7 @@ class NostrArticleRepliesRepository(
         quietly { engine.fetch(commentsFilter(coordinate), timeout) }
         quietly { engine.fetch(notesFilter(coordinate), timeout) }
         emitIfNew()
-        if (allowForeign) {
+        if (allowForeign && hintsAllowed()) {
             askForeign(ref)
             emitIfNew()
         }

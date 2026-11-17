@@ -1,0 +1,7 @@
+- «Nessuna nuova nota» se un aggiornamento non porta nulla, con «Scopri persone» se segui pochi
+- Mance: ID di pagamento legato al mittente, nessuno può attribuirsi la tua mancia
+- Le mance anonime consultano il destinatario con una connessione separata
+- L'impostazione dei relay dell'autore vale anche per i relay citati in una nota
+- I link ingannevoli chiedono prima; domini simili mostrati in punycode
+- Tema scelto di nuovo visibile nelle impostazioni
+- Correzioni di sicurezza e privacy

@@ -61,6 +61,7 @@ Release APKs are signed with this certificate (SHA-256):
 - Pictures load only on tap by default; Settings can load them automatically.
 - Notes, likes and reposts carry a NIP-89 `client` tag ("via Monostr") only if you switch it on in Settings; off by default.
 - Long-form articles (NIP-23) open in an in-app reader with likes, reposts, replies, bookmarks and Monero tips; profiles show an Articles tab.
+- Polls (NIP-88): vote in a poll's card and see the results; create single-choice polls (2–4 choices, 5 minutes to 7 days) in the composer. A vote is final; votes go to your write relays and the poll's public relays.
 - A Monero address can be published without a watcher (NIP-A3 payto); tips to people who only have a payto address open your wallet without a confirmation in Monostr.
 - Follower numbers are the largest count the relays report (NIP-45); no proprietary index is asked (since 0.22.4).
 

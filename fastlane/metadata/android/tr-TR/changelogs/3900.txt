@@ -1,0 +1,7 @@
+- Yenileme bir şey getirmezse «Yeni not yok», az kişiyi takip ediyorsanız «Kişileri keşfet»
+- Bahşiş: ödeme kimliği gönderene bağlı, kimse bahşişinizi sahiplenemez
+- Anonim bahşişler alıcı bilgisini ayrı bir bağlantıyla alır
+- Yazar röleleri ayarı bir notun belirttiği röleleri de kapsar
+- Yanıltıcı bağlantılar önce sorar; benzer alan adları punycode ile gösterilir
+- Seçilen tema ayarlarda yeniden görünür
+- Güvenlik ve gizlilik düzeltmeleri

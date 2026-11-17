@@ -101,6 +101,15 @@ func runPersonal(logger *slog.Logger) error {
 		http.DefaultTransport.(*http.Transport).Proxy = http.ProxyURL(cfg.proxy)
 	}
 
+	// user-supplied relays (the recipient's NIP-65 list) must not reach
+	// internal hosts; the configured relays, nodes and proxy stay reachable
+	trusted := append(append(append([]string{}, cfg.relays...), cfg.relayListRelays...), cfg.nodes...)
+	if cfg.proxy != nil {
+		trusted = append(trusted, cfg.proxy.String())
+	}
+	if err := relays.GuardDefaultTransport(relays.TrustedHosts(trusted...)); err != nil {
+		return err
+	}
 	st, err := store.Open(cfg.dbPath)
 	if err != nil {
 		return err

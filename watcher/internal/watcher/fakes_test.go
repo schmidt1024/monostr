@@ -41,6 +41,7 @@ type fakeLWS struct {
 	failEnsure  error
 	failHook    error
 	failRescan  error
+	failDelete  error
 	rescanErrs  []error // per-call result, recorded attempts included; nil past the end
 }
 
@@ -74,6 +75,9 @@ func (f *fakeLWS) WebhookAdd(_ context.Context, address, pid, token, url string,
 func (f *fakeLWS) WebhookDeleteUUID(_ context.Context, ids []string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.failDelete != nil {
+		return f.failDelete
+	}
 	f.deleted = append(f.deleted, ids...)
 	return nil
 }
@@ -156,9 +160,12 @@ func (f *fakeRelays) events() []nostr.Event {
 	return out
 }
 
-type fakeHeight struct{ h uint64 }
+type fakeHeight struct {
+	h   uint64
+	err error
+}
 
-func (f *fakeHeight) Height(context.Context) (uint64, error) { return f.h, nil }
+func (f *fakeHeight) Height(context.Context) (uint64, error) { return f.h, f.err }
 
 type env struct {
 	svc    *Service
@@ -220,7 +227,7 @@ func intentEvent(t *testing.T, senderSK, recipientPK, pid string, amount int64, 
 }
 
 func hook(token, pid, eventID, txHash string, conf uint32, amount int64) lws.Hook {
-	return lws.Hook{Token: token, PaymentID: pid, EventID: eventID, TxHash: txHash, Confirmations: conf, Amount: amount, Block: 1}
+	return lws.Hook{Token: token, PaymentID: pid, EventID: eventID, TxHash: txHash, Confirmations: conf, Amount: amount, Block: 3200001}
 }
 
 func eventually(t *testing.T, what string, cond func() bool) {

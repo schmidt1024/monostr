@@ -227,6 +227,9 @@ class ForeignRelays(
         }
     }
 
+    /** Whether [url] is attached through this budget (held or lingering): a relay only borrowed for a lookup. */
+    fun holds(url: String): Boolean = normalise(url)?.let { it in view } ?: false
+
     /** Under [mutex]: the attached set for [attached]. */
     private fun publish() {
         view = (holders.keys - attaching.keys) + lingering.keys

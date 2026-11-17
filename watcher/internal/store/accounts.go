@@ -99,3 +99,10 @@ func (s *Store) ListAccounts() ([]Account, error) {
 	}
 	return out, rows.Err()
 }
+
+// CountAccountsWithAddress counts the accounts registered with address.
+func (s *Store) CountAccountsWithAddress(address string) (int, error) {
+	var n int
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM accounts WHERE address = ?`, address).Scan(&n)
+	return n, err
+}

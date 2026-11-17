@@ -144,6 +144,8 @@
     <string name="feed_new_note">Yeni not</string>
     <string name="feed_empty">Henüz not yok. Birini takip et ya da ilkini yaz.</string>
     <string name="feed_new_notes">Yeni notlar</string>
+    <string name="feed_nothing_new">Yeni not yok</string>
+    <string name="feed_nothing_new_discover">Kişileri keşfet</string>
     <string name="feed_error_load">Akış yüklenemedi</string>
     <string name="feed_error_more">Daha fazla not yüklenemedi</string>
 
@@ -357,7 +359,7 @@
     <string name="link_preview_cd">Bağlantı önizlemesi: %1$s, %2$s</string>
     <string name="link_preview_remove">Önizlemeyi kaldır</string>
     <string name="settings_author_relays">Yazarın rölelerini geçici olarak bağla</string>
-    <string name="settings_author_relays_hint">Notlar başka kişilerin kendi rölelerinden de alınır: bir profil açıldığında ve bir not, rölelerinizde olmayan bir nota yanıt verdiğinde veya onu alıntıladığında. Bu röleler IP adresinizi ve hangi notlara baktığınızı görür.</string>
+    <string name="settings_author_relays_hint">Notlar başka kişilerin kendi rölelerinden ve bir notun belirttiği rölelerden de alınır: bir profil açıldığında, bir not rölelerinizde olmayan bir nota yanıt verdiğinde veya onu alıntıladığında, ayrıca anketler ve bağlantılı makaleler için. Bu röleler IP adresinizi ve hangi notlara baktığınızı görür.</string>
     <string name="settings_pow">Gönderirken iş ispatı</string>
     <string name="settings_pow_hint">Bazı relay’ler yalnızca iş ispatlı notları kabul eder (NIP-13). Daha çok bit daha yaygın kabul edilir ama gönderim daha uzun sürer.</string>
     <string name="settings_pow_off">Kapalı</string>

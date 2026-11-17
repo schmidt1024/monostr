@@ -18,7 +18,8 @@ import com.monostr.tips.event.Event as JsonEvent
  * request by the note's own author counts; `a` tags are not read.
  */
 object Withdrawn {
-    private val WITHDRAWABLE = setOf(1, 6, 7, 16, Kinds.COMMENT, Kinds.POLL)
+    /** A tip receipt too: its watcher retracts one whose payment never confirmed (kind 5 by the watcher, protocol spec §3.4). */
+    private val WITHDRAWABLE = setOf(1, 6, 7, 16, Kinds.COMMENT, Kinds.POLL, Kinds.TIP_RECEIPT)
     private val HEX64 = Regex("[0-9a-f]{64}")
     private const val ID_CHUNK = 100
 

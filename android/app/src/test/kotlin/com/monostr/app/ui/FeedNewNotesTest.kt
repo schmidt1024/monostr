@@ -12,6 +12,7 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -23,9 +24,9 @@ class FeedNewNotesTest {
     private val profiles = FakeProfiles(mapOf(alice to Profile(alice, "alice", "Alice", "https://x/a.png", null, null)))
 
     private fun TestScope.eager(): CoroutineScope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher(testScheduler))
-    private fun TestScope.controller(feed: FakeFeed) = FeedController(
+    private fun TestScope.controller(feed: FakeFeed, online: Boolean = true) = FeedController(
         feed, profiles, FakePublish(), TipDecorations(FakeTips(), FakePendingTips(), profiles, FakePublish(), eager()) { 5_000 },
-        BookmarkActions(FakeBookmarks(), eager()), FakeCounts(), eager(),
+        BookmarkActions(FakeBookmarks(), eager()), FakeCounts(), eager(), online = { online },
     )
 
     private val old = note('1', alice, 1000)
@@ -72,5 +73,46 @@ class FeedNewNotesTest {
         feed.liveUpdates.emit(listOf(new, old)); advanceUntilIdle()
         assertEquals(listOf(new.id, old.id), c.state.value.notes.map { it.note.id })
         assertTrue(c.state.value.newAbove.isEmpty())
+    }
+
+    @Test
+    fun `a refresh that brings nothing says so`() = runTest {
+        val feed = FakeFeed().apply { current = listOf(old) }
+        val c = controller(feed)
+        c.start(); advanceUntilIdle()
+        c.refresh(); advanceUntilIdle()
+        assertTrue(c.state.value.nothingNew)
+        c.clearNothingNew()
+        assertFalse(c.state.value.nothingNew)
+    }
+
+    @Test
+    fun `a refresh that brings a note says nothing`() = runTest {
+        val feed = FakeFeed().apply { current = listOf(old) }
+        val c = controller(feed)
+        c.start(); advanceUntilIdle()
+        feed.current = listOf(new, old)
+        c.refresh(); advanceUntilIdle()
+        assertFalse(c.state.value.nothingNew)
+    }
+
+    @Test
+    fun `the notes waiting behind the pill count as new on a refresh`() = runTest {
+        val feed = FakeFeed().apply { current = listOf(old) }
+        val c = controller(feed)
+        c.start(); advanceUntilIdle()
+        feed.liveUpdates.emit(listOf(new, old)); advanceUntilIdle()
+        feed.current = listOf(new, old)
+        c.refresh(); advanceUntilIdle()
+        assertFalse(c.state.value.nothingNew)
+    }
+
+    @Test
+    fun `without a connected relay a refresh claims nothing`() = runTest {
+        val feed = FakeFeed().apply { current = listOf(old) }
+        val c = controller(feed, online = false)
+        c.start(); advanceUntilIdle()
+        c.refresh(); advanceUntilIdle()
+        assertFalse(c.state.value.nothingNew)
     }
 }

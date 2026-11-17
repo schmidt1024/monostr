@@ -5,6 +5,7 @@ Monostr è un client Nostr per Android con mance in Monero.
 • Mi piace, ripubblica, cita, rispondi; menzioni, hashtag e link toccabili
 • Immagini e video fino a 2 minuti nelle note e caricamenti propri (Blossom), contenuti sensibili sfocati
 • Leggi articoli lunghi (NIP-23) direttamente nell'app, con mi piace, ripubblicazioni, risposte, segnalibri e mance; i link ad articoli, dirette e altri eventi appaiono come schede
+• Sondaggi (NIP-88): vota e guarda i risultati, oppure creane di tuoi con 2–4 scelte per un massimo di 7 giorni
 • Messaggi privati (NIP-17), segnalibri e account silenziati privati (NIP-51)
 • Ricerca di persone e note (NIP-50), notifiche per mi piace, ripubblicazioni, risposte e mance
 • La tua lista di relay (NIP-65); i relay di scrittura di un autore si aggiungono finché il suo profilo è aperto

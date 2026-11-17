@@ -128,6 +128,8 @@ data class FeedUiState(
     val loadingMore: Boolean = false,
     /** The snackbar's message; after a mute it offers to unmute the account (spec 9.4). */
     val message: Message? = null,
+    /** A pull-to-refresh brought nothing new while relays were reachable: the short "No new notes" pill shows (BCG wish 2026-11-17). */
+    val nothingNew: Boolean = false,
 ) {
     /**
      * What the feed shows: [notes] without the ones that already stand as an ancestor in a conversation
@@ -176,6 +178,8 @@ class FeedController(
     private val sendGate: SendGate = SendGate.OPEN,
     /** See [scheduleLateRetry]; null = off (tests that count walks), the session passes [LATE_RETRY_MS]. */
     private val lateRetryMs: Long? = null,
+    /** Whether a read relay is connected now: "No new notes" only when the relays could have brought some (tests: always). */
+    private val online: suspend () -> Boolean = { true },
 ) {
     val names: StateFlow<Map<String, String>> get() = mentions.names
     private val _state = MutableStateFlow(FeedUiState())
@@ -325,16 +329,22 @@ class FeedController(
     }
 
     fun refresh() {
+        // taken before the pill's notes join the list: they are new to the reader too
+        val before = _state.value.notes.mapTo(HashSet()) { it.note.id }
         // what waits behind the pill shows at once, the relays bring the rest
         showNew()
         fillLeft = FILL_PAGES
         lastPageEmpty = false
         scope.launch {
-            _state.update { it.copy(refreshing = true) }
+            _state.update { it.copy(refreshing = true, nothingNew = false) }
             try {
                 feed.refresh(source)
                 val decorated = decorate(feed.notes(source))
                 setFresh(decorated, refreshing = false)
+                val after = _state.value
+                if (after.newAbove.isEmpty() && after.notes.all { it.note.id in before } && online()) {
+                    _state.update { it.copy(nothingNew = true) }
+                }
                 chainsFor(decorated)
                 forgetMisses()
                 retryUnavailable()
@@ -610,6 +620,9 @@ class FeedController(
     fun bookmark(note: NoteUi) = bookmarks.toggle(note.target) { m -> _state.update { s -> s.mapAll(bookmarks::flags).copy(message = m?.asMessage() ?: s.message) } }
     fun clearMessage() = _state.update { it.copy(message = null) }
 
+    /** The "No new notes" pill has been shown (or tapped). */
+    fun clearNothingNew() = _state.update { it.copy(nothingNew = false) }
+
     /** Spec 9.4: mutes the note's author at once; the publish runs behind it, a failure brings the account back with the usual message. */
     fun mute(note: Note) {
         muteActions?.mute(note.author) { m, ok -> _state.update { it.copy(message = Message(m, undoMute = note.author.takeIf { ok })) } }
@@ -707,6 +720,7 @@ fun Ready.listFeed(factory: TipSheetFactory, source: FeedSource.Authors, scope: 
     reopened = engine.reopened,
     sendGate = sendGate,
     lateRetryMs = FeedController.LATE_RETRY_MS,
+    online = { engine.connectedReadRelayUrls().isNotEmpty() },
 )
 
 @HiltViewModel
@@ -714,7 +728,7 @@ class FeedViewModel @Inject constructor(session: NostrSession, private val facto
     private val ready = session.requireReady()
     val decorations = factory.decorations(viewModelScope)
     val bookmarks = BookmarkActions(ready.bookmarks, viewModelScope, background = ready.engine.backgroundScope, sendGate = ready.sendGate)
-    val controller = FeedController(ready.feed, ready.profiles, ready.publish, decorations, bookmarks, ready.counts, viewModelScope, conversations = ready.conversations, mentions = MentionResolver(ready.profiles, viewModelScope, Dispatchers.Default), followChanges = ready.follows.changes, deletions = ready.deletions, visibility = ready.visibility, afterDelete = ready.afterNoteDelete, own = ready.ownReactions, mute = ready.mute, muteScope = ready.engine.backgroundScope, snapshot = ready.feedSnapshot, forgetMisses = { ready.locator?.forget(notify = false) }, onFirstFresh = { ready.startupGate.open("feed fresh page") }, reopened = ready.engine.reopened, sendGate = ready.sendGate, lateRetryMs = FeedController.LATE_RETRY_MS)
+    val controller = FeedController(ready.feed, ready.profiles, ready.publish, decorations, bookmarks, ready.counts, viewModelScope, conversations = ready.conversations, mentions = MentionResolver(ready.profiles, viewModelScope, Dispatchers.Default), followChanges = ready.follows.changes, deletions = ready.deletions, visibility = ready.visibility, afterDelete = ready.afterNoteDelete, own = ready.ownReactions, mute = ready.mute, muteScope = ready.engine.backgroundScope, snapshot = ready.feedSnapshot, forgetMisses = { ready.locator?.forget(notify = false) }, onFirstFresh = { ready.startupGate.open("feed fresh page") }, reopened = ready.engine.reopened, sendGate = ready.sendGate, lateRetryMs = FeedController.LATE_RETRY_MS, online = { ready.engine.connectedReadRelayUrls().isNotEmpty() })
     val deletions = ready.deletions
     val menu = ready.noteMenu(delete = controller::delete, mute = controller::mute)
 
@@ -763,6 +777,12 @@ class FeedViewModel @Inject constructor(session: NostrSession, private val facto
             discover.start()
         }
     }
+
+    /** How many people the account follows; null while the contact list is unknown. */
+    val followCount: StateFlow<Int?> = ready.follows.followed().map { it?.size }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** The "Discover people" action of the "No new notes" pill: the suggestions come back above the feed for this session. */
+    fun openDiscover() = ready.discoverDecision.reopen()
 
     fun dismissDiscover() {
         ready.discoverDecision.dismiss()

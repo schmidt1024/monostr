@@ -39,7 +39,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -61,6 +63,7 @@ import com.monostr.app.ui.common.AddressCard
 import com.monostr.app.ui.common.VisibleNotes
 import com.monostr.app.ui.theme.Spacing
 import com.monostr.nostr.model.Note
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** Where taps in a note list lead: the same on the home feed, its list tabs and the list screen. */
@@ -95,6 +98,8 @@ internal fun FeedList(
     headerWhenEmpty: Boolean = false,
     /** The key of the header's first row when it has one: a header that appears above the notes keeps the list at its top. */
     headerTopKey: Any? = null,
+    /** Non-null: the "No new notes" pill also offers "Discover people" (home feed, fewer than 20 follows, suggestions hidden). */
+    onDiscover: (() -> Unit)? = null,
 ) {
     val state by feed.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
@@ -190,11 +195,61 @@ internal fun FeedList(
                     modifier = Modifier.align(Alignment.TopCenter).padding(top = Spacing.s),
                 )
             }
+            // BCG wish 2026-11-17: a pull that brought nothing says so for a moment instead of only stopping the spinner
+            if (state.nothingNew && state.newAbove.isEmpty()) {
+                LaunchedEffect(Unit) {
+                    delay(NOTHING_NEW_MS)
+                    feed.clearNothingNew()
+                }
+                NothingNewPill(
+                    onDiscover = onDiscover?.let { open ->
+                        {
+                            feed.clearNothingNew()
+                            open()
+                            scope.launch { listState.animateScrollToItem(0) }
+                        }
+                    },
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = Spacing.s),
+                )
+            }
             VisibleNotes(listState, feed::visible)
         }
     }
 }
 
+
+private const val NOTHING_NEW_MS = 2_500L
+
+/** "No new notes" after a pull that brought nothing; neutral, unlike the accent "New notes"; with [onDiscover] a tap opens the suggestions. */
+@Composable
+private fun NothingNewPill(onDiscover: (() -> Unit)?, modifier: Modifier = Modifier) {
+    val label = stringResource(R.string.feed_nothing_new)
+    val action = stringResource(R.string.feed_nothing_new_discover)
+    val content: @Composable () -> Unit = {
+        Row(Modifier.padding(horizontal = Spacing.l, vertical = Spacing.s), verticalAlignment = Alignment.CenterVertically) {
+            Text(label, style = MaterialTheme.typography.labelLarge)
+            if (onDiscover != null) {
+                Text(" · ", style = MaterialTheme.typography.labelLarge)
+                Text(action, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            }
+        }
+    }
+    val a11y = Modifier.semantics {
+        contentDescription = if (onDiscover != null) "$label. $action" else label
+        liveRegion = LiveRegionMode.Polite
+    }.testTag("feed-nothing-new")
+    if (onDiscover != null) {
+        Surface(
+            onClick = onDiscover, shape = CircleShape, color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            contentColor = MaterialTheme.colorScheme.onSurface, shadowElevation = 4.dp, modifier = modifier.then(a11y), content = content,
+        )
+    } else {
+        Surface(
+            shape = CircleShape, color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            contentColor = MaterialTheme.colorScheme.onSurface, shadowElevation = 4.dp, modifier = modifier.then(a11y), content = content,
+        )
+    }
+}
 
 /** X's "new posts" pill: up to three faces of the waiting notes and "New notes"; a tap shows them. */
 @Composable

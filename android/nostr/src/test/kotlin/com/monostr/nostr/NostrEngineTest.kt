@@ -367,6 +367,19 @@ class NostrEngineTest {
     }
 
     @Test
+    fun `no AUTH for a relay the policy refuses, the others as before`() = runTest {
+        val policy = AuthPolicy().apply { refuse = { it == "wss://borrowed.example" } }
+        val adapter = SignerAdapter(LocalSigner(sk1), policy)
+        val me = rust.nostr.sdk.PublicKey.parse(LocalSigner(sk1).pubkey)
+        fun auth(relay: String) = EventBuilder(Kind(22242u), "").tags(listOf(Tag.parse(listOf("relay", relay)), Tag.parse(listOf("challenge", "c1")))).build(me)
+        val refused = runCatching { adapter.signEvent(auth("wss://borrowed.example/")) }.exceptionOrNull()
+        assertTrue(refused is SigningRejectedException, "got $refused")
+        assertEquals(22242, adapter.signEvent(auth("wss://inbox.example"))!!.kind().asU16().toInt())
+        // a note is never subject to the policy
+        assertEquals(1, adapter.signEvent(EventBuilder.textNote("hi").build(me))!!.kind().asU16().toInt())
+    }
+
+    @Test
     fun `sendTo reaches a relay held as a temporary one and keeps it out of normal sends`() = runTest {
         SilentWsRelay(acceptEvents = true).use { relay ->
             val engine = NostrEngine.create(dir.resolve("lmdb").toString(), LocalSigner(sk1), emptyList())

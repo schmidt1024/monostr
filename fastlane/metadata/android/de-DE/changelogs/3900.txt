@@ -1,0 +1,7 @@
+- «Keine neuen Notes», wenn ein Refresh nichts bringt, mit «Leute entdecken» bei wenigen Follows
+- Tips: Payment-ID an den Sender gebunden, niemand kann sich deinen Tip zuschreiben
+- Anonyme Tips holen die Empfänger-Infos über eine eigene Verbindung
+- Der Schalter «Relays des Autors» gilt auch für Relays, die eine Note nennt
+- Irreführende Links fragen nach; ähnlich aussehende Domains als Punycode
+- Gewähltes Theme in den Einstellungen wieder sichtbar
+- Sicherheits- und Privacy-Korrekturen

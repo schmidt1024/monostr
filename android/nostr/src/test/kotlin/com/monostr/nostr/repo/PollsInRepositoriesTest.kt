@@ -215,7 +215,7 @@ class PollsInRepositoriesTest {
             .tags(listOf(listOf("option", "a", "Yes"), listOf("option", "b", "No"), listOf("p", me.publicKey().toHex())).map { Tag.parse(it) })
             .signWithKeys(alice)
         e.save(ev)
-        val items = NostrNotificationsRepository(e, NostrTipsRepository(e) { 1000 }) { 1000 }.list()
+        val items = NostrNotificationsRepository(e, NostrTipsRepository(e) { 1000 }) { System.currentTimeMillis() / 1000 }.list()
         assertEquals(listOf(NotificationKind.MENTION), items.map { it.kind })
         assertTrue(LiveMatch.matches(com.monostr.nostr.model.NoteMapper.decoded(ev), me.publicKey().toHex()))
         e.close()

@@ -50,6 +50,7 @@ import com.monostr.app.ui.settings.SettingsViewModel
 import com.monostr.app.ui.theme.Spacing
 import com.monostr.app.ui.settings.SettingsCardDivider
 import com.monostr.app.ui.settings.SettingsGroup
+import com.monostr.app.ui.settings.settingsSegmentColors
 
 /** The Monero actions that ask before they run; [tag] is the confirm button's test tag (the row's tag plus `-confirm`). */
 private enum class MoneroConfirm(val title: Int, val text: Int, val confirm: Int, val tag: String) {
@@ -177,7 +178,7 @@ fun MoneroPage(vm: SettingsViewModel, focus: String?, onBack: () -> Unit, onMone
                     AmountUnit.entries.forEachIndexed { i, u ->
                         SegmentedButton(
                             selected = monero.unit == u, onClick = { vm.monero.setUnit(u) },
-                            shape = SegmentedButtonDefaults.itemShape(i, AmountUnit.entries.size, baseShape = MaterialTheme.shapes.medium), modifier = Modifier.testTag("settings-amount-unit-${u.name.lowercase()}"),
+                            shape = SegmentedButtonDefaults.itemShape(i, AmountUnit.entries.size, baseShape = MaterialTheme.shapes.medium), colors = settingsSegmentColors(), modifier = Modifier.testTag("settings-amount-unit-${u.name.lowercase()}"),
                         ) { Text(u.label) }
                     }
                 }

@@ -28,6 +28,31 @@ func TestParseRelayList(t *testing.T) {
 	}
 }
 
+// TestParseRelayListRejectsInternalLookingHosts: plain ws://, single-label
+// names (compose services), local-only suffixes and non-public IP literals,
+// CGNAT and IPv6 ULA included, are dropped.
+func TestParseRelayListRejectsInternalLookingHosts(t *testing.T) {
+	ev := &nostr.Event{Kind: KindRelayList, Tags: nostr.Tags{
+		{"r", "ws://public.example"},
+		{"r", "wss://lws:8443"},
+		{"r", "wss://monerod"},
+		{"r", "wss://printer.local"},
+		{"r", "wss://db.internal"},
+		{"r", "wss://router.lan"},
+		{"r", "wss://100.64.1.1"},
+		{"r", "wss://[fd00::1]"},
+		{"r", "wss://[::ffff:127.0.0.1]"},
+		{"r", "wss://0.1.2.3"},
+		{"r", "wss://224.0.0.1"},
+		{"r", "wss://relay.example."},
+		{"r", "wss://ok.example"},
+	}}
+	read, _ := ParseRelayList(ev)
+	if !reflect.DeepEqual(read, []string{"wss://relay.example.", "wss://ok.example"}) {
+		t.Fatalf("read %v", read)
+	}
+}
+
 // TestParseRelayListCapsAndFilters is finding I3: a hostile NIP-65 list
 // must not make the watcher connect to many relays or to internal hosts.
 func TestParseRelayListCapsAndFilters(t *testing.T) {

@@ -49,6 +49,17 @@ func TestProfileAndAnonymousIntentsRoundTrip(t *testing.T) {
 	}
 }
 
+func TestIntentKeepsChainHeight(t *testing.T) {
+	s := openTemp(t)
+	in := intent("4")
+	if ins, err := s.InsertIntentAt(in, 1001, 3200000); err != nil || !ins {
+		t.Fatalf("insert: %v %v", ins, err)
+	}
+	if row, ok, err := s.GetIntent(in.ID); err != nil || !ok || row.ChainHeight != 3200000 {
+		t.Fatalf("row %+v %v %v", row, ok, err)
+	}
+}
+
 func TestOpenAddsAnonColumnToAnOlderDatabase(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "old.db")
 	db, err := sql.Open("sqlite", "file:"+path)
@@ -75,7 +86,7 @@ func TestOpenAddsAnonColumnToAnOlderDatabase(t *testing.T) {
 			t.Fatalf("open %d: %v", i, err)
 		}
 		row, ok, err := s.GetIntent(old.ID)
-		if err != nil || !ok || row.Anon || row.NoteID != old.NoteID || row.Amount != 7 || row.StoredAt != 1001 {
+		if err != nil || !ok || row.Anon || row.NoteID != old.NoteID || row.Amount != 7 || row.StoredAt != 1001 || row.ChainHeight != 0 {
 			t.Fatalf("open %d: row %+v %v %v", i, row, ok, err)
 		}
 		s.Close()
@@ -515,5 +526,109 @@ func TestRecomputeIntentState(t *testing.T) {
 		if row, _, _ := s.GetIntent(in.ID); row.State != c.want {
 			t.Errorf("%s: stored %q, want %q", c.name, row.State, c.want)
 		}
+	}
+}
+
+func TestReplaceUnboundIntent(t *testing.T) {
+	s := openTemp(t)
+	copied := intent("1")
+	if ins, _ := s.InsertIntentAt(copied, 1001, 100); !ins {
+		t.Fatal("unbound insert")
+	}
+	bound := intent("2")
+	bound.PID = copied.PID
+	bound.Bound = true
+	old, replaced, err := s.ReplaceUnboundIntent(bound, 1002, 101)
+	if err != nil || !replaced || len(old) != 1 || old[0].ID != copied.ID {
+		t.Fatalf("replace: %+v %v %v", old, replaced, err)
+	}
+	if _, ok, _ := s.GetIntent(copied.ID); ok {
+		t.Fatal("copied intent still stored")
+	}
+	got, ok, _ := s.GetIntent(bound.ID)
+	if !ok || !got.Bound || got.State != StateOpen || got.ChainHeight != 101 {
+		t.Fatalf("bound intent: %+v %v", got, ok)
+	}
+}
+
+func TestReplaceKeepsPaidUnbound(t *testing.T) {
+	s := openTemp(t)
+	paid := intent("1")
+	s.InsertIntentAt(paid, 1001, 100)
+	s.InsertReceipt(receiptFor(paid.ID, "9", "7", ReceiptSeen))
+	bound := intent("2")
+	bound.PID = paid.PID
+	bound.Bound = true
+	if _, replaced, err := s.ReplaceUnboundIntent(bound, 1002, 101); err != nil || replaced {
+		t.Fatalf("paid unbound replaced: %v %v", replaced, err)
+	}
+	if _, ok, _ := s.GetIntent(paid.ID); !ok {
+		t.Fatal("paid intent gone")
+	}
+}
+
+func TestReplaceNeverOverBound(t *testing.T) {
+	s := openTemp(t)
+	first := intent("1")
+	first.Bound = true
+	s.InsertIntentAt(first, 1001, 100)
+	second := intent("2")
+	second.PID = first.PID
+	second.Bound = true
+	if _, replaced, err := s.ReplaceUnboundIntent(second, 1002, 101); err != nil || replaced {
+		t.Fatalf("bound replaced: %v %v", replaced, err)
+	}
+}
+
+func TestReplaceSameAddressOtherAccount(t *testing.T) {
+	s := openTemp(t)
+	a, b := strings.Repeat("c", 64), strings.Repeat("d", 64)
+	s.PutAccount(Account{Pubkey: a, Address: "4SHARED", CreatedAt: 1})
+	s.PutAccount(Account{Pubkey: b, Address: "4SHARED", CreatedAt: 1})
+	copied := intent("1")
+	copied.Recipient = b
+	s.InsertIntentAt(copied, 1001, 100)
+	bound := intent("2")
+	bound.PID = copied.PID
+	bound.Bound = true // recipient a, same address: the LWS webhook (address, pid) is the same
+	if _, replaced, err := s.ReplaceUnboundIntent(bound, 1002, 101); err != nil || !replaced {
+		t.Fatalf("same-address unbound not replaced: %v %v", replaced, err)
+	}
+	other := intent("3")
+	other.PID = strings.Repeat("9", 16)
+	other.Bound = true
+	if _, replaced, _ := s.ReplaceUnboundIntent(other, 1003, 101); replaced {
+		t.Fatal("replaced without a conflicting pid")
+	}
+}
+
+// A bound intent for (a, P) and an unbound one of b with P on the same address (b moved there later): a new bound
+// intent for a with P must be dropped quietly, not fail on the unique index after removing b's row.
+func TestReplaceRefusesWhenAnyConflictIsKept(t *testing.T) {
+	s := openTemp(t)
+	a, b := strings.Repeat("c", 64), strings.Repeat("d", 64)
+	s.PutAccount(Account{Pubkey: a, Address: "4X", CreatedAt: 1})
+	s.PutAccount(Account{Pubkey: b, Address: "4Y", CreatedAt: 1})
+	kept := intent("1")
+	kept.Recipient = a
+	kept.Bound = true
+	s.InsertIntentAt(kept, 1001, 100)
+	copied := intent("2")
+	copied.Recipient = b
+	copied.PID = kept.PID
+	if ins, _ := s.InsertIntentAt(copied, 1002, 100); !ins {
+		t.Fatal("unbound insert on another address")
+	}
+	s.PutAccount(Account{Pubkey: b, Address: "4X", CreatedAt: 2})
+	again := intent("3")
+	again.Recipient = a
+	again.PID = kept.PID
+	again.Bound = true
+	removed, replaced, err := s.ReplaceUnboundIntent(again, 1003, 101)
+	if err != nil || replaced || len(removed) != 0 {
+		t.Fatalf("want a quiet refusal, got %v %v %v", removed, replaced, err)
+	}
+	if _, ok, _ := s.GetIntent(copied.ID); !ok {
+		t.Fatal("unbound row removed although nothing replaced it")
 	}
 }

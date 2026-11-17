@@ -86,6 +86,8 @@ class NostrEngine private constructor(
     /** The SOCKS port from [create]; every relay added with its own options has to be told again. */
     private val socksPort: Int? = null,
     held: Boolean = false,
+    /** Which relays get no NIP-42 AUTH from us; the session fills it in (see [AuthPolicy]). */
+    val authPolicy: AuthPolicy = AuthPolicy(),
 ) {
     val pubkey: String? = signer?.pubkey
 
@@ -1279,6 +1281,19 @@ class NostrEngine private constructor(
         signAndSend(RustConvert.toBuilder(unsigned))
 
     /**
+     * Like [signAndSend], but [first] get the event before the normal relays: a public tip intent reaches its watcher
+     * before anyone reading the user's relays can copy its payment id into an intent of their own and get there first
+     * (the watcher keeps the first intent per payment id). Returns the normal send and the one to [first].
+     */
+    suspend fun signAndSendFirstTo(unsigned: com.monostr.tips.event.UnsignedEvent, first: List<String>): Pair<PublishResult, PublishResult> {
+        val event = sign(RustConvert.toBuilder(unsigned))
+        save(event)
+        announce(event)
+        val early = sendTo(first, event.id().toHex())
+        return send(event) to early
+    }
+
+    /**
      * Signs and sends like [signAndSend], but only stores the event locally when at least one
      * relay accepted it ([PublishResult.sentToAny]). For a replaceable list (kind 10000-19999,
      * e.g. bookmarks) [signAndSend]'s store-before-send would leave a rejected write sitting in
@@ -1980,19 +1995,31 @@ class NostrEngine private constructor(
             // The adapter is created once here and handed to both the Client and the engine's
             // `nostrSigner` field, so the two are always the same NostrSigner instance.
             val authIds: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
-            val nostrSigner = signer?.let { NostrSigner.custom(SignerAdapter(it) { id -> authIds += id }) }
+            val authPolicy = AuthPolicy()
+            val nostrSigner = signer?.let { NostrSigner.custom(SignerAdapter(it, authPolicy) { id -> authIds += id }) }
             var builder = ClientBuilder().database(database).opts(ClientOptions().automaticAuthentication(true).throughSocks(socksPort))
             if (nostrSigner != null) builder = builder.signer(nostrSigner)
             val client = builder.build()
             // The handler drops exceptions: a failure in handleNotifications must not take the process down.
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + CoroutineExceptionHandler { _, _ -> })
-            val engine = NostrEngine(client, signer, scope, nostrSigner, authIds, ffi, socksPort, held)
+            val engine = NostrEngine(client, signer, scope, nostrSigner, authIds, ffi, socksPort, held, authPolicy)
             engine.addRelays(relays)
             engine
         }
     }
 }
 
+
+/**
+ * NIP-42 AUTH signs the user's pubkey for a relay. The client answers every challenge on its own, so a relay attached
+ * only to look something up (a note's hint relay, an author's outbox, an indexer) would learn who opened which note.
+ * [refuse] names those relays; the session sets it once the foreign relay budget exists. Default: none refused.
+ */
+class AuthPolicy {
+    @Volatile var refuse: (String) -> Boolean = { false }
+
+    fun refuses(relayUrl: String): Boolean = runCatching { refuse(relayUrl.trim().trimEnd('/')) }.getOrDefault(true)
+}
 
 /** Failure reported for a relay a publish left out because it was not connected. */
 const val NOT_CONNECTED = "not connected"
@@ -2030,13 +2057,20 @@ private fun RelayStatus.toState(): RelayState = when (this) {
  * signed silently, so a relay's challenge never opens Amber. Without a silent answer the AUTH
  * fails and the DM auth hint shows instead.
  */
-internal class SignerAdapter(private val signer: Signer, private val onAuthSigned: (String) -> Unit = {}) : CustomNostrSigner {
+internal class SignerAdapter(
+    private val signer: Signer,
+    private val authPolicy: AuthPolicy = AuthPolicy(),
+    private val onAuthSigned: (String) -> Unit = {},
+) : CustomNostrSigner {
     override fun backend(): SignerBackend = SignerBackend.Custom("monostr")
     override suspend fun getPublicKey(): PublicKey? = PublicKey.parse(signer.pubkey)
     override suspend fun signEvent(unsignedEvent: UnsignedEvent): Event? {
         val unsigned = RustConvert.toTipsUnsigned(unsignedEvent)
         return plainErrors {
             if (unsigned.kind == AUTH_KIND) {
+                val relay = unsigned.tags.firstOrNull { it.size >= 2 && it[0] == "relay" }?.get(1)
+                // an AUTH tells the relay who is reading: a stranger's relay we only borrowed for a lookup does not learn it
+                if (relay != null && authPolicy.refuses(relay)) throw SigningRejectedException()
                 RustConvert.toRust(signer.signEventSilent(unsigned)).also { onAuthSigned(it.id().toHex()) }
             } else {
                 RustConvert.toRust(signer.sign(unsigned))

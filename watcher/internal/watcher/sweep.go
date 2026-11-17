@@ -22,6 +22,7 @@ func (s *Service) Sweep(ctx context.Context) error {
 	if err := s.registerMissingWebhooks(ctx, now); err != nil {
 		return err
 	}
+	s.removeOrphanWebhooks(ctx)
 	if err := s.expireIntents(ctx, now); err != nil {
 		return err
 	}
@@ -188,9 +189,6 @@ func (s *Service) refreshStaleRelayLists(ctx context.Context, now int64) {
 // moving last_height past it would lose payments if the watcher restarted
 // before the rescan succeeds.
 func (s *Service) recordHeight(ctx context.Context) error {
-	if _, pending, err := s.deps.Store.GetMeta(metaPendingRescan); err != nil || pending {
-		return err
-	}
 	height, err := s.deps.Height.Height(ctx)
 	if err != nil {
 		s.log.Warn("height unavailable, last_height not updated", "err", err.Error())
@@ -199,7 +197,53 @@ func (s *Service) recordHeight(ctx context.Context) error {
 	if height == 0 {
 		return nil
 	}
+	// the payment bound's height (paymentBoundHeight) advances regardless
+	if err := s.deps.Store.SetMeta(metaLastSeenHeight, strconv.FormatUint(height, 10)); err != nil {
+		return err
+	}
+	if _, pending, err := s.deps.Store.GetMeta(metaPendingRescan); err != nil || pending {
+		return err
+	}
 	return s.deps.Store.SetMeta(metaLastHeight, strconv.FormatUint(height, 10))
+}
+
+const metaHookURL = "hook_url"
+
+// MigrateHookURL moves every live webhook to the current HookURL when it
+// differs from the one the webhooks were registered with (first start with
+// the hook secret, or a changed secret): each old webhook is deleted at LWS
+// and registered again. Callbacks LWS sent to the old URL meanwhile are lost,
+// but Recover's rescan from last_height, which runs next, sends them again.
+// Without a HookURL (personal mode) it does nothing.
+func (s *Service) MigrateHookURL(ctx context.Context) error {
+	if s.cfg.HookURL == "" {
+		return nil
+	}
+	if v, ok, err := s.deps.Store.GetMeta(metaHookURL); err != nil || (ok && v == s.cfg.HookURL) {
+		return err
+	}
+	rows, err := s.deps.Store.IntentsWithWebhook()
+	if err != nil {
+		return err
+	}
+	for _, row := range rows {
+		if err := s.deps.LWS.WebhookDeleteUUID(ctx, []string{row.LWSEventID}); err != nil {
+			// the old URL no longer answers, so a leftover webhook is harmless
+			s.log.Warn("old webhook not deleted", "intent", row.ID, "err", err.Error())
+		}
+		if err := s.deps.Store.ClearIntentWebhook(row.ID); err != nil {
+			return err
+		}
+		account, ok, err := s.deps.Store.GetAccount(row.Recipient)
+		if err != nil {
+			return err
+		}
+		if ok {
+			s.registerWebhook(ctx, row, account.Address) // a failure is retried by Sweep
+		}
+	}
+	s.log.Info("webhooks moved to the current hook URL", "count", len(rows))
+	return s.deps.Store.SetMeta(metaHookURL, s.cfg.HookURL)
 }
 
 // Recover runs once at startup, after Backfill has loaded the intents
@@ -280,4 +324,20 @@ func (s *Service) runPendingRescan(ctx context.Context) error {
 		}
 	}
 	return s.deps.Store.DeleteMeta(metaPendingRescan)
+}
+
+// removeOrphanWebhooks retries the LWS webhooks of replaced intents that could
+// not be removed at the time; failures stay for the next sweep.
+func (s *Service) removeOrphanWebhooks(ctx context.Context) {
+	ids, err := s.deps.Store.OrphanWebhooks()
+	if err != nil || len(ids) == 0 {
+		return
+	}
+	if err := s.deps.LWS.WebhookDeleteUUID(ctx, ids); err != nil {
+		s.log.Warn("orphan webhooks still not removed", "count", len(ids), "err", err.Error())
+		return
+	}
+	if err := s.deps.Store.ForgetOrphanWebhooks(ids); err != nil {
+		s.log.Warn("orphan webhooks not forgotten", "err", err.Error())
+	}
 }

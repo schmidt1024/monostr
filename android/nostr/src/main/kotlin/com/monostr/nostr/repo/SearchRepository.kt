@@ -11,6 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import rust.nostr.sdk.Filter
 import rust.nostr.sdk.Kind
@@ -85,8 +86,11 @@ class NostrSearchRepository(
         // fetchFrom attaches [relays] temporarily (refcounted); this call's own attach is
         // released again here so a caller's outer attach()/detach() pair (SearchController)
         // stays balanced regardless of how many searches run in between (spec 3.4).
+        // held, not fetchFrom's own attach: fetchFrom returns before attaching while the route is held (Tor not ready),
+        // and releasing an attach never taken would drop another holder's relay; NonCancellable keeps `held` on cancel
+        val held = withContext(NonCancellable) { engine.attachTemporary(relays) }
         try {
-            val hits = engine.fetchFrom(relays, Filter().kind(Kind(0u)).search(query.trim()).limit(limit.toULong()), timeout)
+            val hits = engine.fetchFrom(relays, Filter().kind(Kind(0u)).search(query.trim()).limit(limit.toULong()), timeout, attach = false)
                 .map { NoteMapper.decoded(it).pubkey }.distinct()
             // the newest stored kind 0 of the hits, not the raw relay events: a relay may hold someone's old profile
             val remote = storedProfiles(hits)
@@ -100,15 +104,16 @@ class NostrSearchRepository(
         } catch (e: Exception) {
             return SearchOutcome(local, e)
         } finally {
-            engine.detachTemporary(relays)
+            withContext(NonCancellable) { engine.detachTemporary(held) }
         }
     }
 
     override suspend fun notes(query: String, relays: List<String>, limit: Int): SearchOutcome<Note> {
         if (relays.isEmpty()) return SearchOutcome(emptyList())
-        // See profiles(): releases this call's own fetchFrom attach again.
+        // See profiles(): this call's own attach, released again.
+        val held = withContext(NonCancellable) { engine.attachTemporary(relays) }
         try {
-            val events = engine.fetchFrom(relays, Filter().kind(Kind(1u)).search(query.trim()).limit(limit.toULong()), timeout)
+            val events = engine.fetchFrom(relays, Filter().kind(Kind(1u)).search(query.trim()).limit(limit.toULong()), timeout, attach = false)
             val connected = engine.connectedRelayUrls()
             val reachable = relays.map { it.trim().trimEnd('/') }.any { it in connected }
             val error = if (!reachable) SearchRelayUnreachableException() else null
@@ -118,7 +123,7 @@ class NostrSearchRepository(
         } catch (e: Exception) {
             return SearchOutcome(emptyList(), e)
         } finally {
-            engine.detachTemporary(relays)
+            withContext(NonCancellable) { engine.detachTemporary(held) }
         }
     }
 

@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SegmentedButtonColors
+import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -65,3 +67,14 @@ fun SettingsGroup(label: String?, modifier: Modifier = Modifier, first: Boolean 
     if (label != null) SettingsGroupLabel(label, first = first) else if (!first) Spacer(Modifier.height(Spacing.m))
     SettingsCard(modifier, content)
 }
+
+/**
+ * Segmented-button colours for rows inside a [SettingsCard]. The default active fill is `secondaryContainer`, which the theme
+ * sets to the card colour (`surfaceContainer`), so inside a card the chosen segment looked exactly like the others; the
+ * accent fill keeps the choice visible, also for the theme row that has no check mark.
+ */
+@Composable
+fun settingsSegmentColors(): SegmentedButtonColors = SegmentedButtonDefaults.colors(
+    activeContainerColor = MaterialTheme.colorScheme.primary,
+    activeContentColor = MaterialTheme.colorScheme.onPrimary,
+)

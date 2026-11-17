@@ -32,7 +32,9 @@ CREATE TABLE IF NOT EXISTS intents (
   state        TEXT NOT NULL DEFAULT 'open',
   lws_event_id TEXT NOT NULL DEFAULT '',
   stored_at    INTEGER NOT NULL,
-  anon         INTEGER NOT NULL DEFAULT 0
+  anon         INTEGER NOT NULL DEFAULT 0,
+  chain_height INTEGER NOT NULL DEFAULT 0,
+  bound        INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS intents_recipient ON intents(recipient, state);
 CREATE INDEX IF NOT EXISTS intents_expiration ON intents(expiration);
@@ -81,12 +83,23 @@ func Open(path string) (*Store, error) {
 // migrate brings a database created by an older watcher up to the current
 // schema. Each step is idempotent.
 func migrate(db *sql.DB) error {
-	has, err := hasColumn(db, "intents", "anon")
-	if err != nil || has {
-		return err
+	for _, col := range []struct{ table, column, ddl string }{
+		{"intents", "anon", `ALTER TABLE intents ADD COLUMN anon INTEGER NOT NULL DEFAULT 0`},
+		{"intents", "chain_height", `ALTER TABLE intents ADD COLUMN chain_height INTEGER NOT NULL DEFAULT 0`},
+		{"intents", "bound", `ALTER TABLE intents ADD COLUMN bound INTEGER NOT NULL DEFAULT 0`},
+	} {
+		has, err := hasColumn(db, col.table, col.column)
+		if err != nil {
+			return err
+		}
+		if has {
+			continue
+		}
+		if _, err := db.Exec(col.ddl); err != nil {
+			return err
+		}
 	}
-	_, err = db.Exec(`ALTER TABLE intents ADD COLUMN anon INTEGER NOT NULL DEFAULT 0`)
-	return err
+	return nil
 }
 
 func hasColumn(db *sql.DB, table, column string) (bool, error) {

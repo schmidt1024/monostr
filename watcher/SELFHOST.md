@@ -52,6 +52,12 @@ file, `WALLET_RPC_URL` and `WALLET_RPC_CHECK_URL` must point to two different wa
 If the machine is off, tips still arrive in your wallet; the receipts follow when it is back.
 Updates: `git pull`, then `docker compose -f compose.personal.yml up -d --build`. Back up `.env`.
 
+Keep the two wallet-rpc containers private. They run without an RPC login and hold your view-only
+wallets (without a password), so anyone who can reach their port can read your incoming payments.
+`compose.personal.yml` publishes no port for them; only the watcher and the Tor container share
+their network. Do not add a `ports:` entry for them, do not attach other containers to that network,
+and keep the volume (`wallets`) on a machine only you can log in to.
+
 ## Own node and domain (for hosting a watcher)
 
 ### What you need

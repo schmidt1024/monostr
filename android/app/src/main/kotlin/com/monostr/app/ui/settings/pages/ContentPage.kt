@@ -23,6 +23,7 @@ import com.monostr.app.ui.settings.QuickReactionsSection
 import com.monostr.app.ui.settings.SettingsCard
 import com.monostr.app.ui.settings.SettingsCardDivider
 import com.monostr.app.ui.settings.SettingsGroup
+import com.monostr.app.ui.settings.settingsSegmentColors
 import com.monostr.app.ui.settings.SettingsPage
 import com.monostr.app.ui.settings.SettingsViewModel
 import com.monostr.app.ui.settings.settingAnchor
@@ -49,7 +50,7 @@ fun ContentPage(vm: SettingsViewModel, focus: String?, onBack: () -> Unit, onOpe
                     GifMode.entries.forEachIndexed { i, mode ->
                         SegmentedButton(
                             selected = gifMode == mode, onClick = { vm.setGifMode(mode) },
-                            shape = SegmentedButtonDefaults.itemShape(i, GifMode.entries.size, baseShape = MaterialTheme.shapes.medium), modifier = Modifier.testTag("settings-gif-$mode"),
+                            shape = SegmentedButtonDefaults.itemShape(i, GifMode.entries.size, baseShape = MaterialTheme.shapes.medium), colors = settingsSegmentColors(), modifier = Modifier.testTag("settings-gif-$mode"),
                         ) {
                             Text(stringResource(when (mode) { GifMode.AUTO -> R.string.settings_gif_auto; GifMode.ON_TAP -> R.string.settings_gif_tap; GifMode.OFF -> R.string.settings_gif_off }))
                         }
@@ -71,7 +72,7 @@ fun ContentPage(vm: SettingsViewModel, focus: String?, onBack: () -> Unit, onOpe
                     POW_CHOICES.forEachIndexed { i, bits ->
                         SegmentedButton(
                             selected = powFilter == bits, onClick = { vm.setPowFilterBits(bits) },
-                            shape = SegmentedButtonDefaults.itemShape(i, POW_CHOICES.size, baseShape = MaterialTheme.shapes.medium), modifier = Modifier.testTag("settings-pow-filter-$bits"),
+                            shape = SegmentedButtonDefaults.itemShape(i, POW_CHOICES.size, baseShape = MaterialTheme.shapes.medium), colors = settingsSegmentColors(), modifier = Modifier.testTag("settings-pow-filter-$bits"),
                         ) { Text(if (bits == 0) stringResource(R.string.settings_pow_off) else stringResource(R.string.settings_pow_bits, bits)) }
                     }
                 }

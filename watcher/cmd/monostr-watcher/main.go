@@ -3,12 +3,15 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -40,11 +43,13 @@ type config struct {
 	listen          string
 	dbPath          string
 	hookURL         string
+	hookSecret      string // WATCHER_HOOK_SECRET; empty: generated and kept in the database
 	lwsAdminURL     string
 	lwsAdminKey     string
 	allowedPubkeys  []string
 	monerodRPC      string
 	sweepInterval   time.Duration
+	maxNewAccounts  int
 }
 
 func env(key, def string) string {
@@ -110,7 +115,11 @@ func loadConfig() (config, error) {
 	}
 	c.listen = env("WATCHER_LISTEN", "127.0.0.1:8080")
 	c.dbPath = env("WATCHER_DB", "/data/watcher.db")
-	c.hookURL = env("WATCHER_HOOK_URL", "http://127.0.0.1:8080/internal/lws-hook")
+	c.hookURL = strings.TrimRight(env("WATCHER_HOOK_URL", "http://127.0.0.1:8080/internal/lws-hook"), "/")
+	c.hookSecret = env("WATCHER_HOOK_SECRET", "")
+	if c.hookSecret != "" && !validHookSecret(c.hookSecret) {
+		return c, errors.New("WATCHER_HOOK_SECRET must be at least 32 characters of [A-Za-z0-9_-]")
+	}
 	c.lwsAdminURL = env("LWS_ADMIN_URL", "http://127.0.0.1:8443/admin")
 	c.lwsAdminKey = env("LWS_ADMIN_KEY", "")
 	c.monerodRPC = env("MONEROD_RPC_URL", "http://127.0.0.1:18089")
@@ -122,7 +131,45 @@ func loadConfig() (config, error) {
 	if err != nil || c.sweepInterval < time.Second {
 		return c, errors.New("WATCHER_SWEEP_INTERVAL must be a duration >= 1s")
 	}
+	c.maxNewAccounts, err = strconv.Atoi(env("WATCHER_MAX_NEW_ACCOUNTS_PER_HOUR", strconv.Itoa(watcher.DefaultMaxNewAccountsPerHour)))
+	if err != nil || c.maxNewAccounts < 1 {
+		return c, errors.New("WATCHER_MAX_NEW_ACCOUNTS_PER_HOUR must be a positive integer")
+	}
 	return c, nil
+}
+
+const metaHookSecret = "hook_secret"
+
+func validHookSecret(s string) bool {
+	if len(s) < 32 {
+		return false
+	}
+	for _, r := range s {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_') {
+			return false
+		}
+	}
+	return true
+}
+
+// loadHookSecret returns the configured secret, else the one kept in the
+// database, else a new random one, which is then kept so the webhooks
+// registered with it stay valid across restarts.
+func loadHookSecret(st *store.Store, configured string) (string, error) {
+	if configured != "" {
+		return configured, nil
+	}
+	if v, ok, err := st.GetMeta(metaHookSecret); err != nil {
+		return "", err
+	} else if ok && validHookSecret(v) {
+		return v, nil
+	}
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	secret := hex.EncodeToString(b)
+	return secret, st.SetMeta(metaHookSecret, secret)
 }
 
 func main() {
@@ -157,11 +204,26 @@ func run(logger *slog.Logger) error {
 	}
 	defer st.Close()
 
+	// user-supplied relays (recipients' NIP-65 lists) must not reach internal
+	// hosts; everything the operator configured stays reachable
+	if err := relays.GuardDefaultTransport(relays.TrustedHosts(append(append(append([]string{
+		cfg.lwsAdminURL, cfg.monerodRPC}, cfg.relays...), cfg.publicRelays...), cfg.relayListRelays...)...)); err != nil {
+		return err
+	}
+	hookSecret, err := loadHookSecret(st, cfg.hookSecret)
+	if err != nil {
+		return err
+	}
+	// LWS posts to WATCHER_HOOK_URL + "/" + secret; the path must end like api.HookPath
+	hookURL := cfg.hookURL + "/" + hookSecret
+	if !strings.HasSuffix(hookURL, api.HookPath(hookSecret)) {
+		return errors.New("WATCHER_HOOK_URL must end with /internal/lws-hook")
+	}
 	pool := relays.NewPool(ctx)
 	svc, err := watcher.New(watcher.Config{
 		SecretKey: cfg.secretKey, Network: cfg.network, Relays: cfg.relays, PublicRelays: cfg.publicRelays,
 		RelayListRelays: cfg.relayListRelays,
-		HookURL:         cfg.hookURL, Version: version,
+		HookURL:         hookURL, Version: version, MaxNewAccountsPerHour: cfg.maxNewAccounts,
 	}, watcher.Deps{
 		Store: st, LWS: lws.New(cfg.lwsAdminURL, cfg.lwsAdminKey), Relays: pool,
 		Height: monerod.NewHeightClient(cfg.monerodRPC), Logger: logger,
@@ -174,7 +236,7 @@ func run(logger *slog.Logger) error {
 	// Startup order (spec 4.4): the HTTP listener comes first so LWS hooks
 	// fired during the rescan reach us; Backfill loads intents published
 	// while we were down before Recover computes the rescan address set.
-	handler := api.New(svc, cfg.publicURL, ratelimit.New(5, time.Hour), cfg.allowedPubkeys, logger)
+	handler := api.New(svc, cfg.publicURL, ratelimit.New(5, time.Hour), cfg.allowedPubkeys, hookSecret, logger)
 	srv := &http.Server{Addr: cfg.listen, Handler: handler, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second}
 	errCh := make(chan error, 1)
 	go func() { errCh <- srv.ListenAndServe() }()
@@ -182,6 +244,9 @@ func run(logger *slog.Logger) error {
 
 	if err := svc.Backfill(ctx); err != nil {
 		logger.Error("backfill", "err", err.Error())
+	}
+	if err := svc.MigrateHookURL(ctx); err != nil {
+		logger.Error("migrate hook url", "err", err.Error())
 	}
 	if err := svc.Recover(ctx); err != nil {
 		logger.Error("recover", "err", err.Error())

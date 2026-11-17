@@ -68,6 +68,8 @@ class NostrAddressableRepository(
     private val relayFilter: (String) -> Boolean = RelayHosts::isPublicWss,
     /** Spec 2026-10-23 §3/§4.4: when set, the hint relays are leased from the app-wide budget (no wait) instead of attached on the side. */
     private val foreign: ForeignRelays? = null,
+    /** The user's «Author relays» switch, read at use time: off, no relay a stranger's event names is contacted (owner 2026-11-17). */
+    private val hintsAllowed: suspend () -> Boolean = { true },
     /** Only its [EventLocator.retries] is used: network back, pull-to-refresh or the switch lift the miss marks (spec 2026-10-23 §6). */
     locator: EventLocator? = null,
 ) : AddressableRepository {
@@ -94,7 +96,9 @@ class NostrAddressableRepository(
         memo(ref.coordinate)?.takeIf { it.result != AddressResult.Missing || asked(ref, allowForeign) }?.result
     }
 
-    override suspend fun get(ref: AddressRef, allowForeign: Boolean): AddressResult {
+    override suspend fun get(ref: AddressRef, allowForeign: Boolean): AddressResult = getAllowed(ref, allowForeign && hintsAllowed())
+
+    private suspend fun getAllowed(ref: AddressRef, allowForeign: Boolean): AddressResult {
         val key = ref.coordinate
         val job = synchronized(lock) {
             val m = memo(key)
