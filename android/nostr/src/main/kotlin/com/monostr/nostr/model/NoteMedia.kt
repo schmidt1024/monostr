@@ -25,8 +25,13 @@ data class NoteMedia(
         const val MAX = 20
         /** Pictures a note written in monostr can carry (the composer's limit; uploads count against the media server's quota). */
         const val MAX_ATTACH = 4
-        /** `#nsfw` as a whole hashtag, anywhere in the content (spec 3.1). */
-        val NSFW = Regex("(?<![\\p{L}\\p{N}_])#nsfw(?![\\p{L}\\p{N}_])", RegexOption.IGNORE_CASE) // regex
+        /**
+         * Hashtags that mark adult content (spec 3.1: `#nsfw`; owner 2026-11-17: pictures under `#nudestr` `#boobstr`
+         * `#buttstr` came through unblurred in `#monero`). Deliberately short and unambiguous: no `#model`, `#gym`, `#lovestr`.
+         */
+        val ADULT_TAGS = setOf("nsfw", "nudestr", "boobstr", "buttstr", "nude", "nudes", "porn", "pornstr", "onlyfans", "xxx", "hentai")
+        /** One of [ADULT_TAGS] as a whole hashtag, anywhere in the content. */
+        val NSFW = Regex("(?<![\\p{L}\\p{N}_])#(?:${ADULT_TAGS.joinToString("|")})(?![\\p{L}\\p{N}_])", RegexOption.IGNORE_CASE) // regex
         private val URL = Regex("https?://[^\\s<>\"']+") // regex
         private val HTTP = Regex("^https?://", RegexOption.IGNORE_CASE) // regex
         private val IMAGE_EXT = setOf("jpg", "jpeg", "png", "gif", "webp")

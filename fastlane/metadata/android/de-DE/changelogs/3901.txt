@@ -1,0 +1,5 @@
+- Suchergebnisse zeigen Likes, Reposts und Antworten
+- Bilder unter Erwachsenen-Hashtags werden unscharf angezeigt wie bei #nsfw
+- Deine Tips auf Notes erscheinen als angekommen, auch wenn deine Relays das Receipt nicht haben
+- Die Wallet öffnet sich in einem eigenen Fenster statt in Monostr
+- Korrekturen

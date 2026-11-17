@@ -30,10 +30,12 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import com.monostr.nostr.model.NoteCounts
 import rust.nostr.sdk.Keys
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -52,6 +54,7 @@ class SearchControllerTest {
         mute: MuteRepository? = null,
         recentSearches: RecentSearchesStore? = null,
         pending: FakePendingTips = FakePendingTips(),
+        counts: FakeCounts = FakeCounts(),
     ): SearchController {
         val scope = eager()
         val decorations = TipDecorations(FakeTips(), pending, profiles, publish, scope) { 5_000 }
@@ -59,7 +62,33 @@ class SearchControllerTest {
         return SearchController(
             search, profiles, publish, decorations, BookmarkActions(FakeBookmarks(), eager()), relays, scope, debounceMs = 400, detachScope = detachScope,
             deletions = deletions, visibility = NoteVisibility(deletions, muted), mute = mute, recentSearches = recentSearches,
+            counts = counts,
         )
+    }
+
+    @Test
+    fun `visible hits ask for their counts and show them`() = runTest {
+        val n1 = note('1', alice, 2000)
+        val n2 = note('2', alice, 1500)
+        val counts = FakeCounts()
+        val c = controller(FakeSearch().apply { hashtagNotes = mapOf("monero" to listOf(n1, n2)) }, counts = counts)
+        c.start()
+        c.onQueryChange("#monero"); c.submit(); advanceUntilIdle()
+        c.visible(listOf(n1.id))
+        assertEquals(listOf(listOf(n1.id)), counts.requested)
+        counts.set(n1.id, NoteCounts(3, 1, 2)); advanceUntilIdle()
+        assertEquals(NoteCounts(3, 1, 2), c.state.value.notes.first { it.note.id == n1.id }.counts)
+        assertNull(c.state.value.notes.first { it.note.id == n2.id }.counts)
+    }
+
+    @Test
+    fun `a count already known shows on hits that arrive later`() = runTest {
+        val n1 = note('1', alice, 2000)
+        val counts = FakeCounts().apply { set(n1.id, NoteCounts(5, null, null)) }
+        val c = controller(FakeSearch().apply { hashtagNotes = mapOf("monero" to listOf(n1)) }, counts = counts)
+        c.start()
+        c.onQueryChange("#monero"); c.submit(); advanceUntilIdle()
+        assertEquals(NoteCounts(5, null, null), c.state.value.notes.single().counts)
     }
 
     @Test

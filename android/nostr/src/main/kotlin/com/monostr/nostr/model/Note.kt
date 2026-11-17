@@ -62,8 +62,8 @@ data class Note(
     val isPoll: Boolean get() = poll != null
     val isReply: Boolean get() = replyToId != null
     val isRepost: Boolean get() = kind == 6
-    /** Spec 3.1: NIP-36 tag, `t` tag nsfw, or `#nsfw` in the text. */
-    val isSensitive: Boolean get() = contentWarning != null || "nsfw" in hashtags || NoteMedia.NSFW.containsMatchIn(content)
+    /** Spec 3.1: NIP-36 tag, or an adult hashtag ([NoteMedia.ADULT_TAGS], `#nsfw` among them) as `t` tag or in the text. */
+    val isSensitive: Boolean get() = contentWarning != null || hashtags.any { it in NoteMedia.ADULT_TAGS } || NoteMedia.NSFW.containsMatchIn(content)
 
     companion object {
         const val CLIENT_MAX = 32

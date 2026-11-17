@@ -1,0 +1,5 @@
+- Arama sonuçları beğenileri, yeniden paylaşımları ve yanıtları gösterir
+- Yetişkin hashtag'leri altındaki resimler #nsfw gibi bulanıklaştırılır
+- Notlara verdiğiniz bahşişler, röleleriniz makbuzu taşımasa da ulaştı olarak görünür
+- Cüzdan Monostr içinde değil kendi penceresinde açılır
+- Düzeltmeler

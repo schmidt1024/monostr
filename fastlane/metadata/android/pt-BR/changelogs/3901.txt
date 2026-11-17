@@ -1,0 +1,5 @@
+- Os resultados da busca mostram curtidas, reposts e respostas
+- Imagens com hashtags adultas ficam desfocadas como com #nsfw
+- Suas gorjetas em notas aparecem como recebidas mesmo que seus relays não tenham o recibo
+- A carteira abre em sua própria janela e não dentro do Monostr
+- Correções

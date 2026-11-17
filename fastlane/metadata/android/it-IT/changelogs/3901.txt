@@ -1,0 +1,5 @@
+- I risultati di ricerca mostrano mi piace, repost e risposte
+- Le immagini con hashtag per adulti vengono sfocate come con #nsfw
+- Le tue mance sulle note risultano arrivate anche se i tuoi relay non hanno la ricevuta
+- Il portafoglio si apre in una finestra propria e non dentro Monostr
+- Correzioni

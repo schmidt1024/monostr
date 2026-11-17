@@ -1,0 +1,5 @@
+- Les résultats de recherche montrent les j'aime, reposts et réponses
+- Les images sous des hashtags pour adultes sont floutées comme avec #nsfw
+- Vos pourboires sur des notes apparaissent comme reçus même si vos relais n'ont pas le reçu
+- Le portefeuille s'ouvre dans sa propre fenêtre et non dans Monostr
+- Correctifs

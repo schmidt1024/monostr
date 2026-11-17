@@ -1,0 +1,5 @@
+- Search results show likes, reposts and replies
+- Pictures under adult hashtags are blurred like #nsfw
+- Your tips on notes show as arrived even when your relays don't carry the receipt
+- The wallet opens in its own window instead of inside Monostr
+- Fixes

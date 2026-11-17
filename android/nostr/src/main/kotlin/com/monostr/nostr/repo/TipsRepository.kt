@@ -75,6 +75,14 @@ interface TipsRepository {
      * prepared). Public: the session's key. Anonymous: a fresh one-time key per call, kept only in the returned value.
      */
     suspend fun tipSender(anonymous: Boolean): TipSender
+
+    /**
+     * Intent ids of the tip receipts to [noteIds] found on [relays] (a tip's watcher relays) since [since], signed by
+     * [watcherPubkey]. The watcher publishes a receipt only to its own relays and the recipient's write relays: a tipper
+     * whose relays are elsewhere learns this way that their tip arrived. [detached]: over a connection of its own, nothing
+     * stored (an anonymous tip); else over the session, which keeps the receipts like any fetched event.
+     */
+    suspend fun noteReceiptsOn(relays: List<String>, noteIds: Collection<String>, watcherPubkey: String, since: Long, detached: Boolean): Set<String> = emptySet()
     /**
      * Signs and publishes the user's own payment info (spec 3.1). It is kept locally only when a relay
      * accepted it: a copy nobody else can see would still make this device's tip sheet pay to it.
@@ -320,6 +328,35 @@ class NostrTipsRepository(
         TipSender(requireNotNull(engine.pubkey) { "a public tip needs a logged-in user" })
     } else {
         withContext(engine.ffiDispatcher) { Keys.generate().let { TipSender(it.publicKey().toHex(), it.secretKey().toHex()) } }
+    }
+
+    override suspend fun noteReceiptsOn(relays: List<String>, noteIds: Collection<String>, watcherPubkey: String, since: Long, detached: Boolean): Set<String> {
+        if (relays.isEmpty() || noteIds.isEmpty()) return emptySet()
+        val filter = Filter().kind(Kind(Kinds.TIP_RECEIPT.toUShort())).events(noteIds.take(MAX_NOTES).map { EventId.parse(it) })
+            .author(PublicKey.parse(watcherPubkey)).since(Timestamp.fromSecs(since.coerceAtLeast(0).toULong()))
+        val events = try {
+            if (detached) {
+                this.detached.fetch(filter, relays, UNLINKED_CONNECT, UNLINKED_ANSWER)
+            } else {
+                // held, not fetchFrom's own attach (see AuthorRelaysRepository.fetchNotes)
+                val held = withContext(NonCancellable) { engine.attachTemporary(relays) }
+                try {
+                    engine.fetchFrom(relays, filter, fetchTimeout, attach = false)
+                } finally {
+                    withContext(NonCancellable) { engine.detachTemporary(held) }
+                }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return emptySet()
+        }
+        return withContext(engine.ffiDispatcher) {
+            events.mapNotNull { TipReceipt.parse(RustConvert.toTips(it)) }
+                .filter { it.watcherPubkey == watcherPubkey && it.noteId in noteIds }
+                .map { it.intentId }
+                .toSet()
+        }
     }
 
     override suspend fun sendIntent(prepared: PreparedTip, watcherRelays: List<String>): PublishResult {

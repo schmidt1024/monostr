@@ -104,6 +104,16 @@ class NoteMapperMediaTest {
     }
 
     @Test
+    fun `well-known adult hashtags mark the note sensitive, harmless ones do not`() {
+        // seen 2026-11-17 in #monero: pictures under #nudestr #boobstr #buttstr without any content warning
+        assertTrue(NoteMapper.note(event("Dm for more #model #nudestr #gym"))!!.isSensitive)
+        assertTrue(NoteMapper.note(event("x", listOf(Tag.parse(listOf("t", "Boobstr")))))!!.isSensitive)
+        assertTrue(NoteMapper.note(event("new set #OnlyFans"))!!.isSensitive)
+        assertFalse(NoteMapper.note(event("#lovestr #gym #fitness #model #photography"))!!.isSensitive)
+        assertFalse(NoteMapper.note(event("#nudestrand is a beach"))!!.isSensitive)
+    }
+
+    @Test
     fun `a repost carries the original's media`() {
         val original = event("https://x.example/a.jpg")
         val repost = EventBuilder.repost(original, null).signWithKeys(Keys.generate())

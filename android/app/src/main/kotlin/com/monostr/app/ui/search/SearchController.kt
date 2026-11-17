@@ -1,5 +1,7 @@
 package com.monostr.app.ui.search
 
+import com.monostr.app.ui.feed.target
+import com.monostr.nostr.repo.CountsRepository
 import com.monostr.app.net.SendGate
 import com.monostr.app.ui.common.mapKeep
 
@@ -100,13 +102,18 @@ class SearchController(
     private val recentSearches: RecentSearchesStore? = null,
     /** Whether anything may leave now; open only in tests. */
     private val sendGate: SendGate = SendGate.OPEN,
+    /**
+     * NIP-45 counts for the visible hits, as in the feed (owner 2026-11-17: without them hits looked empty; Plan 10a had
+     * left search out as "fleeting"). Null (tests that do not care): no counts.
+     */
+    private val counts: CountsRepository? = null,
 ) {
     val names: StateFlow<Map<String, String>> get() = mentions.names
     private val _state = MutableStateFlow(SearchUiState())
     val state: StateFlow<SearchUiState> = _state.asStateFlow()
     private val _nav = MutableSharedFlow<SearchNav>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     val nav: SharedFlow<SearchNav> = _nav
-    private val actions = NoteActions(publish, scope, deletions = deletions, afterDelete = afterDelete, own = own, sendGate = sendGate)
+    private val actions = NoteActions(publish, scope, counts, deletions = deletions, afterDelete = afterDelete, own = own, sendGate = sendGate)
     private val muteActions = mute?.let { MuteActions(it, scope, profiles, background = muteScope, sendGate = sendGate) }
     private var debounce: Job? = null
     private var running: Job? = null
@@ -128,6 +135,7 @@ class SearchController(
         // the people index is built behind the screen, so the first search does not wait for it (spec perf 3.8)
         search.warmUp()
         scope.launch { decorations.changes.collect { _state.update { s -> s.copy(notes = s.notes.mapKeep(decorations::decorate)) } } }
+        counts?.let { c -> scope.launch { c.counts.collect { _state.update { s -> s.copy(notes = s.notes.mapKeep(::withCounts)) } } } }
         scope.launch {
             searchRelays.collect { relays ->
                 if (attached.isNotEmpty()) search.detach(attached)
@@ -316,7 +324,18 @@ class SearchController(
     }
 
     /** [ui] with the current tips and flags; applied inside `_state.update`, so a change during a slow profile lookup is not undone. */
-    private fun flagged(ui: NoteUi): NoteUi = actions.flags(bookmarks.flags(decorations.decorate(ui)))
+    private fun flagged(ui: NoteUi): NoteUi = withCounts(actions.flags(bookmarks.flags(decorations.decorate(ui))))
+
+    /** [ui] with its current count, so a new page of hits keeps the counts already known. */
+    private fun withCounts(ui: NoteUi): NoteUi =
+        counts?.counts?.value?.get(ui.target.id).let { c -> if (c == null || c == ui.counts) ui else ui.copy(counts = c) }
+
+    /** Visible hit ids from the list; counts are requested for their targets, as in the feed (spec 4.2). */
+    fun visible(noteIds: List<String>) {
+        val wanted = noteIds.toSet()
+        val targets = _state.value.notes.filter { it.note.id in wanted }.map { it.target.id }.distinct()
+        if (targets.isNotEmpty()) { counts?.request(targets); actions.check(targets) }
+    }
 
     private suspend fun decorate(notes: List<Note>): List<NoteUi> {
         val pubkeys = notes.flatMap { listOfNotNull(it.author, it.repostOf?.author) }

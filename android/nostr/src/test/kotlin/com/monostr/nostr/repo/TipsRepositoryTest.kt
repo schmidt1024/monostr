@@ -429,6 +429,28 @@ class TipsRepositoryTest {
     }
 
     @Test
+    fun `receipts to a tipped note are found on the watcher's relays, only signed by that watcher`() = runTest {
+        val noteId = "1".repeat(64)
+        val aliceHex = alice.publicKey().toHex()
+        val real = receipt(watcher, noteId, aliceHex, 5, "a".repeat(64), clock)
+        val forged = receipt(Keys.generate(), noteId, aliceHex, 5, "b".repeat(64), clock)
+        for (detachedPath in listOf(false, true)) {
+            SilentWsRelay(serveFor = { listOf(real.asJson(), forged.asJson()) }).use { relay ->
+                // the user's own relays are elsewhere: the receipt is only on the watcher's relay
+                val e = engine()
+                try {
+                    val repo = NostrTipsRepository(e, DetachedSender(gate = directGate())) { clock }
+                    e.connect()
+                    val got = repo.noteReceiptsOn(listOf(relay.url), listOf(noteId), watcher.publicKey().toHex(), clock - 600, detached = detachedPath)
+                    assertEquals(setOf("a".repeat(64)), got, "detached=$detachedPath")
+                } finally {
+                    e.close()
+                }
+            }
+        }
+    }
+
+    @Test
     fun `an anonymous intent is signed by the key its pid came from`() = runTest {
         SilentWsRelay(acceptEvents = true).use { watcherRelay ->
             val e = engine()

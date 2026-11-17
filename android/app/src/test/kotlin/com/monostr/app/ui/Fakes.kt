@@ -409,6 +409,13 @@ class FakeTips(
         cachedCalls += pubkey
         return infos[pubkey] ?: PaymentInfo.Disabled
     }
+    /** Intent ids [noteReceiptsOn] finds on the watcher relays; each call is recorded with its detached flag. */
+    var watcherReceipts: Set<String> = emptySet()
+    val receiptLookups = ArrayList<Pair<List<String>, Boolean>>()
+    override suspend fun noteReceiptsOn(relays: List<String>, noteIds: Collection<String>, watcherPubkey: String, since: Long, detached: Boolean): Set<String> {
+        receiptLookups += relays to detached
+        return watcherReceipts
+    }
     /** When set, publishPaymentInfo throws it (after recording the call). */
     var publishError: Exception? = null
     override suspend fun publishPaymentInfo(address: Address, watcher: Watcher, amountsHidden: Boolean): PublishResult {

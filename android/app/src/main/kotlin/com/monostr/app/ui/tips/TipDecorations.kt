@@ -1,5 +1,10 @@
 package com.monostr.app.ui.tips
 
+import kotlin.random.Random
+import com.monostr.tips.PaymentInfo
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.collectLatest
 import com.monostr.app.net.SendGate
 import com.monostr.nostr.StartupGate
 import com.monostr.app.data.PendingTip
@@ -74,6 +79,8 @@ class TipDecorations(
     private val gate: StartupGate = StartupGate.OPEN,
     /** Whether anything may leave now; open only in tests. */
     private val sendGate: SendGate = SendGate.OPEN,
+    /** See [askWatchersForOwnNoteTips]; null = off (tests that do not care), the session passes [OWN_RECEIPTS_EVERY_MS]. */
+    private val ownReceiptsEveryMs: Long? = null,
     private val now: () -> Long = { System.currentTimeMillis() / 1000 },
 ) {
     private val tracked = MutableStateFlow<Map<String, String>>(emptyMap())
@@ -97,6 +104,7 @@ class TipDecorations(
     fun start() {
         scope.launch { runCatching { pending.prune(now()) } }
         scope.launch { resendPending() }
+        ownReceiptsEveryMs?.let { every -> scope.launch { askWatchersForOwnNoteTips(every) } }
         scope.launch {
             tracked
                 .flatMapLatest { notes -> receiptsOf(notes) }
@@ -251,6 +259,63 @@ class TipDecorations(
         }
     }
 
+    /**
+     * shortwavesurfer2009 2026-11-17: the watcher publishes a receipt only to its relays and the recipient's write
+     * relays, so a tipper whose relays are elsewhere never saw it and the tip stayed «Waiting for payment». While own
+     * note tips wait, their watcher relays are asked directly, about once a minute: anonymous tips over a connection of
+     * their own (as the profile watch does), public ones over the session. A tip sent under Tor is asked about under Tor only.
+     */
+    private suspend fun askWatchersForOwnNoteTips(everyMs: Long) {
+        gate.await()
+        pending.pending
+            .catch { /* store read failed: the markers expire after 24 h */ }
+            .map { all -> PendingTips.waiting(all, now()).filter { it.noteId != null && it.recipient != null && relaysOf(it).isNotEmpty() } }
+            .distinctUntilChanged()
+            .collectLatest { own ->
+                if (own.isEmpty()) return@collectLatest
+                delay(OWN_RECEIPTS_FIRST_MS)
+                while (true) {
+                    askOnce(own)
+                    // jitter: a fixed rhythm on the watcher relays would itself be a pattern
+                    delay(everyMs / 2 + Random.nextLong(everyMs))
+                }
+            }
+    }
+
+    private fun relaysOf(tip: PendingTip): List<String> = (tip.anonRelays + tip.watcherRelays).distinct().sorted()
+
+    private suspend fun askOnce(own: List<PendingTip>) {
+        val confirmed = HashSet<String>()
+        val askable = own.filter(sendGate::mayResend)
+            // an anonymous tip is asked about only while its receipt can still come (the watcher retracts after 60 min)
+            .filter { it.anonEvent == null || now() - it.createdAt <= OWN_ANON_ASK_WINDOW }
+        // public tips of one recipient share a question; an anonymous tip always asks alone, over its own connection,
+        // so that one question never ties two anonymous tips together
+        val groups = askable.groupBy { Triple(it.recipient!!, if (it.anonEvent != null) it.intentId else "", relaysOf(it)) }
+        for ((key, group) in groups) {
+            val (recipient, anonKey, relays) = key
+            val anonymous = anonKey.isNotEmpty()
+            try {
+                val info = tips.cachedPaymentInfo(recipient) as? PaymentInfo.Enabled ?: continue
+                val since = group.minOf { it.createdAt } - OWN_RECEIPTS_SINCE_MARGIN
+                confirmed += tips.noteReceiptsOn(relays, group.mapNotNull { it.noteId }.distinct(), info.watcherPubkey, since, detached = anonymous)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // this group is asked again next round
+            }
+        }
+        val done = own.filter { it.intentId in confirmed }.map { it.intentId }
+        if (done.isEmpty()) return
+        try {
+            pending.settle(done)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // the marker stays until the next round or its 24 h expiry
+        }
+    }
+
     private suspend fun settle(summaries: Map<String, TipSummary>) {
         val confirmed = summaries.values.flatMap { it.receipts }.map { it.intentId }.toSet()
         if (confirmed.isEmpty()) return
@@ -265,6 +330,14 @@ class TipDecorations(
     }
 
     companion object {
+        /** Own pending note tips: the first look at the watcher relays (a receipt follows the payment by a minute or so), then every [OWN_RECEIPTS_EVERY_MS]. */
+        const val OWN_RECEIPTS_FIRST_MS = 30_000L
+        const val OWN_RECEIPTS_EVERY_MS = 60_000L
+        /** Receipts are asked for from shortly before the oldest waiting tip was sent. */
+        const val OWN_RECEIPTS_SINCE_MARGIN = 600L
+        /** How long after sending an anonymous tip its watcher relays are asked (seconds). */
+        const val OWN_ANON_ASK_WINDOW = 7_200L
+
         /** Live receipt subscriptions [add] keeps at most (each is one REQ on every relay; strfry allows ~20 per connection). */
         const val MAX_LIVE_GROUPS = 3
         /** A tracked set must stay this long before its receipts are asked of the relays (spec perf2 A4). */

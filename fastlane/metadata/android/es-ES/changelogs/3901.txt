@@ -1,0 +1,5 @@
+- Los resultados de búsqueda muestran me gusta, reposts y respuestas
+- Las imágenes con hashtags para adultos se difuminan como con #nsfw
+- Tus propinas en notas aparecen como recibidas aunque tus relays no tengan el recibo
+- El monedero se abre en su propia ventana y no dentro de Monostr
+- Correcciones

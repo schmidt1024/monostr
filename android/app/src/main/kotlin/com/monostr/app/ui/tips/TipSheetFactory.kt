@@ -25,7 +25,7 @@ class TipSheetFactory @Inject constructor(
 ) {
     fun decorations(scope: CoroutineScope): TipDecorations {
         val r = session.requireReady()
-        return TipDecorations(r.tips, pending, r.profiles, r.publish, scope, selfPubkey = r.pubkey, gate = r.startupGate, sendGate = r.sendGate)
+        return TipDecorations(r.tips, pending, r.profiles, r.publish, scope, selfPubkey = r.pubkey, gate = r.startupGate, sendGate = r.sendGate, ownReceiptsEveryMs = TipDecorations.OWN_RECEIPTS_EVERY_MS)
     }
 
     fun tipSheet(scope: CoroutineScope): TipSheetController {

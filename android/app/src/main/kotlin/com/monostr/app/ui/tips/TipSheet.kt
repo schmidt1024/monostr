@@ -62,7 +62,8 @@ import com.monostr.app.ui.theme.Spacing
 /** Opens a `monero:` URI in a wallet app. Must be called with an Activity context (spec 5.9; Espresso intercepts only these). */
 object WalletOpener {
     fun open(context: Context, uri: String): Boolean = try {
-        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(uri)))
+        // its own task: without it most wallets open inside Monostr's task and take its place (shortwavesurfer2009 2026-11-17)
+        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(uri)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         true
     } catch (e: ActivityNotFoundException) {
         false

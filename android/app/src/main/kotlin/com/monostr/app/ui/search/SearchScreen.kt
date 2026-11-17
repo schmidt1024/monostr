@@ -1,5 +1,6 @@
 package com.monostr.app.ui.search
 
+import com.monostr.app.ui.common.VisibleNotes
 import com.monostr.app.ui.common.TorBannerSlot
 import com.monostr.app.ui.discover.DiscoverFollowAllHost
 import com.monostr.app.ui.common.NoteLinks
@@ -100,7 +101,7 @@ class SearchViewModel @Inject constructor(session: NostrSession, factory: TipShe
     private val ready = session.requireReady()
     val decorations = factory.decorations(viewModelScope)
     val bookmarks = BookmarkActions(ready.bookmarks, viewModelScope, background = ready.engine.backgroundScope, sendGate = ready.sendGate)
-    val controller = SearchController(ready.search, ready.profiles, ready.publish, decorations, bookmarks, searchRelays.relays, viewModelScope, mentions = MentionResolver(ready.profiles, viewModelScope, Dispatchers.Default), deletions = ready.deletions, visibility = ready.visibility, afterDelete = ready.afterNoteDelete, own = ready.ownReactions, mute = ready.mute, muteScope = ready.engine.backgroundScope, recentSearches = recentSearches, sendGate = ready.sendGate)
+    val controller = SearchController(ready.search, ready.profiles, ready.publish, decorations, bookmarks, searchRelays.relays, viewModelScope, mentions = MentionResolver(ready.profiles, viewModelScope, Dispatchers.Default), deletions = ready.deletions, visibility = ready.visibility, afterDelete = ready.afterNoteDelete, own = ready.ownReactions, mute = ready.mute, muteScope = ready.engine.backgroundScope, recentSearches = recentSearches, sendGate = ready.sendGate, counts = ready.counts)
     val deletions = ready.deletions
     val menu = ready.noteMenu(delete = controller::delete, mute = controller::mute)
     val tipSheet = factory.tipSheet(viewModelScope)
@@ -174,6 +175,8 @@ fun SearchScreen(
         bottomBar = { HideOnScrollFooter(hide) { MonostrBottomBar(BottomTab.SEARCH, unread = 0, dmUnread = dmUnread, onFeed = onFeed, onSearch = hide::show, onBookmarks = onBookmarks, onMessages = onMessages, onNotifications = onNotifications, windowInsets = WindowInsets(0)) } },
         snackbarHost = { SnackbarHost(snackbar, Modifier.muteUndoTag(state.message)) },
     ) { padding ->
+        // counts for the hits in view, as in the feed (keys of the note rows are their ids)
+        VisibleNotes(listState, vm.controller::visible)
         LazyColumn(state = listState, modifier = Modifier.padding(padding).fillMaxSize().testTag("search-list")) {
             if (state.noSearchRelays && state.mode == SearchMode.TEXT) {
                 item {
