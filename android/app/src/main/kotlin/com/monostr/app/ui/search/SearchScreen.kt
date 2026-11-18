@@ -1,6 +1,7 @@
 package com.monostr.app.ui.search
 
 import com.monostr.app.ui.common.VisibleNotes
+import com.monostr.app.ui.common.MonostrSnackbarHost
 import com.monostr.app.ui.common.TorBannerSlot
 import com.monostr.app.ui.discover.DiscoverFollowAllHost
 import com.monostr.app.ui.common.NoteLinks
@@ -40,7 +41,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -173,7 +173,7 @@ fun SearchScreen(
             TorBannerSlot() }
         },
         bottomBar = { HideOnScrollFooter(hide) { MonostrBottomBar(BottomTab.SEARCH, unread = 0, dmUnread = dmUnread, onFeed = onFeed, onSearch = hide::show, onBookmarks = onBookmarks, onMessages = onMessages, onNotifications = onNotifications, windowInsets = WindowInsets(0)) } },
-        snackbarHost = { SnackbarHost(snackbar, Modifier.muteUndoTag(state.message)) },
+        snackbarHost = { MonostrSnackbarHost(snackbar, Modifier.muteUndoTag(state.message)) },
     ) { padding ->
         // counts for the hits in view, as in the feed (keys of the note rows are their ids)
         VisibleNotes(listState, vm.controller::visible)

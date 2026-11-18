@@ -620,7 +620,7 @@
     <string name="settings_media_server_hint">Le immagini che alleghi vengono caricate su questo server Blossom. Sono pubbliche.</string>
     <string name="settings_media_server_invalid">Deve essere un indirizzo https:// senza percorso</string>
     <string name="settings_media_server_reset">Predefinito</string>
-    <string name="about_media">Le immagini che carichi sono conservate su %1$s e sono pubbliche per chiunque abbia il link. Per segnalare un\'immagine, invia il link all\'account del progetto Monostr su Nostr.</string>
+    <string name="about_media">Le immagini che carichi sono conservate per impostazione predefinita su %1$s e sono pubbliche per chiunque abbia il link. Puoi usare invece il tuo server Blossom: Impostazioni › Contenuti e media › Server multimediale. Per segnalare un\'immagine su %1$s, invia il link all\'account del progetto Monostr su Nostr.</string>
     <string name="note_menu">Altro</string>
     <string name="note_menu_copy_link">Copia link</string>
     <string name="note_menu_copy_text">Copia testo</string>

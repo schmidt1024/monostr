@@ -620,7 +620,7 @@
     <string name="settings_media_server_hint">As imagens que você anexa são enviadas para este servidor Blossom. Elas são públicas.</string>
     <string name="settings_media_server_invalid">Deve ser um endereço https:// sem caminho</string>
     <string name="settings_media_server_reset">Padrão</string>
-    <string name="about_media">As imagens que você envia ficam em %1$s e são públicas para qualquer pessoa com o link. Para denunciar uma imagem, envie o link para a conta do projeto Monostr no Nostr.</string>
+    <string name="about_media">As imagens que você envia ficam por padrão em %1$s e são públicas para qualquer pessoa com o link. Você pode usar seu próprio servidor Blossom: Configurações › Conteúdo e mídia › Servidor de mídia. Para denunciar uma imagem em %1$s, envie o link para a conta do projeto Monostr no Nostr.</string>
     <string name="note_menu">Mais</string>
     <string name="note_menu_copy_link">Copiar link</string>
     <string name="note_menu_copy_text">Copiar texto</string>

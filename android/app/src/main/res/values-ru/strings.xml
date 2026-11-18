@@ -639,7 +639,7 @@
     <string name="settings_media_server_hint">Прикреплённые изображения загружаются на этот сервер Blossom. Они общедоступны.</string>
     <string name="settings_media_server_invalid">Нужен адрес https:// без пути</string>
     <string name="settings_media_server_reset">По умолчанию</string>
-    <string name="about_media">Загруженные вами изображения хранятся на %1$s и доступны всем, у кого есть ссылка. Чтобы пожаловаться на изображение, отправьте ссылку на него аккаунту проекта Monostr в Nostr.</string>
+    <string name="about_media">Загруженные вами изображения по умолчанию хранятся на %1$s и доступны всем, у кого есть ссылка. Вместо этого можно использовать свой сервер Blossom: Настройки › Контент и медиа › Медиасервер. Чтобы пожаловаться на изображение на %1$s, отправьте ссылку на него аккаунту проекта Monostr в Nostr.</string>
     <string name="note_menu">Ещё</string>
     <string name="note_menu_copy_link">Копировать ссылку</string>
     <string name="note_menu_copy_text">Копировать текст</string>

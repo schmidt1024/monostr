@@ -1,6 +1,7 @@
 package com.monostr.app.ui.lists
 
 import com.monostr.app.ui.common.GuardedAlertDialog
+import com.monostr.app.ui.common.MonostrSnackbarHost
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -20,7 +21,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -77,7 +77,7 @@ fun ListEditScreen(onDone: (deleted: Boolean) -> Unit, vm: ListEditViewModel = h
                 },
             )
         },
-        snackbarHost = { SnackbarHost(snackbar) },
+        snackbarHost = { MonostrSnackbarHost(snackbar) },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(Spacing.l)) {
             if (state.loading || state.saving) LinearProgressIndicator(Modifier.fillMaxWidth())

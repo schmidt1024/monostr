@@ -1,6 +1,7 @@
 package com.monostr.app.ui.profile
 
 import androidx.activity.compose.rememberLauncherForActivityResult
+import com.monostr.app.ui.common.MonostrSnackbarHost
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
@@ -29,7 +30,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -94,7 +94,7 @@ fun ProfileEditScreen(onDone: () -> Unit, vm: ProfileEditViewModel = hiltViewMod
                 navigationIcon = { IconButton(onClick = onDone) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back)) } },
             )
         },
-        snackbarHost = { SnackbarHost(snackbar) },
+        snackbarHost = { MonostrSnackbarHost(snackbar) },
     ) { padding ->
         if (state.loading) {
             LoadingScreen()

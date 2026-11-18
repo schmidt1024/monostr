@@ -1,6 +1,8 @@
 package com.monostr.app.ui.feed
 
 import com.monostr.app.ui.common.GuardedAlertDialog
+import com.monostr.app.ui.common.MonostrSnackbarHost
+import com.monostr.app.ui.common.SNACKBAR_MARGIN
 import com.monostr.app.ui.common.LocalCanSend
 import com.monostr.app.ui.discover.DiscoverFollowAllHost
 import com.monostr.app.ui.discover.DiscoverVisibility
@@ -41,7 +43,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -182,7 +183,6 @@ fun FeedScreen(
             ) { Icon(FeatherGlyph, contentDescription = stringResource(R.string.feed_new_note)) }
         },
         bottomBar = { HideOnScrollFooter(hide) { MonostrBottomBar(BottomTab.FEED, unread = unread, dmUnread = dmUnread, onFeed = toTop, onSearch = onSearch, onBookmarks = onBookmarks, onMessages = onMessages, onNotifications = onNotifications, windowInsets = WindowInsets(0)) } },
-        snackbarHost = { SnackbarHost(snackbar, Modifier.muteUndoTag(feedMessage)) },
     ) { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
           stateHolder.SaveableStateProvider(current.key) {
@@ -224,6 +224,13 @@ fun FeedScreen(
                 }
             }
           }
+          // beside the compose button at its height, not stacked above it (owner 2026-11-18): the FAB stays free and less of the
+          // note behind is covered. The card's own margin is part of the host, hence the paddings below.
+          MonostrSnackbarHost(
+              snackbar,
+              Modifier.align(Alignment.BottomStart).padding(start = FEED_SNACKBAR_START, end = FEED_SNACKBAR_END, bottom = FEED_SNACKBAR_BOTTOM)
+                  .muteUndoTag(feedMessage),
+          )
         }
     }
     TipSheetHost(vm.tipSheet)
@@ -324,3 +331,11 @@ private fun SupportHintCard(onSupport: () -> Unit, onDismiss: () -> Unit) {
 
 /** How see-through the compose button is while the bars are hidden. */
 private const val FAB_SCROLL_ALPHA = 0.45f
+
+/**
+ * The feed's snackbar sits left of the compose FAB. Scaffold places the FAB 16 dp from the end and 16 dp above the bottom bar;
+ * [SNACKBAR_MARGIN] surrounds the card. A one-line card (48 dp) is centred on the 56 dp FAB; longer ones grow upwards.
+ */
+private val FEED_SNACKBAR_START = 16.dp - SNACKBAR_MARGIN
+private val FEED_SNACKBAR_END = 16.dp + 56.dp + 12.dp - SNACKBAR_MARGIN
+private val FEED_SNACKBAR_BOTTOM = 16.dp + 4.dp - SNACKBAR_MARGIN

@@ -1,6 +1,7 @@
 package com.monostr.app.ui.profile
 
 import com.monostr.app.ui.common.GuardedDropdownMenu
+import com.monostr.app.ui.common.MonostrSnackbarHost
 import com.monostr.app.ui.common.GuardedAlertDialog
 import com.monostr.app.ui.common.LocalCanSend
 import com.monostr.app.net.SendGate
@@ -75,7 +76,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import com.monostr.app.ui.common.HideOnScrollHeader
 import com.monostr.app.ui.common.rememberHideOnScroll
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -790,7 +790,7 @@ fun ProfileScreen(
                 }
             }
         })
-    } }, snackbarHost = { SnackbarHost(snackbar, Modifier.muteUndoTag(state.message)) }) { padding ->
+    } }, snackbarHost = { MonostrSnackbarHost(snackbar, Modifier.muteUndoTag(state.message)) }) { padding ->
         val listState = rememberLazyListState()
         val listReorder = rememberListReorderState<FollowSet>(listState) { "list-" + it.address }
         val scope = rememberCoroutineScope()

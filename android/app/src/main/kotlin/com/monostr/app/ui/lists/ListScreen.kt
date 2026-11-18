@@ -1,6 +1,7 @@
 package com.monostr.app.ui.lists
 
 import com.monostr.app.ui.common.LocalCanSend
+import com.monostr.app.ui.common.MonostrSnackbarHost
 import com.monostr.app.ui.discover.FollowPill
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.clickable
@@ -30,7 +31,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
@@ -152,7 +152,7 @@ fun ListScreen(
                 }
             }
         } } },
-        snackbarHost = { SnackbarHost(snackbar) },
+        snackbarHost = { MonostrSnackbarHost(snackbar) },
     ) { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
             val feed = state.feed

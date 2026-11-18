@@ -1,6 +1,7 @@
 package com.monostr.app.ui.notifications
 
 import com.monostr.app.ui.common.TorBannerSlot
+import com.monostr.app.ui.common.MonostrSnackbarHost
 import com.monostr.app.data.dm.unreadTotalExcept
 import android.Manifest
 import android.content.pm.PackageManager
@@ -22,7 +23,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -96,7 +96,7 @@ fun NotificationsScreen(onFeed: () -> Unit, onSearch: () -> Unit, onBookmarks: (
         modifier = Modifier.nestedScroll(hide.connection),
         topBar = { Column { TopAppBar(title = { Text(stringResource(R.string.notifications_title)) }); TorBannerSlot() } },
         bottomBar = { HideOnScrollFooter(hide) { MonostrBottomBar(BottomTab.NOTIFICATIONS, unread = 0, dmUnread = dmUnread, onFeed = onFeed, onSearch = onSearch, onBookmarks = onBookmarks, onMessages = onMessages, onNotifications = hide::show, windowInsets = WindowInsets(0)) } },
-        snackbarHost = { SnackbarHost(snackbar) },
+        snackbarHost = { MonostrSnackbarHost(snackbar) },
     ) { padding ->
         if (state.loading) LoadingScreen()
         // like the home feed: pulling down at the top fetches from the relays

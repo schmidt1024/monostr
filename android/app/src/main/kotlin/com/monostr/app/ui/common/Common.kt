@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.ripple
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import com.monostr.app.ui.media.NoteLinkPreview
@@ -84,7 +85,8 @@ fun LoadingScreen() {
 fun Avatar(url: String?, modifier: Modifier = Modifier, size: Dp = 40.dp, contentDescription: String? = null) {
     val m = modifier.size(size).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainer)
         .let { if (contentDescription != null) it.semantics { this.contentDescription = contentDescription } else it }
-    if (url.isNullOrBlank()) Box(m) else AsyncImage(model = url, contentDescription = null, modifier = m)
+    // Crop, not the default Fit: a picture that is not square fills the circle instead of leaving bars at its sides (owner 2026-11-17)
+    if (url.isNullOrBlank()) Box(m) else AsyncImage(model = url, contentDescription = null, contentScale = ContentScale.Crop, modifier = m)
 }
 
 /** Relay connectivity dot for the top bar; a tap ([onClick]) shows the relays one by one (owner 2026-11-12). */

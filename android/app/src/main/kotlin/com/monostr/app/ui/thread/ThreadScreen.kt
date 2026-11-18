@@ -1,6 +1,7 @@
 package com.monostr.app.ui.thread
 
 import com.monostr.app.net.SendGate
+import com.monostr.app.ui.common.MonostrSnackbarHost
 import com.monostr.app.ui.common.mapKeep
 
 import com.monostr.nostr.repo.OwnReactions
@@ -21,7 +22,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -356,7 +356,7 @@ fun ThreadScreen(
     DeletionMessages(vm.deletions, snackbar)
     Scaffold(topBar = {
         TopAppBar(title = { Text(stringResource(R.string.thread_title)) }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back)) } })
-    }, snackbarHost = { SnackbarHost(snackbar, Modifier.muteUndoTag(state.message)) }) { padding ->
+    }, snackbarHost = { MonostrSnackbarHost(snackbar, Modifier.muteUndoTag(state.message)) }) { padding ->
         when {
             state.loading -> LoadingScreen()
             state.notFound -> Text(stringResource(R.string.thread_not_found), Modifier.padding(padding).padding(Spacing.l))

@@ -620,7 +620,7 @@
     <string name="settings_media_server_hint">Pictures you attach are uploaded to this Blossom server. They are public.</string>
     <string name="settings_media_server_invalid">Must be an https:// address without a path</string>
     <string name="settings_media_server_reset">Default</string>
-    <string name="about_media">Pictures you upload are stored on %1$s and are public to anyone who has the link. To report a picture, send its link to the Monostr project account on Nostr.</string>
+    <string name="about_media">Pictures you upload go to %1$s by default and are public to anyone who has the link. You can use your own Blossom server instead: Settings › Content &amp; media › Media server. To report a picture on %1$s, send its link to the Monostr project account on Nostr.</string>
     <string name="note_menu">More</string>
     <string name="note_menu_copy_link">Copy link</string>
     <string name="note_menu_copy_text">Copy text</string>

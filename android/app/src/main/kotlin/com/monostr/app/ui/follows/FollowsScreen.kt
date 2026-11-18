@@ -1,6 +1,7 @@
 package com.monostr.app.ui.follows
 
 import com.monostr.app.ui.common.GuardedAlertDialog
+import com.monostr.app.ui.common.MonostrSnackbarHost
 import com.monostr.app.ui.common.asString
 import com.monostr.app.ui.common.uiText
 import com.monostr.app.ui.common.UiText
@@ -221,7 +222,7 @@ fun FollowsScreen(onBack: () -> Unit, onOpenProfile: (String) -> Unit, vm: Follo
     val refusal by vm.controller.message.collectAsStateWithLifecycle()
     val refusalText = refusal?.asString()
     LaunchedEffect(refusalText) { refusalText?.let { snackbar.showSnackbar(it); vm.controller.clearMessage() } }
-    Scaffold(snackbarHost = { androidx.compose.material3.SnackbarHost(snackbar) }, topBar = {
+    Scaffold(snackbarHost = { MonostrSnackbarHost(snackbar) }, topBar = {
         TopAppBar(
             title = { Text(state.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
             navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back)) } },

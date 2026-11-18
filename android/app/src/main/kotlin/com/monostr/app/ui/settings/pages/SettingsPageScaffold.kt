@@ -1,6 +1,7 @@
 package com.monostr.app.ui.settings.pages
 
 import com.monostr.app.ui.settings.settingAnchor
+import com.monostr.app.ui.common.MonostrSnackbarHost
 import com.monostr.app.ui.settings.LocalSettingFocus
 import com.monostr.app.ui.settings.LocalSettingFocusDone
 import androidx.compose.foundation.clickable
@@ -31,7 +32,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -81,7 +81,7 @@ fun SettingsPageScaffold(page: SettingsPage, focus: String?, onBack: () -> Unit,
         topBar = {
             TopAppBar(title = { Text(stringResource(page.title)) }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back)) } })
         },
-        snackbarHost = { SnackbarHost(snackbar) },
+        snackbarHost = { MonostrSnackbarHost(snackbar) },
     ) { padding ->
         CompositionLocalProvider(LocalSettingFocus provides focus.takeUnless { focusConsumed }, LocalSettingFocusDone provides { focusConsumed = true }, LocalSettingsSnackbar provides snackbar) {
             Column(Modifier.padding(padding).padding(Spacing.l).fillMaxSize().verticalScroll(rememberScrollState()).testTag("settings-page-${page.id}"), content = content)

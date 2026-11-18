@@ -1,6 +1,7 @@
 package com.monostr.app.ui.bookmarks
 
 import com.monostr.app.ui.common.TorBannerSlot
+import com.monostr.app.ui.common.MonostrSnackbarHost
 import com.monostr.app.ui.common.LocalCanSend
 import com.monostr.app.net.SendGate
 import com.monostr.nostr.repo.OwnReactions
@@ -25,7 +26,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -313,7 +313,7 @@ fun BookmarksScreen(
         topBar = { Column { TopAppBar(title = { Text(stringResource(R.string.bookmarks_title)) }); TorBannerSlot() } },
         // spec 11.1: a tab like search and notifications, not a sub-screen with a back arrow
         bottomBar = { HideOnScrollFooter(hide) { MonostrBottomBar(BottomTab.BOOKMARKS, unread = 0, dmUnread = dmUnread, onFeed = onFeed, onSearch = onSearch, onBookmarks = hide::show, onMessages = onMessages, onNotifications = onNotifications, windowInsets = WindowInsets(0)) } },
-        snackbarHost = { SnackbarHost(snackbar, Modifier.muteUndoTag(state.message)) },
+        snackbarHost = { MonostrSnackbarHost(snackbar, Modifier.muteUndoTag(state.message)) },
     ) { padding ->
         when {
             state.loading -> LoadingScreen()

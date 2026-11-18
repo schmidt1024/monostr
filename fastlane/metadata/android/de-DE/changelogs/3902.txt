@@ -1,0 +1,4 @@
+- Eine neue Nachricht bringt wieder eine Benachrichtigung, nicht eine pro Chat mit älteren Nachrichten
+- Hinweise wie «stummgeschaltet» stehen neben dem Schreiben-Knopf, passen zum dunklen Design und verschwinden von selbst
+- Profilbilder füllen ihren Kreis
+- «Über Monostr» erklärt, dass du deinen eigenen Medien-Server nutzen kannst

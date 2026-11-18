@@ -620,7 +620,7 @@
     <string name="settings_media_server_hint">Les images que vous joignez sont envoyées sur ce serveur Blossom. Elles sont publiques.</string>
     <string name="settings_media_server_invalid">Doit être une adresse https:// sans chemin</string>
     <string name="settings_media_server_reset">Par défaut</string>
-    <string name="about_media">Les images que vous envoyez sont stockées sur %1$s et sont publiques pour toute personne disposant du lien. Pour signaler une image, envoyez son lien au compte du projet Monostr sur Nostr.</string>
+    <string name="about_media">Les images que vous envoyez sont stockées par défaut sur %1$s et sont publiques pour toute personne disposant du lien. Vous pouvez utiliser votre propre serveur Blossom : Paramètres › Contenu et médias › Serveur de médias. Pour signaler une image sur %1$s, envoyez son lien au compte du projet Monostr sur Nostr.</string>
     <string name="note_menu">Plus</string>
     <string name="note_menu_copy_link">Copier le lien</string>
     <string name="note_menu_copy_text">Copier le texte</string>

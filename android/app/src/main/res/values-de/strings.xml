@@ -615,7 +615,7 @@
     <string name="settings_media_server_hint">Bilder, die du anhängst, werden auf diesen Blossom-Server geladen. Sie sind öffentlich.</string>
     <string name="settings_media_server_invalid">Muss eine https://-Adresse ohne Pfad sein</string>
     <string name="settings_media_server_reset">Standard</string>
-    <string name="about_media">Bilder, die du hochlädst, liegen auf %1$s und sind für jeden mit dem Link sichtbar. Um ein Bild zu melden, schick den Link an das Monostr-Projektkonto auf Nostr.</string>
+    <string name="about_media">Bilder, die du hochlädst, liegen standardmässig auf %1$s und sind für jeden mit dem Link sichtbar. Du kannst stattdessen deinen eigenen Blossom-Server nutzen: Einstellungen › Inhalt &amp; Medien › Medien-Server. Um ein Bild auf %1$s zu melden, schick den Link an das Monostr-Projektkonto auf Nostr.</string>
     <string name="note_menu">Mehr</string>
     <string name="note_menu_copy_link">Link kopieren</string>
     <string name="note_menu_copy_text">Text kopieren</string>

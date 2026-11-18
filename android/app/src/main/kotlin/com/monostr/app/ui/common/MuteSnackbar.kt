@@ -39,8 +39,7 @@ fun MessageSnackbar(message: Message?, snackbar: SnackbarHostState, onUnmute: (S
             retry != null -> retryLabel
             else -> null
         }
-        // [Message.undo] only for a while: it must not stay over the screen until someone taps it
-        val result = if (undo != null) snackbar.showSnackbar(text, actionLabel = label, duration = SnackbarDuration.Long) else snackbar.showSnackbar(text, actionLabel = label)
+        val result = snackbar.showSnackbar(text, actionLabel = label, duration = snackbarDuration(undo = undo != null || undoMute != null, retry = retry != null))
         if (result == SnackbarResult.ActionPerformed) {
             when {
                 undoMute != null -> onUnmute(undoMute)
@@ -50,6 +49,16 @@ fun MessageSnackbar(message: Message?, snackbar: SnackbarHostState, onUnmute: (S
         }
         onShown()
     }
+}
+
+/**
+ * An "Undo" (a mute, [Message.undo]) only for a while: Material keeps a snackbar with an action until it is tapped, so the mute
+ * confirmation stood over the feed for good (owner 2026-11-18). "Retry" stays until answered: the change was not saved.
+ */
+internal fun snackbarDuration(undo: Boolean, retry: Boolean): SnackbarDuration = when {
+    undo -> SnackbarDuration.Long
+    retry -> SnackbarDuration.Indefinite
+    else -> SnackbarDuration.Short
 }
 
 /** Test tag of the snackbar host while it offers "Undo". */

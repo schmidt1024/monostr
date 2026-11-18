@@ -1,0 +1,4 @@
+- Yeni bir mesaj yine tek bir bildirim getiriyor, eski mesajları olan her sohbet için bir tane değil
+- «Sessize alındı» gibi uyarılar yazma düğmesinin yanında duruyor, koyu temaya uyuyor ve kendiliğinden kayboluyor
+- Profil resimleri dairelerini dolduruyor
+- «Monostr hakkında» kendi medya sunucunu kullanabileceğini açıklıyor

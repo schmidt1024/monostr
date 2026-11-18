@@ -1,0 +1,4 @@
+- Un nuovo messaggio porta di nuovo una sola notifica, non una per ogni chat con messaggi più vecchi
+- Avvisi come «silenziato» compaiono accanto al pulsante di scrittura, si adattano al tema scuro e spariscono da soli
+- Le immagini del profilo riempiono il loro cerchio
+- «Informazioni su Monostr» spiega che puoi usare il tuo server multimediale

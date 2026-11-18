@@ -1,0 +1,4 @@
+- A new message brings one notification again, not one per chat with older messages
+- Notices like "muted" sit beside the write button, fit the dark theme and go away by themselves
+- Profile pictures fill their circle
+- About Monostr explains that you can use your own media server

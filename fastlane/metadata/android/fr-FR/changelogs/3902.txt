@@ -1,0 +1,4 @@
+- Un nouveau message n'apporte à nouveau qu'une notification, pas une par conversation avec d'anciens messages
+- Les avis comme « masqué » apparaissent à côté du bouton d'écriture, s'accordent au thème sombre et disparaissent d'eux-mêmes
+- Les photos de profil remplissent leur cercle
+- « À propos de Monostr » explique que vous pouvez utiliser votre propre serveur de médias

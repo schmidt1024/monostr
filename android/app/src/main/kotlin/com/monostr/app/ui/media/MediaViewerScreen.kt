@@ -1,6 +1,7 @@
 package com.monostr.app.ui.media
 
 import com.monostr.app.ui.common.GuardedModalBottomSheet
+import com.monostr.app.ui.common.MonostrSnackbarHost
 import com.monostr.app.ui.theme.Spacing
 import com.monostr.app.data.GifMode
 import android.Manifest
@@ -37,7 +38,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -253,7 +253,7 @@ fun MediaViewerScreen(onBack: () -> Unit, vm: MediaViewerViewModel = hiltViewMod
             IconButton(onClick = onBack, modifier = Modifier.testTag("media-close")) { Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.media_viewer_close), tint = Color.White) }
             Text(stringResource(R.string.media_viewer_position, pager.currentPage + 1, state.media.size), color = Color.White, style = MaterialTheme.typography.labelLarge)
         }
-        SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding())
+        MonostrSnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding())
     }
     sheetFor?.let { m ->
         val clipboard = LocalClipboardManager.current

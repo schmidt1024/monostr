@@ -615,7 +615,7 @@
     <string name="settings_media_server_hint">Eklediğin resimler bu Blossom sunucusuna yüklenir. Herkese açıktır.</string>
     <string name="settings_media_server_invalid">Yol içermeyen bir https:// adresi olmalı</string>
     <string name="settings_media_server_reset">Varsayılan</string>
-    <string name="about_media">Yüklediğin resimler %1$s üzerinde saklanır ve bağlantıya sahip herkese açıktır. Bir resmi bildirmek için bağlantısını Nostr\'daki Monostr proje hesabına gönder.</string>
+    <string name="about_media">Yüklediğin resimler varsayılan olarak %1$s üzerinde saklanır ve bağlantıya sahip herkese açıktır. Bunun yerine kendi Blossom sunucunu kullanabilirsin: Ayarlar › İçerik ve medya › Medya sunucusu. %1$s üzerindeki bir resmi bildirmek için bağlantısını Nostr\'daki Monostr proje hesabına gönder.</string>
     <string name="note_menu">Diğer</string>
     <string name="note_menu_copy_link">Bağlantıyı kopyala</string>
     <string name="note_menu_copy_text">Metni kopyala</string>

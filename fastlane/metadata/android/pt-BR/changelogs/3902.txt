@@ -1,0 +1,4 @@
+- Uma nova mensagem volta a trazer uma só notificação, não uma por conversa com mensagens antigas
+- Avisos como «silenciado» ficam ao lado do botão de escrever, combinam com o tema escuro e somem sozinhos
+- As fotos de perfil preenchem o círculo
+- «Sobre o Monostr» explica que você pode usar seu próprio servidor de mídia

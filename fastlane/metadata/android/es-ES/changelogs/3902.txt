@@ -1,0 +1,4 @@
+- Un mensaje nuevo vuelve a traer una sola notificación, no una por cada chat con mensajes antiguos
+- Avisos como «silenciado» aparecen junto al botón de escribir, encajan con el tema oscuro y desaparecen solos
+- Las fotos de perfil llenan su círculo
+- «Acerca de Monostr» explica que puedes usar tu propio servidor de medios
