@@ -9,6 +9,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
@@ -18,6 +20,8 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Path
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.time.Duration.Companion.seconds
 
 class ForeignRelaysTest {
@@ -211,6 +215,88 @@ class ForeignRelaysTest {
             pool.release(listOf(a.url, b.url))
             pool.close()
             assertTrue(e.temporaryRelayUrls().isEmpty())
+        }
+    }
+
+    @Test
+    fun `a relay that asks for AUTH right after connecting gets none while it is being attached`() = runTest {
+        // final review I1: rust-nostr answers a challenge at once; the attach window must already count as borrowed
+        val own = SilentWsRelay()
+        val stranger = SilentWsRelay(authChallenge = "challenge-1")
+        val e = connectedEngine(dir, own)
+        try {
+            val pool = ForeignRelays(e, io, lingerMs = 60_000)
+            e.authPolicy.borrowed = { pool.holds(it) }
+            val armed = AtomicBoolean(false)
+            val connectedInWindow = AtomicBoolean(false)
+            e.poolProbe = { at ->
+                if (at == "added") armed.set(true)
+                // the refresh at the end of attachTemporary: the relay is dialled, the lease has not seen the result yet
+                if (at == "read" && armed.compareAndSet(true, false)) {
+                    connectedInWindow.set(awaitTrue(3000) { stranger.connections > 0 })
+                    withTimeoutOrNull(1500) { while (stranger.auths.isEmpty()) delay(20) }
+                }
+            }
+            assertEquals(listOf(stranger.url), pool.lease(listOf(stranger.url)))
+            e.poolProbe = null
+            assertTrue(connectedInWindow.get(), "the relay never connected during the attach")
+            Thread.sleep(500)
+            assertTrue(stranger.auths.isEmpty(), "AUTH sent to a borrowed relay: ${stranger.auths}")
+            pool.close()
+        } finally {
+            e.close()
+            stranger.shutdown()
+            own.shutdown()
+        }
+    }
+
+    @Test
+    fun `holds covers a relay from its reservation until its detach returned, attached only while attached`() = runTest {
+        setup(2) { e, _, (a, b) ->
+            val pool = ForeignRelays(e, io, cap = 1, lingerMs = 60_000)
+            val heldInAttach = AtomicReference<Boolean?>(null)
+            val attachedInAttach = AtomicReference<Boolean?>(null)
+            e.poolProbe = { at ->
+                if (at == "added" && heldInAttach.compareAndSet(null, pool.holds(a.url))) attachedInAttach.set(a.url in pool.attached())
+            }
+            assertEquals(listOf(a.url), pool.lease(listOf(a.url)))
+            assertEquals(true, heldInAttach.get())
+            assertEquals(false, attachedInAttach.get())
+            assertTrue(pool.holds(a.url))
+            // evicted: A lingers, B takes its slot; A is borrowed until its detach returned
+            pool.release(listOf(a.url))
+            val heldInEviction = AtomicReference<Boolean?>(null)
+            e.poolProbe = { at -> if (at == "removing") heldInEviction.compareAndSet(null, pool.holds(a.url)) }
+            assertEquals(listOf(b.url), pool.lease(listOf(b.url)))
+            assertEquals(true, heldInEviction.get())
+            assertFalse(pool.holds(a.url))
+            assertTrue(pool.holds(b.url))
+            // dropped while lingering
+            pool.release(listOf(b.url))
+            val heldInDrop = AtomicReference<Boolean?>(null)
+            e.poolProbe = { at -> if (at == "removing") heldInDrop.compareAndSet(null, pool.holds(b.url)) }
+            pool.dropLingering()
+            e.poolProbe = null
+            assertEquals(true, heldInDrop.get())
+            assertFalse(pool.holds(b.url))
+            assertTrue(e.temporaryRelayUrls().isEmpty())
+            pool.close()
+        }
+    }
+
+    @Test
+    fun `a relay whose attach outlives a close stays borrowed until its lease gave it back`() = runTest {
+        setup(1) { e, _, (a) ->
+            val pool = ForeignRelays(e, io, lingerMs = 60_000)
+            val heldAfterClose = AtomicReference<Boolean?>(null)
+            e.poolProbe = { at ->
+                if (at == "added" && heldAfterClose.get() == null) { pool.close(); heldAfterClose.set(pool.holds(a.url)) }
+            }
+            assertEquals(emptyList<String>(), pool.lease(listOf(a.url)))
+            e.poolProbe = null
+            assertEquals(true, heldAfterClose.get())
+            assertFalse(pool.holds(a.url))
+            assertTrue(awaitTrue(1000) { e.temporaryRelayUrls().isEmpty() }, "engine: ${e.temporaryRelayUrls()}")
         }
     }
 }

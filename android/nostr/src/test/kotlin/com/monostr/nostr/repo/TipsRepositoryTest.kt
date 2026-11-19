@@ -733,4 +733,99 @@ class TipsRepositoryTest {
             }
         }
     }
+
+    @Test
+    fun `receipts and their retractions come from the author's watcher relays`() = runTest {
+        val aliceHex = alice.publicKey().toHex()
+        val kept = receipt(watcher, "1".repeat(64), aliceHex, 5, "a".repeat(64), clock)
+        val withdrawn = receipt(watcher, "1".repeat(64), aliceHex, 7, "b".repeat(64), clock)
+        val retraction = EventBuilder(Kind(5u), "unconfirmed").tags(listOf(rust.nostr.sdk.Tag.parse(listOf("e", withdrawn.id().toHex())))).signWithKeys(watcher)
+        val forged = receipt(Keys.generate(), "1".repeat(64), aliceHex, 9, "c".repeat(64), clock)
+        SilentWsRelay(answerEose = true, recordRequests = true).use { own ->
+            SilentWsRelay(serveFor = { req -> when {
+                "\"kinds\":[9739]" in req -> listOf(kept.asJson(), withdrawn.asJson(), forged.asJson())
+                "\"kinds\":[5]" in req -> listOf(retraction.asJson())
+                else -> emptyList()
+            } }, recordRequests = true).use { w ->
+                val e = connectedEngine(dir, own)
+                try {
+                    e.save(alicePaymentInfo())
+                    val repo = NostrTipsRepository(e, DetachedSender(gate = directGate()), foreign = ForeignRelays(e)) { clock }
+                    assertEquals(WatcherFetch.Asked, repo.fetchWatcherReceipts(listOf(w.url), listOf("1".repeat(64)), watcher.publicKey().toHex()))
+                    val s = repo.localReceipts(mapOf("1".repeat(64) to aliceHex))["1".repeat(64)]
+                    assertEquals(1, s?.count, "the retracted and the forged receipt do not count")
+                    assertEquals(5L, s?.total)
+                    assertTrue(w.requests.any { "\"authors\":[\"${watcher.publicKey().toHex()}\"]" in it && "9739" in it })
+                    assertTrue(own.requests.none { "9739" in it }, "nothing extra on the viewer's own relay")
+                } finally { e.close() }
+            }
+        }
+    }
+
+    @Test
+    fun `the viewer's own read relays are not asked again`() = runTest {
+        SilentWsRelay(answerEose = true, recordRequests = true).use { own ->
+            val e = connectedEngine(dir, own)
+            try {
+                val repo = NostrTipsRepository(e, DetachedSender(gate = directGate()), foreign = ForeignRelays(e)) { clock }
+                val before = own.requests.size
+                assertEquals(WatcherFetch.OwnRelaysOnly, repo.fetchWatcherReceipts(listOf(own.url + "/"), listOf("1".repeat(64)), watcher.publicKey().toHex()))
+                assertEquals(before, own.requests.size)
+            } finally { e.close() }
+        }
+    }
+
+    @Test
+    fun `a full foreign-relay budget is told apart from own relays only`() = runTest {
+        // final review I2: no free slot is retried soon, «own relays only» waits its five minutes
+        SilentWsRelay(answerEose = true).use { own ->
+            SilentWsRelay(answerEose = true).use { other ->
+                SilentWsRelay(answerEose = true, recordRequests = true).use { w ->
+                    val e = connectedEngine(dir, own)
+                    try {
+                        val foreign = ForeignRelays(e, cap = 1)
+                        assertEquals(listOf(other.url), foreign.lease(listOf(other.url)))
+                        val repo = NostrTipsRepository(e, DetachedSender(gate = directGate()), foreign = foreign) { clock }
+                        assertEquals(WatcherFetch.NoSlot, repo.fetchWatcherReceipts(listOf(w.url), listOf("1".repeat(64)), watcher.publicKey().toHex()))
+                        assertTrue(w.requests.isEmpty())
+                        foreign.release(listOf(other.url))
+                        foreign.close()
+                    } finally { e.close() }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `150 notes are asked in two chunks of at most MAX_NOTES`() = runTest {
+        SilentWsRelay(answerEose = true, recordRequests = true).use { own ->
+            SilentWsRelay(answerEose = true, recordRequests = true).use { w ->
+                val e = connectedEngine(dir, own)
+                try {
+                    val repo = NostrTipsRepository(e, DetachedSender(gate = directGate()), foreign = ForeignRelays(e)) { clock }
+                    val ids = (0 until 150).map { "%064x".format(it) }
+                    assertEquals(WatcherFetch.Asked, repo.fetchWatcherReceipts(listOf(w.url), ids, watcher.publicKey().toHex()))
+                    assertEquals(2, w.requests.count { "9739" in it }, w.requests.toString())
+                } finally { e.close() }
+            }
+        }
+    }
+
+    @Test
+    fun `a cancelled fetch gives its relays back`() = runTest {
+        SilentWsRelay(answerEose = true, recordRequests = true).use { own ->
+            SilentWsRelay(recordRequests = true).use { silent -> // never answers: the fetch hangs until cancelled
+                val e = connectedEngine(dir, own)
+                try {
+                    val foreign = ForeignRelays(e)
+                    val repo = NostrTipsRepository(e, DetachedSender(gate = directGate()), foreign = foreign) { clock }
+                    val job = launch(Dispatchers.Default) { repo.fetchWatcherReceipts(listOf(silent.url), listOf("1".repeat(64)), watcher.publicKey().toHex()) }
+                    awaitTrue { silent.requests.isNotEmpty() }
+                    job.cancel(); job.join()
+                    foreign.dropLingering()
+                    assertTrue(foreign.attached().isEmpty(), foreign.attached().toString())
+                } finally { e.close() }
+            }
+        }
+    }
 }

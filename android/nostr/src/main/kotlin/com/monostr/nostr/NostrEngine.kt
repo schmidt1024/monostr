@@ -86,7 +86,7 @@ class NostrEngine private constructor(
     /** The SOCKS port from [create]; every relay added with its own options has to be told again. */
     private val socksPort: Int? = null,
     held: Boolean = false,
-    /** Which relays get no NIP-42 AUTH from us; the session fills it in (see [AuthPolicy]). */
+    /** Which relays get a NIP-42 AUTH from us (an allowlist, see [AuthPolicy]); [create] wires the own-list check, the session the rest. */
     val authPolicy: AuthPolicy = AuthPolicy(),
 ) {
     val pubkey: String? = signer?.pubkey
@@ -325,6 +325,10 @@ class NostrEngine private constructor(
      * subscribed would never deliver live events.
      */
     suspend fun addRelays(urls: List<String>) {
+        // every relay this call marked as joining, unmarked only after the trailing refresh took it into the normal set
+        val joined = java.util.concurrent.ConcurrentLinkedQueue<String>()
+        // the URLs whose pool add failed: never in the pool, so their mark goes at once (unless another call is adding the same URL)
+        val addFailed = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
         try {
         ffi {
         urls.forEach { url ->
@@ -332,6 +336,11 @@ class NostrEngine private constructor(
             // a hidden service is dialled through Tor only: without a proxy it is never added, never resolved (spec 2026-11-06 Tor 7.4)
             if (socksPort == null && RelayHosts.isOnionHost(parsed.toString())) return@forEach
             val norm = parsed.toString().trimEnd('/')
+            // spec 2026-11-19: an own relay may send its AUTH challenge right after connecting, before the refresh below
+            // lists it in the normal set; marked before the relay enters the pool, so that challenge is answered
+            joining += norm
+            joiningInFlight.merge(norm, 1, Int::plus)
+            joined += norm
             // The whole promotion (including the network calls and a failed rollback) runs under
             // temporaryMutex: releasing it between the `temporary.remove` and the rollback would let
             // a concurrent attachTemporary/detachTemporary for the same URL observe or create an
@@ -350,6 +359,7 @@ class NostrEngine private constructor(
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
+                    addFailed += norm
                     // Rollback: promotion failed, keep the relay reachable as a temporary one
                     // (with its prior reference count restored) instead of losing it from both
                     // `temporary` and the pool.
@@ -362,6 +372,7 @@ class NostrEngine private constructor(
             }
             if (!promoted) {
                 val added = try {
+                    if (failNextAdd) { failNextAdd = false; throw IllegalStateException("add failed") }
                     client.addRoutedRelay(parsed, socksPort)
                 } catch (e: CancellationException) {
                     throw e
@@ -369,12 +380,20 @@ class NostrEngine private constructor(
                     false
                 }
                 poolProbe?.invoke("added")
-                if (added) replaySubscriptions(parsed)
+                if (added) replaySubscriptions(parsed) else addFailed += norm
             }
         }
         }
         } finally {
-            withContext(NonCancellable) { refreshRelaySet() }
+            withContext(NonCancellable) {
+                // this call is done with its URLs; a concurrent call for the same URL keeps the mark through its own count
+                joined.forEach { joiningInFlight.compute(it) { _, n -> if (n == null || n <= 1) null else n - 1 } }
+                addFailed.forEach { if (!joiningInFlight.containsKey(it)) joining.remove(it) }
+                refreshRelaySet()
+                // fail closed on a failed refresh: the relaySet is stale then and does not list the new relay yet, so the mark stays
+                // (cleared by the next successful refresh that lists it, or by removeRelays / forgetJoiningOutside)
+                if (!relaySetStale) joined.forEach { if (!joiningInFlight.containsKey(it)) joining.remove(it) }
+            }
         }
     }
 
@@ -416,6 +435,8 @@ class NostrEngine private constructor(
         try {
             // under temporaryMutex: a renew running meanwhile must not add a removed relay back (spec 2026-10-23 §7)
             temporaryMutex.withLock { ffi { urls.forEach { url -> runCatching { client.removeRelay(RelayUrl.parse(url)) } } } }
+            // a removed relay is no longer joining, whatever an earlier failed refresh left behind
+            urls.forEach { url -> runCatching { RelayUrl.parse(url).toString().trimEnd('/') }.getOrNull()?.let(joining::remove) }
             poolProbe?.invoke("removed")
         } finally {
             withContext(NonCancellable) { refreshRelaySet() }
@@ -457,6 +478,29 @@ class NostrEngine private constructor(
     /** Normalised URLs [sendTo] added to the pool for one send; a refresh in that window leaves them out. */
     private val transient: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
 
+    /** Normalised URLs [addRelays] is adding to the normal set: own relays already, before its trailing refresh lists them ([isOwnListRelay]). */
+    private val joining: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
+    /** Per URL, how many [addRelays] calls are adding it right now: their marks may not be swept or cleared by another call. */
+    private val joiningInFlight = java.util.concurrent.ConcurrentHashMap<String, Int>()
+
+    /** Drops the marks of every URL outside [keep] (the list the user just applied): none of them may keep an AUTH allowance. */
+    fun forgetJoiningOutside(keep: List<String>) {
+        val kept = keep.mapNotNull { runCatching { RelayUrl.parse(it).toString().trimEnd('/') }.getOrNull() }.toSet()
+        joining.removeAll { it !in kept && !joiningInFlight.containsKey(it) }
+    }
+
+    internal val joiningForTest: Set<String> get() = joining.toSet()
+
+    /**
+     * Spec 2026-11-19: [key] ([RelayKeys.of]) is a relay of the user's own list in use (read, write or write-only), or one
+     * [addRelays] is adding to it. Never a temporary, a [sendTo] or a leaving relay. Reads the volatile [relaySet] and the
+     * concurrent marker sets only, never [snapshot]: no suspension and no FFI, since it runs inside rust-nostr's signer
+     * callback. A stale snapshot can only hold a relay the user removed meanwhile; any attach or send of it marks it first.
+     */
+    internal fun isOwnListRelay(key: String): Boolean =
+        (key in relaySet.normalSet || key in joining || joiningInFlight.containsKey(key)) && key !in temporary && key !in transient && key !in leaving
+
     /** Normalised URLs [detachTemporary] is removing: kept out of the normal list until its trailing refresh ran, so a refresh that read the pool before the removal cannot cache them. */
     private val leaving: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
 
@@ -473,6 +517,7 @@ class NostrEngine private constructor(
     /** Test hooks: [poolProbe] runs right after a pool change ("added", "removed") and right before a relay is force-removed ("removing"); [failNextRefresh] makes the next refresh throw. */
     @Volatile internal var poolProbe: (suspend (String) -> Unit)? = null
     @Volatile internal var failNextRefresh = false
+    @Volatile internal var failNextAdd = false
 
     internal suspend fun refreshRelaySetForTest() = refreshRelaySet()
 
@@ -501,7 +546,13 @@ class NostrEngine private constructor(
             } catch (e: Exception) {
                 null
             }
-            if (next != null) { relaySet = next; relaySetStale = false } else relaySetStale = true
+            if (next != null) {
+                relaySet = next; relaySetStale = false
+                // a joining relay the new set lists is an ordinary member now (a stale refresh left its mark behind)
+                joining.removeAll(next.normalSet)
+                // a mark for a relay the pool does not hold is stale too (its add failed or it left), unless a call is still adding it
+                joining.removeAll { it !in next.pool && !joiningInFlight.containsKey(it) }
+            } else relaySetStale = true
         }
     }
 
@@ -2003,6 +2054,8 @@ class NostrEngine private constructor(
             // The handler drops exceptions: a failure in handleNotifications must not take the process down.
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + CoroutineExceptionHandler { _, _ -> })
             val engine = NostrEngine(client, signer, scope, nostrSigner, authIds, ffi, socksPort, held, authPolicy)
+            // before the first relay joins: until then the policy refuses every AUTH
+            authPolicy.ownList = engine::isOwnListRelay
             engine.addRelays(relays)
             engine
         }
@@ -2010,15 +2063,40 @@ class NostrEngine private constructor(
 }
 
 
+/** NIP-42 client authentication event. */
+internal const val AUTH_KIND = 22242
+
 /**
- * NIP-42 AUTH signs the user's pubkey for a relay. The client answers every challenge on its own, so a relay attached
- * only to look something up (a note's hint relay, an author's outbox, an indexer) would learn who opened which note.
- * [refuse] names those relays; the session sets it once the foreign relay budget exists. Default: none refused.
+ * NIP-42 AUTH signs the user's pubkey for a relay, and the client answers every challenge on its own. Spec 2026-11-19:
+ * an **allowlist**, only the user's own relays learn who is connected: the own list in use ([ownList]), the own DM inbox
+ * and the configured search relays ([ownExtra]). Every other relay (temporary, a [NostrEngine.sendTo] target such as a
+ * recipient's inbox, a lease, an indexer, an unknown one) is refused. Fails closed: a missing or unparsable relay tag,
+ * a rule that throws or an extra source that does not answer refuses. Runs inside the signer callback: no FFI here.
  */
 class AuthPolicy {
-    @Volatile var refuse: (String) -> Boolean = { false }
+    /** The engine's own-list check (normal set incl. joining, no temporary/transient/leaving); set by NostrEngine.create. */
+    @Volatile var ownList: (String) -> Boolean = { false }
+        internal set
 
-    fun refuses(relayUrl: String): Boolean = runCatching { refuse(relayUrl.trim().trimEnd('/')) }.getOrDefault(true)
+    /** Own relays outside the normal set (own DM inbox, configured search relays) as RelayKeys.of keys; read at every challenge. */
+    @Volatile var ownExtra: suspend () -> Set<String> = { emptySet() }
+
+    /** Second line (spec §4): borrowed through ForeignRelays; narrows the normal-set branch only. */
+    @Volatile var borrowed: (String) -> Boolean = { false }
+
+    /** Fails closed: null/unparsable tag, any exception → false; CancellationException is rethrown. */
+    suspend fun allows(relayTag: String?): Boolean = try {
+        val key = relayTag?.let(RelayKeys::of)
+        when {
+            key == null -> false
+            ownList(key) && !borrowed(key) -> true
+            else -> key in ownExtra()
+        }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        false
+    }
 }
 
 /** Failure reported for a relay a publish left out because it was not connected. */
@@ -2054,8 +2132,9 @@ private fun RelayStatus.toState(): RelayState = when (this) {
 /**
  * Lets rust-nostr sign through our [Signer] (local key or Amber). rust-nostr only asks this signer
  * for a signature on its own for NIP-42 AUTH (kind 22242, automatic authentication); that one is
- * signed silently, so a relay's challenge never opens Amber. Without a silent answer the AUTH
- * fails and the DM auth hint shows instead.
+ * signed silently, so a relay's challenge never opens Amber, and only for a relay [AuthPolicy]
+ * allows (the user's own, spec 2026-11-19). Without a silent answer the AUTH fails and the DM auth
+ * hint shows instead.
  */
 internal class SignerAdapter(
     private val signer: Signer,
@@ -2068,9 +2147,10 @@ internal class SignerAdapter(
         val unsigned = RustConvert.toTipsUnsigned(unsignedEvent)
         return plainErrors {
             if (unsigned.kind == AUTH_KIND) {
-                val relay = unsigned.tags.firstOrNull { it.size >= 2 && it[0] == "relay" }?.get(1)
-                // an AUTH tells the relay who is reading: a stranger's relay we only borrowed for a lookup does not learn it
-                if (relay != null && authPolicy.refuses(relay)) throw SigningRejectedException()
+                // an AUTH tells the relay who is connected: only the user's own relays learn it (allowlist, spec 2026-11-19);
+                // the first relay tag is the one rust-nostr wrote, a challenge without one is refused
+                val relay = unsigned.tags.firstOrNull { it.isNotEmpty() && it[0] == "relay" }?.getOrNull(1)
+                if (!authPolicy.allows(relay)) throw SigningRejectedException()
                 RustConvert.toRust(signer.signEventSilent(unsigned)).also { onAuthSigned(it.id().toHex()) }
             } else {
                 RustConvert.toRust(signer.sign(unsigned))
@@ -2078,9 +2158,6 @@ internal class SignerAdapter(
         }
     }
 
-    private companion object {
-        const val AUTH_KIND = 22242
-    }
     override suspend fun nip04Encrypt(publicKey: PublicKey, content: String): String = throw UnsupportedOperationException("nip04")
     override suspend fun nip04Decrypt(publicKey: PublicKey, encryptedContent: String): String = throw UnsupportedOperationException("nip04")
     override suspend fun nip44Encrypt(publicKey: PublicKey, content: String): String = plainErrors { signer.nip44Encrypt(publicKey.toHex(), content) }
@@ -2094,8 +2171,12 @@ class SilentDecryptUnavailable : Exception("no silent NIP-44 answer")
 internal class SilentSignerAdapter(private val signer: Signer) : CustomNostrSigner {
     override fun backend(): SignerBackend = SignerBackend.Custom("monostr-silent")
     override suspend fun getPublicKey(): PublicKey? = PublicKey.parse(signer.pubkey)
-    override suspend fun signEvent(unsignedEvent: UnsignedEvent): Event? =
-        plainErrors { RustConvert.toRust(signer.sign(RustConvert.toTipsUnsigned(unsignedEvent))) }
+    override suspend fun signEvent(unsignedEvent: UnsignedEvent): Event? = plainErrors {
+        val unsigned = RustConvert.toTipsUnsigned(unsignedEvent)
+        // no AUTH policy here: this signer never answers a NIP-42 challenge (spec 2026-11-19, fail closed)
+        if (unsigned.kind == AUTH_KIND) throw SigningRejectedException()
+        RustConvert.toRust(signer.sign(unsigned))
+    }
     override suspend fun nip04Encrypt(publicKey: PublicKey, content: String): String = throw UnsupportedOperationException("nip04")
     override suspend fun nip04Decrypt(publicKey: PublicKey, encryptedContent: String): String = throw UnsupportedOperationException("nip04")
     override suspend fun nip44Encrypt(publicKey: PublicKey, content: String): String = plainErrors { signer.nip44Encrypt(publicKey.toHex(), content) }

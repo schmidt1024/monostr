@@ -1,0 +1,5 @@
+- Les pourboires s'affichent sur chaque note, quels que soient vos relais
+- Confidentialité : Monostr ne s'authentifie qu'auprès de vos propres relais, les autres ne savent jamais qui vous êtes
+- Les galeries affichent en entier les bandes d'images hautes
+- Les listes des autres suivent le réglage « Connecter temporairement les relais de l'auteur »
+- Corrections

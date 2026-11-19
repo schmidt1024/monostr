@@ -20,6 +20,8 @@ interface RunningRelays {
     suspend fun relayUrls(): List<String>
     suspend fun removeRelays(urls: List<String>)
     suspend fun addRelays(urls: List<String>)
+    /** Drops the engine's "joining" AUTH allowance for every relay outside [keep], the list just applied. */
+    suspend fun forgetJoiningOutside(keep: List<String>) {}
     suspend fun applyRelayModes(modes: Map<String, RelayMode>)
     suspend fun connect()
     suspend fun restartDms()
@@ -139,6 +141,7 @@ class SessionRelays(
         val added = list - current.toSet()
         run.removeRelays(gone)
         run.applyRelayModes(chosen)
+        run.forgetJoiningOutside(list)
         run.addRelays(added)
         // a relay the engine would not take (a hidden service in Direct) joined nothing: no reconnect, no DM restart for it
         val joined = run.relayUrls().toSet() != current.toSet() - gone.toSet()

@@ -1,5 +1,7 @@
 package com.monostr.app.net
 
+import com.monostr.app.data.linkpreview.AddressCheckInterceptor
+import com.monostr.app.data.linkpreview.AddressPolicy
 import com.monostr.nostr.net.NetworkGate
 import com.monostr.nostr.net.NetworkMode
 import kotlinx.coroutines.runBlocking
@@ -56,6 +58,23 @@ internal fun gatedOkHttp(gate: NetworkGate, unknownWaitMs: Long, torReady: () ->
         .addInterceptor(GateInterceptor(gate, torReady, unknownWaitMs))
         .addNetworkInterceptor(RouteCheckInterceptor(gate))
         .build()
+
+/**
+ * For requests the app makes by itself to a host someone else named (a stranger's watcher URL, backlog 97): every name lookup
+ * leaves out non-public addresses ([PublicOnlyDns], so nothing is connected to), and every connection is checked again
+ * ([AddressCheckInterceptor]: IP literals skip the lookup; behind SOCKS = Tor nothing is resolved here and the name decides).
+ */
+fun OkHttpClient.publicAddressesOnly(policy: AddressPolicy = AddressPolicy.PUBLIC_ONLY): OkHttpClient =
+    newBuilder().dns(PublicOnlyDns(dns, policy)).addNetworkInterceptor(AddressCheckInterceptor(policy, dns)).build()
+
+/** [delegate]'s answer without the addresses [policy] refuses; none left is an unknown host. A public name that points at the LAN stops here. */
+class PublicOnlyDns(private val delegate: Dns, private val policy: AddressPolicy = AddressPolicy.PUBLIC_ONLY) : Dns {
+    override fun lookup(hostname: String): List<InetAddress> {
+        val ok = delegate.lookup(hostname).filter(policy::allows)
+        if (ok.isEmpty()) throw UnknownHostException("no public address for $hostname")
+        return ok
+    }
+}
 
 /** Also reaches clients derived with `newBuilder()`: they share the dispatcher and the pool. */
 fun OkHttpClient.dropAllConnections() {

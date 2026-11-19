@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.collectLatest
 import com.monostr.app.net.SendGate
 import com.monostr.nostr.StartupGate
+import com.monostr.nostr.PerfTrace
 import com.monostr.app.data.PendingTip
 import com.monostr.app.data.PendingTipStore
 import com.monostr.app.data.PendingTips
@@ -18,10 +19,14 @@ import com.monostr.nostr.repo.ProfileRepository
 import com.monostr.nostr.repo.PublishRepository
 import com.monostr.nostr.repo.TipSummary
 import com.monostr.nostr.repo.TipsRepository
+import com.monostr.nostr.repo.WatcherFetch
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -66,7 +71,7 @@ data class TipperUi(val name: String?, val amount: Long?, val comment: String, v
  * settle step that drops a pending tip once a receipt names its intent. Intents stored while
  * offline are re-sent once per [start]. Profile tips are settled by `ProfileTipWatch`, not here.
  */
-@OptIn(ExperimentalCoroutinesApi::class)
+@OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 class TipDecorations(
     private val tips: TipsRepository,
     private val pending: PendingTipStore,
@@ -81,6 +86,10 @@ class TipDecorations(
     private val sendGate: SendGate = SendGate.OPEN,
     /** See [askWatchersForOwnNoteTips]; null = off (tests that do not care), the session passes [OWN_RECEIPTS_EVERY_MS]. */
     private val ownReceiptsEveryMs: Long? = null,
+    /** Backlog 97: the session's [WatcherReceipts]; null = the note authors' watcher relays are never asked. */
+    private val watcherReceipts: WatcherReceipts? = null,
+    /** The «author relays» setting, read at each use (a privacy setting: never a seeded value). */
+    private val authorRelaysEnabled: suspend () -> Boolean = { false },
     private val now: () -> Long = { System.currentTimeMillis() / 1000 },
 ) {
     private val tracked = MutableStateFlow<Map<String, String>>(emptyMap())
@@ -93,6 +102,8 @@ class TipDecorations(
     /** The running receipt subscription per live slice index of [added]; at most [MAX_LIVE_GROUPS]. */
     private val groups = HashMap<Int, Group>()
     private val _pendingNotes = MutableStateFlow<Set<String>>(emptySet())
+    /** Bumped when [add] got a new target, so the watcher relays are asked about it. */
+    private val addedTick = MutableStateFlow(0L)
 
     /** Valid receipts per target note id. */
     val summaries: StateFlow<Map<String, TipSummary>> = _summaries.asStateFlow()
@@ -105,6 +116,17 @@ class TipDecorations(
         scope.launch { runCatching { pending.prune(now()) } }
         scope.launch { resendPending() }
         ownReceiptsEveryMs?.let { every -> scope.launch { askWatchersForOwnNoteTips(every) } }
+        watcherReceipts?.let { w ->
+            scope.launch {
+                gate.await()
+                // a running round is never cancelled (its notes are marked asked): the next one takes the latest set
+                // also when anything may leave again (Tor connected); the setting is read in the round itself
+                combine(tracked, addedTick, sendGate.canSend) { t, _, _ -> t }
+                    .debounce(WATCHER_DEBOUNCE_MS)
+                    .conflate()
+                    .collect { t -> watcherRound(w, t + liveAddedTargets()) }
+            }
+        }
         scope.launch {
             tracked
                 .flatMapLatest { notes -> receiptsOf(notes) }
@@ -149,8 +171,9 @@ class TipDecorations(
     fun add(notes: List<Note>) {
         val map = notes.associate { n -> (n.repostOf ?: n).let { it.id to it.author } }
         val starts = ArrayList<Job>()
+        var grew = false
         synchronized(groups) {
-            for ((id, author) in map) if (id !in added) added[id] = author
+            for ((id, author) in map) if (id !in added) { added[id] = author; grew = true }
             // slices only ever grow at the end, so a new id restarts the last slice alone
             val slices = added.entries.chunked(NostrTipsRepository.MAX_NOTES)
             val live = liveSlices(slices.size)
@@ -168,6 +191,82 @@ class TipDecorations(
             }
         }
         starts.forEach { it.start() }
+        if (grew) addedTick.update { it + 1 }
+    }
+
+    /** The targets of the live slices of [add]: those a screen still shows; older slices had their turn while live. */
+    private fun liveAddedTargets(): Map<String, String> = synchronized(groups) {
+        groups.values.fold(LinkedHashMap<String, String>()) { all, g -> all.apply { putAll(g.notes) } }
+    }
+
+    /**
+     * Backlog 97: a watcher publishes a receipt only to its own relays and the recipient's write relays, so a viewer
+     * whose relays are elsewhere saw no tips on a note. The [targets] whose author's stored 10037 names a watcher are
+     * asked once on that watcher's relays (one one-shot fetch per watcher and relay set, no subscription), at most every
+     * [WatcherReceipts.ASK_EVERY_MS]; the stored sums of the asked notes are then read again. Nothing at all with the
+     * «author relays» setting off or while nothing may leave (Tor not connected).
+     */
+    /** One round of [askWatcherRelays]; a failure of it (e.g. the settings store) ends the round, never the collector. */
+    private suspend fun watcherRound(w: WatcherReceipts, targets: Map<String, String>) {
+        try {
+            askWatcherRelays(w, targets)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // the next tracked change starts the next round
+        }
+    }
+
+    private suspend fun askWatcherRelays(w: WatcherReceipts, targets: Map<String, String>) {
+        if (targets.isEmpty() || !authorRelaysEnabled() || !sendGate.canSend.value) return
+        val due = w.due(targets.keys)
+        if (due.isEmpty()) return
+        val byGroup = LinkedHashMap<Pair<String, List<String>>, MutableList<String>>()
+        for ((author, ids) in due.groupBy { targets.getValue(it) }) {
+            try {
+                // local only: an author without a stored 10037 costs this one look
+                val info = tips.cachedPaymentInfo(author) as? PaymentInfo.Enabled
+                // marked too, so the next rounds skip even the look; a 10037 that comes later waits at most ASK_EVERY_MS
+                if (info == null) { w.markAsked(ids); continue }
+                val relays = w.relaysOf(info)
+                if (relays.isEmpty()) { w.markAsked(ids); continue }
+                byGroup.getOrPut(info.watcherPubkey to relays.sorted()) { ArrayList() } += ids
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // a db error: this author is looked at again with the next set
+            }
+        }
+        for ((key, ids) in byGroup) {
+            val (watcherPubkey, relays) = key
+            if (!sendGate.canSend.value) return
+            try {
+                w.markAsked(ids)
+                PerfTrace.mark("watcher-receipts relays=${relays.size} notes=${ids.size}")
+                // one fetch at a time session-wide; the gate is looked at again after the wait
+                val result = w.oneFetchAtATime { if (sendGate.canSend.value) tips.fetchWatcherReceipts(relays, ids, watcherPubkey) else null }
+                when (result) {
+                    null -> { w.markRetry(ids); return }
+                    WatcherFetch.Asked -> mergeStored(ids, targets)
+                    // the budget was full (user-visible lookups first): asked again soon, not in five minutes
+                    WatcherFetch.NoSlot -> w.markRetry(ids)
+                    WatcherFetch.OwnRelaysOnly, WatcherFetch.Failed -> {}
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // relay down or db error: the read-relay counts stay; asked again after ASK_EVERY_MS
+            }
+        }
+    }
+
+    /** The stored sums of [ids] after a fetch, into the tracked and added summaries they belong to; no live subscription needed. */
+    private suspend fun mergeStored(ids: List<String>, targets: Map<String, String>) {
+        val fresh = tips.localReceipts(ids.associateWith { targets.getValue(it) })
+        val askedTracked = ids.filterTo(HashSet()) { it in tracked.value }
+        val askedAdded = synchronized(groups) { ids.filterTo(HashSet()) { it in added } }
+        if (askedTracked.isNotEmpty()) trackedSummaries.update { cur -> cur.filterKeys { it !in askedTracked } + fresh.filterKeys { it in askedTracked } }
+        if (askedAdded.isNotEmpty()) addedSummaries.update { cur -> cur.filterKeys { it !in askedAdded } + fresh.filterKeys { it in askedAdded } }
     }
 
     /**
@@ -342,5 +441,7 @@ class TipDecorations(
         const val MAX_LIVE_GROUPS = 3
         /** A tracked set must stay this long before its receipts are asked of the relays (spec perf2 A4). */
         const val RECEIPTS_DEBOUNCE_MS = 500L
+        /** A tracked set, or the last [add], must stay this long before the note authors' watcher relays are asked (backlog 97). */
+        const val WATCHER_DEBOUNCE_MS = 1_500L
     }
 }

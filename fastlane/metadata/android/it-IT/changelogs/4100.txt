@@ -1,0 +1,5 @@
+- Le mance appaiono su ogni nota, qualunque relay tu usi
+- Privacy: Monostr si autentica solo presso i tuoi relay, gli altri relay non sanno mai chi sei
+- Le gallerie mostrano per intero le strisce di immagini alte
+- Le liste degli altri seguono l'impostazione «Collega temporaneamente i relay dell'autore»
+- Correzioni

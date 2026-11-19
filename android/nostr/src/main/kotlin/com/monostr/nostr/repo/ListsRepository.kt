@@ -82,8 +82,20 @@ class NostrListsRepository(
     private val reconcileScope: CoroutineScope? = null,
     /** Spec perf2 A3: the relay reconcile waits until the home feed's first page is in; a write opens it (A2 (5)). */
     private val gate: StartupGate = StartupGate.OPEN,
+    /** Spec 2026-11-19: the app-wide budget for foreign relays; when set, a foreign list's other relays are leased from it. */
+    private val foreign: ForeignRelays? = null,
+    /** The «author relays» setting, read at every foreign lookup (no seeded stateIn): off asks only [defaultRelays]. */
+    private val authorRelaysEnabled: suspend () -> Boolean = { true },
 ) : ListsRepository {
     private val privateTags = PrivateTags(signer)
+
+    /** Spec 2026-11-19: the relays a foreign list is asked of besides the session's; the author's outbox only with the switch on. */
+    private suspend fun foreignExtra(pk: String): List<String> =
+        if (authorRelaysEnabled()) authorRelays.writeRelays(pk) + defaultRelays else defaultRelays
+
+    /** The others leg's relays come from [foreign] when it is set (counted against the budget), else they are attached on the side. */
+    private val leaseFn: (suspend (List<String>) -> List<String>)? = foreign?.let { f -> { urls -> f.lease(urls) } }
+    private val releaseFn: suspend (List<String>) -> Unit = { held -> if (foreign != null) foreign.release(held) else engine.detachTemporary(held) }
 
     /** Null until the summary or the database answered. */
     private val _own = MutableStateFlow<List<FollowSet>?>(null)
@@ -277,7 +289,7 @@ class NostrListsRepository(
         if (author == signer.pubkey) return localOf(author)
         val filter = authorFilter(author)
         // the author's write relays are looked up inside the second leg: the session relays are asked at once
-        foreignRefresh.awaitStamped("author:$author") { fetchWide(engine, filter, fetchTimeout) { authorRelays.writeRelays(author) + defaultRelays } }
+        foreignRefresh.awaitStamped("author:$author") { fetchWide(engine, filter, fetchTimeout, lease = leaseFn, release = releaseFn) { foreignExtra(author) } }
         return localOf(author)
     }
 
@@ -300,7 +312,9 @@ class NostrListsRepository(
         }
         // a foreign list, or a follow pack of anyone: those are never among the own lists
         val filter = Filter().kind(Kind(address.kind.toUShort())).author(PublicKey.parse(address.pubkey)).identifier(address.d)
-        if (fetch) foreignRefresh.awaitStamped("list:$address") { fetchWide(engine, filter, fetchTimeout, Exit.NewestPerAuthor(setOf(address.pubkey))) { authorRelays.writeRelays(address.pubkey) + defaultRelays } }
+        if (fetch) foreignRefresh.awaitStamped("list:$address") {
+            fetchWide(engine, filter, fetchTimeout, Exit.NewestPerAuthor(setOf(address.pubkey)), lease = leaseFn, release = releaseFn) { foreignExtra(address.pubkey) }
+        }
         return engine.queryDecoded(filter).maxByOrNull { it.createdAt }?.let { FollowSetCodec.decode(it, null, interactive = false) }
     }
 
@@ -440,12 +454,16 @@ internal fun newest(events: List<Event>): Event? = events.maxByOrNull { it.creat
  * back the session relays. Never throws except on cancellation. True when a relay answered: events, or an end of
  * stored events before the timeout; false when every leg failed or ran into its timeout (offline, relays down).
  * With [exit] (spec wave 2 B4, foreign lists only) the first leg that meets it ends the other one; that counts as a reply.
+ * With [lease] (spec 2026-11-19, foreign lists) the other relays are taken from the foreign budget: only those it hands
+ * out are asked, and they go back through [release]; without it they are attached for the call and detached after.
  */
 internal suspend fun fetchWide(
     engine: NostrEngine,
     filter: Filter,
     timeout: Duration,
     exit: Exit? = null,
+    lease: (suspend (List<String>) -> List<String>)? = null,
+    release: suspend (List<String>) -> Unit = { engine.detachTemporary(it) },
     extra: suspend () -> List<String>,
 ): Boolean = coroutineScope {
     val metAny = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -470,17 +488,22 @@ internal suspend fun fetchWide(
         legReplied(replyTimeout, { up }) {
             val urls = extra().map { it.trim().trimEnd('/') }.distinct() - engine.relayUrls().toSet()
             if (urls.isEmpty()) return@legReplied null
-            // NonCancellable: the other leg may end this one at any moment, and an attach cut off half way would leak its relays
-            val held = withContext(NonCancellable) { engine.attachTemporary(urls) }
+            var held: List<String> = emptyList()
             try {
+                // NonCancellable: the other leg may end this one at any moment, and an attach cut off half way would leak its
+                // relays; assigned inside, so a cancellation that lands as the block returns still gives back what it took
+                withContext(NonCancellable) { held = if (lease != null) lease(urls) else engine.attachTemporary(urls) }
+                // with a lease only the relays it handed out are asked: the rest are over the budget
+                val asked = if (lease != null) held else urls
+                if (asked.isEmpty()) return@legReplied null
                 val events = if (exit == null) {
-                    engine.fetchFrom(urls, filter, timeout, attach = false)
+                    engine.fetchFrom(asked, filter, timeout, attach = false)
                 } else {
-                    engine.fetchExit(urls, filter, timeout, exit).also { if (it.met) { metAny.set(true); session.cancel() } }.events
+                    engine.fetchExit(asked, filter, timeout, exit).also { if (it.met) { metAny.set(true); session.cancel() } }.events
                 }
-                events.also { up = engine.connectedRelayUrls().any { it in urls } }
+                events.also { up = engine.connectedRelayUrls().any { it in asked } }
             } finally {
-                engine.detachTemporary(held)
+                withContext(NonCancellable) { if (lease != null) release(held) else engine.detachTemporary(held) }
             }
         }
     }

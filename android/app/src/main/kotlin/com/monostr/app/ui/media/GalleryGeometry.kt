@@ -13,7 +13,8 @@ object GalleryGeometry {
     /** The first card takes this share of the row width; the row height follows from its ratio. */
     const val REFERENCE_WIDTH_SHARE = 0.62f
     const val MAX_CARD_WIDTH_SHARE = 0.85f
-    const val MIN_CARD_ASPECT = 0.5f
+    /** Owner 2026-11-19: down to 1:4, so tall strips (a panorama cut in pieces, like on X) show whole instead of cropped. */
+    const val MIN_CARD_ASPECT = 0.25f
     const val MIN_ROW_HEIGHT_DP = 160f
     const val GAP_DP = 4f
     const val PICTURE_FALLBACK = 4f / 5f

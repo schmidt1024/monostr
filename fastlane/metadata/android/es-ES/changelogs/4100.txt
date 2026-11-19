@@ -1,0 +1,5 @@
+- Las propinas aparecen en cada nota, uses los relays que uses
+- Privacidad: Monostr solo se identifica ante tus propios relays, los demás nunca saben quién eres
+- Las galerías muestran completas las tiras altas de imágenes
+- Las listas de otros siguen el ajuste «Conectar temporalmente los relays del autor»
+- Correcciones

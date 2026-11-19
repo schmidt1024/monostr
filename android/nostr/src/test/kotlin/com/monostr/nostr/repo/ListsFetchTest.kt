@@ -6,7 +6,10 @@ import com.monostr.nostr.SilentWsRelay
 import com.monostr.nostr.awaitTrue
 import com.monostr.nostr.connectedEngine
 import com.monostr.nostr.model.ListAddress
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
@@ -36,6 +39,18 @@ class ListsFetchTest {
     private class SlowAuthorRelays(private val relays: List<String>, private val delayMs: Long = 0) : AuthorRelaysRepository {
         override suspend fun writeRelays(pubkey: String): List<String> {
             if (delayMs > 0) withContext(Dispatchers.IO) { Thread.sleep(delayMs) }
+            return relays
+        }
+        override suspend fun attach(relays: List<String>) {}
+        override suspend fun detach(relays: List<String>) {}
+        override suspend fun fetchNotes(relays: List<String>, pubkey: String, limit: Int): Set<String> = emptySet()
+    }
+
+    /** Every author's write relays are [relays]; counts how often they were asked for. */
+    private class RecordingAuthorRelays(private val relays: List<String>) : AuthorRelaysRepository {
+        val calls = java.util.concurrent.atomic.AtomicInteger(0)
+        override suspend fun writeRelays(pubkey: String): List<String> {
+            calls.incrementAndGet()
             return relays
         }
         override suspend fun attach(relays: List<String>) {}
@@ -233,6 +248,88 @@ class ListsFetchTest {
                     assertEquals("Bob picks", set?.title)
                 } finally {
                     e.close()
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `with author relays off a foreign list asks only the default relays`() = runTest {
+        SilentWsRelay(answerEose = true).use { own ->
+            SilentWsRelay(recordRequests = true).use { stranger ->
+                SilentWsRelay(answerEose = true).use { def ->
+                    val e = connectedEngine(dir, own, me.secretKey().toHex())
+                    try {
+                        val recording = RecordingAuthorRelays(listOf(stranger.url))
+                        val repo = NostrListsRepository(
+                            e, signer, recording, defaultRelays = listOf(def.url), now = { clock },
+                            fetchTimeout = Duration.ofSeconds(2), authorRelaysEnabled = { false },
+                        )
+                        withContext(Dispatchers.Default) {
+                            repo.byAddress(ListAddress(30000, bob.publicKey().toHex(), "picks"), fetch = true)
+                            repo.of(bob.publicKey().toHex())
+                        }
+                        assertEquals(0, recording.calls.get(), "the author's relays were looked up")
+                        assertTrue(listRequests(stranger).isEmpty(), "the author's relay was asked: ${stranger.requests}")
+                        assertTrue(listRequests(def).isNotEmpty(), "the default relay was never asked")
+                    } finally {
+                        e.close()
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `the switch is read at use time`() = runTest {
+        SilentWsRelay(answerEose = true).use { own ->
+            SilentWsRelay(answerEose = true).use { stranger ->
+                val e = connectedEngine(dir, own, me.secretKey().toHex())
+                try {
+                    var on = false
+                    val repo = NostrListsRepository(
+                        e, signer, RecordingAuthorRelays(listOf(stranger.url)), now = { clock },
+                        fetchTimeout = Duration.ofSeconds(2), authorRelaysEnabled = { on },
+                    )
+                    withContext(Dispatchers.Default) { repo.of(bob.publicKey().toHex()) }
+                    assertTrue(listRequests(stranger).isEmpty(), "asked with the switch off: ${stranger.requests}")
+                    on = true
+                    // another author: the ten-minute gate would hide a second lookup of bob
+                    withContext(Dispatchers.Default) { repo.of(c) }
+                    assertTrue(awaitTrue { listRequests(stranger).isNotEmpty() }, "not asked after the switch went on")
+                } finally {
+                    e.close()
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `a foreign list's other relays are leased from the foreign budget`() = runTest {
+        SilentWsRelay(answerEose = true).use { own ->
+            SilentWsRelay(authChallenge = "c", answerEose = true).use { s1 ->
+                SilentWsRelay(authChallenge = "c", answerEose = true).use { s2 ->
+                    val e = connectedEngine(dir, own, me.secretKey().toHex())
+                    val io = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+                    val pool = ForeignRelays(e, io, cap = 1, lingerMs = 60_000)
+                    try {
+                        val repo = NostrListsRepository(
+                            e, signer, RecordingAuthorRelays(listOf(s1.url, s2.url)), now = { clock },
+                            fetchTimeout = Duration.ofSeconds(2), foreign = pool,
+                        )
+                        withContext(Dispatchers.Default) { repo.byAddress(ListAddress(30000, bob.publicKey().toHex(), "picks"), fetch = true) }
+                        val asked = listOf(s1, s2).filter { listRequests(it).isNotEmpty() }
+                        assertEquals(1, asked.size, "asked beyond the budget: s1 ${s1.requests}, s2 ${s2.requests}")
+                        assertTrue(awaitTrue { asked.single().connections > 0 })
+                        withContext(Dispatchers.IO) { Thread.sleep(1_500) }
+                        assertTrue(s1.auths.isEmpty() && s2.auths.isEmpty(), "AUTH sent: ${s1.auths} ${s2.auths}")
+                        // the leased relay lingers in the budget, nothing else stays attached
+                        assertTrue(e.temporaryRelayUrls().size <= 1, "attached: ${e.temporaryRelayUrls()}")
+                    } finally {
+                        pool.close()
+                        io.cancel()
+                        e.close()
+                    }
                 }
             }
         }

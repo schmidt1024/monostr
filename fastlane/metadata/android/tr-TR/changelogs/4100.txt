@@ -1,0 +1,5 @@
+- Bahşişler, hangi röleleri kullanırsan kullan her notta görünür
+- Gizlilik: Monostr yalnızca kendi rölelerinde oturum açar, diğer röleler kim olduğunu asla öğrenmez
+- Galeriler uzun görsel şeritlerini tam gösterir
+- Başkalarının listeleri «Yazarın rölelerini geçici olarak bağla» ayarına uyar
+- Düzeltmeler

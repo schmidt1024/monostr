@@ -57,6 +57,18 @@ sealed class OwnPayto {
 /** Outcome of [TipsRepository.setOwnPayto]. */
 enum class PaytoWrite { Published, NotPublished, Unknown }
 
+/** What [TipsRepository.fetchWatcherReceipts] did. */
+enum class WatcherFetch {
+    /** At least one of the relays was asked. */
+    Asked,
+    /** Nothing to ask: no notes, or every relay is one of the viewer's read relays (asked already). */
+    OwnRelaysOnly,
+    /** No relay could be held: the foreign-relay budget had no free slot (or none of the relays could be attached). */
+    NoSlot,
+    /** The lookup failed (a relay or database error, or no relay could be attached). */
+    Failed,
+}
+
 interface TipsRepository {
     /** The recipient's payment info (kind 10037): local first, relays when missing or older than [maxAgeSeconds]. Malformed ⇒ Disabled. */
     suspend fun paymentInfo(pubkey: String, maxAgeSeconds: Long = 3600): PaymentInfo
@@ -83,6 +95,14 @@ interface TipsRepository {
      * stored (an anonymous tip); else over the session, which keeps the receipts like any fetched event.
      */
     suspend fun noteReceiptsOn(relays: List<String>, noteIds: Collection<String>, watcherPubkey: String, since: Long, detached: Boolean): Set<String> = emptySet()
+
+    /**
+     * One-shot: the receipts to [noteIds] signed by [watcherPubkey] on [relays] (a note author's watcher relays), and
+     * that watcher's retractions of them, stored like any fetch. The viewer's read relays are left out (asked already).
+     * See [WatcherFetch] for the outcomes; a closed route (Tor not connected) still counts as [WatcherFetch.Asked]: the
+     * fetches then return nothing at once, so callers check whether anything may leave before they ask.
+     */
+    suspend fun fetchWatcherReceipts(relays: List<String>, noteIds: Collection<String>, watcherPubkey: String): WatcherFetch = WatcherFetch.Failed
     /**
      * Signs and publishes the user's own payment info (spec 3.1). It is kept locally only when a relay
      * accepted it: a copy nobody else can see would still make this device's tip sheet pay to it.
@@ -165,6 +185,8 @@ class NostrTipsRepository(
      * with a stagenet watcher could otherwise show tip counts and totals as if they were real XMR and be tipped there.
      */
     private val testNetworks: Boolean = true,
+    /** The session's budget of foreign relays; without one a fetch of [fetchWatcherReceipts] attaches its relays on its own. */
+    private val foreign: ForeignRelays? = null,
     private val now: () -> Long = { System.currentTimeMillis() / 1000 },
 ) : TipsRepository {
     /** One payment info fetch per pubkey at a time, shared by every caller; its stamp is the freshness (spec perf 3.4). */
@@ -356,6 +378,37 @@ class NostrTipsRepository(
                 .filter { it.watcherPubkey == watcherPubkey && it.noteId in noteIds }
                 .map { it.intentId }
                 .toSet()
+        }
+    }
+
+    override suspend fun fetchWatcherReceipts(relays: List<String>, noteIds: Collection<String>, watcherPubkey: String): WatcherFetch {
+        val ids = noteIds.distinct()
+        if (ids.isEmpty() || relays.isEmpty()) return WatcherFetch.OwnRelaysOnly
+        try {
+            val own = engine.readRelayUrls().map { it.trimEnd('/') }.toSet()
+            val rest = relays.map { it.trim().trimEnd('/') }.filter { it !in own }.distinct()
+            if (rest.isEmpty()) return WatcherFetch.OwnRelaysOnly
+            // NonCancellable: a cancellation landing on the lease's own return would lose `held` and leak the relays
+            val held = withContext(NonCancellable) { foreign?.lease(rest) ?: engine.attachTemporary(rest) }
+            if (held.isEmpty()) return if (foreign != null) WatcherFetch.NoSlot else WatcherFetch.Failed
+            try {
+                val author = PublicKey.parse(watcherPubkey)
+                for (chunk in ids.chunked(MAX_NOTES)) {
+                    val filter = Filter().kind(Kind(Kinds.TIP_RECEIPT.toUShort())).events(chunk.map { EventId.parse(it) }).author(author)
+                    quietly { engine.fetchFrom(held, filter, fetchTimeout, attach = false) }
+                    val stored = engine.query(filter).map { it.id() }
+                    for (retractable in stored.chunked(MAX_NOTES)) {
+                        quietly { engine.fetchFrom(held, Filter().kind(Kind(5u)).author(author).events(retractable), fetchTimeout, attach = false) }
+                    }
+                }
+                return WatcherFetch.Asked
+            } finally {
+                withContext(NonCancellable) { if (foreign != null) foreign.release(held) else engine.detachTemporary(held) }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return WatcherFetch.Failed
         }
     }
 

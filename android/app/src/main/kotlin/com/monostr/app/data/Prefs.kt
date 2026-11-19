@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.monostr.nostr.RelayKeys
 import com.monostr.nostr.model.RelayMode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -127,11 +128,23 @@ class PrefsRelayStore(private val store: DataStore<Preferences>) : RelayStore, R
 
 /** Relays used only for NIP-50 search (spec 3.4); an empty list is allowed and means local search only. */
 interface SearchRelayStore : RelayStore {
+    /**
+     * The search relays that count as own for NIP-42 AUTH (spec 2026-11-19, controller rulings A and C): the stored list
+     * without any default search relay, compared by [RelayKeys.of] key, so however a default is spelled or stored (the
+     * editor stores the whole visible list, defaults included, at the first edit) it never learns the user's pubkey.
+     * Empty while the defaults apply.
+     */
+    val configured: Flow<List<String>>
+
     suspend fun reset()
 }
 
 class PrefsSearchRelayStore(private val store: DataStore<Preferences>) : SearchRelayStore {
     override val relays: Flow<List<String>> = store.data.map { p -> p[SEARCH_RELAYS]?.sorted() ?: DEFAULT_SEARCH_RELAYS }
+
+    override val configured: Flow<List<String>> = store.data.map { p ->
+        p[SEARCH_RELAYS].orEmpty().filter { url -> RelayKeys.of(url).let { it != null && it !in DEFAULT_SEARCH_KEYS } }.sorted()
+    }
 
     override suspend fun set(relays: List<String>) {
         store.edit { p -> p[SEARCH_RELAYS] = relays.map { it.trim().trimEnd('/') }.filter { isValidRelayUrl(it) }.toSet() }
@@ -143,6 +156,8 @@ class PrefsSearchRelayStore(private val store: DataStore<Preferences>) : SearchR
 
     companion object {
         val DEFAULT_SEARCH_RELAYS = listOf("wss://search.monostr.com", "wss://search.nos.today")
+        /** [DEFAULT_SEARCH_RELAYS] as [RelayKeys.of] keys: never own relays for NIP-42 AUTH ([configured]). */
+        private val DEFAULT_SEARCH_KEYS: Set<String> = DEFAULT_SEARCH_RELAYS.mapNotNullTo(HashSet()) { RelayKeys.of(it) }
         private val SEARCH_RELAYS = stringSetPreferencesKey("search_relays")
     }
 }

@@ -45,7 +45,7 @@ class GalleryGeometryTest {
 
     @Test fun `extreme cards are clamped and cropped`() {
         val tall = GalleryGeometry.layout(listOf(0.2f, 1f), 360f, 600f)
-        assertEquals(300f, tall.cardWidthsDp[0], tol); assertTrue(tall.crop[0])
+        assertEquals(150f, tall.cardWidthsDp[0], tol); assertTrue(tall.crop[0]) // 120 < 0.25 x 600
         val pano = GalleryGeometry.layout(listOf(1f, 4f), 360f, 600f)
         assertEquals(306f, pano.cardWidthsDp[1], tol); assertTrue(pano.crop[1])
     }
@@ -62,8 +62,10 @@ class GalleryGeometryTest {
         val b = GalleryGeometry.cardWidth(4f, 160f, 360f)
         assertEquals(306f, b.first, tol); assertTrue(b.second)
         val c = GalleryGeometry.cardWidth(0.2f, 600f, 360f)
-        assertEquals(300f, c.first, tol); assertTrue(c.second)
-        val narrow = GalleryGeometry.cardWidth(0.2f, 640f, 296f)
+        assertEquals(150f, c.first, tol); assertTrue(c.second)
+        val strip = GalleryGeometry.cardWidth(0.25f, 600f, 360f) // a 1:4 strip fits exactly, uncropped
+        assertEquals(150f, strip.first, tol); assertFalse(strip.second)
+        val narrow = GalleryGeometry.cardWidth(0.2f, 1200f, 296f) // min 300 above max 251.6: the upper bound wins
         assertEquals(251.6f, narrow.first, tol); assertTrue(narrow.second)
     }
 }

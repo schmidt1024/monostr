@@ -2,6 +2,7 @@ package com.monostr.nostr
 
 import com.monostr.tips.event.Event
 import com.monostr.tips.event.UnsignedEvent
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -348,7 +349,8 @@ class NostrEngineTest {
     @Test
     fun `the client signer signs NIP-42 AUTH silently and never prompts for it`() = runTest {
         val signer = PromptingSigner()
-        val adapter = SignerAdapter(signer)
+        val policy = AuthPolicy().apply { ownList = { it == "wss://inbox.example" } }
+        val adapter = SignerAdapter(signer, policy)
         val me = rust.nostr.sdk.PublicKey.parse(signer.pubkey)
         val auth = EventBuilder(Kind(22242u), "").tags(listOf(Tag.parse(listOf("relay", "wss://inbox.example")), Tag.parse(listOf("challenge", "c1")))).build(me)
         val thrown = runCatching { adapter.signEvent(auth) }.exceptionOrNull()
@@ -360,23 +362,134 @@ class NostrEngineTest {
         assertEquals(1, note.kind().asU16().toInt())
         assertEquals(listOf(1), signer.prompts)
 
-        // a local key signs AUTH as before
-        val local = SignerAdapter(LocalSigner(sk1)).signEvent(auth)!!
+        // a local key signs AUTH for an own relay as before
+        val local = SignerAdapter(LocalSigner(sk1), policy).signEvent(auth)!!
         assertEquals(22242, local.kind().asU16().toInt())
         assertTrue(local.verify())
     }
 
+    private fun authEvent(relay: String?): rust.nostr.sdk.UnsignedEvent {
+        val me = rust.nostr.sdk.PublicKey.parse(LocalSigner(sk1).pubkey)
+        val tags = listOfNotNull(relay?.let { Tag.parse(listOf("relay", it)) }, Tag.parse(listOf("challenge", "c1")))
+        return EventBuilder(Kind(22242u), "").tags(tags).build(me)
+    }
+
     @Test
-    fun `no AUTH for a relay the policy refuses, the others as before`() = runTest {
-        val policy = AuthPolicy().apply { refuse = { it == "wss://borrowed.example" } }
+    fun `no AUTH outside the allowlist, a note never asks the policy`() = runTest {
+        val policy = AuthPolicy().apply { ownList = { it == "wss://own.example" } }
         val adapter = SignerAdapter(LocalSigner(sk1), policy)
         val me = rust.nostr.sdk.PublicKey.parse(LocalSigner(sk1).pubkey)
-        fun auth(relay: String) = EventBuilder(Kind(22242u), "").tags(listOf(Tag.parse(listOf("relay", relay)), Tag.parse(listOf("challenge", "c1")))).build(me)
-        val refused = runCatching { adapter.signEvent(auth("wss://borrowed.example/")) }.exceptionOrNull()
+        assertEquals(22242, adapter.signEvent(authEvent("wss://own.example/"))!!.kind().asU16().toInt())
+        val refused = runCatching { adapter.signEvent(authEvent("wss://borrowed.example")) }.exceptionOrNull()
         assertTrue(refused is SigningRejectedException, "got $refused")
-        assertEquals(22242, adapter.signEvent(auth("wss://inbox.example"))!!.kind().asU16().toInt())
         // a note is never subject to the policy
         assertEquals(1, adapter.signEvent(EventBuilder.textNote("hi").build(me))!!.kind().asU16().toInt())
+    }
+
+    @Test
+    fun `an AUTH without a relay tag is refused`() = runTest {
+        val adapter = SignerAdapter(LocalSigner(sk1), AuthPolicy().apply { ownList = { true } })
+        val refused = runCatching { adapter.signEvent(authEvent(null)) }.exceptionOrNull()
+        assertTrue(refused is SigningRejectedException, "got $refused")
+    }
+
+    @Test
+    fun `the silent signer never signs AUTH`() = runTest {
+        val refused = runCatching { SilentSignerAdapter(LocalSigner(sk1)).signEvent(authEvent("wss://own.example")) }.exceptionOrNull()
+        assertTrue(refused is SigningRejectedException, "got $refused")
+    }
+
+    @Test
+    fun `the own-list check knows the normal set only`() = runTest {
+        val engine = NostrEngine.create(dir.resolve("lmdb").toString(), null, listOf("wss://normal.example"))
+        engine.attachTemporary(listOf("wss://temp.example"))
+        assertTrue(engine.isOwnListRelay("wss://normal.example"))
+        assertFalse(engine.isOwnListRelay("wss://temp.example"))
+        assertFalse(engine.isOwnListRelay("wss://unknown.example"))
+        // the engine's policy asks the same check
+        assertTrue(engine.authPolicy.allows("wss://normal.example/"))
+        assertFalse(engine.authPolicy.allows("wss://temp.example"))
+        engine.removeRelays(listOf("wss://normal.example"))
+        engine.attachTemporary(listOf("wss://normal.example"))
+        assertFalse(engine.isOwnListRelay("wss://normal.example"))
+        assertFalse(engine.authPolicy.allows("wss://normal.example"))
+        engine.close()
+    }
+
+    @Test
+    fun `a just-added own relay keeps its AUTH when the refresh fails`() = runTest {
+        val engine = NostrEngine.create(dir.resolve("lmdb").toString(), null, emptyList())
+        engine.failNextRefresh = true
+        engine.addRelays(listOf("wss://joining.example/"))
+        // the refresh failed: the stale set does not list the relay, the joining mark must still allow it
+        assertTrue(engine.isOwnListRelay("wss://joining.example"))
+        assertEquals(setOf("wss://joining.example"), engine.joiningForTest)
+        engine.refreshRelaySetForTest()
+        assertTrue(engine.joiningForTest.isEmpty())
+        assertTrue(engine.isOwnListRelay("wss://joining.example"))
+        engine.close()
+    }
+
+    @Test
+    fun `a failed add leaves no joining mark`() = runTest {
+        val engine = NostrEngine.create(dir.resolve("lmdb").toString(), null, emptyList())
+        engine.failNextRefresh = true
+        engine.failNextAdd = true
+        engine.addRelays(listOf("wss://never.example/"))
+        assertTrue(engine.joiningForTest.isEmpty())
+        assertFalse(engine.isOwnListRelay("wss://never.example"))
+        engine.close()
+    }
+
+    @Test
+    fun `forgetJoiningOutside clears a stale mark of a relay that never entered the set`() = runTest {
+        val engine = NostrEngine.create(dir.resolve("lmdb").toString(), null, emptyList())
+        engine.failNextRefresh = true
+        engine.addRelays(listOf("wss://stale.example/", "wss://keep.example/"))
+        assertEquals(setOf("wss://stale.example", "wss://keep.example"), engine.joiningForTest)
+        engine.forgetJoiningOutside(listOf("wss://keep.example/"))
+        assertEquals(setOf("wss://keep.example"), engine.joiningForTest)
+        assertFalse(engine.isOwnListRelay("wss://stale.example"))
+        engine.close()
+    }
+
+    @Test
+    fun `concurrent adds of one URL keep the mark until both finish`() = runTest {
+        val engine = NostrEngine.create(dir.resolve("lmdb").toString(), null, emptyList())
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val firstIn = kotlinx.coroutines.CompletableDeferred<Unit>()
+        var first = true
+        engine.poolProbe = { at -> if (at == "added" && first) { first = false; firstIn.complete(Unit); gate.await() } }
+        val a = backgroundScope.async(kotlinx.coroutines.Dispatchers.Default) { engine.addRelays(listOf("wss://dup.example/")) }
+        firstIn.await()
+        engine.poolProbe = null
+        // the second call runs to the end while the first is still in flight; its add fails (already in the pool) and its
+        // refresh fails too, so only the in-flight count of the first call keeps the URL own
+        engine.failNextRefresh = true
+        engine.addRelays(listOf("wss://dup.example/"))
+        assertTrue(engine.isOwnListRelay("wss://dup.example"))
+        assertEquals(setOf("wss://dup.example"), engine.joiningForTest)
+        engine.failNextRefresh = false
+        gate.complete(Unit)
+        a.await()
+        assertTrue(engine.joiningForTest.isEmpty())
+        assertTrue(engine.isOwnListRelay("wss://dup.example"))
+        engine.close()
+    }
+
+    @Test
+    fun `a relay being added counts as own before the relay set refreshes`() = runTest {
+        // rust-nostr answers a challenge right after connecting: an own relay joining the list must not be refused in that window
+        val engine = NostrEngine.create(dir.resolve("lmdb").toString(), null, emptyList())
+        var inWindow: Boolean? = null
+        engine.poolProbe = { at -> if (at == "added" && inWindow == null) inWindow = engine.isOwnListRelay("wss://joining.example") }
+        engine.addRelays(listOf("wss://joining.example/"))
+        engine.poolProbe = null
+        assertEquals(true, inWindow)
+        assertTrue(engine.isOwnListRelay("wss://joining.example"))
+        engine.removeRelays(listOf("wss://joining.example"))
+        assertFalse(engine.isOwnListRelay("wss://joining.example"))
+        engine.close()
     }
 
     @Test

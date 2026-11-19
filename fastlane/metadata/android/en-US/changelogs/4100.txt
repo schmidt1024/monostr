@@ -1,0 +1,5 @@
+- Tips show on every note, whatever relays you use
+- Privacy: Monostr signs in to your own relays only, other relays never learn who you are
+- Galleries show tall picture strips whole
+- Other people's lists follow the setting «Connect the author's relays temporarily»
+- Fixes

@@ -52,6 +52,7 @@ import com.monostr.app.media.OwnPictures
 import com.monostr.app.net.SwitchedSession
 import com.monostr.app.net.TorController
 import com.monostr.app.net.torConnected
+import com.monostr.app.net.publicAddressesOnly
 import com.monostr.app.ui.common.NoteDeletions
 import com.monostr.app.ui.common.NoteVisibility
 import com.monostr.app.ui.common.UiText
@@ -59,6 +60,7 @@ import com.monostr.app.ui.profile.ProfileCache
 import com.monostr.app.ui.common.pluralText
 import com.monostr.app.ui.common.uiText
 import com.monostr.app.ui.media.MediaReveals
+import com.monostr.app.ui.tips.WatcherReceipts
 import com.monostr.app.work.BackgroundCheckWorker
 import com.monostr.app.work.DmNotifier
 import com.monostr.nostr.DetachedSender
@@ -181,6 +183,8 @@ class Ready(
     val search: SearchRepository,
     val bookmarks: BookmarksRepository,
     val watchers: WatcherGateway,
+    /** Backlog 97: which watcher relays to ask for the tips of others' notes, and when; shared by every screen. */
+    val watcherReceipts: WatcherReceipts,
     val counts: CountsRepository,
     val authorRelays: AuthorRelaysRepository,
     val dms: DmSync,
@@ -266,6 +270,7 @@ class Ready(
 interface NostrSessionEntryPoint {
     fun session(): NostrSession
     fun searchRelays(): SearchRelayStore
+    fun relayStore(): com.monostr.app.data.RelayStore
     fun recentSearches(): com.monostr.app.data.RecentSearchesStore
     fun uiSettings(): UiSettingsStore
     fun drafts(): DraftStore
@@ -311,6 +316,7 @@ class NostrSession @Inject constructor(
     private val tipSettings: TipSettingsStore,
     private val pendingTips: PendingTipStore,
     private val dmSettings: DmSettingsStore,
+    private val searchRelayStore: SearchRelayStore,
     private val hints: HintStore,
     private val uiSettings: UiSettingsStore,
     private val linkPreviews: LinkPreviews,
@@ -692,13 +698,12 @@ class NostrSession @Inject constructor(
         val dmStore = DmDatabase(context, signer.pubkey)
         // spec 7.3: whatever fails from here on, the DM database and the engine are closed again
         try {
-            val tips = NostrTipsRepository(engine, DetachedSender(engine.ffiDispatcher, networkGate, torReady = torConnected(tor)), gate = startupGate, testNetworks = com.monostr.app.BuildConfig.DEBUG)
             // spec 2026-10-23 §3/§4.4: one budget of foreign relays for the whole session, the indexers included
             val foreign = ForeignRelays(engine)
-            // NIP-42: no AUTH (the user's pubkey) for relays borrowed for a lookup, unless one is also an own DM inbox
-            val dmInbox = java.util.concurrent.atomic.AtomicReference<Set<String>>(emptySet())
-            engine.backgroundScope.launch { dmSettings.relays.collect { list -> dmInbox.set(list.map { it.trim().trimEnd('/') }.toSet()) } }
-            engine.authPolicy.refuse = { url -> foreign.holds(url) && url !in dmInbox.get() }
+            val tips = NostrTipsRepository(engine, DetachedSender(engine.ffiDispatcher, networkGate, torReady = torConnected(tor)), gate = startupGate, testNetworks = com.monostr.app.BuildConfig.DEBUG, foreign = foreign)
+            // spec 2026-11-19: NIP-42 AUTH only for the user's own relays (normal set, own DM inbox, configured search relays;
+            // a default search relay never counts, even when the editor stored it with the user's list)
+            AuthAllowlist.wire(engine.authPolicy, dmRelays = dmSettings.relays, searchRelays = searchRelayStore.configured, borrowed = foreign::holds)
             val authorRelays = NostrAuthorRelaysRepository(engine, foreign = foreign)
             // the switch is read at use time (no seeded stateIn), so a lookup never runs against the user's choice
             val locator = NostrEventLocator(engine, authorRelays, foreign, enabled = { uiSettings.authorRelays.first() })
@@ -713,7 +718,11 @@ class NostrSession @Inject constructor(
             }
             // a collector of this session's own lists may outlive it (a screen's scope): logout closes this view first
             val ownLists = SessionOwnListsCache(ownListsCache)
-            val lists = NostrListsRepository(engine, signer, authorRelays, defaultRelays = PrefsRelayStore.DEFAULT_RELAYS, cache = ownLists, reconcileScope = engine.backgroundScope, gate = startupGate)
+            // spec 2026-11-19: a foreign list's outbox lookup follows the «author relays» switch (read at use time) and the foreign budget
+            val lists = NostrListsRepository(
+                engine, signer, authorRelays, defaultRelays = PrefsRelayStore.DEFAULT_RELAYS, cache = ownLists, reconcileScope = engine.backgroundScope, gate = startupGate,
+                foreign = foreign, authorRelaysEnabled = { uiSettings.authorRelays.first() },
+            )
             val feedTabs = NostrFeedTabsRepository(engine, signer, feedTabsCache, defaultRelays = PrefsRelayStore.DEFAULT_RELAYS, reconcileScope = engine.backgroundScope, gate = startupGate)
             // NIP-89 "via Monostr": read from the store at publish time (not a stateIn with a seed), so a
             // note published before the first emission cannot carry the tag against the user's choice
@@ -813,6 +822,8 @@ class NostrSession @Inject constructor(
                 tips = tips, notifications = notifications, notificationsStore = notificationsStore, search = NostrSearchRepository(engine, profileUpdates = profiles.updates, scope = engine.backgroundScope),
                 bookmarks = NostrBookmarksRepository(engine, signer, watch = engine.backgroundScope, gate = startupGate),
                 watchers = WatcherClients(http, signer),
+                // a stranger's watcher URL, asked without the user doing anything: only public addresses, also after the lookup
+                watcherReceipts = WatcherReceipts(WatcherClients.infoOnly(http.publicAddressesOnly())),
                 counts = NostrCountsRepository(engine, engine.backgroundScope, sessionRelays = { engine.readRelayUrls() }, limiter = countLimiter),
                 authorRelays = authorRelays,
                 dms = dms, dmStore = dmStore, dmRelays = dmRelays,
@@ -886,6 +897,7 @@ private class ReadyRelays(private val ready: Ready) : RunningRelays {
     override suspend fun relayUrls() = ready.engine.relayUrls()
     override suspend fun removeRelays(urls: List<String>) = ready.engine.removeRelays(urls)
     override suspend fun addRelays(urls: List<String>) = ready.engine.addRelays(urls)
+    override suspend fun forgetJoiningOutside(keep: List<String>) = ready.engine.forgetJoiningOutside(keep)
     override suspend fun applyRelayModes(modes: Map<String, RelayMode>) = ready.engine.applyRelayModes(modes)
     override suspend fun connect() = ready.engine.connect()
     override suspend fun restartDms() = ready.dms.restart()

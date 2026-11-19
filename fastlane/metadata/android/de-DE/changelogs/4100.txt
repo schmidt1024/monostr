@@ -1,0 +1,5 @@
+- Tips erscheinen auf jeder Note, egal welche Relays du nutzt
+- Privatsphäre: Monostr meldet sich nur noch bei deinen eigenen Relays an, andere Relays erfahren nie, wer du bist
+- Galerien zeigen hohe Bildstreifen ganz
+- Listen anderer folgen der Einstellung «Relays des Autors temporär verbinden»
+- Korrekturen

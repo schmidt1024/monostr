@@ -17,6 +17,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.monostr.app.data.PrefsRelayStore
 import com.monostr.app.session.NostrSessionEntryPoint
 import dagger.hilt.android.EntryPointAccessors
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertTrue
@@ -111,13 +112,35 @@ class DmFlowTest {
     }
 
     @Test
-    fun bSendsAReplyArrivesAndBothSeeTheChat() {
+    fun bSendsAReplyArrivesAndBothSeeTheChat() = conversation()
+
+    /**
+     * Spec 2026-11-19: relay.monostr.com is not in the relay list, only the DM inbox (kind 10050 default). It requires AUTH
+     * for kind 1059 reads, so A's read of B's DM and B's read of A's reply work only through the own-inbox branch of the allowlist.
+     */
+    @Test
+    fun inboxOutsideTheRelayListStillAuthenticates() {
+        val inboxRelay = "wss://relay.monostr.com"
+        val listWithoutInbox = PrefsRelayStore.DEFAULT_RELAYS - inboxRelay
+        conversation(afterFirstLogin = {
+            runBlocking { entry.session().applyRelays(listWithoutInbox) }
+        }, afterLaterLogin = {
+            // a login may have reset the store to the defaults: apply the list again and check it
+            if (runBlocking { entry.relayStore().relays.first() }.contains(inboxRelay)) {
+                runBlocking { entry.session().applyRelays(listWithoutInbox) }
+            }
+            assertTrue("the relay list contains the inbox relay", !runBlocking { entry.relayStore().relays.first() }.contains(inboxRelay))
+        })
+    }
+
+    private fun conversation(afterFirstLogin: () -> Unit = {}, afterLaterLogin: () -> Unit = {}) {
         val stamp = System.currentTimeMillis()
         val fromB = "hello from B $stamp"
         val fromA = "hello from A $stamp"
 
         // 1. B opens A's profile through the search (npub) and sends a DM
         loginAs(secretB)
+        afterFirstLogin()
         openMessagesTab()
         rule.onNodeWithTag("tab-search").performClick()
         rule.waitUntil(10_000) { nodes("search-field").isNotEmpty() }
@@ -130,6 +153,7 @@ class DmFlowTest {
         // 2. A finds B's conversation (under "Requests" unless A follows B) and replies
         runBlocking { entry.session().logout() }
         loginAs(secretA)
+        afterLaterLogin()
         openMessagesTab()
         val b8 = "conversation-${pubB.toHex().take(8)}"
         rule.waitUntil(90_000) { nodes(b8).isNotEmpty() || nodes("messages-requests").isNotEmpty() }
@@ -144,6 +168,7 @@ class DmFlowTest {
         // 3. B sees the reply; the conversation is in the main list (the requests section stays closed)
         runBlocking { entry.session().logout() }
         loginAs(secretB)
+        afterLaterLogin()
         openMessagesTab()
         val a8 = "conversation-${pubA.toHex().take(8)}"
         rule.waitUntil(90_000) { nodes(a8).isNotEmpty() && textShown(fromA) }

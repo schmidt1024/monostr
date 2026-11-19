@@ -1,6 +1,7 @@
 package com.monostr.nostr.repo
 
 import com.monostr.nostr.NostrEngine
+import com.monostr.nostr.RelayKeys
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -16,7 +17,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import rust.nostr.sdk.RelayUrl
 import kotlin.time.Duration
 import kotlin.time.TimeSource
 
@@ -49,6 +49,13 @@ class ForeignRelays(
     /** Bumped whenever a slot may have come free (release, expiry, failed attach, close): wakes waiting leases. */
     private val freed = MutableStateFlow(0L)
     @Volatile private var view: Set<String> = emptySet()
+    /**
+     * Relays given back to the engine whose [NostrEngine.detachTemporary] has not returned yet (evicted, expired, dropped,
+     * stale or closed), counted per detach in flight: still borrowed for [holds] until they left the pool.
+     */
+    private val leaving = HashMap<String, Int>()
+    /** For [holds]: held (attaching included), lingering and [leaving]; set before an attach starts, cleared after a detach. */
+    @Volatile private var borrowed: Set<String> = emptySet()
 
     /**
      * Takes a reference on those of [urls] that fit the budget (relays already held or lingering first, then new ones in order); waits up to [wait] for a free slot when none fits. Normal-set relays pass through uncounted, except the ones the user only writes to: they hear nothing about other people (spec 2026-11-05). A lease serves lookups by hint, indexer or author outbox, and no read-before-write goes through one: the user's own events reach those relays through [NostrEngine.fetchWriteOnly]. Returns the URLs the caller now holds (normalised).
@@ -116,6 +123,7 @@ class ForeignRelays(
                     if (oldest == null) { noRoom += url; continue }
                     lingering.remove(oldest)?.cancel()
                     evicted += oldest
+                    leave(oldest)
                 }
                 holders[url] = 1
                 val outcome = CompletableDeferred<Boolean>()
@@ -125,7 +133,9 @@ class ForeignRelays(
             publish()
         }
         // an engine failure must not leave the reservations behind: waiters on them would hang and the slots stay taken
-        if (evicted.isNotEmpty()) runCatching { engine.detachTemporary(evicted) }
+        if (evicted.isNotEmpty()) {
+            try { runCatching { engine.detachTemporary(evicted) } } finally { left(evicted) }
+        }
         val taken = if (toAttach.isEmpty()) emptySet() else runCatching { engine.attachTemporary(toAttach.keys.toList()).toSet() }.getOrDefault(emptySet())
         val promoted = ArrayList<String>()
         val stale = ArrayList<String>()
@@ -136,7 +146,8 @@ class ForeignRelays(
                 val ok = url in taken && epoch == started
                 if (ok) acquired += url
                 else {
-                    if (url in taken) stale += url
+                    // closed meanwhile: [close] counted this attach in [leaving]; a taken one leaves after its detach below
+                    if (url in taken) stale += url else if (epoch != started) unleave(url)
                     if (epoch == started) { holders.remove(url); freed.value++ }
                     // ruled out: a normal-set relay (promoted meanwhile) or a malformed/unaddable one
                     if (url !in taken) promoted += url
@@ -145,7 +156,9 @@ class ForeignRelays(
             }
             publish()
         }
-        if (stale.isNotEmpty()) engine.detachTemporary(stale)
+        if (stale.isNotEmpty()) {
+            try { engine.detachTemporary(stale) } finally { left(stale) }
+        }
         // a relay another lease was attaching: ours once that attach succeeded; on failure its entry is gone already
         for ((url, outcome) in inFlight) if (outcome.await()) acquired += url
         val normal = if (promoted.isEmpty()) emptySet() else engine.relayUrls().toSet()
@@ -179,11 +192,12 @@ class ForeignRelays(
                 // reused or evicted meanwhile: its timer was replaced or cancelled, the relay is not ours to detach
                 if (lingering[url] !== me) return@withLock false
                 lingering.remove(url)
+                leave(url)
                 freed.value++
                 publish()
                 true
             }
-            if (gone) engine.detachTemporary(listOf(url))
+            if (gone) try { engine.detachTemporary(listOf(url)) } finally { left(listOf(url)) }
         }
     }
 
@@ -199,11 +213,12 @@ class ForeignRelays(
                 lingering.values.forEach { it.cancel() }
                 val gone = lingering.keys.toList()
                 lingering.clear()
+                gone.forEach(::leave)
                 freed.value++
                 publish()
                 gone
             }
-            if (gone.isNotEmpty()) engine.detachTemporary(gone)
+            if (gone.isNotEmpty()) try { engine.detachTemporary(gone) } finally { left(gone) }
         }
     }
 
@@ -218,24 +233,50 @@ class ForeignRelays(
                 lingering.values.forEach { it.cancel() }
                 // relays still being attached are given back by their own lease once the attach returns (epoch check)
                 val all = (holders.keys - attaching.keys) + lingering.keys
+                all.forEach(::leave)
+                // an attach in flight stays borrowed until its lease gave the reference back (see [place])
+                attaching.keys.forEach(::leave)
                 holders.clear(); lingering.clear(); attaching.clear()
                 freed.value++
                 publish()
                 all.toList()
             }
-            if (all.isNotEmpty()) engine.detachTemporary(all)
+            if (all.isNotEmpty()) try { engine.detachTemporary(all) } finally { left(all) }
         }
     }
 
-    /** Whether [url] is attached through this budget (held or lingering): a relay only borrowed for a lookup. */
-    fun holds(url: String): Boolean = normalise(url)?.let { it in view } ?: false
+    /**
+     * Whether [url] is borrowed through this budget, a relay only used for a lookup (NIP-42: it gets no AUTH). True from
+     * the moment a lease reserved it, through the attach (rust-nostr answers an AUTH challenge right after connecting),
+     * while it is held or lingers, and until its [NostrEngine.detachTemporary] returned; unlike [attached].
+     */
+    fun holds(url: String): Boolean = normalise(url)?.let { it in borrowed } ?: false
 
-    /** Under [mutex]: the attached set for [attached]. */
+    /** Under [mutex]: the attached set for [attached] and the borrowed set for [holds]. */
     private fun publish() {
         view = (holders.keys - attaching.keys) + lingering.keys
+        borrowed = holders.keys + lingering.keys + leaving.keys
+    }
+
+    /** Under [mutex]: one more detach of [url] in flight. */
+    private fun leave(url: String) { leaving.merge(url, 1, Int::plus) }
+
+    /** Under [mutex]: one detach of [url] done (or not needed after all). */
+    private fun unleave(url: String) {
+        val n = leaving[url] ?: return
+        if (n > 1) leaving[url] = n - 1 else leaving.remove(url)
+    }
+
+    /** After a detach of [urls] returned: they are no longer borrowed. */
+    private suspend fun left(urls: List<String>) {
+        withContext(NonCancellable) {
+            mutex.withLock {
+                urls.forEach(::unleave)
+                publish()
+            }
+        }
     }
 
     /** The engine's form of a relay URL (as [NostrEngine.attachTemporary] returns it), null when malformed. */
-    private fun normalise(raw: String): String? =
-        runCatching { RelayUrl.parse(raw.trim()).toString().trimEnd('/') }.getOrNull()
+    private fun normalise(raw: String): String? = RelayKeys.of(raw)
 }

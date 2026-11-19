@@ -416,6 +416,24 @@ class FakeTips(
         receiptLookups += relays to detached
         return watcherReceipts
     }
+    /** Every fetchWatcherReceipts call as (relays, note ids, watcher pubkey); [watcherFetchError] makes the next one throw. */
+    val watcherFetches = ArrayList<Triple<List<String>, List<String>, String>>()
+    var watcherFetchError: Exception? = null
+    /** Runs inside each call, e.g. to land receipts in [receipts] as the real fetch would store them. */
+    var onWatcherFetch: () -> Unit = {}
+    /** When set, each fetchWatcherReceipts call suspends here (after being recorded); [watcherFetchesDone] counts the calls that ended normally. */
+    var watcherFetchGate: CompletableDeferred<Unit>? = null
+    var watcherFetchesDone = 0
+    /** What each fetchWatcherReceipts call returns when it ends normally. */
+    var watcherFetchResult: com.monostr.nostr.repo.WatcherFetch = com.monostr.nostr.repo.WatcherFetch.Asked
+    override suspend fun fetchWatcherReceipts(relays: List<String>, noteIds: Collection<String>, watcherPubkey: String): com.monostr.nostr.repo.WatcherFetch {
+        watcherFetches += Triple(relays, noteIds.toList(), watcherPubkey)
+        watcherFetchGate?.await()
+        watcherFetchError?.let { watcherFetchError = null; throw it }
+        onWatcherFetch()
+        watcherFetchesDone++
+        return watcherFetchResult
+    }
     /** When set, publishPaymentInfo throws it (after recording the call). */
     var publishError: Exception? = null
     override suspend fun publishPaymentInfo(address: Address, watcher: Watcher, amountsHidden: Boolean): PublishResult {

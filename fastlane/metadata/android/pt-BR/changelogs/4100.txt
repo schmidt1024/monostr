@@ -1,0 +1,5 @@
+- As gorjetas aparecem em cada nota, quaisquer que sejam os seus relays
+- Privacidade: o Monostr só se autentica nos seus próprios relays, os outros nunca sabem quem você é
+- As galerias mostram inteiras as faixas altas de imagens
+- As listas de outras pessoas seguem a opção «Conectar temporariamente os relays do autor»
+- Correções
