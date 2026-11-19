@@ -1,0 +1,4 @@
+- Video-Player: Vollbild-Knopf, quer drehen schaltet auf Vollbild
+- Ton-Knopf, Doppeltipp springt 10 Sekunden, kurze Clips laufen in Schleife
+- Der Bildschirm bleibt an, solange ein Video läuft
+- Die Steuerung liegt nicht mehr hinter der Navigationsleiste

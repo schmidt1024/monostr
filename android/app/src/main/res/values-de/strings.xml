@@ -92,6 +92,10 @@
     <string name="media_failed">Bild konnte nicht geladen werden</string>
     <string name="media_tor_blocked">Seite sperrt Tor</string>
     <string name="media_video">Video abspielen</string>
+    <string name="media_video_mute">Ton aus</string>
+    <string name="media_video_unmute">Ton an</string>
+    <string name="media_video_fullscreen">Vollbild</string>
+    <string name="media_video_fullscreen_exit">Vollbild beenden</string>
     <plurals name="media_gallery">
         <item quantity="one">Galerie, %d Element</item>
         <item quantity="other">Galerie, %d Elemente</item>

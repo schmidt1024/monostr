@@ -1,0 +1,4 @@
+- Lecteur vidéo : bouton plein écran, tourner le téléphone passe en plein écran
+- Bouton muet, double appui pour sauter de 10 secondes, les clips courts tournent en boucle
+- L'écran reste allumé pendant la lecture
+- Les commandes ne sont plus cachées derrière la barre de navigation

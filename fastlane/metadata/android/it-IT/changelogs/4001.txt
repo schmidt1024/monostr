@@ -1,0 +1,4 @@
+- Lettore video: pulsante schermo intero, ruotare il telefono attiva lo schermo intero
+- Pulsante muto, doppio tocco per saltare di 10 secondi, i clip brevi vanno in loop
+- Lo schermo resta acceso durante la riproduzione
+- I comandi non finiscono più dietro la barra di navigazione

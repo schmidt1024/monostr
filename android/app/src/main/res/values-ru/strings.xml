@@ -96,6 +96,10 @@
     <string name="media_failed">Не удалось загрузить изображение</string>
     <string name="media_tor_blocked">Сайт блокирует Tor</string>
     <string name="media_video">Воспроизвести видео</string>
+    <string name="media_video_mute">Выключить звук</string>
+    <string name="media_video_unmute">Включить звук</string>
+    <string name="media_video_fullscreen">Во весь экран</string>
+    <string name="media_video_fullscreen_exit">Выйти из полноэкранного режима</string>
     <plurals name="media_gallery">
         <item quantity="one">Галерея, %d элемент</item>
         <item quantity="few">Галерея, %d элемента</item>

@@ -92,6 +92,10 @@
     <string name="media_failed">Görsel yüklenemedi</string>
     <string name="media_tor_blocked">Site Tor\'u engelliyor</string>
     <string name="media_video">Videoyu oynat</string>
+    <string name="media_video_mute">Sesi kapat</string>
+    <string name="media_video_unmute">Sesi aç</string>
+    <string name="media_video_fullscreen">Tam ekran</string>
+    <string name="media_video_fullscreen_exit">Tam ekrandan çık</string>
     <plurals name="media_gallery">
         <item quantity="one">Galeri, %d öğe</item>
         <item quantity="other">Galeri, %d öğe</item>

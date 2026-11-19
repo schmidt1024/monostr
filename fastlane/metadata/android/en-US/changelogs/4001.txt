@@ -1,0 +1,4 @@
+- Video player: fullscreen button, turning the phone sideways goes fullscreen
+- Mute button, double tap to jump 10 seconds, short clips loop
+- The screen stays on while a video plays
+- Player controls no longer hide behind the navigation bar

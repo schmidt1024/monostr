@@ -1,0 +1,4 @@
+- Reproductor de vídeo: botón de pantalla completa, girar el móvil activa la pantalla completa
+- Botón de silencio, doble toque para saltar 10 segundos, los clips cortos se repiten
+- La pantalla sigue encendida mientras se reproduce un vídeo
+- Los controles ya no quedan detrás de la barra de navegación

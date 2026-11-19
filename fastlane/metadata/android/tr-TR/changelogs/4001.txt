@@ -1,0 +1,4 @@
+- Video oynatıcı: tam ekran düğmesi, telefonu yan çevirmek tam ekrana geçer
+- Ses düğmesi, çift dokunuşla 10 saniye atlama, kısa klipler döngüde oynar
+- Video oynarken ekran açık kalır
+- Kontroller artık gezinme çubuğunun arkasında kalmıyor

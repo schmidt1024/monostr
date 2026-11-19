@@ -92,6 +92,10 @@
     <string name="media_failed">Impossibile caricare l\'immagine</string>
     <string name="media_tor_blocked">Il sito blocca Tor</string>
     <string name="media_video">Riproduci video</string>
+    <string name="media_video_mute">Disattiva audio</string>
+    <string name="media_video_unmute">Attiva audio</string>
+    <string name="media_video_fullscreen">Schermo intero</string>
+    <string name="media_video_fullscreen_exit">Esci da schermo intero</string>
     <plurals name="media_gallery">
         <item quantity="one">Galleria, %d elemento</item>
         <item quantity="many">Galleria, %d elementi</item>

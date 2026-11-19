@@ -1,0 +1,4 @@
+- Player de vídeo: botão de tela cheia, girar o celular ativa a tela cheia
+- Botão de mudo, toque duplo para pular 10 segundos, clipes curtos repetem
+- A tela fica ligada enquanto um vídeo toca
+- Os controles não ficam mais atrás da barra de navegação

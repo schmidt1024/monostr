@@ -93,6 +93,10 @@
     <string name="media_failed">Picture could not be loaded</string>
     <string name="media_tor_blocked">Site blocks Tor</string>
     <string name="media_video">Play video</string>
+    <string name="media_video_mute">Mute</string>
+    <string name="media_video_unmute">Unmute</string>
+    <string name="media_video_fullscreen">Fullscreen</string>
+    <string name="media_video_fullscreen_exit">Exit fullscreen</string>
     <plurals name="media_gallery">
         <item quantity="one">Gallery, %d item</item>
         <item quantity="other">Gallery, %d items</item>

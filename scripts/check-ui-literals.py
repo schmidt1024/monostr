@@ -13,7 +13,7 @@ INTERPOLATION = re.compile(r"\$\{[^}]*\}|\$[A-Za-z_][A-Za-z0-9_]*")
 ALLOWED = re.compile(
     r"^(wss?://|https?://|monero:|nostrsigner|content://|nostr-|compose\?replyTo|media/\{noteId\}|media-urls\?u=|"
     r"[a-z0-9_.:\-/?={}$+]*$|[0-9. ]*$|%|\+$|<redacted|Monostr$|"
-    r"watcher pubkey|Existing\(|[A-Z_]+$|replyTo$|intro$|pubkey$|id$|noteId$|InlinedApi$|"
+    r"watcher pubkey|Existing\(|[A-Z_]+$|replyTo$|intro$|pubkey$|id$|noteId$|InlinedApi$|ClickableViewAccessibility$|"
     # third-party wallet brand names (proper nouns, like Monostr itself; never translated)
     r"Monerujo$|Cake Wallet$|"
     # blurhash base83 alphabet (spec-fixed data literal, not prose; the source has a
