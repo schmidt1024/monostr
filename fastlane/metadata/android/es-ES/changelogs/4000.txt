@@ -1,0 +1,6 @@
+- Las imágenes de una nota en una fila para deslizar, con puntos que muestran cuántas hay
+- Hasta 20 imágenes por nota
+- Los vídeos muestran su duración
+- Las subidas indican «Comprobando…» mientras el servidor las revisa
+- Las notificaciones muestran el emoji de la reacción más reciente
+- Correcciones

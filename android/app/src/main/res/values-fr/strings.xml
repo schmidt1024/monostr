@@ -92,6 +92,11 @@
     <string name="media_failed">Image impossible à charger</string>
     <string name="media_tor_blocked">Le site bloque Tor</string>
     <string name="media_video">Lire la vidéo</string>
+    <plurals name="media_gallery">
+        <item quantity="one">Galerie, %d élément</item>
+        <item quantity="many">Galerie, %d éléments</item>
+        <item quantity="other">Galerie, %d éléments</item>
+    </plurals>
     <string name="media_viewer_close">Fermer</string>
     <string name="media_copy_link">Copier le lien</string>
     <string name="media_open_browser">Ouvrir dans le navigateur</string>
@@ -610,6 +615,7 @@
     <string name="upload_error_failed">Échec de l\'envoi</string>
     <string name="compose_error_uploads">Attendez la fin de l\'envoi des images ou retirez celles qui ont échoué</string>
     <string name="compose_attach">Ajouter des images</string>
+    <string name="compose_attach_limit">Jusqu\'à 20 images par note</string>
     <string name="compose_attachment_remove">Retirer l\'image</string>
     <string name="upload_retry">Réessayer</string>
     <string name="compose_sensitive">Contenu sensible</string>
@@ -748,7 +754,12 @@
     <!-- spec 2026-10-27 video upload -->
     <string name="compose_add_video">Ajouter une vidéo</string>
     <string name="compose_video_preparing">Préparation…</string>
-    <string name="compose_video_too_long">Vidéos de 2 minutes maximum. Coupe-la d’abord dans ta galerie.</string>
+    <string name="compose_media_checking">Vérification…</string>
+    <plurals name="compose_video_too_long">
+        <item quantity="one">Vidéos de %1$d minute maximum. Coupe-la d’abord dans ta galerie.</item>
+        <item quantity="many">Vidéos de %1$d minutes maximum. Coupe-la d’abord dans ta galerie.</item>
+        <item quantity="other">Vidéos de %1$d minutes maximum. Coupe-la d’abord dans ta galerie.</item>
+    </plurals>
     <string name="upload_video_too_large">Cette vidéo est trop lourde. Essaie un clip plus court.</string>
     <string name="upload_video_rate">Limite quotidienne de vidéos atteinte, réessaie demain</string>
     <string name="compose_video_tile">Vidéo</string>

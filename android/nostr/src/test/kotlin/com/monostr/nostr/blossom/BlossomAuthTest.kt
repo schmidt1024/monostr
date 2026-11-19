@@ -22,6 +22,16 @@ class BlossomAuthTest {
     }
 
     @Test
+    fun `a limits authorization names the verb, the host and the expiry, no blob`() {
+        val e = BlossomAuth.unsignedLimits("https://Media.Monostr.com/", now = 1000)
+        assertEquals(24242, e.kind)
+        assertEquals("Limits", e.content)
+        assertEquals(1000, e.createdAt)
+        assertEquals(listOf(listOf("t", "limits"), listOf("expiration", "1300"), listOf("server", "media.monostr.com")), e.tags)
+        assertThrows(IllegalArgumentException::class.java) { BlossomAuth.unsignedLimits("not a url", 1000) }
+    }
+
+    @Test
     fun `an upload authorization names the action, the hash, the expiry and the bare host`() {
         val e = BlossomAuth.unsigned(BlossomAuth.UPLOAD, hash, "https://Media.Monostr.com/", now = 1000)
         assertEquals(24242, e.kind)

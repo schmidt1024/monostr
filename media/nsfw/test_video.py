@@ -15,12 +15,12 @@ import numpy as np
 import server
 
 
-def clip(path: str, seconds: float = 2, size: str = "320x180", audio: bool = True, rotate: int = 0, codec: str = "libx264"):
+def clip(path: str, seconds: float = 2, size: str = "320x180", audio: bool = True, rotate: int = 0, codec: str = "libx264", rate: int = 10):
     """A tiny test clip made with ffmpeg: no binary fixtures in git."""
     cmd = ["ffmpeg", "-v", "error", "-y"]
     if rotate:
         cmd += ["-display_rotation", str(rotate)]
-    cmd += ["-f", "lavfi", "-i", f"testsrc=size={size}:rate=10:duration={seconds}"]
+    cmd += ["-f", "lavfi", "-i", f"testsrc=size={size}:rate={rate}:duration={seconds}"]
     if audio:
         cmd += ["-f", "lavfi", "-i", f"sine=duration={seconds}", "-c:a", "aac"]
     cmd += ["-c:v", codec, "-pix_fmt", "yuv420p", "-shortest", path]
@@ -45,6 +45,34 @@ class FrameTimes(unittest.TestCase):
         self.assertEqual(len(server.frame_times(35)), 4)
         self.assertEqual(len(server.frame_times(120)), 12)
         self.assertEqual(len(server.frame_times(600)), 12)
+
+    def test_frame_cap_and_times_for_long_allowance(self):
+        self.assertEqual(server.frame_cap(125), 12)
+        self.assertEqual(server.frame_cap(900), 90)
+        self.assertEqual(len(server.frame_times(600, server.frame_cap(900))), 60)
+        self.assertEqual(len(server.frame_times(900, 90)), 90)
+        self.assertEqual(len(server.frame_times(600)), 12)
+
+    def test_caps_scale(self):
+        self.assertEqual(server.packet_cap(125), 7500)
+        self.assertEqual(server.packet_cap(900), 54000)
+        self.assertEqual(server.budget_seconds(125), 120.0)
+        self.assertEqual(server.budget_seconds(900), 864.0)
+        self.assertEqual(server.budget_seconds(60), 120.0)
+
+    def test_budget_stays_below_the_go_timeout(self):
+        # Go side: 3 min * max(1, N / 125) per call (media classify VideoTimeout)
+        for n in (1, 60, 125, 300, 900):
+            self.assertLess(server.budget_seconds(n), 180.0 * max(1, n / 125))
+
+    def test_parse_max_seconds(self):
+        self.assertEqual(server.parse_max_seconds("/video"), 125)
+        self.assertEqual(server.parse_max_seconds("/video?max_seconds=900"), 900)
+        self.assertEqual(server.parse_max_seconds("/video?max_seconds=1"), 1)
+        for bad in ("/video?max_seconds=0", "/video?max_seconds=" + "9" * 5000, "/video?max_seconds=0900", "/video?max_seconds=901", "/video?max_seconds=abc",
+                    "/video?max_seconds=900&max_seconds=1", "/video?max_seconds=", "/video?max_seconds=-5",
+                    "/video?other=1", "/videos"):
+            self.assertIsNone(server.parse_max_seconds(bad), bad)
 
     def test_frame_times_are_inside_and_ordered(self):
         times = server.frame_times(30)
@@ -87,6 +115,13 @@ class Probe(unittest.TestCase):
         info = server.probe(flagged)
         self.assertEqual((info["width"], info["height"]), (180, 320))
         self.assertAlmostEqual(info["duration"], 2, delta=0.3)
+
+    def test_a_clip_over_the_default_is_acceptable_only_with_a_long_allowance(self):
+        path = os.path.join(self.dir, "long.mp4")
+        clip(path, seconds=130, size="64x36", audio=False, rate=5)
+        self.assertFalse(server.acceptable(server.probe(path)))
+        self.assertTrue(server.acceptable(server.probe(path, max_seconds=900), 900))
+        self.assertEqual(server.score_video(FakeSession([[-5.0, 5.0]] * 13), path, 900)["frames"], 13)
 
     def test_not_a_video_is_unreadable(self):
         path = os.path.join(self.dir, "d.mp4")
@@ -153,7 +188,7 @@ class Hostile(unittest.TestCase):
         clip(path, seconds=5)
         real = server.frame_times
         try:
-            server.frame_times = lambda d: [1.0, 999.0]  # the second lies past the end
+            server.frame_times = lambda d, cap=server.MAX_VIDEO_FRAMES: [1.0, 999.0]  # the second lies past the end
             with self.assertRaises(server.Unreadable):
                 server.score_video(FakeSession([[-3.0, 3.0]] * 3), path)
         finally:
@@ -239,8 +274,8 @@ class Endpoint(unittest.TestCase):
         self.httpd.shutdown()
         self.httpd.server_close()
 
-    def post(self, data: bytes):
-        req = urllib.request.Request(self.url, data=data, method="POST", headers={"Content-Type": "video/mp4"})
+    def post(self, data: bytes, query: str = ""):
+        req = urllib.request.Request(self.url + query, data=data, method="POST", headers={"Content-Type": "video/mp4"})
         try:
             with urllib.request.urlopen(req, timeout=60) as r:
                 return r.status, json.loads(r.read())
@@ -253,6 +288,14 @@ class Endpoint(unittest.TestCase):
         self.assertEqual(status, 200, body)
         self.assertEqual((body["width"], body["height"], body["video_codec"], body["container"]), (320, 180, "h264", "mp4"))
         self.assertLess(body["score"], 0.01)
+
+    def test_max_seconds_out_of_range_is_400(self):
+        status, body = self.post(b"x", "?max_seconds=901")
+        self.assertEqual(status, 400, body)
+
+    def test_a_short_clip_with_a_long_allowance_is_200(self):
+        status, body = self.post(clip(os.path.join(tempfile.mkdtemp(), "a.mp4")), "?max_seconds=900")
+        self.assertEqual(status, 200, body)
 
     def test_not_a_video_is_422(self):
         status, body = self.post(b"plain text, no video")

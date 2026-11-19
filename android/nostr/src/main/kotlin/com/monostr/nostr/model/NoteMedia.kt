@@ -14,6 +14,8 @@ data class NoteMedia(
     val dim: Pair<Int, Int>? = null,
     /** The `imeta` `m` type, when given. */
     val mime: String? = null,
+    /** A video's length from `imeta duration` (NIP-92/94), whole seconds; null when missing or not believable. */
+    val durationSeconds: Int? = null,
 ) {
     enum class Kind { IMAGE, VIDEO }
 
@@ -21,10 +23,12 @@ data class NoteMedia(
     data class Parsed(val media: List<NoteMedia>, val displayContent: String, val quote: QuoteRef? = null, val address: AddressRef? = null, val invoice: LightningInvoice? = null)
 
     companion object {
-        /** Backlog 39: five and more show as 2 x 2 with «+N»; the viewer holds them all. */
+        /** Backlog 93: the parser's cut; the gallery row shows them all, the viewer holds them all. */
         const val MAX = 20
-        /** Pictures a note written in monostr can carry (the composer's limit; uploads count against the media server's quota). */
-        const val MAX_ATTACH = 4
+        /** Pictures a note written in monostr can carry (the composer's limit, the same as the gallery row's cut [MAX]; uploads run three at a time, spec backlog 93). */
+        const val MAX_ATTACH = 20
+        /** A longer `imeta duration` is not believed (a day). */
+        const val MAX_DURATION_SECONDS = 86_400.0
         /**
          * Hashtags that mark adult content (spec 3.1: `#nsfw`; owner 2026-11-17: pictures under `#nudestr` `#boobstr`
          * `#buttstr` came through unblurred in `#monero`). Deliberately short and unambiguous: no `#model`, `#gym`, `#lovestr`.
@@ -116,7 +120,10 @@ data class NoteMedia(
             }
             // `image` (NIP-92/94), else `thumb`, which some clients write instead (spec 2026-10-27 video §5)
             val poster = attrs?.get("image")?.takeIf { HTTP.containsMatchIn(it) } ?: attrs?.get("thumb")?.takeIf { HTTP.containsMatchIn(it) }
-            return NoteMedia(url, kind, poster = poster, blurhash = attrs?.get("blurhash"), alt = attrs?.get("alt"), dim = dim, mime = attrs?.get("m"))
+            // owner 2026-11-19: the length shows on the video; relay input, so only a sane positive number up to a day
+            val duration = if (kind != Kind.VIDEO) null else attrs?.get("duration")?.toDoubleOrNull()
+                ?.takeIf { it.isFinite() && it >= 0.5 && it <= MAX_DURATION_SECONDS }?.let { Math.round(it).toInt() }
+            return NoteMedia(url, kind, poster = poster, blurhash = attrs?.get("blurhash"), alt = attrs?.get("alt"), dim = dim, mime = attrs?.get("m"), durationSeconds = duration)
         }
 
         /** `imeta` tags as url → attributes (`m`, `image`, `blurhash`, `alt`, `dim`); entries without an http(s) `url` are skipped. */

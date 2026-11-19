@@ -106,16 +106,27 @@ func TestVideoSendsTheStreamAndReadsTheProbe(t *testing.T) {
 			t.Errorf("request: %s %s", r.Method, r.URL.Path)
 		}
 		length = r.ContentLength
+		if q := r.URL.Query().Get("max_seconds"); q != "900" {
+			t.Errorf("max_seconds = %q", q)
+		}
 		got, _ = io.ReadAll(r.Body)
 		w.Write([]byte(`{"score": 0.12, "frames": 3, "width": 720, "height": 1280, "duration": 61.5, "video_codec": "h264", "audio_codec": null, "container": "mp4"}`))
 	})
-	info, err := c.Video(context.Background(), strings.NewReader("movie"), 5)
+	info, err := c.Video(context.Background(), strings.NewReader("movie"), 5, 900)
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := VideoInfo{Score: 0.12, Width: 720, Height: 1280, Duration: 61.5, VideoCodec: "h264", AudioCodec: "", Container: "mp4"}
 	if info != want || string(got) != "movie" || length != 5 {
 		t.Fatalf("info %+v, body %q, length %d", info, got, length)
+	}
+}
+
+func TestVideoTimeoutScales(t *testing.T) {
+	for secs, want := range map[int]time.Duration{125: 3 * time.Minute, 900: 1296 * time.Second, 60: 3 * time.Minute} {
+		if got := VideoTimeout(secs); got != want {
+			t.Errorf("VideoTimeout(%d) = %v, want %v", secs, got, want)
+		}
 	}
 }
 
@@ -137,7 +148,7 @@ func TestVideoErrors(t *testing.T) {
 			w.WriteHeader(tc.status)
 			w.Write([]byte(tc.body))
 		})
-		if _, err := c.Video(context.Background(), strings.NewReader("x"), 1); !errors.Is(err, tc.want) {
+		if _, err := c.Video(context.Background(), strings.NewReader("x"), 1, 125); !errors.Is(err, tc.want) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
@@ -158,7 +169,7 @@ func TestVideoLeavesTheCallersFileOpen(t *testing.T) {
 		w.Write([]byte(`{"score": 0.1, "width": 720, "height": 1280, "duration": 3, "video_codec": "h264", "container": "mp4"}`))
 	})
 	body := &closeRecorder{Reader: strings.NewReader("movie")}
-	if _, err := c.Video(context.Background(), body, 5); err != nil {
+	if _, err := c.Video(context.Background(), body, 5, 125); err != nil {
 		t.Fatal(err)
 	}
 	if body.closed {

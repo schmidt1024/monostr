@@ -1,6 +1,8 @@
 package com.monostr.app.ui
 
 import com.monostr.app.R
+import com.monostr.app.ui.compose.Attachment
+import com.monostr.app.media.UploadedMedia
 import com.monostr.app.media.UploadException
 import com.monostr.app.ui.common.uiText
 import com.monostr.app.ui.compose.ComposeController
@@ -12,6 +14,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -29,15 +32,15 @@ class ComposeAttachmentsTest {
     fun `a source the note does not hold any more is released, and so is one it never took`() = runTest {
         val released = ArrayList<String>()
         val c = ComposeController(null, FakeThreads(emptyMap()), FakePublish(), eager(), uploader = FakeMediaUploader(), release = { released += it })
-        c.attach(listOf("file:///r/1", "file:///r/2", "file:///r/3", "file:///r/4", "file:///r/5"))
+        c.attach((1..21).map { "file:///r/$it" })
         advanceUntilIdle()
-        assertEquals(listOf("file:///r/5"), released) // no room for the fifth
+        assertEquals(listOf("file:///r/21"), released) // no room for the 21st
         c.attach(listOf("file:///r/1")) // already on the note: kept, not released
-        assertEquals(listOf("file:///r/5"), released)
+        assertEquals(listOf("file:///r/21"), released)
         c.removeAttachment(c.state.value.attachments[0].id)
-        assertEquals(listOf("file:///r/5", "file:///r/1"), released)
+        assertEquals(listOf("file:///r/21", "file:///r/1"), released)
         c.releaseSources()
-        assertEquals(listOf("file:///r/5", "file:///r/1", "file:///r/2", "file:///r/3", "file:///r/4"), released)
+        assertEquals(listOf("file:///r/21", "file:///r/1") + (2..20).map { "file:///r/$it" }, released)
 
         val bare = ComposeController(null, FakeThreads(emptyMap()), FakePublish(), eager(), release = { released += it })
         bare.attach(listOf("file:///r/6"))
@@ -81,21 +84,48 @@ class ComposeAttachmentsTest {
     }
 
     @Test
-    fun `at most four pictures, and none without an uploader`() = runTest {
+    fun `at most twenty pictures, the surplus is released with a message`() = runTest {
+        val released = ArrayList<String>()
         val uploader = FakeMediaUploader()
-        val c = controller(FakePublish(), uploader)
-        c.attach(listOf("a", "b", "c"))
-        c.attach(listOf("d", "e", "f"))
+        val c = ComposeController(null, FakeThreads(emptyMap()), FakePublish(), eager(), uploader = uploader, release = { released += it })
+        c.attach((1..18).map { "s$it" })
+        assertNull(c.state.value.error)
+        c.attach((19..25).map { "s$it" })
         advanceUntilIdle()
-        assertEquals(listOf("a", "b", "c", "d"), c.state.value.attachments.map { it.source })
+        assertEquals((1..20).map { "s$it" }, c.state.value.attachments.map { it.source })
         assertFalse(c.state.value.canAttach)
-        assertEquals(4, uploader.uploads.size)
+        assertEquals(uiText(R.string.compose_attach_limit), c.state.value.error)
+        assertEquals((21..25).map { "s$it" }, released)
         c.removeAttachment(c.state.value.attachments[0].id)
         assertTrue(c.state.value.canAttach)
+    }
 
+    @Test
+    fun `duplicates alone do not raise the limit message`() = runTest {
+        val c = controller(FakePublish(), FakeMediaUploader())
+        c.attach(listOf("a", "b"))
+        c.attach(listOf("a", "b"))
+        assertNull(c.state.value.error)
+    }
+
+    @Test
+    fun `no pictures without an uploader`() = runTest {
         val bare = ComposeController(null, FakeThreads(emptyMap()), FakePublish(), eager())
         bare.attach(listOf("a"))
         assertTrue(bare.state.value.attachments.isEmpty())
+    }
+
+    @Test
+    fun `at most three pictures upload at the same time`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val uploader = FakeMediaUploader().apply { this.gate = gate }
+        val c = controller(FakePublish(), uploader)
+        c.attach((1..5).map { "s$it" })
+        runCurrent()
+        assertEquals(3, uploader.uploads.size)
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(5, uploader.completed.size)
     }
 
     @Test
@@ -311,9 +341,10 @@ class ComposeAttachmentsTest {
         advanceUntilIdle()
         assertEquals(1, c.state.value.attachments.size)
         assertEquals(1, uploader.uploads.size)
-        // duplicates do not eat room: three more still fit
-        c.attach(listOf("b", "b", "c", "d", "e"))
-        assertEquals(listOf("a", "b", "c", "d"), c.state.value.attachments.map { it.source })
+        // duplicates do not eat room: 19 distinct ones still fit next to "a", though the pick holds 22 sources
+        c.attach(listOf("b", "b", "a") + (1..18).map { "p$it" })
+        assertEquals(listOf("a", "b") + (1..18).map { "p$it" }, c.state.value.attachments.map { it.source })
+        assertNull(c.state.value.error)
     }
 
     @Test
@@ -398,5 +429,16 @@ class ComposeAttachmentsTest {
         assertEquals(started, up.uploads.size)
         assertEquals(tile.error, c.state.value.attachments.single().error)
         assertEquals(com.monostr.app.ui.common.uiText(com.monostr.app.R.string.send_blocked_tor), c.state.value.error)
+    }
+
+    @Test
+    fun `once the whole file is sent the tile checks until the server answers`() {
+        // owner 2026-11-19: an 8-minute video «hung at the end» while the server scored its frames
+        assertFalse(Attachment(1, "s", progress = 0.6f).checking)
+        assertTrue(Attachment(1, "s", progress = 1f).checking)
+        assertFalse(Attachment(1, "s", progress = 1f, video = true, preparing = 0.4f).checking)
+        assertFalse(Attachment(1, "s", progress = 1f, error = uiText(R.string.compose_error_uploads)).checking)
+        val uploaded = UploadedMedia("https://media.test", "https://media.test/a.jpg", "image/jpeg", "a".repeat(64), 1L, 1, 1, null, true)
+        assertFalse(Attachment(1, "s", progress = 1f, uploaded = uploaded).checking)
     }
 }

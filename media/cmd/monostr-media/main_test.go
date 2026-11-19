@@ -36,9 +36,15 @@ func TestLoadConfigDefaultsAreTheSpecLimits(t *testing.T) {
 	}
 	// spec 2026-10-27 video §6: 2 GiB per pubkey, 20 GiB a day, videos up to 50 MiB, 5 a day, a word at 200 GB
 	want := limits.Limits{MaxBytes: 10 << 20, PubkeyPerDay: 50, PubkeyQuota: 2 << 30, IPPerDay: 100, GlobalBytesPerDay: 20 << 30,
-		MaxVideoBytes: 50 << 20, PubkeyVideosPerDay: 5, StorageAlertBytes: 200_000_000_000}
+		MaxVideoBytes: 50 << 20, MaxVideoSeconds: 125, PubkeyVideosPerDay: 5, StorageAlertBytes: 200_000_000_000}
 	if c.limits != want {
 		t.Fatalf("limits: %+v", c.limits)
+	}
+	if len(c.trusted.Pubkeys) != 0 {
+		t.Fatalf("trusted pubkeys by default: %v", c.trusted.Pubkeys)
+	}
+	if tr := c.trusted; tr.MaxVideoBytes != 314572800 || tr.MaxVideoSeconds != 900 || tr.VideosPerDay != 20 || tr.QuotaBytes != 21474836480 {
+		t.Fatalf("trusted limits: %+v", tr)
 	}
 	if c.threshold != 0.60 || c.publicURL != "https://media.example" || c.dbPath != "/data/media.db" || c.nsfwURL != "http://127.0.0.1:8081" {
 		t.Fatalf("config: %+v", c)
@@ -71,7 +77,7 @@ func TestLoadConfigOverridesAndS3(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := limits.Limits{MaxBytes: 2048, PubkeyPerDay: 3, PubkeyQuota: 4096, IPPerDay: 5, GlobalBytesPerDay: 8192,
-		MaxVideoBytes: 16384, PubkeyVideosPerDay: 2, StorageAlertBytes: 32768}
+		MaxVideoBytes: 16384, MaxVideoSeconds: 125, PubkeyVideosPerDay: 2, StorageAlertBytes: 32768}
 	if c.limits != want || c.threshold != 0.33 || c.s3.Bucket != "b" || c.s3.Endpoint != "https://s3.example" {
 		t.Fatalf("config: %+v", c)
 	}
@@ -89,6 +95,15 @@ func TestLoadConfigRejects(t *testing.T) {
 		"max bytes zero":         with(map[string]string{"MEDIA_MAX_BYTES": "0"}),
 		"quota not a number":     with(map[string]string{"MEDIA_PUBKEY_QUOTA_BYTES": "500MB"}),
 		"negative daily limit":   with(map[string]string{"MEDIA_PUBKEY_UPLOADS_PER_DAY": "-1"}),
+
+		"trusted npub":                  with(map[string]string{"MEDIA_TRUSTED_PUBKEYS": "npub1" + strings.Repeat("q", 58)}),
+		"trusted short":                 with(map[string]string{"MEDIA_TRUSTED_PUBKEYS": strings.Repeat("a", 63)}),
+		"trusted non-hex":               with(map[string]string{"MEDIA_TRUSTED_PUBKEYS": strings.Repeat("a", 63) + "g"}),
+		"trusted seconds above ceiling": with(map[string]string{"MEDIA_TRUSTED_MAX_VIDEO_SECONDS": "901"}),
+		"trusted bytes above ceiling":   with(map[string]string{"MEDIA_TRUSTED_MAX_VIDEO_BYTES": "314572801"}),
+		"video bytes above ceiling":     with(map[string]string{"MEDIA_MAX_VIDEO_BYTES": "314572801"}),
+		"video seconds above ceiling":   with(map[string]string{"MEDIA_MAX_VIDEO_SECONDS": "901"}),
+		"trusted per day zero":          with(map[string]string{"MEDIA_TRUSTED_VIDEOS_PER_DAY": "0"}),
 	} {
 		if _, err := loadConfig(getenv(env)); err == nil {
 			t.Errorf("%s accepted", name)
@@ -166,5 +181,17 @@ func TestConfigRelaysAndDMCap(t *testing.T) {
 	}
 	if _, err := loadConfig(getenv(with(map[string]string{"MEDIA_REVIEW_DMS_PER_DAY": "0"}))); err == nil {
 		t.Error("a cap of 0 was accepted")
+	}
+}
+
+func TestTrustedPubkeysParse(t *testing.T) {
+	a := "ABCDEF01" + strings.Repeat("a", 52) + "FEDC"
+	b := strings.Repeat("b", 64)
+	c, err := loadConfig(getenv(with(map[string]string{"MEDIA_TRUSTED_PUBKEYS": " " + a + " , ," + b + " "})))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.trusted.Pubkeys) != 2 || !c.trusted.Pubkeys[strings.ToLower(a)] || !c.trusted.Pubkeys[b] {
+		t.Fatalf("pubkeys: %v", c.trusted.Pubkeys)
 	}
 }

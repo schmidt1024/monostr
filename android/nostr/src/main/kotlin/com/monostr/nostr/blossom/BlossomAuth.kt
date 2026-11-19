@@ -17,6 +17,7 @@ object BlossomAuth {
     const val KIND = 24242
     const val UPLOAD = "upload"
     const val DELETE = "delete"
+    const val LIMITS = "limits"
     /** How long an authorization is valid; the server needs it for one request. */
     const val LIFETIME_SECONDS = 300L
     private const val SCHEME = "Nostr "
@@ -27,6 +28,16 @@ object BlossomAuth {
         val tags = mutableListOf(listOf("t", action), listOf("x", sha256), listOf("expiration", (now + LIFETIME_SECONDS).toString()))
         host(serverUrl)?.let { tags += listOf("server", it) }
         return UnsignedEvent(kind = KIND, content = if (action == UPLOAD) "Upload" else "Delete", tags = tags, createdAt = now)
+    }
+
+    /**
+     * Authorizes `GET /limits` (the account's own video limits): the verb and the server, no blob. The
+     * server tag is required here, so the token cannot be replayed against another server.
+     */
+    fun unsignedLimits(serverUrl: String, now: Long): UnsignedEvent {
+        val host = requireNotNull(host(serverUrl)) { "a limits authorization needs the server's host" }
+        val tags = listOf(listOf("t", LIMITS), listOf("expiration", (now + LIFETIME_SECONDS).toString()), listOf("server", host))
+        return UnsignedEvent(kind = KIND, content = "Limits", tags = tags, createdAt = now)
     }
 
     suspend fun authorization(signer: EventSigner, action: String, sha256: String, serverUrl: String, now: Long): String =

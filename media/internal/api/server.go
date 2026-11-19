@@ -53,7 +53,7 @@ const (
 // Classifier scores a picture or a video; classify.Client is the real one.
 type Classifier interface {
 	Score(ctx context.Context, data []byte) (float64, error)
-	Video(ctx context.Context, r io.Reader, size int64) (classify.VideoInfo, error)
+	Video(ctx context.Context, r io.Reader, size int64, maxSeconds int) (classify.VideoInfo, error)
 	Health(ctx context.Context) error
 }
 
@@ -61,6 +61,8 @@ type Classifier interface {
 type Config struct {
 	PublicURL string // https://media.monostr.com
 	Limits    limits.Limits
+	// Trusted holds the video limits of the whitelisted pubkeys; the zero value whitelists nobody.
+	Trusted   limits.Trusted
 	Threshold float64 // an NSFW score at or above it needs a review (or refuses, without a grey zone)
 	// Reject is the score at or above which an upload is refused. Between
 	// Threshold and Reject the picture is stored and goes to review. 0 means
@@ -125,6 +127,9 @@ type server struct {
 
 // New builds the handler.
 func New(cfg Config, deps Deps) (http.Handler, error) {
+	if cfg.Limits.MaxVideoSeconds == 0 {
+		cfg.Limits.MaxVideoSeconds = limits.DefaultMaxVideoSeconds
+	}
 	cfg.PublicURL = strings.TrimRight(cfg.PublicURL, "/")
 	u, err := url.Parse(cfg.PublicURL)
 	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
@@ -173,7 +178,8 @@ func New(cfg Config, deps Deps) (http.Handler, error) {
 	mux.HandleFunc("GET /healthz", s.healthz)
 	mux.HandleFunc("PUT /upload", s.upload)
 	mux.HandleFunc("HEAD /upload", s.preflight)
-	mux.HandleFunc("GET /{blob}", s.serve) // GET patterns also match HEAD
+	mux.HandleFunc("GET /limits", s.accountLimits) // before GET /{blob}
+	mux.HandleFunc("GET /{blob}", s.serve)         // GET patterns also match HEAD
 	mux.HandleFunc("DELETE /{blob}", s.remove)
 	return s.logging(cors(mux)), nil
 }
@@ -316,4 +322,9 @@ func blobHash(segment string) (string, bool) {
 	}
 	segment = strings.ToLower(segment)
 	return segment, blossom.IsHex64(segment)
+}
+
+// limitsFor is what pubkey may upload: the configured limits, or the trusted video values.
+func (s *server) limitsFor(pubkey string) limits.Limits {
+	return s.cfg.Limits.For(pubkey, s.cfg.Trusted)
 }

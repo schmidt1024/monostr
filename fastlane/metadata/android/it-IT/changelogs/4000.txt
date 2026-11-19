@@ -1,0 +1,6 @@
+- Le immagini di una nota in una riga da scorrere, con punti che ne mostrano il numero
+- Fino a 20 immagini per nota
+- I video mostrano la loro durata
+- I caricamenti indicano «Verifica…» mentre il server li controlla
+- Le notifiche mostrano l'emoji della reazione più recente
+- Correzioni

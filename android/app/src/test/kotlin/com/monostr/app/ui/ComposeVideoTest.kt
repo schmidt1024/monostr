@@ -1,7 +1,10 @@
 package com.monostr.app.ui
 
 import com.monostr.app.R
-import com.monostr.app.ui.common.uiText
+import com.monostr.app.media.UploadException
+import com.monostr.app.media.VideoLimits
+import com.monostr.app.ui.common.pluralText
+import com.monostr.app.ui.common.uploadMessage
 import com.monostr.app.ui.compose.ComposeController
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -51,7 +54,7 @@ class ComposeVideoTest {
         c.attachVideo("content://v/1")
         advanceUntilIdle()
         assertTrue(c.state.value.attachments.isEmpty())
-        assertEquals(uiText(R.string.compose_video_too_long), c.state.value.error)
+        assertEquals(pluralText(R.plurals.compose_video_too_long, 2, 2), c.state.value.error)
         assertTrue(up.videoUploads.isEmpty())
     }
 
@@ -140,5 +143,52 @@ class ComposeVideoTest {
         advanceUntilIdle()
         assertTrue(up.discarded.isEmpty())
         assertNull(c.state.value.attachments.single().uploaded)
+    }
+
+    @Test
+    fun `a trusted account takes a 15 minute source`() = runTest {
+        val up = FakeMediaUploader().apply { videoLimits = VideoLimits(900, 314_572_800); videoDurationMs = 896_000 }
+        val c = controller(uploader = up)
+        c.attachVideo("content://v/1")
+        advanceUntilIdle()
+        assertTrue(c.state.value.attachments.single().video)
+        assertEquals(listOf("content://v/1"), up.videoUploads)
+        assertEquals(1, up.videoLimitsCalls)
+    }
+
+    @Test
+    fun `a source under the default length never asks the server for limits`() = runTest {
+        val up = FakeMediaUploader().apply { videoDurationMs = 60_000 }
+        val c = controller(uploader = up)
+        c.attachVideo("content://v/1")
+        advanceUntilIdle()
+        assertEquals(0, up.videoLimitsCalls)
+        assertEquals(listOf("content://v/1"), up.videoUploads)
+    }
+
+    @Test
+    fun `over the server's limit names its minutes`() = runTest {
+        val up = FakeMediaUploader().apply { videoLimits = VideoLimits(900, 314_572_800); videoDurationMs = 896_001 }
+        val c = controller(uploader = up)
+        c.attachVideo("content://v/1")
+        advanceUntilIdle()
+        assertTrue(c.state.value.attachments.isEmpty())
+        assertEquals(pluralText(R.plurals.compose_video_too_long, 15, 15), c.state.value.error)
+        assertTrue(up.videoUploads.isEmpty())
+    }
+
+    @Test
+    fun `a 3 minute source on a default account is refused before any encode`() = runTest {
+        val up = FakeMediaUploader().apply { videoDurationMs = 180_000 }
+        val c = controller(uploader = up)
+        c.attachVideo("content://v/1")
+        advanceUntilIdle()
+        assertEquals(pluralText(R.plurals.compose_video_too_long, 2, 2), c.state.value.error)
+        assertTrue(up.videoUploads.isEmpty())
+    }
+
+    @Test
+    fun `the refusal message names the minutes it carries`() {
+        assertEquals(pluralText(R.plurals.compose_video_too_long, 15, 15), UploadException.VideoTooLong(15).uploadMessage())
     }
 }

@@ -1,6 +1,7 @@
 package limits
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -55,5 +56,23 @@ func TestDailyCountsPerKeyAndForgetsAtMidnightUTC(t *testing.T) {
 	d.Add("a", next)
 	if d.Count("a", next) != 1 {
 		t.Fatal("count on the new day")
+	}
+}
+
+func TestForSwapsTheFourVideoValuesForATrustedPubkey(t *testing.T) {
+	aa, bb := strings.Repeat("aa", 32), strings.Repeat("bb", 32)
+	def := Limits{MaxBytes: 10, PubkeyPerDay: 50, PubkeyQuota: 2 << 30, MaxVideoBytes: 50 << 20, MaxVideoSeconds: 125,
+		PubkeyVideosPerDay: 5, IPPerDay: 100, GlobalBytesPerDay: 20 << 30}
+	tr := Trusted{Pubkeys: map[string]bool{aa: true}, MaxVideoBytes: 300 << 20, MaxVideoSeconds: 900, VideosPerDay: 20, QuotaBytes: 20 << 30}
+	want := def
+	want.MaxVideoBytes, want.MaxVideoSeconds, want.PubkeyVideosPerDay, want.PubkeyQuota = 300<<20, 900, 20, 20<<30
+	if got := def.For(aa, tr); got != want {
+		t.Fatalf("trusted: %+v", got)
+	}
+	if got := def.For(bb, tr); got != def {
+		t.Fatalf("other: %+v", got)
+	}
+	if got := def.For(aa, Trusted{}); got != def {
+		t.Fatalf("no whitelist: %+v", got)
 	}
 }

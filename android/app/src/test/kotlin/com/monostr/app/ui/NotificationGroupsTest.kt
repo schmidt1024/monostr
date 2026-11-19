@@ -5,6 +5,7 @@ import com.monostr.app.ui.notifications.NotificationRow
 import com.monostr.nostr.repo.NotificationItem
 import com.monostr.nostr.repo.NotificationKind
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 
 class NotificationGroupsTest {
@@ -75,5 +76,21 @@ class NotificationGroupsTest {
         assertEquals(6, group.count)
         val likes = NotificationGroups.build(listOf(r(1, "+"), r(2, "+"))).single() as NotificationRow.Group
         assertEquals(emptyList<String>(), likes.reactions)
+    }
+
+    @Test
+    fun `the row's symbol is the newest reactor's own reaction, a plain like is the heart`() {
+        val x = "x".repeat(64)
+        fun r(n: Int, content: String) = NotificationItem(n.toString().padStart(64, '0'), NotificationKind.REACTION, n.toString().padStart(64, 'e'), 1000L + n, x, x, content, null)
+        // owner 2026-11-19: the symbol stands beside the newest face, so it is that person's reaction
+        val emojiNewest = NotificationGroups.build(listOf(r(1, "❤️"), r(2, "🚀"))).single() as NotificationRow.Group
+        assertEquals("🚀", emojiNewest.newestEmoji)
+        val likeNewest = NotificationGroups.build(listOf(r(1, "🚀"), r(2, "+"))).single() as NotificationRow.Group
+        assertNull(likeNewest.newestEmoji)
+        assertEquals(listOf("🚀"), likeNewest.reactions) // older emojis still make the sentence "reacted"
+        val spoofNewest = NotificationGroups.build(listOf(r(1, "🚀"), r(2, "sent you 10 XMR"))).single() as NotificationRow.Group
+        assertNull(spoofNewest.newestEmoji)
+        val repost = NotificationGroups.build(listOf(NotificationItem("9".repeat(64), NotificationKind.REPOST, alice, 1000L, x, x, "🚀", null))).single() as NotificationRow.Group
+        assertNull(repost.newestEmoji)
     }
 }

@@ -92,6 +92,11 @@
     <string name="media_failed">Impossibile caricare l\'immagine</string>
     <string name="media_tor_blocked">Il sito blocca Tor</string>
     <string name="media_video">Riproduci video</string>
+    <plurals name="media_gallery">
+        <item quantity="one">Galleria, %d elemento</item>
+        <item quantity="many">Galleria, %d elementi</item>
+        <item quantity="other">Galleria, %d elementi</item>
+    </plurals>
     <string name="media_viewer_close">Chiudi</string>
     <string name="media_copy_link">Copia link</string>
     <string name="media_open_browser">Apri nel browser</string>
@@ -610,6 +615,7 @@
     <string name="upload_error_failed">Caricamento non riuscito</string>
     <string name="compose_error_uploads">Attendi il caricamento delle immagini o rimuovi quelle non riuscite</string>
     <string name="compose_attach">Aggiungi immagini</string>
+    <string name="compose_attach_limit">Fino a 20 immagini per nota</string>
     <string name="compose_attachment_remove">Rimuovi immagine</string>
     <string name="upload_retry">Riprova</string>
     <string name="compose_sensitive">Contenuto sensibile</string>
@@ -748,7 +754,12 @@
     <!-- spec 2026-10-27 video upload -->
     <string name="compose_add_video">Aggiungi video</string>
     <string name="compose_video_preparing">Preparazione…</string>
-    <string name="compose_video_too_long">Video fino a 2 minuti. Taglialo prima nella tua app galleria.</string>
+    <string name="compose_media_checking">Verifica…</string>
+    <plurals name="compose_video_too_long">
+        <item quantity="one">Video fino a %1$d minuto. Taglialo prima nella tua app galleria.</item>
+        <item quantity="many">Video fino a %1$d minuti. Taglialo prima nella tua app galleria.</item>
+        <item quantity="other">Video fino a %1$d minuti. Taglialo prima nella tua app galleria.</item>
+    </plurals>
     <string name="upload_video_too_large">Questo video è troppo grande. Prova una clip più corta.</string>
     <string name="upload_video_rate">Limite giornaliero di video raggiunto, riprova domani</string>
     <string name="compose_video_tile">Video</string>

@@ -1,6 +1,14 @@
 package com.monostr.app
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.assertWidthIsEqualTo
+import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.unit.dp
+import com.monostr.app.ui.media.NoteMediaRow
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.captureToImage
@@ -8,6 +16,7 @@ import androidx.compose.ui.test.getBoundsInRoot
 import com.monostr.app.ui.media.MediaRatios
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -149,5 +158,90 @@ class NoteMediaTest {
         set(single(NoteMedia("https://192.0.2.1/unknown-${System.nanoTime()}.jpg", NoteMedia.Kind.IMAGE)))
         val b = rule.onNodeWithTag("note-media-$id8-0").getBoundsInRoot()
         assertEquals(4f / 3f, (b.right - b.left) / (b.bottom - b.top), 0.05f)
+    }
+
+    // backlog 93: 2-20 items as one horizontal row; notes built like note(...), the row width from a fixed-width Box
+    private fun gallery(vararg media: NoteMedia, sensitive: Boolean = false) = Note(
+        id, "a".repeat(64), "", 1000, 1, null, null, null, emptyList(), media = media.toList(),
+        contentWarning = if (sensitive) "" else null, displayContent = "",
+    )
+    private fun pic(i: Int, dim: Pair<Int, Int>? = 300 to 400) =
+        NoteMedia("https://192.0.2.1/g$i-${System.nanoTime()}.jpg", NoteMedia.Kind.IMAGE, dim = dim)
+
+    private fun setRow(n: Note, widthDp: Int, onMedia: (Int) -> Unit = {}, onVideo: (String) -> Unit = {}) {
+        rule.setContent {
+            CompositionLocalProvider(LocalMediaSettings provides MediaSettings(mediaOnTap = false)) {
+                MaterialTheme { Column { Box(Modifier.width(widthDp.dp)) { NoteMediaRow(n, onOpenMedia = onMedia, onOpenVideo = onVideo) } } }
+            }
+        }
+    }
+
+    private fun widthOf(tag: String): Float = rule.onNodeWithTag(tag, useUnmergedTree = true).getBoundsInRoot().let { (it.right - it.left).value }
+
+    @Test
+    fun gallery_of_seven_scrolls_and_shows_dots() {
+        setRow(gallery(*Array(7) { pic(it) }), 360)
+        rule.onNodeWithTag("note-media-row-$id8").assertIsDisplayed()
+        rule.onNodeWithTag("note-media-dots-$id8").assertIsDisplayed()
+        rule.onNodeWithTag("note-media-$id8-0").assertIsDisplayed()
+        rule.onNodeWithTag("note-media-$id8-6").assertDoesNotExist()
+        rule.onNodeWithTag("note-media-row-$id8").performScrollToIndex(6)
+        rule.onNodeWithTag("note-media-$id8-6").assertIsDisplayed()
+    }
+
+    @Test
+    fun two_that_fit_have_no_dots() {
+        setRow(gallery(pic(0, 400 to 400), pic(1, 200 to 400)), 360)
+        rule.onNodeWithTag("note-media-dots-$id8").assertDoesNotExist()
+        rule.onNodeWithTag("note-media-$id8-0").assertIsDisplayed()
+        rule.onNodeWithTag("note-media-$id8-1").assertIsDisplayed()
+    }
+
+    @Test
+    fun tap_on_fifth_card_opens_the_viewer_at_four() {
+        var opened: Pair<String, Int>? = null
+        set(gallery(*Array(7) { pic(it) }), onMedia = { nid, i -> opened = nid to i })
+        rule.onNodeWithTag("note-media-row-$id8").performScrollToIndex(4)
+        rule.onNodeWithTag("note-media-$id8-4").performClick()
+        assertEquals(id to 4, opened)
+    }
+
+    @Test
+    fun video_card_in_a_row_opens_the_player() {
+        // a wide first picture keeps the row low enough that a 16:9 video card fits under the 0.85 x width clamp
+        val url = "https://v.example/g-${System.nanoTime()}.mp4"
+        var opened = ""
+        setRow(gallery(pic(0, 1600 to 900), NoteMedia(url, NoteMedia.Kind.VIDEO)), 360, onVideo = { opened = it })
+        // unclipped size: the video card runs past the row's right edge
+        val size = rule.onNodeWithTag("note-media-$id8-1").fetchSemanticsNode().size
+        assertEquals(16f / 9f, size.width.toFloat() / size.height, 0.05f)
+        rule.onNodeWithTag("note-media-$id8-1").performClick()
+        assertEquals(url, opened)
+    }
+
+    @Test
+    fun covered_gallery_has_no_dots_and_one_cover() {
+        setRow(gallery(*Array(7) { pic(it) }, sensitive = true), 360)
+        rule.onNodeWithTag("note-media-cover-$id8").assertIsDisplayed()
+        rule.onNodeWithTag("note-media-dots-$id8").assertDoesNotExist()
+    }
+
+    @Test
+    fun row_uses_its_own_width_inside_a_narrow_parent() {
+        setRow(gallery(pic(0), pic(1), pic(2)), 250)
+        rule.onNodeWithTag("note-media-row-$id8").assertWidthIsEqualTo(250.dp)
+        assertEquals(250f * 0.62f, widthOf("note-media-$id8-0"), 1.5f)
+    }
+
+    @Test
+    fun video_shows_its_length_from_imeta_duration() {
+        set(single(NoteMedia("https://v.example/d-${System.nanoTime()}.mp4", NoteMedia.Kind.VIDEO, durationSeconds = 492)))
+        rule.onNodeWithTag("note-media-duration-$id8-0", useUnmergedTree = true).assertIsDisplayed().assertTextEquals("8:12")
+    }
+
+    @Test
+    fun video_without_duration_has_no_length_badge() {
+        set(single(NoteMedia("https://v.example/e-${System.nanoTime()}.mp4", NoteMedia.Kind.VIDEO)))
+        rule.onNodeWithTag("note-media-duration-$id8-0", useUnmergedTree = true).assertDoesNotExist()
     }
 }

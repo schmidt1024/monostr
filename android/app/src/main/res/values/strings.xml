@@ -93,6 +93,10 @@
     <string name="media_failed">Picture could not be loaded</string>
     <string name="media_tor_blocked">Site blocks Tor</string>
     <string name="media_video">Play video</string>
+    <plurals name="media_gallery">
+        <item quantity="one">Gallery, %d item</item>
+        <item quantity="other">Gallery, %d items</item>
+    </plurals>
     <string name="media_viewer_close">Close</string>
     <string name="media_viewer_position" translatable="false">%1$d/%2$d</string>
     <string name="media_copy_link">Copy link</string>
@@ -610,6 +614,7 @@
     <string name="upload_error_failed">Upload failed</string>
     <string name="compose_error_uploads">Wait until the pictures are uploaded, or remove the failed ones</string>
     <string name="compose_attach">Add pictures</string>
+    <string name="compose_attach_limit">Up to 20 pictures per note</string>
     <string name="compose_attachment_remove">Remove picture</string>
     <string name="upload_retry">Try again</string>
     <string name="compose_sensitive">Sensitive content</string>
@@ -747,7 +752,11 @@
     <!-- spec 2026-10-27 video upload -->
     <string name="compose_add_video">Add video</string>
     <string name="compose_video_preparing">Preparing…</string>
-    <string name="compose_video_too_long">Videos up to 2 minutes. Trim it in your gallery app first.</string>
+    <string name="compose_media_checking">Checking…</string>
+    <plurals name="compose_video_too_long">
+        <item quantity="one">Videos up to %1$d minute. Trim it in your gallery app first.</item>
+        <item quantity="other">Videos up to %1$d minutes. Trim it in your gallery app first.</item>
+    </plurals>
     <string name="upload_video_too_large">This video is too large. Try a shorter clip.</string>
     <string name="upload_video_rate">Daily video limit reached, try again tomorrow</string>
     <string name="compose_video_tile">Video</string>

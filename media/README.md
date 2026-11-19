@@ -53,12 +53,18 @@ Image-Digest von Caddy im `compose.yml` ändern, dann deployen. Kein Watchtower.
 
 ## Konfiguration
 
-Alles in `compose.yml` unter `media.environment`, ausser dem S3-Zugang, `MEDIA_REVIEW_NPUB` und `MEDIA_NOSTR_NSEC` (`.env`):
+Alles in `compose.yml` unter `media.environment`, ausser dem S3-Zugang, `MEDIA_REVIEW_NPUB`, `MEDIA_NOSTR_NSEC` und `MEDIA_TRUSTED_PUBKEYS` (`.env`):
 
 | Variable | Standard | Bedeutung |
 |---|---|---|
 | `MEDIA_MAX_BYTES` | 10485760 | größtes Bild |
 | `MEDIA_MAX_VIDEO_BYTES` | 52428800 | größtes Video |
+| `MEDIA_MAX_VIDEO_SECONDS` | 125 | längstes Video in Sekunden (höchstens 900) |
+| `MEDIA_TRUSTED_PUBKEYS` | – | vertrauenswürdige Pubkeys (64 Zeichen Hex, kommagetrennt), nur in `.env`; sie bekommen die vier `MEDIA_TRUSTED_*`-Werte statt der Video-Werte oben und des Kontingents |
+| `MEDIA_TRUSTED_MAX_VIDEO_BYTES` | 314572800 | größtes Video eines vertrauenswürdigen Pubkeys (höchstens 314572800) |
+| `MEDIA_TRUSTED_MAX_VIDEO_SECONDS` | 900 | längstes Video eines vertrauenswürdigen Pubkeys in Sekunden (höchstens 900) |
+| `MEDIA_TRUSTED_VIDEOS_PER_DAY` | 20 | Videos pro UTC-Tag und vertrauenswürdigem Pubkey |
+| `MEDIA_TRUSTED_QUOTA_BYTES` | 21474836480 | Kontingent eines vertrauenswürdigen Pubkeys |
 | `MEDIA_PUBKEY_VIDEOS_PER_DAY` | 5 | Videos pro Pubkey und UTC-Tag (zählen auch bei den Uploads mit) |
 | `MEDIA_STORAGE_ALERT_BYTES` | 200000000000 | übersteigt der gesamte Speicher diesen Wert, bekommt der Betreiber einmal eine DM (erst nach einem Absinken wieder); braucht `MEDIA_REVIEW_NPUB` |
 | `MEDIA_PUBKEY_UPLOADS_PER_DAY` | 50 | Uploads pro Pubkey und UTC-Tag (gespeicherte und als NSFW abgelehnte) |
@@ -75,6 +81,16 @@ Alles in `compose.yml` unter `media.environment`, ausser dem S3-Zugang, `MEDIA_R
 | `MEDIA_CONTACT_NPUB` | Projekt-npub | Meldeadresse auf der Startseite |
 
 Nach einer Änderung `./deploy.sh up`.
+
+## Limits-Endpunkt
+
+`GET /limits` (auch `HEAD`) nennt dem angemeldeten Konto seine eigenen Grenzen, damit die App sie nicht fest verdrahten muss. Auth: Blossom-Event Kind 24242 mit genau einem `t`-Tag `limits`, `expiration` in der Zukunft und einem `server`-Tag mit dem Host dieses Servers (Pflicht, kein `x`-Tag nötig). Upload- und Delete-Tokens oder Tokens für andere Server werden mit 401 `auth` abgewiesen.
+
+```json
+{"max_video_seconds":125,"max_video_bytes":52428800,"videos_per_day":5,"quota_bytes":2147483648,"used_bytes":0}
+```
+
+Die Antwort gilt nur für den Aufrufer (Standard- oder Trusted-Werte, `used_bytes` = belegter Speicher) und trägt `Cache-Control: no-store`. Die Whitelist ist nicht abfragbar: niemand erfährt die Grenzen eines anderen Kontos, und der Server loggt dazu keinen Pubkey.
 
 ## Betrieb
 

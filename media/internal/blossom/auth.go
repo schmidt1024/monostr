@@ -21,6 +21,8 @@ const (
 
 	ActionUpload = "upload"
 	ActionDelete = "delete"
+	// ActionLimits asks for the caller's own limits (no blob involved).
+	ActionLimits = "limits"
 
 	scheme = "nostr "
 )
@@ -73,6 +75,21 @@ func decode(token string) ([]byte, error) {
 // Verify checks the header for one action ("upload" or "delete") on this
 // server (host is the bare lowercase domain) at time now (unix seconds).
 func Verify(header, action, host string, now int64) (Auth, error) {
+	return verify(header, action, host, now, false)
+}
+
+// maxQueryLifetime bounds how long a limits token may live: it is a read-only
+// ask, signed per use, so a leaked one should die within the hour.
+const maxQueryLifetime = 3600
+
+// VerifyQuery is Verify for an action without blobs: no x tag is needed, but a
+// server tag naming host is required, so a token minted for another server
+// (or an upload/delete token) can never be replayed here.
+func VerifyQuery(header, action, host string, now int64) (Auth, error) {
+	return verify(header, action, host, now, true)
+}
+
+func verify(header, action, host string, now int64, query bool) (Auth, error) {
 	if len(header) < len(scheme) || !strings.EqualFold(header[:len(scheme)], scheme) {
 		return Auth{}, ErrMissing
 	}
@@ -128,10 +145,13 @@ func Verify(header, action, host string, now int64) (Auth, error) {
 	if len(actions) != 1 || actions[0] != action {
 		return Auth{}, invalid("t tag")
 	}
-	if len(hashes) == 0 {
+	if query && expiration > now+maxQueryLifetime {
+		return Auth{}, invalid("expiration too far ahead")
+	}
+	if !query && len(hashes) == 0 {
 		return Auth{}, invalid("x tag")
 	}
-	if len(servers) > 0 {
+	if query || len(servers) > 0 {
 		ok := false
 		for _, s := range servers {
 			if s == host {

@@ -9,6 +9,16 @@ import (
 	"time"
 )
 
+const (
+	// DefaultMaxVideoSeconds is the longest video an ordinary account may upload;
+	// it leaves room above the app's 121 s, as encoding may add a little.
+	DefaultMaxVideoSeconds = 125
+	// VideoSecondsCeiling and VideoBytesCeiling are what the scorer sidecar
+	// accepts at most (spec 2026-11-19 media-trusted-video); no setting may pass them.
+	VideoSecondsCeiling = 900
+	VideoBytesCeiling   = 314572800 // 300 MiB
+)
+
 // Limits are the configured ceilings (spec section 4.3).
 type Limits struct {
 	MaxBytes          int64 // one file
@@ -18,8 +28,32 @@ type Limits struct {
 	GlobalBytesPerDay int64 // newly stored bytes per UTC day, all users
 
 	MaxVideoBytes      int64 // one video (spec 2026-10-27 video §6)
+	MaxVideoSeconds    int   // longest video, in seconds
 	PubkeyVideosPerDay int   // videos per pubkey and UTC day; they count toward PubkeyPerDay too
 	StorageAlertBytes  int64 // the operator hears once when all stored bytes pass this; 0 = never
+}
+
+// Trusted are the video limits of the whitelisted pubkeys (spec 2026-11-19
+// media-trusted-video). They are kept apart from Limits so that Limits stays comparable.
+type Trusted struct {
+	Pubkeys         map[string]bool // lowercase hex
+	MaxVideoBytes   int64
+	MaxVideoSeconds int
+	VideosPerDay    int
+	QuotaBytes      int64
+}
+
+// For is l with the four video values of t when pubkey is whitelisted, else l
+// unchanged. Pictures, uploads per day, per address and per day in all stay as they are.
+func (l Limits) For(pubkey string, t Trusted) Limits {
+	if !t.Pubkeys[pubkey] {
+		return l
+	}
+	l.MaxVideoBytes = t.MaxVideoBytes
+	l.MaxVideoSeconds = t.MaxVideoSeconds
+	l.PubkeyVideosPerDay = t.VideosPerDay
+	l.PubkeyQuota = t.QuotaBytes
+	return l
 }
 
 // DayStart is the unix time at which now's UTC day began.

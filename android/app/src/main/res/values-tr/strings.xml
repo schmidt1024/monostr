@@ -92,6 +92,10 @@
     <string name="media_failed">Görsel yüklenemedi</string>
     <string name="media_tor_blocked">Site Tor\'u engelliyor</string>
     <string name="media_video">Videoyu oynat</string>
+    <plurals name="media_gallery">
+        <item quantity="one">Galeri, %d öğe</item>
+        <item quantity="other">Galeri, %d öğe</item>
+    </plurals>
     <string name="media_viewer_close">Kapat</string>
     <string name="media_copy_link">Bağlantıyı kopyala</string>
     <string name="media_open_browser">Tarayıcıda aç</string>
@@ -605,6 +609,7 @@
     <string name="upload_error_failed">Yükleme başarısız</string>
     <string name="compose_error_uploads">Resimlerin yüklenmesini bekle veya yüklenemeyenleri kaldır</string>
     <string name="compose_attach">Resim ekle</string>
+    <string name="compose_attach_limit">Notta en fazla 20 resim</string>
     <string name="compose_attachment_remove">Resmi kaldır</string>
     <string name="upload_retry">Yeniden dene</string>
     <string name="compose_sensitive">Hassas içerik</string>
@@ -741,7 +746,11 @@
     <!-- spec 2026-10-27 video upload -->
     <string name="compose_add_video">Video ekle</string>
     <string name="compose_video_preparing">Hazırlanıyor…</string>
-    <string name="compose_video_too_long">En fazla 2 dakikalık videolar. Önce galeri uygulamanda kırp.</string>
+    <string name="compose_media_checking">Kontrol ediliyor…</string>
+    <plurals name="compose_video_too_long">
+        <item quantity="one">En fazla %1$d dakikalık videolar. Önce galeri uygulamanda kırp.</item>
+        <item quantity="other">En fazla %1$d dakikalık videolar. Önce galeri uygulamanda kırp.</item>
+    </plurals>
     <string name="upload_video_too_large">Bu video çok büyük. Daha kısa bir klip dene.</string>
     <string name="upload_video_rate">Günlük video sınırına ulaşıldı, yarın tekrar dene</string>
     <string name="compose_video_tile">Video</string>

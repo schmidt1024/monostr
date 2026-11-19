@@ -14,23 +14,27 @@ import (
 	"monostr.com/media/internal/blossom"
 	"monostr.com/media/internal/classify"
 	"monostr.com/media/internal/imagecheck"
+	"monostr.com/media/internal/limits"
 	"monostr.com/media/internal/store"
 )
 
 // Videos (spec 2026-10-27 video §6, §7).
 const (
-	// videoUploadTime is how long one admitted video may take to arrive and be
-	// answered: 50 MiB through a slow line (1 Mbit/s is about 7 minutes). The
-	// server-wide timeouts stay short; only an admitted video gets this much.
-	videoUploadTime = 15 * time.Minute
-	// maxVideoSeconds leaves room above the app's 121 s: encoding may add a little.
-	maxVideoSeconds   = 125.0
 	maxVideoShortEdge = 720
 	// videoBucketTimeout bounds the write of one video to the bucket.
 	videoBucketTimeout = 5 * time.Minute
 	// tempPattern names the server's temp files, so that a start can clear what a crash left.
 	tempPattern = "video-*.mp4"
 )
+
+// videoUploadTime is how long one admitted video may take to arrive and be
+// answered: 15 minutes for the default 50 MiB (a slow line at 1 Mbit/s needs
+// about 7), more in step with an account's larger ceiling (a trusted 300 MiB
+// gets 90 minutes). The server-wide timeouts stay short; only an admitted
+// video gets this much.
+func videoUploadTime(maxVideoBytes int64) time.Duration {
+	return time.Duration(float64(15*time.Minute) * max(1, float64(maxVideoBytes)/52428800.0))
+}
 
 // A body slower than videoMinRate (after videoGrace), or one that stalls for
 // videoStall, gives up its upload slot.
@@ -81,10 +85,11 @@ func (r *rateReader) Read(p []byte) (int, error) {
 // with its hash, the same hash, ban and duplicate checks as a picture, then
 // the scorer's probe and frames decide, then the bucket. The temp file is gone
 // on every way out.
-func (s *server) uploadVideo(w http.ResponseWriter, r *http.Request, auth blossom.Auth, address string, now time.Time) {
+func (s *server) uploadVideo(w http.ResponseWriter, r *http.Request, auth blossom.Auth, lim limits.Limits, address string, now time.Time) {
 	rc := http.NewResponseController(w)
+	uploadTime := videoUploadTime(lim.MaxVideoBytes)
 	// the answer may take the whole upload time; the body gets a rolling deadline per read (rateReader)
-	_ = rc.SetWriteDeadline(time.Now().Add(videoUploadTime))
+	_ = rc.SetWriteDeadline(time.Now().Add(uploadTime))
 
 	f, err := os.CreateTemp(s.tempDir, tempPattern)
 	if err != nil {
@@ -94,9 +99,11 @@ func (s *server) uploadVideo(w http.ResponseWriter, r *http.Request, auth blosso
 	defer os.Remove(f.Name())
 	defer f.Close()
 
+	// the account's own ceiling: a trusted pubkey may send more than the default
+	maxVideoBytes := lim.MaxVideoBytes
 	sum := sha256.New()
-	body := &rateReader{r: http.MaxBytesReader(w, r.Body, s.cfg.Limits.MaxVideoBytes), min: videoMinRate, grace: videoGrace,
-		now: time.Now, start: time.Now(), stall: videoStall, end: time.Now().Add(videoUploadTime), setDeadline: rc.SetReadDeadline}
+	body := &rateReader{r: http.MaxBytesReader(w, r.Body, maxVideoBytes), min: videoMinRate, grace: videoGrace,
+		now: time.Now, start: time.Now(), stall: videoStall, end: time.Now().Add(uploadTime), setDeadline: rc.SetReadDeadline}
 	size, err := io.Copy(io.MultiWriter(f, sum), body)
 	if err != nil {
 		// a broken or too slow body cost a slot: it counts for the address, so it is not free to repeat
@@ -104,7 +111,7 @@ func (s *server) uploadVideo(w http.ResponseWriter, r *http.Request, auth blosso
 		var tooLarge *http.MaxBytesError
 		switch {
 		case errors.As(err, &tooLarge):
-			reject(w, http.StatusRequestEntityTooLarge, CodeVideoTooLarge, fmt.Sprintf("video larger than %d bytes", s.cfg.Limits.MaxVideoBytes))
+			reject(w, http.StatusRequestEntityTooLarge, CodeVideoTooLarge, fmt.Sprintf("video larger than %d bytes", maxVideoBytes))
 		case errors.Is(err, errTooSlow):
 			reject(w, http.StatusRequestTimeout, CodeBadRequest, "the video arrives too slowly")
 		default:
@@ -112,6 +119,8 @@ func (s *server) uploadVideo(w http.ResponseWriter, r *http.Request, auth blosso
 		}
 		return
 	}
+	// the body is in: the check and the bucket write still need their time, so the answer gets a fresh deadline
+	_ = rc.SetWriteDeadline(time.Now().Add(classify.VideoTimeout(lim.MaxVideoSeconds) + videoBucketTimeout + time.Minute))
 	hash := hex.EncodeToString(sum.Sum(nil))
 	if !s.hashAllowed(w, r, auth, hash) {
 		return
@@ -127,7 +136,7 @@ func (s *server) uploadVideo(w http.ResponseWriter, r *http.Request, auth blosso
 		s.internal(w, "temp file rewind", err)
 		return
 	}
-	info, err := s.classifier.Video(r.Context(), f, size)
+	info, err := s.classifier.Video(r.Context(), f, size, lim.MaxVideoSeconds)
 	if err != nil {
 		// as for a picture: a failed check counts for the address, never for the pubkey
 		s.ips.Add(address, now)
@@ -144,9 +153,9 @@ func (s *server) uploadVideo(w http.ResponseWriter, r *http.Request, auth blosso
 		reject(w, http.StatusUnsupportedMediaType, CodeVideoFormat, "only MP4 with H.264 video and AAC sound (or none) is accepted")
 		return
 	}
-	if info.Duration > maxVideoSeconds {
+	if info.Duration > float64(lim.MaxVideoSeconds) {
 		s.ips.Add(address, now)
-		reject(w, http.StatusRequestEntityTooLarge, CodeVideoTooLong, fmt.Sprintf("videos may last %.0f seconds at most", maxVideoSeconds))
+		reject(w, http.StatusRequestEntityTooLarge, CodeVideoTooLong, fmt.Sprintf("videos may last %d seconds at most", lim.MaxVideoSeconds))
 		return
 	}
 	if min(info.Width, info.Height) > maxVideoShortEdge {

@@ -58,6 +58,9 @@ interface MediaUploader {
     suspend fun uploadVideo(source: String, onPreparing: (Float) -> Unit = {}, onProgress: (Float) -> Unit = {}): UploadedMedia =
         throw UploadException.Unreadable()
 
+    /** The video limits of the signed-in account on the configured server; DEFAULT when unknown. Never throws (but CancellationException). */
+    suspend fun videoLimits(): VideoLimits = VideoLimits.DEFAULT
+
     /** The length of the video behind [source] in ms, read before any work (spec 2026-10-27 video §3). Throws [UploadException.Unreadable]. */
     suspend fun videoDurationMs(source: String): Long = throw UploadException.Unreadable()
 
@@ -85,6 +88,12 @@ class BlossomMediaUploader(
     /** One lock per sha256, kept for the life of the session (a handful of pictures). */
     private val locks = ConcurrentHashMap<String, Mutex>()
 
+    /**
+     * The account's video limits per server (this uploader is built per session, so per account). A refused signature
+     * is remembered as DEFAULT so the signer is not asked again; a network failure is not, the next call asks again.
+     */
+    private val limitsCache = ConcurrentHashMap<String, VideoLimits>()
+
     private fun lockFor(sha256: String): Mutex = locks.computeIfAbsent(sha256) { Mutex() }
 
     override suspend fun upload(source: String, target: ImageTarget, onProgress: (Float) -> Unit): UploadedMedia =
@@ -108,12 +117,25 @@ class BlossomMediaUploader(
         }
     }
 
+    override suspend fun videoLimits(): VideoLimits {
+        val server = settings.mediaServer.first()
+        val key = server.trim().trimEnd('/')
+        limitsCache[key]?.let { return it }
+        return when (val answer = client.fetchVideoLimits(server)) {
+            is LimitsAnswer.Got -> answer.limits.also { limitsCache[key] = it }
+            LimitsAnswer.Refused -> VideoLimits.DEFAULT.also { limitsCache[key] = it }
+            LimitsAnswer.Failed -> VideoLimits.DEFAULT
+        }
+    }
+
     override suspend fun videoDurationMs(source: String): Long = (videos ?: throw UploadException.Unreadable()).durationMs(source)
 
     override suspend fun uploadVideo(source: String, onPreparing: (Float) -> Unit, onProgress: (Float) -> Unit): UploadedMedia {
         val prep = videos ?: throw UploadException.Unreadable()
         val server = settings.mediaServer.first()
-        val video = prep.prepare(source, onPreparing)
+        // only what the composer already cached: a video under the default length never asks the server (no signature, no round trip)
+        val limits = limitsCache[server.trim().trimEnd('/')] ?: VideoLimits.DEFAULT
+        val video = prep.prepare(source, limits, onPreparing)
         try {
             // the poster first, to the same server; it is a tenth of the bytes at most
             val poster = uploadPicture(server, video.poster.toURI().toString(), ImageTarget.NOTE) { onProgress(it * POSTER_SHARE) }
@@ -134,7 +156,8 @@ class BlossomMediaUploader(
             } catch (e: Throwable) {
                 // the video did not make it: its poster has no note to show it in
                 discard(poster)
-                throw e
+                // the server's refusal names this account's limit, not the default's
+                throw if (e is UploadException.VideoTooLong) UploadException.VideoTooLong(limits.minutes) else e
             }
         } finally {
             video.delete()

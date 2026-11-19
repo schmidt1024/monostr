@@ -28,8 +28,13 @@ type Client struct {
 	video *http.Client
 }
 
-// VideoTimeout bounds one video check: up to 50 MiB to send and twelve frames to take and score.
-const VideoTimeout = 3 * time.Minute
+// VideoTimeout bounds one video check for an account whose videos may last
+// maxSeconds: 3 minutes up to 125 s (50 MiB to send, twelve frames to take and
+// score), growing in step with the sidecar's own budget beyond that (more
+// frames and packets to read: 900 s gets 21.6 minutes).
+func VideoTimeout(maxSeconds int) time.Duration {
+	return time.Duration(float64(3*time.Minute) * max(1, float64(maxSeconds)/125.0))
+}
 
 // VideoInfo is what the scorer saw in a video (spec 2026-10-27 video §6, §7):
 // the size as displayed, the codecs ("" for no audio), the container, the
@@ -45,7 +50,7 @@ type VideoInfo struct {
 // New builds a client for the scorer at base (http://nsfw:8081); every call
 // gives up after timeout.
 func New(base string, timeout time.Duration) *Client {
-	return &Client{base: strings.TrimRight(base, "/"), http: &http.Client{Timeout: timeout}, video: &http.Client{Timeout: VideoTimeout}}
+	return &Client{base: strings.TrimRight(base, "/"), http: &http.Client{Timeout: timeout}, video: &http.Client{}}
 }
 
 // Score returns the NSFW probability (0..1) of the picture.
@@ -79,10 +84,14 @@ func (c *Client) Score(ctx context.Context, data []byte) (float64, error) {
 	return *out.Score, nil
 }
 
-// Video sends size bytes from r to the scorer and returns what it saw.
-func (c *Client) Video(ctx context.Context, r io.Reader, size int64) (VideoInfo, error) {
+// Video sends size bytes from r to the scorer and returns what it saw. The
+// scorer is told the account's longest allowed video (maxSeconds) to size its
+// frame and packet caps; the call has VideoTimeout(maxSeconds) to finish.
+func (c *Client) Video(ctx context.Context, r io.Reader, size int64, maxSeconds int) (VideoInfo, error) {
+	ctx, cancel := context.WithTimeout(ctx, VideoTimeout(maxSeconds))
+	defer cancel()
 	// only a Reader: the transport closes a body that is also a Closer, and the caller still needs its file
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base+"/video", struct{ io.Reader }{r})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/video?max_seconds=%d", c.base, maxSeconds), struct{ io.Reader }{r})
 	if err != nil {
 		return VideoInfo{}, fmt.Errorf("%w: %v", ErrUnavailable, err)
 	}

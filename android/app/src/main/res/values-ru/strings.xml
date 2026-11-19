@@ -96,6 +96,12 @@
     <string name="media_failed">Не удалось загрузить изображение</string>
     <string name="media_tor_blocked">Сайт блокирует Tor</string>
     <string name="media_video">Воспроизвести видео</string>
+    <plurals name="media_gallery">
+        <item quantity="one">Галерея, %d элемент</item>
+        <item quantity="few">Галерея, %d элемента</item>
+        <item quantity="many">Галерея, %d элементов</item>
+        <item quantity="other">Галерея, %d элемента</item>
+    </plurals>
     <string name="media_viewer_close">Закрыть</string>
     <string name="media_copy_link">Копировать ссылку</string>
     <string name="media_open_browser">Открыть в браузере</string>
@@ -629,6 +635,7 @@
     <string name="upload_error_failed">Не удалось загрузить</string>
     <string name="compose_error_uploads">Дождитесь загрузки изображений или уберите те, что не загрузились</string>
     <string name="compose_attach">Добавить изображения</string>
+    <string name="compose_attach_limit">Не более 20 изображений в заметке</string>
     <string name="compose_attachment_remove">Убрать изображение</string>
     <string name="upload_retry">Повторить</string>
     <string name="compose_sensitive">Деликатный контент</string>
@@ -773,7 +780,13 @@
     <!-- spec 2026-10-27 video upload -->
     <string name="compose_add_video">Добавить видео</string>
     <string name="compose_video_preparing">Подготовка…</string>
-    <string name="compose_video_too_long">Видео до 2 минут. Сначала обрежьте его в галерее.</string>
+    <string name="compose_media_checking">Проверка…</string>
+    <plurals name="compose_video_too_long">
+        <item quantity="one">Видео до %1$d минуты. Сначала обрежьте его в галерее.</item>
+        <item quantity="few">Видео до %1$d минут. Сначала обрежьте его в галерее.</item>
+        <item quantity="many">Видео до %1$d минут. Сначала обрежьте его в галерее.</item>
+        <item quantity="other">Видео до %1$d минуты. Сначала обрежьте его в галерее.</item>
+    </plurals>
     <string name="upload_video_too_large">Видео слишком большое. Попробуйте клип покороче.</string>
     <string name="upload_video_rate">Дневной лимит видео исчерпан, попробуйте завтра</string>
     <string name="compose_video_tile">Видео</string>

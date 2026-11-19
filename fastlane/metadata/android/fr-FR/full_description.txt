@@ -3,7 +3,7 @@ Monostr est un client Nostr pour Android avec des pourboires en Monero.
 <b>Nostr, tel que vous le connaissez</b>
 • Fil des personnes que vous suivez, discussions, profils avec les onglets Publications, Réponses, Reposts, Articles et Listes
 • Aimer, republier, citer, répondre ; mentions, hashtags et liens cliquables
-• Images et vidéos jusqu'à 2 minutes dans les notes et vos propres envois (Blossom), contenu sensible flouté
+• Galeries jusqu'à 20 images à faire défiler, vidéos jusqu'à 2 minutes avec leur durée affichée, vos propres envois (Blossom), contenu sensible flouté
 • Lisez des articles longs (NIP-23) directement dans l'app, avec j'aime, republications, réponses, favoris et pourboires ; les liens vers des articles, des directs et d'autres événements s'affichent sous forme de cartes
 • Sondages (NIP-88) : votez et voyez les résultats, ou créez les vôtres avec 2 à 4 choix pour 7 jours au plus
 • Messages privés (NIP-17), favoris et comptes masqués privés (NIP-51)
@@ -21,7 +21,7 @@ Monostr est un client Nostr pour Android avec des pourboires en Monero.
 <b>Vie privée</b>
 • Tor intégré, désactivé par défaut. Une fois activé, relais, images, envois et le watcher voient Tor au lieu de votre adresse IP, les messages et pourboires sont aussi vérifiés via Tor en arrière-plan, et rien ne part directement tant que Tor n'est pas connecté
 • Relais onion dans votre propre liste de relais quand Tor est activé
-• Les liens web demandent avant de s'ouvrir ; avec Tor, vous pouvez les ouvrir dans Tor Browser ou les copier
+• Les liens web demandent avant de s'ouvrir ; avec Tor, vous pouvez les copier pour les coller dans Tor Browser
 • Tor masque votre adresse IP, pas votre compte, votre portefeuille ni votre navigateur
 
 <b>Ouvert</b>

@@ -45,9 +45,11 @@ type fakeClassifier struct {
 	score    float64
 	err      error
 	health   error
-	calls    int
-	delay    time.Duration
-	gate     chan struct{}
+	// maxSeconds is what each Video call was told as the account's duration limit
+	maxSeconds []int
+	calls      int
+	delay      time.Duration
+	gate       chan struct{}
 }
 
 func (f *fakeClassifier) Score(context.Context, []byte) (float64, error) {
@@ -62,9 +64,10 @@ func (f *fakeClassifier) Score(context.Context, []byte) (float64, error) {
 	return score, err
 }
 
-func (f *fakeClassifier) Video(_ context.Context, r io.Reader, size int64) (classify.VideoInfo, error) {
+func (f *fakeClassifier) Video(_ context.Context, r io.Reader, size int64, maxSeconds int) (classify.VideoInfo, error) {
 	f.mu.Lock()
 	f.calls++
+	f.maxSeconds = append(f.maxSeconds, maxSeconds)
 	info, err, score := f.video, f.videoErr, f.score
 	f.mu.Unlock()
 	if n, _ := io.Copy(io.Discard, r); n != size {
@@ -927,6 +930,57 @@ func TestVideoLengthLimit(t *testing.T) {
 	e.want(e.put(u, []byte("video two"), "video/mp4", nil), 413, CodeVideoTooLong)
 }
 
+func trustedVideoEnv(t *testing.T, u user) *env {
+	return newEnvWith(t, Config{Limits: videoLimits(), Trusted: limits.Trusted{
+		Pubkeys:       map[string]bool{u.pk: true},
+		MaxVideoBytes: 6000, MaxVideoSeconds: 900, VideosPerDay: 7, QuotaBytes: 20 << 20}})
+}
+
+func TestTrustedVideoLengthLimit(t *testing.T) {
+	trusted, plain := newUser(t), newUser(t)
+	e := trustedVideoEnv(t, trusted)
+	e.nsfw.video.Duration = 899.9
+	e.want(e.put(trusted, []byte("video one"), "video/mp4", nil), 201, "")
+	if got := e.nsfw.maxSeconds; len(got) != 1 || got[0] != 900 {
+		t.Fatalf("classifier told %v", got)
+	}
+	e.nsfw.video.Duration = 900.5
+	res := e.put(trusted, []byte("video two"), "video/mp4", nil)
+	e.want(res, 413, CodeVideoTooLong)
+	if !strings.Contains(res.header.Get("X-Reason"), "900 seconds") {
+		t.Fatalf("reason %q", res.header.Get("X-Reason"))
+	}
+	e.nsfw.video.Duration = 899.9
+	e.want(e.put(plain, []byte("video three"), "video/mp4", nil), 413, CodeVideoTooLong)
+	if got := e.nsfw.maxSeconds; got[len(got)-1] != 125 {
+		t.Fatalf("classifier told %v for a plain pubkey", got)
+	}
+}
+
+func TestVideoUploadTimeScalesWithTheAccountsBytes(t *testing.T) {
+	for bytes, want := range map[int64]time.Duration{50 << 20: 15 * time.Minute, 300 << 20: 90 * time.Minute, 1000: 15 * time.Minute} {
+		if got := videoUploadTime(bytes); got != want {
+			t.Errorf("videoUploadTime(%d) = %v, want %v", bytes, got, want)
+		}
+	}
+}
+
+func TestTrustedVideoBodyCappedAtItsOwnBytes(t *testing.T) {
+	u := newUser(t)
+	e := trustedVideoEnv(t, u)
+	e.want(e.put(u, bytes.Repeat([]byte{1}, 6001), "video/mp4", nil), 413, CodeVideoTooLarge)
+	// no declared length (chunked): admit demands one, so the over-long stream never starts. The server's own
+	// body limit makes a declared length binding, so MaxBytesReader is a second line that a client cannot reach.
+	data := bytes.Repeat([]byte{2}, 6001)
+	req, err := http.NewRequest(http.MethodPut, e.srv.URL+"/upload", io.MultiReader(bytes.NewReader(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", blossomtest.Auth(u.sk, "upload", hashOf(data), e.now.Unix()))
+	req.Header.Set("Content-Type", "video/mp4")
+	e.want(e.do(req), 411, CodeLength)
+}
+
 func TestVideoFormatChecks(t *testing.T) {
 	e := newEnv(t, videoLimits())
 	u := newUser(t)
@@ -1083,5 +1137,122 @@ func TestAVideoBodyHasAnAbsoluteEnd(t *testing.T) {
 	clock = clock.Add(25 * time.Second) // past the end, however fast
 	if _, err := r.Read(make([]byte, 100)); !errors.Is(err, errTooSlow) {
 		t.Fatalf("past the end: %v", err)
+	}
+}
+
+func TestTrustedAccountGetsItsOwnVideoLimits(t *testing.T) {
+	trusted, trusted2, plain, plain2, plain3 := newUser(t), newUser(t), newUser(t), newUser(t), newUser(t)
+	e := newEnvWith(t, Config{Limits: videoLimits(), Trusted: limits.Trusted{
+		Pubkeys:       map[string]bool{trusted.pk: true, trusted2.pk: true},
+		MaxVideoBytes: 6000, MaxVideoSeconds: 900, VideosPerDay: 7, QuotaBytes: 20 << 20}})
+	seed := func(u user, n int, size int64, salt byte) {
+		for i := 0; i < n; i++ {
+			b := store.Blob{SHA256: hashOf([]byte{salt, byte(i)}), Size: size, Type: "video/mp4", Width: 720, Height: 1280, CreatedAt: e.now.Unix()}
+			if err := e.store.AddStored(b, u.pk, 0); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	seed(trusted, 5, 10, 1)
+	seed(plain, 5, 10, 2)
+	e.want(e.put(plain, bytes.Repeat([]byte{7}, 100), "video/mp4", nil), 429, CodeVideoRate)
+	e.want(e.put(trusted, bytes.Repeat([]byte{8}, 100), "video/mp4", nil), 201, "")
+	e.want(e.put(trusted, bytes.Repeat([]byte{9}, 5000), "video/mp4", nil), 201, "")
+	e.want(e.put(plain2, bytes.Repeat([]byte{10}, 5000), "video/mp4", nil), 413, CodeVideoTooLarge)
+	// quota: 10 MiB held, a 2000 byte video does not fit in the default 10 MiB but does in 20 MiB
+	seed(plain3, 1, 10<<20, 3)
+	seed(trusted2, 1, 10<<20, 4)
+	e.want(e.put(plain3, bytes.Repeat([]byte{11}, 2000), "video/mp4", nil), 413, CodeQuota)
+	e.want(e.put(trusted2, bytes.Repeat([]byte{12}, 2000), "video/mp4", nil), 201, "")
+}
+
+func TestPageShowsTheDefaultLimitsOnly(t *testing.T) {
+	lim := generous
+	lim.PubkeyQuota = 2 << 30
+	e := newEnvWith(t, Config{Limits: lim, Trusted: limits.Trusted{
+		Pubkeys: map[string]bool{strings.Repeat("a", 64): true}, MaxVideoBytes: 6000, MaxVideoSeconds: 900, VideosPerDay: 7, QuotaBytes: 20 << 30}})
+	page := string(e.request(http.MethodGet, "/", nil, nil).body)
+	if !strings.Contains(page, "2 GB") || strings.Contains(page, "20 GB") {
+		t.Fatalf("page: %s", page)
+	}
+}
+
+func TestLimitsEndpointAnswersTheCallersOwnLimits(t *testing.T) {
+	trusted, plain := newUser(t), newUser(t)
+	lim := videoLimits()
+	lim.MaxVideoSeconds = 125
+	e := newEnvWith(t, Config{Limits: lim, Trusted: limits.Trusted{
+		Pubkeys:       map[string]bool{trusted.pk: true},
+		MaxVideoBytes: 6000, MaxVideoSeconds: 900, VideosPerDay: 7, QuotaBytes: 20 << 20}})
+	b := store.Blob{SHA256: hashOf([]byte("x")), Size: 1234, Type: "image/jpeg", Width: 1, Height: 1, CreatedAt: e.now.Unix()}
+	if err := e.store.AddStored(b, plain.pk, 0); err != nil {
+		t.Fatal(err)
+	}
+	get := func(u user) result {
+		return e.request(http.MethodGet, "/limits", nil, map[string]string{"Authorization": blossomtest.QueryAuth(u.sk, "limits", "media.example", e.now.Unix())})
+	}
+	keys := func(r result) map[string]bool {
+		var m map[string]any
+		if err := json.Unmarshal(r.body, &m); err != nil {
+			t.Fatal(err)
+		}
+		out := map[string]bool{}
+		for k := range m {
+			out[k] = true
+		}
+		return out
+	}
+	p, tr := get(plain), get(trusted)
+	for _, r := range []result{p, tr} {
+		e.want(r, 200, "")
+		if r.header.Get("Content-Type") != "application/json" || r.header.Get("Cache-Control") != "no-store" {
+			t.Fatalf("headers %v", r.header)
+		}
+	}
+	if got := strings.TrimSpace(string(p.body)); got != `{"max_video_seconds":125,"max_video_bytes":3000,"videos_per_day":5,"quota_bytes":10485760,"used_bytes":1234}` {
+		t.Fatalf("plain: %s", got)
+	}
+	if got := strings.TrimSpace(string(tr.body)); got != `{"max_video_seconds":900,"max_video_bytes":6000,"videos_per_day":7,"quota_bytes":20971520,"used_bytes":0}` {
+		t.Fatalf("trusted: %s", got)
+	}
+	kp, kt := keys(p), keys(tr)
+	if len(kp) != 5 || len(kp) != len(kt) {
+		t.Fatalf("keys %v %v", kp, kt)
+	}
+	for k := range kp {
+		if !kt[k] {
+			t.Fatalf("key sets differ: %v %v", kp, kt)
+		}
+	}
+	if strings.Contains(e.log.String(), plain.pk) || strings.Contains(e.log.String(), trusted.pk) {
+		t.Fatalf("log names a pubkey: %s", e.log.String())
+	}
+}
+
+func TestLimitsEndpointNeedsItsOwnAuth(t *testing.T) {
+	e := newEnv(t, videoLimits())
+	u := newUser(t)
+	now := e.now.Unix()
+	at := func(h string) result {
+		hd := map[string]string{}
+		if h != "" {
+			hd["Authorization"] = h
+		}
+		return e.request(http.MethodGet, "/limits", nil, hd)
+	}
+	e.want(at(""), 401, CodeAuth)
+	e.want(at(blossomtest.Auth(u.sk, "upload", hashOf([]byte("a")), now)), 401, CodeAuth)
+	e.want(at(blossomtest.Auth(u.sk, "delete", hashOf([]byte("a")), now)), 401, CodeAuth)
+	e.want(at(blossomtest.QueryAuth(u.sk, "limits", "other.example", now)), 401, CodeAuth)
+	e.want(at(blossomtest.QueryAuth(u.sk, "upload", "media.example", now)), 401, CodeAuth)
+	e.want(e.request(http.MethodPut, "/upload", []byte("data"), map[string]string{
+		"Authorization": blossomtest.QueryAuth(u.sk, "limits", "media.example", now), "Content-Type": "image/jpeg"}), 401, CodeAuth)
+	head := e.request(http.MethodHead, "/limits", nil, map[string]string{"Authorization": blossomtest.QueryAuth(u.sk, "limits", "media.example", now)})
+	e.want(head, 200, "")
+	if len(head.body) != 0 {
+		t.Fatalf("HEAD body %q", head.body)
+	}
+	if strings.Contains(e.log.String(), u.pk) {
+		t.Fatalf("log names a pubkey")
 	}
 }

@@ -1,26 +1,17 @@
 package com.monostr.app.ui.media
 
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.foundation.layout.fillMaxHeight
 import android.graphics.Bitmap
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Image
@@ -82,7 +73,7 @@ fun rememberBlurhash(hash: String?): ImageBitmap? =
     }
 
 /**
- * Spec 3.2: one picture full width, two to four in a two-column grid; videos as a poster with a
+ * Spec 3.2: one picture full width; from two on one horizontally scrolling row with dots (backlog 93, [GalleryRow]); videos as a poster with a
  * play icon. A sensitive note is covered until tapped; with "media on tap" every picture waits
  * for a tap. Tapping a picture opens the viewer, tapping a video the player.
  */
@@ -165,61 +156,17 @@ private fun MediaGrid(media: List<NoteMedia>, tag: String, blurred: Boolean, pla
         }
         return
     }
-    // backlog 39: X's arrangement; every cell opens the viewer at its own index (the viewer holds all pictures).
-    // Owner 2026-11-12 (variant C): the gallery is one block with squircle corners outside and square ones inside, 2 dp
-    // apart: one squircle clip per gallery instead of a rounded clip per picture; each cell only clips to its bounds.
-    val layout = MediaGridLayout.of(media.size)
-    val gap = GALLERY_GAP
-    @Composable
-    fun cell(i: Int, modifier: Modifier) = MediaCell(media[i], i, tag, modifier.clipToBounds(), blurred, placeholderOnly, enabled, onOpenMedia, onOpenVideo)
-    Box(Modifier.fillMaxWidth().clip(MaterialTheme.shapes.large)) { GalleryCells(layout, gap, tag, ::cell) }
+    // backlog 93: from two items one horizontal row; every card opens the viewer at its own index (the viewer holds all)
+    GalleryRow(media, tag, blurred, placeholderOnly, enabled, onOpenMedia, onOpenVideo, maxHeightDp)
 }
 
 @Composable
-private fun GalleryCells(layout: MediaGridLayout, gap: Dp, tag: String, cell: @Composable (Int, Modifier) -> Unit) {
-    when (layout.kind) {
-        MediaGridLayout.Kind.PAIR -> Row(Modifier.fillMaxWidth().aspectRatio(MediaGridLayout.BLOCK_RATIO), horizontalArrangement = Arrangement.spacedBy(gap)) {
-            cell(0, Modifier.weight(1f).fillMaxHeight())
-            cell(1, Modifier.weight(1f).fillMaxHeight())
-        }
-        // three squares: the big side and the small side from the width, so that the gaps do not bend them
-        MediaGridLayout.Kind.BIG_LEFT -> BoxWithConstraints(Modifier.fillMaxWidth()) {
-            val (big, small) = MediaGridLayout.bigLeftSides(maxWidth.value, gap.value)
-            Row(Modifier.fillMaxWidth().height(big.dp), horizontalArrangement = Arrangement.spacedBy(gap)) {
-                cell(0, Modifier.size(big.dp))
-                Column(Modifier.width(small.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(gap)) {
-                    cell(1, Modifier.size(small.dp))
-                    cell(2, Modifier.size(small.dp))
-                }
-            }
-        }
-        else -> Column(Modifier.fillMaxWidth().aspectRatio(MediaGridLayout.BLOCK_RATIO), verticalArrangement = Arrangement.spacedBy(gap)) {
-            for (row in 0..1) Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(gap)) {
-                cell(row * 2, Modifier.weight(1f).fillMaxHeight())
-                Box(Modifier.weight(1f).fillMaxHeight()) {
-                    cell(row * 2 + 1, Modifier.fillMaxSize())
-                    // from five pictures on: «+N» over the fourth, a tap opens the viewer there and swipes on
-                    if (row == 1 && layout.more > 0) {
-                        Box(
-                            Modifier.matchParentSize().background(Color.Black.copy(alpha = 0.6f)).testTag("note-media-more-$tag"),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text("+${layout.more}", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = Color.White)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun MediaCell(
+internal fun MediaCell(
     m: NoteMedia, index: Int, tag: String, modifier: Modifier, blurred: Boolean, placeholderOnly: Boolean, enabled: Boolean, onOpenMedia: (Int) -> Unit, onOpenVideo: (String) -> Unit,
     contentScale: ContentScale = ContentScale.Crop,
     /** Where a cropped picture is anchored; a single too-tall picture keeps its top (user 2026-10-30, screenshots start there). */
     alignment: Alignment = Alignment.Center,
-    /** Called with the loaded picture's (or poster's) size; only for a single item without `dim`. */
+    /** Called with the loaded picture's (or poster's) size: the single item and the gallery cards learn their ratio from it. */
     onSize: ((Int, Int) -> Unit)? = null,
 ) {
     val placeholder = rememberBlurhash(m.blurhash)
@@ -268,8 +215,14 @@ private fun MediaCell(
         val shown = failure
         if (shown != null && !placeholderOnly && source != null && !MediaModels.derived(source)) MediaFailedMark(shown)
         if (m.kind == NoteMedia.Kind.VIDEO) Icon(Icons.Filled.PlayArrow, contentDescription = videoLabel, tint = Color.White, modifier = Modifier.background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.5f), RoundedCornerShape(50)).padding(Spacing.m))
+        // owner 2026-11-19: the length from `imeta duration`, bottom left like a player; nothing is fetched for it
+        m.durationSeconds?.takeIf { m.kind == NoteMedia.Kind.VIDEO }?.let { secs ->
+            Text(
+                VideoDuration.label(secs), style = MaterialTheme.typography.labelSmall, color = Color.White,
+                modifier = Modifier.align(Alignment.BottomStart).padding(Spacing.s)
+                    .background(Color.Black.copy(alpha = 0.6f), MaterialTheme.shapes.extraSmall).padding(horizontal = Spacing.xs, vertical = Spacing.xxs)
+                    .testTag("note-media-duration-$tag-$index"),
+            )
+        }
     }
 }
-
-/** The lines between a gallery's pictures. */
-private val GALLERY_GAP = 2.dp

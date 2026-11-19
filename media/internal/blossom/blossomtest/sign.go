@@ -33,3 +33,10 @@ func Auth(secretKey, action, hash string, now int64) string {
 		{"t", action}, {"x", hash}, {"expiration", strconv.FormatInt(now+300, 10)},
 	}))
 }
+
+// QueryAuth is the header for an action without blobs: t, server, five minutes of life.
+func QueryAuth(secretKey, action, host string, now int64) string {
+	return Header(Event(secretKey, now, nostr.Tags{
+		{"t", action}, {"server", host}, {"expiration", strconv.FormatInt(now+300, 10)},
+	}))
+}

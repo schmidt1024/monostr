@@ -70,6 +70,12 @@ fun AttachmentTiles(attachments: List<Attachment>, enabled: Boolean, onRemove: (
                                     stringResource(R.string.compose_video_preparing), style = MaterialTheme.typography.labelSmall, color = Color.White,
                                     modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = Spacing.xs).testTag("compose-attachment-preparing-$i"),
                                 )
+                            } else if (a.checking) {
+                                // sent: the server scores and stores it, which takes a while for a long video
+                                Text(
+                                    stringResource(R.string.compose_media_checking), style = MaterialTheme.typography.labelSmall, color = Color.White,
+                                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = Spacing.xs).testTag("compose-attachment-checking-$i"),
+                                )
                             }
                         }
                     }

@@ -92,6 +92,11 @@
     <string name="media_failed">Não foi possível carregar a imagem</string>
     <string name="media_tor_blocked">O site bloqueia o Tor</string>
     <string name="media_video">Reproduzir vídeo</string>
+    <plurals name="media_gallery">
+        <item quantity="one">Galeria, %d item</item>
+        <item quantity="many">Galeria, %d itens</item>
+        <item quantity="other">Galeria, %d itens</item>
+    </plurals>
     <string name="media_viewer_close">Fechar</string>
     <string name="media_copy_link">Copiar link</string>
     <string name="media_open_browser">Abrir no navegador</string>
@@ -610,6 +615,7 @@
     <string name="upload_error_failed">Falha no envio</string>
     <string name="compose_error_uploads">Aguarde o envio das imagens ou remova as que falharam</string>
     <string name="compose_attach">Adicionar imagens</string>
+    <string name="compose_attach_limit">Até 20 imagens por nota</string>
     <string name="compose_attachment_remove">Remover imagem</string>
     <string name="upload_retry">Tentar de novo</string>
     <string name="compose_sensitive">Conteúdo sensível</string>
@@ -748,7 +754,12 @@
     <!-- spec 2026-10-27 video upload -->
     <string name="compose_add_video">Adicionar vídeo</string>
     <string name="compose_video_preparing">A preparar…</string>
-    <string name="compose_video_too_long">Vídeos até 2 minutos. Corta-o primeiro na tua app de galeria.</string>
+    <string name="compose_media_checking">A verificar…</string>
+    <plurals name="compose_video_too_long">
+        <item quantity="one">Vídeos até %1$d minuto. Corta-o primeiro na tua app de galeria.</item>
+        <item quantity="many">Vídeos até %1$d minutos. Corta-o primeiro na tua app de galeria.</item>
+        <item quantity="other">Vídeos até %1$d minutos. Corta-o primeiro na tua app de galeria.</item>
+    </plurals>
     <string name="upload_video_too_large">Este vídeo é demasiado grande. Experimenta um clip mais curto.</string>
     <string name="upload_video_rate">Limite diário de vídeos atingido, tenta amanhã</string>
     <string name="compose_video_tile">Vídeo</string>

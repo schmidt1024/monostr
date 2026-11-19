@@ -1,0 +1,6 @@
+- Les images d'une note dans une rangée à faire défiler, avec des points qui indiquent leur nombre
+- Jusqu'à 20 images par note
+- Les vidéos affichent leur durée
+- Les envois indiquent « Vérification… » pendant que le serveur les vérifie
+- Les notifications affichent l'emoji de la réaction la plus récente
+- Corrections

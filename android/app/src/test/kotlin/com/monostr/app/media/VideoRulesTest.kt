@@ -15,6 +15,12 @@ class VideoRulesTest {
     }
 
     @Test
+    fun `the limit follows the server`() {
+        assertFalse(VideoRules.tooLong(896_000, 896_000))
+        assertTrue(VideoRules.tooLong(896_001, 896_000))
+    }
+
+    @Test
     fun `the shorter side becomes 720 at most`() {
         assertEquals(1280 to 720, VideoRules.target(1920, 1080, 0))
         assertEquals(720 to 1280, VideoRules.target(1080, 1920, 0))

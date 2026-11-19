@@ -162,3 +162,31 @@ func TestVerifyAcceptsCreatedAtSlightlyAhead(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestVerifyQuery(t *testing.T) {
+	sk, pk := keys(t)
+	auth, err := blossom.VerifyQuery(blossomtest.QueryAuth(sk, "limits", host, now), blossom.ActionLimits, host, now)
+	if err != nil || auth.Pubkey != pk || len(auth.Hashes) != 0 {
+		t.Fatalf("got %+v, %v", auth, err)
+	}
+	refused := map[string]nostr.Tags{
+		"no server tag": {{"t", "limits"}, exp(300)},
+		"other server":  {{"t", "limits"}, {"server", "other.example"}, exp(300)},
+		"upload action": {{"t", "upload"}, {"server", host}, exp(300)},
+		"two t tags":    {{"t", "limits"}, {"t", "upload"}, {"server", host}, exp(300)},
+		"expired":       {{"t", "limits"}, {"server", host}, exp(-1)},
+		"too long":      {{"t", "limits"}, {"server", host}, exp(3601)},
+	}
+	for name, tags := range refused {
+		_, err := blossom.VerifyQuery(blossomtest.Header(blossomtest.Event(sk, now, tags)), blossom.ActionLimits, host, now)
+		if !errors.Is(err, blossom.ErrInvalid) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	if _, err := blossom.Verify(blossomtest.QueryAuth(sk, "limits", host, now), blossom.ActionUpload, host, now); !errors.Is(err, blossom.ErrInvalid) {
+		t.Errorf("limits token as upload: %v", err)
+	}
+	if _, err := blossom.Verify(blossomtest.QueryAuth(sk, "limits", host, now), blossom.ActionLimits, host, now); !errors.Is(err, blossom.ErrInvalid) {
+		t.Errorf("Verify without x: %v", err)
+	}
+}

@@ -47,7 +47,7 @@ class NoteMediaTest {
 
     @Test
     fun `up to twenty pictures are media, more stay links in the text`() {
-        // backlog 39: five and more show as 2 x 2 with «+N», the viewer holds all of them
+        // backlog 93: the gallery row shows all twenty, the viewer holds them all
         val six = (1..6).map { "https://x.example/$it.jpg" }
         assertEquals(6, parse(six.joinToString(" ")).media.size)
         assertEquals("", parse(six.joinToString(" ")).displayContent)
@@ -142,5 +142,21 @@ class NoteMediaTest {
         assertNull(quoted.invoice)
         assertTrue(quoted.displayContent.contains(invoice))
         assertNull(NoteMedia.parse("☕ $invoice", emptyList(), withQuote = false).invoice) // inside a quote card: no card
+    }
+
+    @Test
+    fun `a video's imeta duration is kept in whole seconds, nonsense is dropped`() {
+        // owner 2026-11-19: show a video's length so people see what they are in for
+        fun d(v: String, url: String = "https://v.test/a.mp4") = parse(url, listOf(listOf("imeta", "url $url", "duration $v"))).media.single().durationSeconds
+        assertEquals(492, d("492.4"))
+        assertEquals(493, d("492.5"))
+        assertEquals(5, d("5"))
+        assertNull(d("0"))
+        assertNull(d("-3"))
+        assertNull(d("NaN"))
+        assertNull(d("abc"))
+        assertNull(d("86401")) // more than a day: not believable
+        assertNull(d("12", "https://v.test/a.jpg")) // a picture has no length
+        assertNull(parse("https://v.test/a.mp4").media.single().durationSeconds)
     }
 }

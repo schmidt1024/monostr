@@ -3,7 +3,7 @@ Monostr é um cliente Nostr para Android com gorjetas em Monero.
 <b>Nostr, do jeito que você conhece</b>
 • Feed de quem você segue, conversas, perfis com as abas Publicações, Respostas, Reposts, Artigos e Listas
 • Curtir, repostar, citar, responder; menções, hashtags e links tocáveis
-• Imagens e vídeos de até 2 minutos nas notas e uploads próprios (Blossom), conteúdo sensível desfocado
+• Galerias de até 20 imagens para deslizar, vídeos de até 2 minutos com a duração visível, uploads próprios (Blossom), conteúdo sensível desfocado
 • Leia artigos longos (NIP-23) direto no app, com curtidas, reposts, respostas, favoritos e gorjetas; links para artigos, transmissões ao vivo e outros eventos aparecem como cartões
 • Enquetes (NIP-88): vote e veja os resultados, ou crie as suas com 2 a 4 opções por até 7 dias
 • Mensagens privadas (NIP-17), favoritos e contas silenciadas privados (NIP-51)
@@ -21,7 +21,7 @@ Monostr é um cliente Nostr para Android com gorjetas em Monero.
 <b>Privacidade</b>
 • Tor integrado, desligado por padrão. Ligado, relays, imagens, uploads e o watcher veem o Tor em vez do seu endereço IP, mensagens e gorjetas também são verificadas pelo Tor em segundo plano, e nada sai diretamente enquanto o Tor não está conectado
 • Relays onion na sua própria lista de relays com o Tor ligado
-• Links da web perguntam antes de abrir; com Tor você pode abri-los no Tor Browser ou copiá-los
+• Links da web perguntam antes de abrir; com Tor você pode copiá-los para colar no Tor Browser
 • O Tor esconde seu endereço IP, não sua conta, sua carteira ou seu navegador
 
 <b>Aberto</b>

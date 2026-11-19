@@ -2,6 +2,8 @@ package com.monostr.app.media
 
 import com.monostr.app.net.SendGate
 import com.monostr.nostr.Signer
+import com.monostr.nostr.SigningRejectedException
+import com.monostr.nostr.SilentSignUnavailable
 import com.monostr.nostr.blossom.BlossomAuth
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -46,10 +48,12 @@ class BlossomClient(
         .callTimeout(5, TimeUnit.MINUTES).build() // no call lives forever, but 10 MB on a slow link fits
     // spec 2026-10-27 video §8: up to 50 MiB, which a slow line needs minutes for
     // the answer comes after the server checked and stored the video: minutes, not the picture client's 60 s (final review I2)
-    private val videoHttp: OkHttpClient = this.http.newBuilder().writeTimeout(15, TimeUnit.MINUTES).readTimeout(10, TimeUnit.MINUTES)
-        .callTimeout(15, TimeUnit.MINUTES).build()
+    private val videoHttp: OkHttpClient = this.http.newBuilder().writeTimeout(15, TimeUnit.MINUTES).readTimeout(30, TimeUnit.MINUTES)
+        .callTimeout(120, TimeUnit.MINUTES).build() // a trusted 300 MiB video: up to 90 minutes of upload, then the server's checks (up to 15 minutes of video; the answer waits for the scorer and the bucket)
     /** Tests: how long a video upload waits for the server's answer. */
     internal val videoReadTimeoutMillis: Int get() = videoHttp.readTimeoutMillis
+    /** Tests: the whole-call limit of a video upload. */
+    internal val videoCallTimeoutMillis: Int get() = videoHttp.callTimeoutMillis
     private val json = Json { ignoreUnknownKeys = true }
 
     @Serializable
@@ -94,6 +98,39 @@ class BlossomClient(
         if (authority.isEmpty() || authority[0] == '/' || authority[0] == '\\') return false
         val parsed = url.toHttpUrlOrNull() ?: return false
         return parsed.host.isNotEmpty() && (parsed.isHttps || (base.startsWith("http://") && parsed.scheme == "http"))
+    }
+
+    /**
+     * Asks the server for this account's video limits (`GET /limits`). Never throws except for
+     * cancellation: a signature the user refused is [LimitsAnswer.Refused] (the caller may remember
+     * the default), a definitive 4xx (not 401) likewise, everything else that goes wrong is [LimitsAnswer.Failed] (ask again next time).
+     */
+    suspend fun fetchVideoLimits(server: String): LimitsAnswer {
+        try {
+            sendGate.requireCanSend()
+            val base = server.trim().trimEnd('/')
+            val unsigned = BlossomAuth.unsignedLimits(base, now())
+            val signed = try {
+                signer.signEventSilent(unsigned)
+            } catch (e: SilentSignUnavailable) {
+                signer.sign(unsigned)
+            }
+            val request = Request.Builder().url("$base/limits").header("Authorization", BlossomAuth.header(signed)).get().build()
+            val client = http.newBuilder().callTimeout(45, TimeUnit.SECONDS).build() // a remote signer (Amber) may need a moment
+            return execute(request, client) { status, body ->
+                // only a plain 200 is an answer; 204 or a redirect page is not
+                if (status == 200) VideoLimits.parse(body)?.let { LimitsAnswer.Got(it) } ?: LimitsAnswer.Failed else LimitsAnswer.Failed
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: SigningRejectedException) {
+            return LimitsAnswer.Refused
+        } catch (e: UploadException.Rejected) {
+            // a definitive no (404: an older server, 403: not allowed) stays no for the session; 401 may be a clock or a signer hiccup
+            return if (e.status in 400..499 && e.status != 401) LimitsAnswer.Refused else LimitsAnswer.Failed
+        } catch (e: Exception) {
+            return LimitsAnswer.Failed
+        }
     }
 
     /**

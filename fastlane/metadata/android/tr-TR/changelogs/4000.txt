@@ -1,0 +1,6 @@
+- Bir notun görselleri kaydırılabilen tek satırda, kaç tane olduğunu gösteren noktalarla
+- Not başına 20 görsele kadar
+- Videolar sürelerini gösterir
+- Yüklemeler sunucu kontrol ederken «Kontrol ediliyor…» gösterir
+- Bildirimler en yeni tepkinin emojisini gösterir
+- Düzeltmeler

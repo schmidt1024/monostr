@@ -2,6 +2,8 @@ package com.monostr.app.media
 
 import com.monostr.nostr.SigningRejectedException
 import com.monostr.nostr.SilentSignUnavailable
+import com.monostr.nostr.net.NetworkGate
+import com.monostr.app.net.SendGate
 import com.monostr.tips.event.Event
 import com.monostr.tips.event.EventJson
 import kotlinx.coroutines.test.runTest
@@ -12,6 +14,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertInstanceOf
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assertions.fail
 import org.junit.jupiter.api.BeforeEach
@@ -97,7 +100,76 @@ class BlossomClientTest {
     fun `a video upload waits minutes for the server's answer`() {
         // final review I2: after the body the server probes and scores the video and writes it to the bucket
         // before its first byte; the picture client's 60 s read timeout would give up while it works
-        assertTrue(client.videoReadTimeoutMillis >= 5 * 60_000, "read timeout ${client.videoReadTimeoutMillis} ms")
+        assertTrue(client.videoReadTimeoutMillis >= 30 * 60_000, "read timeout ${client.videoReadTimeoutMillis} ms")
+        // a trusted account's 300 MiB video is a 90 minute upload on a slow line
+        assertTrue(client.videoCallTimeoutMillis >= 115 * 60_000, "call timeout ${client.videoCallTimeoutMillis} ms")
+    }
+
+    private val limitsJson =
+        """{"max_video_seconds":900,"max_video_bytes":314572800,"videos_per_day":20,"quota_bytes":21474836480,"used_bytes":0}"""
+
+    @Test
+    fun `fetchVideoLimits asks GET limits with a limits token`() = runTest {
+        server.enqueue(MockResponse().setResponseCode(200).setBody(limitsJson))
+        assertEquals(LimitsAnswer.Got(VideoLimits(900, 314_572_800)), client.fetchVideoLimits(base))
+        val request = server.takeRequest()
+        assertEquals("GET", request.method)
+        assertEquals("/limits", request.path)
+        val auth = authOf(request.getHeader("Authorization")!!)
+        assertEquals(24242, auth.kind)
+        assertEquals("limits", auth.firstTagValue("t"))
+        assertEquals(server.hostName.lowercase(), auth.firstTagValue("server"))
+        assertNull(auth.firstTagValue("x"))
+    }
+
+    @Test
+    fun `fetchVideoLimits falls back on anything unexpected`() = runTest {
+        server.enqueue(MockResponse().setResponseCode(204))
+        assertEquals(LimitsAnswer.Failed, client.fetchVideoLimits(base))
+        server.enqueue(MockResponse().setResponseCode(401))
+        assertEquals(LimitsAnswer.Failed, client.fetchVideoLimits(base))
+        server.enqueue(MockResponse().setResponseCode(503))
+        assertEquals(LimitsAnswer.Failed, client.fetchVideoLimits(base))
+        server.enqueue(MockResponse().setResponseCode(200).setBody(limitsJson.replace("900", "999999")))
+        assertEquals(LimitsAnswer.Failed, client.fetchVideoLimits(base))
+        server.enqueue(MockResponse().setResponseCode(200).setBody("<html>"))
+        assertEquals(LimitsAnswer.Failed, client.fetchVideoLimits(base))
+        server.enqueue(MockResponse().setResponseCode(200).setBody("x".repeat(70_000)))
+        assertEquals(LimitsAnswer.Failed, client.fetchVideoLimits(base))
+    }
+
+    @Test
+    fun `fetchVideoLimits takes a definitive 4xx as a no`() = runTest {
+        for (status in listOf(403, 404)) {
+            server.enqueue(MockResponse().setResponseCode(status))
+            assertEquals(LimitsAnswer.Refused, client.fetchVideoLimits(base), "$status")
+        }
+    }
+
+    @Test
+    fun `fetchVideoLimits opens the signer when a silent signature is not possible`() = runTest {
+        var calls = 0
+        val needsUser = BlossomClient(
+            OkHttpClient(),
+            FakeSigner(pubkey, onSign = { calls++; FakeSigner.signed(it, pubkey) }, onSilent = { calls++; throw SilentSignUnavailable() }),
+        ) { 1000L }
+        server.enqueue(MockResponse().setResponseCode(200).setBody(limitsJson))
+        assertEquals(LimitsAnswer.Got(VideoLimits(900, 314_572_800)), needsUser.fetchVideoLimits(base))
+        assertEquals(2, calls)
+    }
+
+    @Test
+    fun `a refused signature is Refused, not Failed`() = runTest {
+        val refusing = BlossomClient(OkHttpClient(), FakeSigner(pubkey, onSign = { throw SigningRejectedException() }, onSilent = { throw SilentSignUnavailable() })) { 1000L }
+        assertEquals(LimitsAnswer.Refused, refusing.fetchVideoLimits(base))
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test
+    fun `a closed send gate asks nothing`() = runTest {
+        val closed = BlossomClient(OkHttpClient(), signer, SendGate(NetworkGate(), { false }, kotlinx.coroutines.flow.flowOf(false))) { 1000L }
+        assertEquals(LimitsAnswer.Failed, closed.fetchVideoLimits(base))
+        assertEquals(0, server.requestCount)
     }
 
     @Test

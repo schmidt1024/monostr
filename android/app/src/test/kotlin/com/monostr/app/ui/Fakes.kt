@@ -1045,6 +1045,15 @@ class FakeMediaUploader : MediaUploader {
     /** Sources of the videos uploaded, in order. */
     val videoUploads = ArrayList<String>()
 
+    /** What the server reports for the account (Task 7); DEFAULT is an ordinary one. */
+    var videoLimits: com.monostr.app.media.VideoLimits = com.monostr.app.media.VideoLimits.DEFAULT
+    var videoLimitsCalls = 0
+
+    override suspend fun videoLimits(): com.monostr.app.media.VideoLimits {
+        videoLimitsCalls++
+        return videoLimits
+    }
+
     override suspend fun videoDurationMs(source: String): Long = videoDurationMs
 
     override suspend fun uploadVideo(source: String, onPreparing: (Float) -> Unit, onProgress: (Float) -> Unit): UploadedMedia {

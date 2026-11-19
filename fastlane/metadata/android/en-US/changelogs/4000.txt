@@ -1,0 +1,6 @@
+- Pictures of a note in one row you swipe through, with dots that show how many
+- Up to 20 pictures per note
+- Videos show their length
+- Uploads say «Checking…» while the server checks them
+- Notifications show the emoji of the newest reaction
+- Fixes

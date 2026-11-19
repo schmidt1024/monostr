@@ -2,8 +2,13 @@
 
 POST /classify with the raw image bytes answers {"score": 0..1, "frames": n};
 POST /video with an MP4 answers what ffprobe sees (size as displayed, codecs,
-container, duration) and the highest score of up to MAX_VIDEO_FRAMES frames
-ffmpeg takes from it (spec 2026-10-27 video §7), or 422 when it is no video;
+container, duration) and the highest score of the frames ffmpeg takes from it
+(one per 10 s, at least 3, at most max(12, N / 10) for the allowance N; spec
+2026-10-27 video §7), or 422 when it is no video. POST /video?max_seconds=N
+(integer 1..900, absent = 125, else 400) scales the frame cap, the packet cap
+(60 per second) and the time budget (120 s per 125 s of allowance, never less)
+with the length the media server allows that account; the body ceiling is
+300 MiB for all (trusted-video spec 2026-11-19);
 GET /healthz answers 200 once the model is loaded. The score is the model's
 NSFW probability; for an animated GIF, WebP or PNG it is the highest score of
 up to MAX_FRAMES evenly spaced frames, and a picture with transparency is
@@ -25,6 +30,7 @@ import tempfile
 import threading
 import time
 import warnings
+from urllib.parse import parse_qs, urlsplit
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import numpy as np
@@ -36,8 +42,8 @@ MODEL_SHA256 = "50256dde930a4ceeb8953246ba7345158e02cc0a201a173402ab3e6e3a76f40a
 LISTEN = os.environ.get("NSFW_LISTEN", "0.0.0.0:8081")
 MAX_BODY = 11 * 1024 * 1024
 MAX_FRAMES = 8
-# videos (spec 2026-10-27 video §6, §7): the media server caps them at 50 MiB
-MAX_VIDEO_BODY = 50 * 1024 * 1024
+# videos (spec 2026-10-27 video §6, §7): the media server caps them at 50 MiB, a trusted account at 300 MiB
+MAX_VIDEO_BODY = 300 * 1024 * 1024
 MIN_VIDEO_FRAMES = 3
 MAX_VIDEO_FRAMES = 12
 VIDEO_FRAME_EVERY = 10.0  # seconds
@@ -48,11 +54,13 @@ TEMP_ROOT = os.environ.get("NSFW_TEMP", tempfile.gettempdir())
 VIDEO_BUDGET = 120.0  # seconds
 # 125 s at 60 frames a second: more packets (of a stream) are refused before they are listed
 MAX_VIDEO_PACKETS = 7500
+# the allowance in seconds: 125 for everyone, up to 900 for a trusted account (?max_seconds=N)
+DEFAULT_VIDEO_SECONDS = 125
+MAX_VIDEO_SECONDS_CEILING = 900
 # what the media server takes (spec 2026-10-27 video §6): anything else is answered without decoding a frame,
 # the server refuses it with its own reason (final review I3)
 VIDEO_CODEC = "h264"
 AUDIO_CODECS = (None, "aac")
-MAX_VIDEO_SECONDS = 125.0
 MAX_SHORT_EDGE = 720
 # ffmpeg reads exactly this file as MP4/MOV and nothing else: no format guessing
 # (a playlist could name other files or URLs) and no protocol but the file itself
@@ -174,10 +182,44 @@ def score(session, data: bytes) -> tuple[float, int]:
     return best, len(indices)
 
 
-def frame_times(duration: float) -> list[float]:
-    """One frame per VIDEO_FRAME_EVERY seconds, at least MIN and at most MAX,
+def frame_cap(max_seconds: int) -> int:
+    """Frames at most: one per VIDEO_FRAME_EVERY seconds of the allowance, never fewer than MAX_VIDEO_FRAMES."""
+    return max(MAX_VIDEO_FRAMES, int(max_seconds // VIDEO_FRAME_EVERY))
+
+
+def packet_cap(max_seconds: int) -> int:
+    """Packets of one stream at most: 60 a second of the allowance (read at call time)."""
+    return MAX_VIDEO_PACKETS * max_seconds // DEFAULT_VIDEO_SECONDS
+
+
+def budget_seconds(max_seconds: int) -> float:
+    """Time for the whole check: VIDEO_BUDGET up to the default allowance, scaled beyond. The media server waits
+    3 min * max(1, N / 125) for the answer, always more than this."""
+    return VIDEO_BUDGET * max(1.0, max_seconds / DEFAULT_VIDEO_SECONDS)
+
+
+def parse_max_seconds(path: str) -> "int | None":
+    """The allowance of POST /video[?max_seconds=N]: absent = 125, an integer 1..900 = itself, anything else
+    (also a repeated or empty parameter, another path) = None."""
+    parts = urlsplit(path)
+    if parts.path != "/video":
+        return None
+    values = parse_qs(parts.query, keep_blank_values=True)
+    if not values:
+        return None if parts.query else DEFAULT_VIDEO_SECONDS
+    raw = values.get("max_seconds")
+    if len(values) != 1 or raw is None or len(raw) != 1 or not raw[0].isascii() or not raw[0].isdigit():
+        return None
+    if len(raw[0]) > 3:  # int() of a very long digit string raises ValueError
+        return None
+    n = int(raw[0])
+    return n if 1 <= n <= MAX_VIDEO_SECONDS_CEILING else None
+
+
+def frame_times(duration: float, cap: int = MAX_VIDEO_FRAMES) -> list[float]:
+    """One frame per VIDEO_FRAME_EVERY seconds, at least MIN and at most cap,
     each in the middle of its equal share of the video."""
-    n = min(MAX_VIDEO_FRAMES, max(MIN_VIDEO_FRAMES, math.ceil(duration / VIDEO_FRAME_EVERY)))
+    n = min(cap, max(MIN_VIDEO_FRAMES, math.ceil(duration / VIDEO_FRAME_EVERY)))
     return [duration * (i + 0.5) / n for i in range(n)]
 
 
@@ -190,8 +232,8 @@ def _rotation(stream: dict) -> int:
 
 
 class _Budget:
-    def __init__(self):
-        self.end = time.monotonic() + VIDEO_BUDGET
+    def __init__(self, seconds: "float | None" = None):
+        self.end = time.monotonic() + (VIDEO_BUDGET if seconds is None else seconds)
 
     def left(self) -> float:
         left = self.end - time.monotonic()
@@ -214,12 +256,12 @@ def _is_mp4(path: str) -> bool:
     return len(head) == 12 and head[4:8] == b"ftyp"
 
 
-def probe(path: str, budget: "_Budget | None" = None) -> dict:
+def probe(path: str, budget: "_Budget | None" = None, max_seconds: int = DEFAULT_VIDEO_SECONDS) -> dict:
     """What ffprobe sees: width and height as displayed (rotation applied),
     codecs, container, and the duration of the video stream's packets (not the
     header's word for it). Raises Unreadable for what is no MP4 with exactly one
     video stream."""
-    budget = budget or _Budget()
+    budget = budget or _Budget(budget_seconds(max_seconds))
     if not _is_mp4(path):
         raise Unreadable("not an MP4 file")
     try:
@@ -246,9 +288,9 @@ def probe(path: str, budget: "_Budget | None" = None) -> dict:
     names = (fmt.get("format_name") or "").split(",")
     index = str(int(video["index"]))
     # the length is where the last packet of any stream ends: sound longer than the picture counts (final review I4)
-    duration = _stream_end(path, index, budget)
+    duration = _stream_end(path, index, budget, max_seconds=max_seconds)
     if audio is not None:
-        duration = max(duration, _stream_end(path, str(int(audio["index"])), budget, need_packets=False))
+        duration = max(duration, _stream_end(path, str(int(audio["index"])), budget, need_packets=False, max_seconds=max_seconds))
     return {
         "index": int(index),
         "width": width,
@@ -260,15 +302,16 @@ def probe(path: str, budget: "_Budget | None" = None) -> dict:
     }
 
 
-def _stream_end(path: str, index: str, budget: "_Budget", need_packets: bool = True) -> float:
+def _stream_end(path: str, index: str, budget: "_Budget", need_packets: bool = True,
+                max_seconds: int = DEFAULT_VIDEO_SECONDS) -> float:
     """Where the last packet of stream [index] ends. The packets are counted first (one number; a rotated video adds
-    an empty side-data field: "2699,") and more than MAX_VIDEO_PACKETS are refused before any listing reaches memory."""
+    an empty side-data field: "2699,") and more than packet_cap(max_seconds) are refused before any listing reaches memory."""
     try:
         packets = int(_run([FFPROBE, "-v", "error", *FF_INPUT, "-select_streams", index, "-count_packets",
                             "-show_entries", "stream=nb_read_packets", "-of", "csv=p=0", path], budget).split()[0].split(b",")[0])
     except (ValueError, IndexError) as e:
         raise Unreadable("packets not countable") from e
-    if packets > MAX_VIDEO_PACKETS or (need_packets and packets < 1):
+    if packets > packet_cap(max_seconds) or (need_packets and packets < 1):
         raise Unreadable(f"{packets} packets in stream {index}")
     ends = _run([FFPROBE, "-v", "error", *FF_INPUT, "-select_streams", index, "-show_entries", "packet=pts_time,duration_time",
                  "-of", "csv=p=0", path], budget).decode(errors="replace").split()
@@ -284,25 +327,25 @@ def _stream_end(path: str, index: str, budget: "_Budget", need_packets: bool = T
     return end
 
 
-def acceptable(info: dict) -> bool:
+def acceptable(info: dict, max_seconds: int = DEFAULT_VIDEO_SECONDS) -> bool:
     """What the media server would store at all; only such a video is decoded."""
     return (info["video_codec"] == VIDEO_CODEC and info["audio_codec"] in AUDIO_CODECS
-            and min(info["width"], info["height"]) <= MAX_SHORT_EDGE and info["duration"] <= MAX_VIDEO_SECONDS)
+            and min(info["width"], info["height"]) <= MAX_SHORT_EDGE and info["duration"] <= max_seconds)
 
 
-def score_video(session, path: str) -> dict:
+def score_video(session, path: str, max_seconds: int = DEFAULT_VIDEO_SECONDS) -> dict:
     """probe() plus the highest score of the frames at frame_times(). Every
     frame must be taken: one that cannot be fails the check (no part of a
     video goes unscored). The whole check shares one time budget."""
-    budget = _Budget()
-    info = probe(path, budget)
-    if not acceptable(info):
+    budget = _Budget(budget_seconds(max_seconds))
+    info = probe(path, budget, max_seconds)
+    if not acceptable(info, max_seconds):
         # refused anyway: no frame is decoded, the server answers with its own reason
         info["score"], info["frames"] = 0.0, 0
         del info["index"]
         return info
     best, looked_at = 0.0, 0
-    for t in frame_times(info["duration"]):
+    for t in frame_times(info["duration"], frame_cap(max_seconds)):
         frame = _run([FFMPEG, "-v", "error", *FF_INPUT, "-c:v", VIDEO_CODEC, "-ss", f"{t:.3f}", "-i", path, "-map", f"0:{info['index']}", "-frames:v", "1",
                       "-f", "image2pipe", "-vcodec", "mjpeg", "-"], budget)
         if not frame:
@@ -336,8 +379,12 @@ class Handler(BaseHTTPRequestHandler):
             self.reply(404, {"error": "not found"})
 
     def do_POST(self):
-        if self.path == "/video":
-            self.video()
+        if urlsplit(self.path).path == "/video":
+            max_seconds = parse_max_seconds(self.path)
+            if max_seconds is None:
+                self.reply(400, {"error": "bad max_seconds"})
+                return
+            self.video(max_seconds)
             return
         if self.path != "/classify":
             self.reply(404, {"error": "not found"})
@@ -364,7 +411,7 @@ class Handler(BaseHTTPRequestHandler):
         self.reply(200, {"score": round(value, 6), "frames": frames})
 
 
-    def video(self):
+    def video(self, max_seconds: int = DEFAULT_VIDEO_SECONDS):
         try:
             length = int(self.headers.get("Content-Length", ""))
         except ValueError:
@@ -375,13 +422,13 @@ class Handler(BaseHTTPRequestHandler):
             return
         work = tempfile.mkdtemp(dir=TEMP_ROOT)
         try:
-            status, body = self._video_in(work, length)
+            status, body = self._video_in(work, length, max_seconds)
         finally:
             # gone before the answer: the caller never sees a temp file outlive its request
             shutil.rmtree(work, ignore_errors=True)
         self.reply(status, body)
 
-    def _video_in(self, work: str, length: int) -> tuple[int, dict]:
+    def _video_in(self, work: str, length: int, max_seconds: int = DEFAULT_VIDEO_SECONDS) -> tuple[int, dict]:
         path = os.path.join(work, "in.mp4")
         with open(path, "wb") as f:
             left = length
@@ -393,7 +440,7 @@ class Handler(BaseHTTPRequestHandler):
                 left -= len(chunk)
         try:
             with VIDEOS:
-                return 200, score_video(self.session, path)
+                return 200, score_video(self.session, path, max_seconds)
         except Unreadable:
             return 422, {"error": "unreadable video"}
         except Exception:

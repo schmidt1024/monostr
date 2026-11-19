@@ -40,20 +40,20 @@ import kotlin.coroutines.resumeWithException
 
 /** Spec 2026-10-27 video §3, §4: what the device takes and the size it encodes to; no Android types, so the JVM tests reach it. */
 object VideoRules {
-    /** 2:00 plus 1 s for the rounding of containers. */
+    /** The default account's limit: 2:05 minus the margin ([VideoLimits.MARGIN_MS]), 121 s. */
     const val MAX_SOURCE_MS = 121_000L
-    /** What the project's server takes for a video (50 MiB). */
+    /** What the project's server takes for a video of a default account (50 MiB), [VideoLimits.DEFAULT]. */
     const val MAX_BYTES = 52_428_800L
     const val SHORT_EDGE = 720
     const val MAX_FPS = 30f
     const val VIDEO_BITRATE = 2_000_000
-    /** Once more at this rate when the first result is above [MAX_BYTES]. */
+    /** Once more at this rate when the first result is above the account's byte limit. */
     const val RETRY_BITRATE = 1_200_000
     const val AUDIO_BITRATE = 128_000
     /** The poster is the frame at 1 s, or the first one of a shorter video. */
     const val POSTER_AT_US = 1_000_000L
 
-    fun tooLong(durationMs: Long): Boolean = durationMs > MAX_SOURCE_MS
+    fun tooLong(durationMs: Long, maxSourceMs: Long = MAX_SOURCE_MS): Boolean = durationMs > maxSourceMs
 
     /**
      * The encoded size for a source of [width] × [height] stored with a [rotation] flag: the flag is
@@ -85,11 +85,11 @@ interface VideoPreparer {
     suspend fun durationMs(source: String): Long
 
     /**
-     * Encodes [source] to H.264/AAC MP4 at most 720p, without metadata, plus a poster picture; [onProgress]
-     * gets 0..1. Throws [UploadException.VideoTooLong], [UploadException.TooLarge] or [UploadException.Unreadable];
+     * Encodes [source] to H.264/AAC MP4 at most 720p, without metadata, plus a poster picture; [limits] are the
+     * account's (length of the source, bytes of the result); [onProgress] gets 0..1. Throws [UploadException.VideoTooLong], [UploadException.TooLarge] or [UploadException.Unreadable];
      * a cancel or a failure leaves no file behind.
      */
-    suspend fun prepare(source: String, onProgress: (Float) -> Unit = {}): PreparedVideo
+    suspend fun prepare(source: String, limits: VideoLimits = VideoLimits.DEFAULT, onProgress: (Float) -> Unit = {}): PreparedVideo
 }
 
 // Media3's Transformer and its HDR modes are marked unstable/experimental; the app relies on them on purpose (lint)
@@ -104,7 +104,7 @@ class TransformerVideoPreparer(private val context: Context) : VideoPreparer {
             ?: throw UploadException.Unreadable()
     }
 
-    override suspend fun prepare(source: String, onProgress: (Float) -> Unit): PreparedVideo = oneAtATime.withLock {
+    override suspend fun prepare(source: String, limits: VideoLimits, onProgress: (Float) -> Unit): PreparedVideo = oneAtATime.withLock {
         val uri = Uri.parse(source)
         val (width, height, rotation) = withContext(Dispatchers.IO) {
             retrieve(uri) { r ->
@@ -113,7 +113,7 @@ class TransformerVideoPreparer(private val context: Context) : VideoPreparer {
                 val d = r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
                 if (w == null || h == null || d == null || w < 1 || h < 1) null
                 else {
-                    if (VideoRules.tooLong(d)) throw UploadException.VideoTooLong()
+                    if (VideoRules.tooLong(d, limits.maxSourceMs)) throw UploadException.VideoTooLong(limits.minutes)
                     Triple(w, h, r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0)
                 }
             } ?: throw UploadException.Unreadable()
@@ -123,10 +123,10 @@ class TransformerVideoPreparer(private val context: Context) : VideoPreparer {
         val poster = File(dir, "p-${System.nanoTime()}.jpg")
         try {
             var result = encode(uri, out, tw, th, VideoRules.VIDEO_BITRATE) { onProgress(it * 0.9f) }
-            if (out.length() > VideoRules.MAX_BYTES) {
+            if (out.length() > limits.maxVideoBytes) {
                 out.delete()
                 result = encode(uri, out, tw, th, VideoRules.RETRY_BITRATE) { onProgress(0.9f + it * 0.1f) }
-                if (out.length() > VideoRules.MAX_BYTES) throw UploadException.TooLarge()
+                if (out.length() > limits.maxVideoBytes) throw UploadException.TooLarge()
             }
             withContext(Dispatchers.IO) { writePoster(out, poster) }
             val sha = withContext(Dispatchers.IO) { sha256(out) }

@@ -91,7 +91,7 @@ func candidateHash(auth blossom.Auth, r *http.Request) string {
 // the normalised media type and, for a reserving admission, a release func
 // the caller must call when the upload is over, however it ends.
 func (s *server) admit(w http.ResponseWriter, r *http.Request, a admission) (string, func(), bool) {
-	lim := s.cfg.Limits
+	lim := s.limitsFor(a.pubkey)
 	none := func() {}
 	banned, err := s.store.PubkeyBanned(a.pubkey)
 	if err != nil {
@@ -267,7 +267,7 @@ func (s *server) upload(w http.ResponseWriter, r *http.Request) {
 	defer release()
 	address := limits.IPKey(clientIP(r))
 	if mediaType == imagecheck.VideoMP4 {
-		s.uploadVideo(w, r, auth, address, now)
+		s.uploadVideo(w, r, auth, s.limitsFor(auth.Pubkey), address, now)
 		return
 	}
 

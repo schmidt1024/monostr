@@ -1,0 +1,6 @@
+- Bilder einer Note in einer Reihe zum Wischen, mit Punkten, die zeigen, wie viele es sind
+- Bis zu 20 Bilder pro Note
+- Videos zeigen ihre Länge
+- Uploads zeigen «Wird geprüft…», solange der Server sie prüft
+- Benachrichtigungen zeigen das Emoji der neuesten Reaktion
+- Korrekturen

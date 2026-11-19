@@ -95,9 +95,10 @@ private fun GroupRow(group: NotificationRow.Group, row: NotificationRowUi, names
         verticalAlignment = Alignment.Top,
     ) {
         LeadingSlot {
-            if (group.reactions.isNotEmpty()) {
-                // emoji reactions show themselves instead of the heart
-                Text(group.reactions.first(), fontSize = 26.sp, maxLines = 1, softWrap = false, modifier = Modifier.testTag("notification-emoji-${group.key}"))
+            val emoji = group.newestEmoji
+            if (emoji != null) {
+                // the newest reactor's emoji instead of the heart; their plain like keeps the heart (owner 2026-11-19)
+                Text(emoji, fontSize = 26.sp, maxLines = 1, softWrap = false, modifier = Modifier.testTag("notification-emoji-${group.key}"))
             } else {
                 Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(LEADING_ICON))
             }
@@ -131,7 +132,7 @@ private fun groupSentence(group: NotificationRow.Group, names: Map<String, Strin
     val liked = group.kind != NotificationKind.REPOST
     // with an emoji among them the row says "reacted"; one person's emoji is named
     if (liked && group.reactions.isNotEmpty()) return when {
-        b == null -> stringResource(R.string.notif_reacted_one, a, group.reactions.first())
+        b == null -> group.newestEmoji?.let { stringResource(R.string.notif_reacted_one, a, it) } ?: stringResource(R.string.notif_liked_one, a)
         others <= 0 -> stringResource(R.string.notif_reacted_two, a, b)
         else -> pluralStringResource(R.plurals.notif_reacted_more, others, a, b, others)
     }

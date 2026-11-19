@@ -14,6 +14,11 @@ sealed interface NotificationRow {
         val kind: NotificationKind, val aboutId: String, val actors: List<String>, override val createdAt: Long,
         /** Emoji reactions among them (not the plain likes), distinct, newest first, at most [NotificationGroups.MAX_REACTIONS]. */
         val reactions: List<String> = emptyList(),
+        /**
+         * The newest reactor's own emoji, null for a plain like (and for a repost): the row's symbol stands beside the
+         * newest face, so it is that person's reaction (owner 2026-11-19), not an older emoji of somebody else.
+         */
+        val newestEmoji: String? = null,
     ) : NotificationRow {
         override val key: String get() = "${kind.name}:$aboutId"
         val count: Int get() = actors.size
@@ -47,7 +52,8 @@ object NotificationGroups {
             val reactions = if (newestFirst.first().kind != NotificationKind.REACTION) emptyList()
                 // only real emojis: the content is relay input and shows as the row's symbol and in its sentence
                 else newestFirst.mapNotNull { Reactions.shown(it.text) }.distinct().take(MAX_REACTIONS)
-            NotificationRow.Group(newestFirst.first().kind, newestFirst.first().aboutId!!, newestFirst.map { it.from!! }.distinct(), newestFirst.first().createdAt, reactions)
+            val newestEmoji = if (newestFirst.first().kind != NotificationKind.REACTION) null else Reactions.shown(newestFirst.first().text)
+            NotificationRow.Group(newestFirst.first().kind, newestFirst.first().aboutId!!, newestFirst.map { it.from!! }.distinct(), newestFirst.first().createdAt, reactions, newestEmoji)
         }
         return (grouped + singles).sortedByDescending { it.createdAt }
     }

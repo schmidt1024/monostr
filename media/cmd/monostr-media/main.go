@@ -43,6 +43,7 @@ type config struct {
 	nsfwURL     string
 	threshold   float64
 	limits      limits.Limits
+	trusted     limits.Trusted
 	maxInFlight int
 	s3          storage.S3Config
 
@@ -74,6 +75,35 @@ func parseRelays(list string) ([]string, error) {
 		return nil, errors.New("MEDIA_NOSTR_RELAYS names no relay")
 	}
 	return out, nil
+}
+
+// parseTrustedPubkeys reads a comma separated list of 64-character hex pubkeys
+// (case is folded). An error names the entry by position, never by value.
+func parseTrustedPubkeys(list string) (map[string]bool, error) {
+	out := map[string]bool{}
+	for i, p := range strings.Split(list, ",") {
+		p = strings.ToLower(strings.TrimSpace(p))
+		if p == "" {
+			continue
+		}
+		if len(p) != 64 || strings.Trim(p, "0123456789abcdef") != "" {
+			return nil, fmt.Errorf("MEDIA_TRUSTED_PUBKEYS: entry %d is not a 64-character hex pubkey", i+1)
+		}
+		out[p] = true
+	}
+	return out, nil
+}
+
+// envCapped is envInt with an upper bound.
+func envCapped(getenv func(string) string, key string, def, ceiling int64) (int64, error) {
+	v, err := envInt(getenv, key, def)
+	if err != nil {
+		return 0, err
+	}
+	if v > ceiling {
+		return 0, fmt.Errorf("%s must be at most %d", key, ceiling)
+	}
+	return v, nil
 }
 
 func env(getenv func(string) string, key, def string) string {
@@ -157,14 +187,38 @@ func loadConfig(getenv func(string) string) (config, error) {
 	if c.limits.GlobalBytesPerDay, err = envInt(getenv, "MEDIA_GLOBAL_BYTES_PER_DAY", 20<<30); err != nil {
 		return c, err
 	}
-	if c.limits.MaxVideoBytes, err = envInt(getenv, "MEDIA_MAX_VIDEO_BYTES", 50<<20); err != nil {
+	if c.limits.MaxVideoBytes, err = envCapped(getenv, "MEDIA_MAX_VIDEO_BYTES", 50<<20, limits.VideoBytesCeiling); err != nil {
 		return c, err
 	}
+	seconds, err := envCapped(getenv, "MEDIA_MAX_VIDEO_SECONDS", limits.DefaultMaxVideoSeconds, limits.VideoSecondsCeiling)
+	if err != nil {
+		return c, err
+	}
+	c.limits.MaxVideoSeconds = int(seconds)
 	videosPerDay, err := envInt(getenv, "MEDIA_PUBKEY_VIDEOS_PER_DAY", 5)
 	if err != nil {
 		return c, err
 	}
 	c.limits.PubkeyVideosPerDay = int(videosPerDay)
+	if c.trusted.MaxVideoBytes, err = envCapped(getenv, "MEDIA_TRUSTED_MAX_VIDEO_BYTES", limits.VideoBytesCeiling, limits.VideoBytesCeiling); err != nil {
+		return c, err
+	}
+	tSeconds, err := envCapped(getenv, "MEDIA_TRUSTED_MAX_VIDEO_SECONDS", limits.VideoSecondsCeiling, limits.VideoSecondsCeiling)
+	if err != nil {
+		return c, err
+	}
+	c.trusted.MaxVideoSeconds = int(tSeconds)
+	tPerDay, err := envInt(getenv, "MEDIA_TRUSTED_VIDEOS_PER_DAY", 20)
+	if err != nil {
+		return c, err
+	}
+	c.trusted.VideosPerDay = int(tPerDay)
+	if c.trusted.QuotaBytes, err = envInt(getenv, "MEDIA_TRUSTED_QUOTA_BYTES", 20<<30); err != nil {
+		return c, err
+	}
+	if c.trusted.Pubkeys, err = parseTrustedPubkeys(env(getenv, "MEDIA_TRUSTED_PUBKEYS", "")); err != nil {
+		return c, err
+	}
 	if c.limits.StorageAlertBytes, err = envInt(getenv, "MEDIA_STORAGE_ALERT_BYTES", 200_000_000_000); err != nil {
 		return c, err
 	}
@@ -261,7 +315,7 @@ func serve(logger *slog.Logger, cfg config, st *store.Store, bucket storage.Buck
 		go client.AnnounceUntilDone(ctx)
 	}
 	handler, err := api.New(api.Config{
-		PublicURL: cfg.publicURL, Limits: cfg.limits, Threshold: cfg.threshold, Reject: cfg.reject, ReviewDMsPerDay: cfg.reviewDMsPerDay,
+		PublicURL: cfg.publicURL, Limits: cfg.limits, Trusted: cfg.trusted, Threshold: cfg.threshold, Reject: cfg.reject, ReviewDMsPerDay: cfg.reviewDMsPerDay,
 		ContactNpub: cfg.contactNpub, Version: version, MaxInFlight: cfg.maxInFlight,
 		// beside the database on the data volume: a video waits there while it is checked
 		TempDir: filepath.Join(filepath.Dir(cfg.dbPath), "tmp"),
@@ -269,6 +323,7 @@ func serve(logger *slog.Logger, cfg config, st *store.Store, bucket storage.Buck
 	if err != nil {
 		return err
 	}
+	logger.Info("trusted accounts", "count", len(cfg.trusted.Pubkeys))
 	// a 10 MB upload over a slow mobile link needs time; the header timeout guards against idle connections
 	srv := &http.Server{Addr: cfg.listen, Handler: handler, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 5 * time.Minute, WriteTimeout: 5 * time.Minute}
 	errCh := make(chan error, 1)

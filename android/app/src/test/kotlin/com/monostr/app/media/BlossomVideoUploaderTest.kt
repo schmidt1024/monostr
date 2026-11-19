@@ -41,9 +41,12 @@ class BlossomVideoUploaderTest {
     private lateinit var videoFile: File
     private lateinit var posterFile: File
 
+    private var preparedWith: VideoLimits? = null
+
     private val videos = object : VideoPreparer {
         override suspend fun durationMs(source: String) = 61_500L
-        override suspend fun prepare(source: String, onProgress: (Float) -> Unit): PreparedVideo {
+        override suspend fun prepare(source: String, limits: VideoLimits, onProgress: (Float) -> Unit): PreparedVideo {
+            preparedWith = limits
             onProgress(1f)
             return PreparedVideo(videoFile, 720, 1280, 61_500L, videoHash, videoFile.length(), posterFile)
         }
@@ -83,6 +86,101 @@ class BlossomVideoUploaderTest {
 
     private fun uploader(scope: CoroutineScope) =
         BlossomMediaUploader(pictures, BlossomClient(OkHttpClient(), FakeSigner()) { 1000L }, settings, scope, videos = videos)
+
+    /** Answers `GET /limits` with [body] (or [status]) and counts the calls. */
+    private class LimitsServer(val body: String?, val status: Int = 200) : Dispatcher() {
+        val gets = java.util.concurrent.atomic.AtomicInteger()
+        override fun dispatch(request: RecordedRequest): MockResponse = when {
+            request.method == "GET" && request.path == "/limits" -> {
+                gets.incrementAndGet()
+                if (body != null) MockResponse().setResponseCode(status).setHeader("Content-Type", "application/json").setBody(body) else MockResponse().setResponseCode(status)
+            }
+            request.method == "HEAD" -> MockResponse().setResponseCode(404)
+            request.method == "PUT" -> {
+                val sha = request.getHeader("X-SHA-256")!!
+                MockResponse().setResponseCode(201).setBody("""{"url":"http://x/$sha","sha256":"$sha","size":${request.bodySize},"type":"x"}""")
+            }
+            else -> MockResponse().setResponseCode(204)
+        }
+    }
+
+    private val trustedJson = """{"max_video_seconds":900,"max_video_bytes":314572800,"videos_per_day":20,"quota_bytes":1,"used_bytes":0}"""
+
+    @Test
+    fun `limits are cached per server, a 404 too, failures are not`() = runTest {
+        val first = LimitsServer(trustedJson).also { server.dispatcher = it }
+        val other = MockWebServer().apply { start() }
+        try {
+            val second = LimitsServer(null, 404).also { other.dispatcher = it }
+            val up = uploader(this)
+            assertEquals(VideoLimits(900, 314_572_800L), up.videoLimits())
+            assertEquals(VideoLimits(900, 314_572_800L), up.videoLimits())
+            assertEquals(1, first.gets.get())
+            settings.setMediaServer(other.url("/").toString().trimEnd('/'))
+            assertEquals(VideoLimits.DEFAULT, up.videoLimits())
+            assertEquals(VideoLimits.DEFAULT, up.videoLimits())
+            assertEquals(1, second.gets.get()) // a 404 is a definitive no: cached
+        } finally {
+            other.shutdown()
+        }
+    }
+
+    @Test
+    fun `a refused signature is asked once per session`() = runTest {
+        val s = LimitsServer(trustedJson).also { server.dispatcher = it }
+        var signs = 0
+        val signer = FakeSigner(
+            onSign = { signs++; throw com.monostr.nostr.SigningRejectedException() },
+            onSilent = { throw com.monostr.nostr.SilentSignUnavailable() },
+        )
+        val up = BlossomMediaUploader(pictures, BlossomClient(OkHttpClient(), signer) { 1000L }, settings, this, videos = videos)
+        assertEquals(VideoLimits.DEFAULT, up.videoLimits())
+        assertEquals(VideoLimits.DEFAULT, up.videoLimits())
+        assertEquals(0, s.gets.get())
+        assertEquals(1, signs)
+    }
+
+    @Test
+    fun `prepare gets the account's limits`() = runTest {
+        server.dispatcher = LimitsServer(trustedJson)
+        val up = uploader(this)
+        up.videoLimits() // the composer asks for a long source; the upload then uses the cache
+        up.uploadVideo("content://videos/1")
+        assertEquals(VideoLimits(900, 314_572_800L), preparedWith)
+        videoFile.writeBytes(ByteArray(10)); posterFile.writeBytes(byteArrayOf(1))
+        server.dispatcher = LimitsServer(null, 404)
+        uploader(this).uploadVideo("content://videos/1")
+        assertEquals(VideoLimits.DEFAULT, preparedWith)
+    }
+
+    @Test
+    fun `uploadVideo never asks the server for limits itself`() = runTest {
+        val s = LimitsServer(trustedJson).also { server.dispatcher = it }
+        uploader(this).uploadVideo("content://videos/1")
+        assertEquals(0, s.gets.get())
+        assertEquals(VideoLimits.DEFAULT, preparedWith)
+    }
+
+    @Test
+    fun `the server's too-long refusal names the account's limit`() = runTest {
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse = when {
+                request.method == "GET" -> MockResponse().setResponseCode(200).setBody(trustedJson)
+                request.method == "HEAD" -> MockResponse().setResponseCode(404)
+                request.method == "PUT" && request.getHeader("X-SHA-256") == videoHash ->
+                    MockResponse().setResponseCode(403).setHeader("X-Monostr-Reason", "video-too-long")
+                request.method == "PUT" -> {
+                    val sha = request.getHeader("X-SHA-256")!!
+                    MockResponse().setResponseCode(201).setBody("""{"url":"http://x/$sha","sha256":"$sha","size":${request.bodySize},"type":"x"}""")
+                }
+                else -> MockResponse().setResponseCode(204)
+            }
+        }
+        val up = uploader(this)
+        up.videoLimits() // a trusted account: 15 minutes
+        val e = runCatching { up.uploadVideo("content://videos/1") }.exceptionOrNull()
+        assertEquals(15, (e as UploadException.VideoTooLong).minutes)
+    }
 
     @Test
     fun `uploadVideo uploads poster then video to the configured server`() = runTest {
