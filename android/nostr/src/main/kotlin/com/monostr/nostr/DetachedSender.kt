@@ -4,6 +4,7 @@ import com.monostr.nostr.net.NetworkGate
 import com.monostr.nostr.net.NetworkMode
 import com.monostr.nostr.net.addRoutedReadRelay
 import com.monostr.nostr.net.addRoutedWriteRelay
+import com.monostr.nostr.net.FIRST_CONNECTED_GRACE_MS
 import com.monostr.nostr.net.awaitConnected
 import com.monostr.nostr.net.throughSocks
 import kotlinx.coroutines.CancellationException
@@ -45,8 +46,17 @@ import java.time.Duration
  * that port is ours (Tor connected): otherwise another local app could be listening there, so nothing is opened. Asked in Tor only.
  */
 class DetachedSender(private val ffi: CoroutineDispatcher = Dispatchers.IO, private val gate: NetworkGate, private val torReady: Flow<Boolean> = flowOf(false)) {
+    companion object {
+        /**
+         * Backlog 99 review I1: a DM's recipient leg in Tor mode dials every inbox on fresh circuits, whose setup spreads over
+         * seconds. The default grace would hand the wrap to the fastest inbox only; these give every reachable inbox the chance.
+         */
+        val DM_CONNECT: Duration = Duration.ofSeconds(15)
+        const val DM_GRACE_MS: Long = 3_000L
+    }
+
     /** [torOnly]: outside [NetworkMode.Tor] it throws [IOException] before anything exists, and a later change of mode ends the send as it always does. */
-    suspend fun send(event: Event, relays: List<String>, connectTimeout: Duration = Duration.ofSeconds(5), torOnly: Boolean = false): PublishResult = withContext(ffi) {
+    suspend fun send(event: Event, relays: List<String>, connectTimeout: Duration = Duration.ofSeconds(5), torOnly: Boolean = false, graceMs: Long = FIRST_CONNECTED_GRACE_MS): PublishResult = withContext(ffi) {
         val id = event.id().toHex()
         val kind = event.kind().asU16().toInt()
         val targets = relays.mapNotNull { runCatching { RelayUrl.parse(it.trim()) }.getOrNull() }.filterNot { RelayHosts.isOnionHost(it.toString()) } // a watcher's relay is never a hidden service (Tor 7.4)
@@ -59,7 +69,7 @@ class DetachedSender(private val ffi: CoroutineDispatcher = Dispatchers.IO, priv
                 // connect() only starts the connections; one relay is enough, see awaitConnected. This client is thrown away
                 // afterwards, so a relay still connecting when the wait ends costs nothing.
                 ignoringFailure { client.connect() }
-                awaitConnected(targets, connectTimeout) { url -> runCatching { client.relay(url).isConnected() }.getOrDefault(false) }
+                awaitConnected(targets, connectTimeout, graceMs) { url -> runCatching { client.relay(url).isConnected() }.getOrDefault(false) }
                 val connected = targets.filter { url -> runCatching { client.relay(url).isConnected() }.getOrDefault(false) }
                 val unreached = (targets - connected.toSet()).associate { it.toString() to NOT_CONNECTED }
                 if (connected.isEmpty()) return@withClient PublishResult(id, kind, emptyList(), unreached)

@@ -87,17 +87,43 @@ class ChatControllerTest {
         c.send("hey")
         advanceUntilIdle()
         assertEquals(listOf(bob to "hey"), sent)
-        assertTrue(c.state.value.sending)
         assertEquals(DmStatus.SENDING, c.state.value.messages.single().message.status)
         assertNull(c.state.value.message)
         gate.complete(Unit)
         advanceUntilIdle()
         val s = c.state.value
-        assertFalse(s.sending)
         assertEquals(DmStatus.FAILED, s.messages.single().message.status)
         assertEquals(uiText(R.string.chat_error_send), s.message)
         c.clearMessage()
         assertNull(c.state.value.message)
+    }
+
+    @Test
+    fun `a second message goes out while the first is still sending`() = runTest {
+        // backlog 101: a slow first send (cold relays, ~20 s) must not hold the composer; every row shows its own status
+        val store = InMemoryDmStore()
+        val first = CompletableDeferred<Unit>()
+        val sent = ArrayList<String>()
+        val c = controller(store, send = { peer, text ->
+            sent += text
+            store.upsert(DmMessage("pending-$text", peer, true, text, 500, 500, DmStatus.SENDING, null))
+            if (text == "one") first.await()
+            store.setStatus("pending-$text", DmStatus.SENT)
+            DmStatus.SENT
+        })
+        c.start()
+        advanceUntilIdle()
+        c.send("one")
+        advanceUntilIdle()
+        assertTrue(c.state.value.canSend("two"))
+        c.send("two")
+        advanceUntilIdle()
+        assertEquals(listOf("one", "two"), sent)
+        assertEquals(mapOf("pending-one" to DmStatus.SENDING, "pending-two" to DmStatus.SENT), c.state.value.messages.associate { it.message.rumorId to it.message.status })
+        first.complete(Unit)
+        advanceUntilIdle()
+        assertTrue(c.state.value.messages.all { it.message.status == DmStatus.SENT })
+        assertFalse(c.state.value.canSend("  "))
     }
 
     @Test

@@ -35,9 +35,14 @@ data class ChatUiState(
     val peer: Profile,
     val messages: List<ChatMessageUi> = emptyList(),
     val loading: Boolean = true,
-    val sending: Boolean = false,
     val message: UiText? = null,
-)
+) {
+    /**
+     * Any non-blank text may go out, also while earlier messages are still on their way: each row shows its own
+     * SENDING/FAILED status, and a slow first send (cold relays) must not hold the composer (backlog 101).
+     */
+    fun canSend(text: String): Boolean = text.isNotBlank()
+}
 
 /**
  * One NIP-17 conversation with [peer]. Rows come from the local store only: [send] and [retry]
@@ -132,15 +137,8 @@ class ChatController(
     }
 
     fun send(text: String) {
-        if (text.isBlank()) return
-        _state.update { it.copy(sending = true) }
-        scope.launch {
-            try {
-                report(guarded(DmStatus.FAILED) { sendFn(peer, text) })
-            } finally {
-                _state.update { it.copy(sending = false) }
-            }
-        }
+        if (!_state.value.canSend(text)) return
+        scope.launch { report(guarded(DmStatus.FAILED) { sendFn(peer, text) }) }
     }
 
     fun retry(rumorId: String) {

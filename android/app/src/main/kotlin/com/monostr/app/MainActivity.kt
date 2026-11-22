@@ -24,6 +24,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -44,6 +45,7 @@ import com.monostr.app.ui.theme.MonostrTheme
 import com.monostr.nostr.nip55.AmberSigner
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -51,6 +53,7 @@ import javax.inject.Inject
 class MainActivity : ComponentActivity() {
     @Inject lateinit var session: NostrSession
     @Inject lateinit var uiSettings: UiSettingsStore
+    @Inject lateinit var readerTheme: com.monostr.app.ui.article.ReaderThemeStore
     @Inject lateinit var tipSettings: TipSettingsStore
     @Inject lateinit var torSwitch: com.monostr.app.net.TorSwitch
     @Inject lateinit var sendGate: com.monostr.app.net.SendGate
@@ -188,7 +191,9 @@ class MainActivity : ComponentActivity() {
             val mode by uiSettings.themeMode.collectAsState<ThemeMode, ThemeMode?>(initial = null)
             val accent by uiSettings.accent.collectAsState<Accent, Accent?>(initial = null)
             val customHue by uiSettings.customHue.collectAsState<Float, Float?>(initial = null)
-            if (mode == null || accent == null || customHue == null) {
+            // the reader's own choice is read with the app theme: the article is on screen from the first frame (null inside the box = not chosen)
+            val readerDark by remember { readerTheme.dark.map { ReaderChoice(it) } }.collectAsState<ReaderChoice, ReaderChoice?>(initial = null)
+            if (mode == null || accent == null || customHue == null || readerDark == null) {
                 Surface(modifier = Modifier.fillMaxSize(), color = Color(if (isSystemInDarkTheme()) MonoColors.DarkSurface else MonoColors.LightSurface)) {}
                 return@setContent
             }
@@ -196,7 +201,8 @@ class MainActivity : ComponentActivity() {
                 val quick by uiSettings.quickReactions.collectAsState(initial = Reactions.QUICK)
                 val unit by tipSettings.amountUnit.collectAsState(initial = AmountUnit.XMR)
                 val canSend by sendGate.canSend.collectAsState()
-                CompositionLocalProvider(LocalQuickReactions provides quick, LocalAmountUnit provides unit, com.monostr.app.ui.common.LocalCanSend provides canSend) {
+                CompositionLocalProvider(LocalQuickReactions provides quick, LocalAmountUnit provides unit, com.monostr.app.ui.common.LocalCanSend provides canSend,
+                    com.monostr.app.ui.theme.LocalThemeChoice provides com.monostr.app.ui.theme.ThemeChoice(mode!!, accent!!, customHue!!, readerDark!!.dark)) {
                 // NIP-55: whenever the bridge has a new pending request, launch the signer once and
                 // hand the result back correlated by request id (a request can be superseded before
                 // the launcher's callback fires, e.g. after a config change).
@@ -229,3 +235,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
+
+/** Distinguishes «not loaded yet» (null box) from «not chosen» (null inside). */
+private data class ReaderChoice(val dark: Boolean?)

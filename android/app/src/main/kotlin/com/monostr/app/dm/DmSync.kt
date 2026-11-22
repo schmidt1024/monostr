@@ -8,6 +8,7 @@ import com.monostr.app.data.dm.DmStatus
 import com.monostr.app.data.dm.DmStore
 import com.monostr.app.data.dm.DropReason
 import com.monostr.nostr.NostrEngine
+import com.monostr.nostr.PerfTrace
 import com.monostr.nostr.repo.DmRelaysRepository
 import com.monostr.nostr.repo.DmRepository
 import com.monostr.nostr.repo.OwnDmRelays
@@ -526,8 +527,12 @@ class DmSync(
     }.await()
 
     private suspend fun deliver(rowId: String, peer: String, text: String): DmStatus {
+        // perf marks (backlog 99): timing only, never the text or a pubkey
+        val started = System.nanoTime()
+        PerfTrace.mark("dm send start")
         try {
             val result = repo.send(peer, text, relays.dmRelays(peer), settings.relays.first())
+            if (PerfTrace.enabled) PerfTrace.mark("dm send done peer=${result.sentToPeer} self=${result.sentToSelf} ms=${(System.nanoTime() - started) / 1_000_000}")
             val status = if (result.sentToPeer) DmStatus.SENT else DmStatus.FAILED
             withContext(NonCancellable) { store.replaceId(rowId, result.rumorId, status, result.selfWrapId) }
             // Our verdict stands even when a self-copy arrived first: it proves nothing about the peer wrap.
@@ -536,6 +541,7 @@ class DmSync(
             withContext(NonCancellable) { runCatching { store.setStatus(rowId, DmStatus.FAILED) } }
             throw e
         } catch (e: Exception) {
+            if (PerfTrace.enabled) PerfTrace.mark("dm send failed ${e.javaClass.simpleName}")
             store.setStatus(rowId, DmStatus.FAILED)
             return DmStatus.FAILED
         }

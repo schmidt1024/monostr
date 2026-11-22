@@ -34,12 +34,16 @@ import androidx.compose.ui.unit.dp
 import com.monostr.app.R
 import com.monostr.app.data.Presets
 import com.monostr.app.ui.common.Avatar
+import com.monostr.app.ui.common.LocalQuoteLoader
 import com.monostr.app.ui.common.MentionNames
+import com.monostr.app.ui.common.QuoteCard
+import com.monostr.app.ui.common.QuoteUi
 import com.monostr.app.ui.common.asString
 import com.monostr.app.ui.common.relativeTime
 import com.monostr.app.ui.theme.Spacing
 import com.monostr.app.ui.theme.TipCoinFilled
 import com.monostr.nostr.model.NoteMedia
+import com.monostr.nostr.model.QuoteRef
 import com.monostr.nostr.repo.AboutNote
 import com.monostr.nostr.repo.NotificationKind
 
@@ -70,11 +74,14 @@ object NotificationExcerpt {
     private val BLANKS = Regex("\\s+") // regex
 
     fun oneLine(text: String): String = text.replace(BLANKS, " ").trim()
+
+    /** A quote row's text: the quoting token is out of the excerpt and comes back as [NoteMedia.Parsed.quote] (X: the quoted note is a card). */
+    fun quote(text: String): NoteMedia.Parsed = NoteMedia.parse(text, emptyList(), withQuote = true)
 }
 
 @Composable
 private fun excerpt(text: String, hasMedia: Boolean, names: Map<String, String>): String {
-    val plain = NotificationExcerpt.oneLine(MentionNames.plain(text, names))
+    val plain = NotificationExcerpt.oneLine(MentionNames.plain(text, names, stringResource(R.string.note_ref_label)))
     return if (hasMedia) stringResource(R.string.notification_has_media, plain) else plain
 }
 
@@ -164,14 +171,23 @@ private fun EventCard(single: NotificationRow.Single, row: NotificationRowUi, na
                 Spacer(Modifier.width(Spacing.s))
                 Text(relativeTime(item.createdAt).asString(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            // spec §5.4: no about line until the note is known
-            if (item.aboutId != null && row.about != null) {
-                val label = if (item.kind == NotificationKind.QUOTE) R.string.notif_about_quote else R.string.notif_about_reply
-                Text(stringResource(label, aboutText(row.about, names)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.testTag("notification-about-${item.id}"))
+            val isQuote = item.kind == NotificationKind.QUOTE
+            // spec §5.4: no about line until the note is known; a quote shows the quoted note as a card instead (backlog 49)
+            if (!isQuote && item.aboutId != null && row.about != null) {
+                Text(stringResource(R.string.notif_about_reply, aboutText(row.about, names)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.testTag("notification-about-${item.id}"))
             }
             if (item.text.isNotBlank()) {
-                val parsed = remember(item.text) { NoteMedia.parse(item.text, emptyList(), withQuote = false) }
-                Text(excerpt(parsed.displayContent, parsed.media.isNotEmpty(), names), style = MaterialTheme.typography.bodyMedium, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                val parsed = remember(item.text, isQuote) { if (isQuote) NotificationExcerpt.quote(item.text) else NoteMedia.parse(item.text, emptyList(), withQuote = false) }
+                if (parsed.displayContent.isNotBlank()) Text(excerpt(parsed.displayContent, parsed.media.isNotEmpty(), names), style = MaterialTheme.typography.bodyMedium, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                // the q tag made it a quote row: without a token in the text the card still shows the tagged note
+                val quote = parsed.quote ?: item.aboutId?.takeIf { isQuote }?.let { QuoteRef(it, emptyList(), null) }
+                // local data only (perf): the note the row is about is already in the database (Found), or the loader has the
+                // quote in memory; the card then reads the database, never the relays. A note we do not have shows no card.
+                val loader = LocalQuoteLoader.current
+                val stored = row.about is AboutNote.Found && row.about.note.id == quote?.id
+                if (isQuote && quote != null && loader != null && (stored || remember(quote.id, loader) { loader.cached(quote.id, quote.author).let { it != null && it != QuoteUi.Missing } })) {
+                    QuoteCard(quote.id, quote.relays, names, onOpenThread, onOpenProfile, modifier = Modifier.padding(top = Spacing.s), author = quote.author)
+                }
             }
         }
     }

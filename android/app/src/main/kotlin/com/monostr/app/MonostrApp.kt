@@ -41,6 +41,10 @@ class MonostrApp : Application(), SingletonImageLoader.Factory {
     /** Lazy as [http]: read only once the first picture loads. */
     @Inject lateinit var uiSettings: dagger.Lazy<com.monostr.app.data.UiSettingsStore>
     @Volatile private var uploadServer: String? = null
+    /** Lazy: built only when a translation or a trim needs it; nothing binds before a translation on the device. */
+    @Inject lateinit var deviceTranslator: dagger.Lazy<com.monostr.app.translate.DeviceTranslator>
+    /** False in :tor, which runs nothing of the app. */
+    @Volatile private var appProcess = false
     private val pictureScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /**
@@ -88,11 +92,18 @@ class MonostrApp : Application(), SingletonImageLoader.Factory {
         add(VideoFrameKeyer())
     }
 
+    /** Backlog 89: once the UI is hidden, Offline Translator's binding goes (its next translation binds again). */
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (appProcess && level >= android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) deviceTranslator.get().release()
+    }
+
     override fun onCreate() {
         super.onCreate()
         // :tor runs nothing of the app. The rest would crash there: content providers do not run in that process, and
         // WorkManager needs them (docs/testing/tor-spike.md)
         if (isTorProcessName(currentProcessName())) return
+        appProcess = true
         // a long-press on a link in a selectable note must not offer the system «Open» action: its intent skips the link prompt
         androidx.compose.foundation.ComposeFoundationFlags.isSmartSelectionEnabled = false
         if (BuildConfig.PERF) {

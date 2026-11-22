@@ -199,7 +199,7 @@ private fun ChatScreenContent(
                 )
                 IconButton(
                     onClick = { vm.controller.send(text); text = "" },
-                    enabled = text.isNotBlank() && !state.sending,
+                    enabled = state.canSend(text),
                     modifier = Modifier.testTag("chat-send"),
                 ) { Icon(Icons.AutoMirrored.Filled.Send, contentDescription = stringResource(R.string.chat_send)) }
             }

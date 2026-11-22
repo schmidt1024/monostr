@@ -12,6 +12,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -30,16 +32,22 @@ import kotlinx.coroutines.launch
  * [blocks]; each call's timeout follows its length ([timeoutMs]). A refused (429) or failed request stops the rest, which keep their original until
  * [retry]; a block whose tags come back broken, or one longer than the server takes in one request ([MAX_PIECE_CHARS]),
  * keeps its original for good. Either sets [partial].
+ *
+ * With [DeviceBackend] (Offline Translator, backlog 89) every request is one text alone, and a translation whose bold,
+ * italic or strike tags got lost is taken without them (a plain-text translator); a missing language pack or app stops
+ * the run like a failure, [stoppedBy] tells which.
  */
 class ArticleTranslation internal constructor(
-    /** server, texts, source, target, the call's timeout in milliseconds */
-    private val translate: suspend (TranslateServer, List<String>, String, String, Long) -> TranslateResult,
-    val server: TranslateServer,
+    /** backend, texts, source, target, the call's timeout in milliseconds */
+    private val translate: suspend (TranslateBackend, List<String>, String, String, Long) -> TranslateResult,
+    val backend: TranslateBackend,
     private val source: String,
     val target: String,
 ) {
-    constructor(client: TranslateClient, server: TranslateServer, source: String, target: String) :
-        this({ s, q, f, t, ms -> client.translate(s, q, f, t, ms) }, server, source, target)
+    constructor(router: TranslateRouter, backend: TranslateBackend, source: String, target: String) :
+        this({ b, q, f, t, ms -> router.translate(b, q, f, t, ms) }, backend, source, target)
+
+    private val device = backend is DeviceBackend
 
     private enum class Status { PENDING, DONE, KEPT }
 
@@ -71,6 +79,9 @@ class ArticleTranslation internal constructor(
     private val _stopped = MutableStateFlow(false)
     /** A request was refused or failed: texts are left untranslated, [retry] resumes at the first of them. */
     val stopped: StateFlow<Boolean> = _stopped.asStateFlow()
+    private val _stoppedBy = MutableStateFlow<TranslateResult?>(null)
+    /** The answer that stopped the run while [stopped]: [TranslateResult.PackMissing], [TranslateResult.AppMissing], or a failure. */
+    val stoppedBy: StateFlow<TranslateResult?> = _stoppedBy.asStateFlow()
     private val _translated = MutableStateFlow(0)
     /** How many texts show a translation. */
     val translated: StateFlow<Int> = _translated.asStateFlow()
@@ -96,6 +107,7 @@ class ArticleTranslation internal constructor(
     suspend fun retry() {
         if (!_stopped.value) return
         _stopped.value = false
+        _stoppedBy.value = null
         publish()
         send(first = false)
     }
@@ -106,7 +118,8 @@ class ArticleTranslation internal constructor(
             val todo = pieces.filter { it.status == Status.PENDING }
             todo to if (first && titleAt >= 0 && todo.firstOrNull() === pieces[titleAt]) 1 else 0
         }
-        for (request in batches(todo.map { it.enc.html.length }, lead)) {
+        val requests = if (device) todo.indices.map { listOf(it) } else batches(todo.map { it.enc.html.length }, lead)
+        for (request in requests) {
             if (!sendBatch(request.map { todo[it] })) break // stopped: the rest waits for [retry]
         }
         publish()
@@ -116,20 +129,21 @@ class ArticleTranslation internal constructor(
     private suspend fun sendBatch(batch: List<Piece>): Boolean {
         val r = try {
             val q = batch.map { it.enc.html }
-            translate(server, q, source, target, timeoutMs(q.sumOf { it.length }))
+            translate(backend, q, source, target, timeoutMs(q.sumOf { it.length }))
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             TranslateResult.Failed
         }
         if (r !is TranslateResult.Ok || r.texts.size != batch.size) {
+            _stoppedBy.value = if (r is TranslateResult.Ok) TranslateResult.Failed else r
             _stopped.value = true
             publish()
             return false
         }
         synchronized(lock) {
             batch.forEachIndexed { i, p ->
-                val back = MdHtml.decode(r.texts[i], p.enc)
+                val back = MdHtml.decode(r.texts[i], p.enc, strictFormatting = !device)
                 if (back == null) p.status = Status.KEPT else { p.result = back; p.status = Status.DONE }
             }
         }
@@ -217,32 +231,32 @@ data class ArticleTranslationUi(
 /**
  * The reader's translation (spec 2026-11-03 «Articles»): detects the article's language off the main thread (its NIP-32
  * label wins, else title, summary and the first paragraphs), offers «Translate» when that is not the reader's language
- * and a server is set, and runs one [ArticleTranslation] in [scope], the reader's: leaving the reader cancels it.
+ * and a backend is set (a server or the device), and runs one [ArticleTranslation] in [scope], the reader's: leaving the reader cancels it.
  * [checkTarget] follows a switched app language: the translation for the old one is dropped.
  */
 class ArticleTranslator internal constructor(
     settings: TranslationSettingsStore,
     private val detect: (content: String, label: String?) -> String?,
-    /** server, texts, source, target, the call's timeout in milliseconds */
-    private val translator: suspend (TranslateServer, List<String>, String, String, Long) -> TranslateResult,
+    /** backend, texts, source, target, the call's timeout in milliseconds */
+    private val translator: suspend (TranslateBackend, List<String>, String, String, Long) -> TranslateResult,
     private val target: () -> String,
     private val scope: CoroutineScope,
     private val work: CoroutineDispatcher = Dispatchers.Default,
     /** Where the language is detected: the detector's own lane in the app (final review I2). */
     private val detectOn: CoroutineDispatcher = work,
 ) {
-    constructor(settings: TranslationSettingsStore, detector: LanguageDetector, client: TranslateClient, scope: CoroutineScope) :
+    constructor(settings: TranslationSettingsStore, detector: LanguageDetector, router: TranslateRouter, scope: CoroutineScope) :
         this(
-            settings, detector::detect, { s, q, f, t, ms -> client.translate(s, q, f, t, ms) }, { Languages.target(Translations.systemLocales()) }, scope,
+            settings, detector::detect, { b, q, f, t, ms -> router.translate(b, q, f, t, ms) }, { Languages.target(Translations.systemLocales()) }, scope,
             Dispatchers.Default, LanguageDetector.LANE,
         )
 
-    private val server = MutableStateFlow<TranslateServer?>(null)
+    private val backend = MutableStateFlow<TranslateBackend?>(null)
     private val raw = MutableStateFlow(ArticleTranslationUi())
-    val state: StateFlow<ArticleTranslationUi> = combine(server, raw) { s, r -> if (s == null) ArticleTranslationUi() else r }
+    val state: StateFlow<ArticleTranslationUi> = combine(backend, raw) { s, r -> if (s == null) ArticleTranslationUi() else r }
         .stateIn(scope, SharingStarted.Eagerly, ArticleTranslationUi())
 
-    /** Guards [detected], [targetNow], [source], [current], [job] and the writes of [raw]. Never held across a suspension. */
+    /** Guards [detected], [targetNow], [source], [current], [job], the writes of [raw] and of [backend]. Never held across a suspension. */
     private val lock = Any()
     /** Detection is over: [lang] holds its answer, [targetNow] the target [source] was set for. */
     @Volatile private var detected = false
@@ -254,9 +268,25 @@ class ArticleTranslator internal constructor(
     @Volatile private var current: ArticleTranslation? = null
     @Volatile private var job: Job? = null
 
+    /** The stored backend; [backend] follows it a moment later. */
+    private val stored = combine(settings.mode, settings.customUrl, ::translateBackend)
+
     init {
         scope.launch {
-            combine(settings.mode, settings.customUrl, ::translateServer).distinctUntilChanged().collect { server.value = it }
+            stored.distinctUntilChanged().collect { b ->
+                synchronized(lock) {
+                    backend.value = b
+                    // a run still sending to another backend stops here (like [checkTarget]): in DEVICE mode no further
+                    // block may go to the server it began on; what it translated is dropped, «Translate» starts afresh
+                    val t = current
+                    if (t != null && t.backend != b && job?.isActive == true) {
+                        job?.cancel()
+                        job = null
+                        current = null
+                        raw.value = source?.let { ArticleTranslationUi(TranslationState.Offer(it)) } ?: ArticleTranslationUi()
+                    }
+                }
+            }
         }
     }
 
@@ -302,11 +332,13 @@ class ArticleTranslator internal constructor(
     fun translate() {
         checkTarget()
         if (job?.isActive == true) return
-        val s = server.value ?: return
+        val s = backend.value ?: return
         val from = source ?: return
         val to = targetNow ?: return
         val a = article ?: return
-        val t = current
+        // a run begun on another backend (the mode changed while the reader stayed open) is dropped, never resumed:
+        // in DEVICE mode no block may go to the server it began on
+        val t = current?.takeIf { it.backend == s }
         when {
             t == null -> {
                 val fresh = ArticleTranslation(translator, s, from, to)
@@ -315,6 +347,19 @@ class ArticleTranslator internal constructor(
             }
             t.stopped.value -> launch(t) { t.retry() }
             raw.value.row is TranslationState.Original -> showTranslation()
+        }
+    }
+
+    /**
+     * The consent sheet's «Translate»: [translate] once this reader uses the stored backend. Its «Use Offline Translator
+     * instead» stores DEVICE just before, and the article must never go to the server it replaced; dropped when the
+     * backend does not arrive (a tap again then starts it).
+     */
+    fun translateWhenApplied() {
+        scope.launch {
+            val b = stored.first() ?: return@launch
+            withTimeoutOrNull(APPLY_TIMEOUT_MS) { backend.first { it == b } } ?: return@launch
+            translate()
         }
     }
 
@@ -347,9 +392,15 @@ class ArticleTranslator internal constructor(
             if (current !== t) return // dropped by a language switch
             val failed = !loading && t.stopped.value && t.translated.value == 0
             raw.value = when {
-                failed -> ArticleTranslationUi(TranslationState.Failed)
+                failed -> ArticleTranslationUi(
+                    when (t.stoppedBy.value) {
+                        TranslateResult.PackMissing -> TranslationState.PackMissing
+                        TranslateResult.AppMissing -> TranslationState.AppMissing
+                        else -> TranslationState.Failed
+                    },
+                )
                 else -> ArticleTranslationUi(
-                    row = if (loading) TranslationState.Loading else TranslationState.Shown("", t.server.host),
+                    row = if (loading) TranslationState.Loading else TranslationState.Shown("", t.backend.label),
                     title = t.title.value,
                     blocks = t.blocks.value,
                     partial = !loading && t.partial.value,
@@ -369,5 +420,7 @@ class ArticleTranslator internal constructor(
         }
 
         const val SAMPLE_CHARS = 1000
+        /** How long [translateWhenApplied] waits for a just stored backend. */
+        const val APPLY_TIMEOUT_MS = 5_000L
     }
 }

@@ -16,6 +16,8 @@
         <!-- torbrowser brief 2026-11-07: under Tor the link prompt offers Tor Browser, stable before alpha (TorBrowser.PACKAGES) -->
         <package android:name="org.torproject.torbrowser" />
         <package android:name="org.torproject.torbrowser_alpha" />
+        <!-- release 0.42.0 (backlog 89): on-device translation binds the Offline Translator service (DeviceTranslator.PKG) -->
+        <package android:name="dev.davidv.translator" />
     </queries>
     <application
         android:icon="@mipmap/ic_launcher"

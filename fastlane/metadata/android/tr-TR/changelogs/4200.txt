@@ -1,0 +1,5 @@
+- Offline Translator (F-Droid) ile telefonunda çevir: hiçbir metin telefonundan çıkmaz
+- Bildirimlerdeki alıntılar alıntılanan notu gösterir
+- Makaleleri açık ya da koyu oku, okuyucuda tek dokunuşla
+- Tor modu: doğrudan mesajlar kişine ayrı bir bağlantı üzerinden gider
+- Düzeltmeler

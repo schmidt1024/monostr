@@ -29,11 +29,11 @@ class TranslationsTest {
     }
 
     private class FakeClient {
-        val calls = mutableListOf<Pair<TranslateServer, List<String>>>()
+        val calls = mutableListOf<Pair<TranslateBackend, List<String>>>()
         val targets = mutableListOf<String>()
         var gate: CompletableDeferred<Unit>? = null
         var answer: (List<String>) -> TranslateResult = { texts -> TranslateResult.Ok(texts.map { it.replace("Bonjour", "Hallo") }) }
-        suspend fun translate(server: TranslateServer, texts: List<String>, source: String, target: String): TranslateResult {
+        suspend fun translate(server: TranslateBackend, texts: List<String>, source: String, target: String): TranslateResult {
             calls += server to texts
             targets += target
             gate?.await()
@@ -122,6 +122,47 @@ class TranslationsTest {
         assertEquals(0, detectCalls)
         s.mode.value = TranslationMode.MONOSTR; advanceUntilIdle()
         assertEquals(TranslationState.Offer("fr"), t.state("a").value)
+    }
+
+    // backlog 89: mode DEVICE goes to Offline Translator only, never to a server, and needs no consent
+
+    @Test
+    fun deviceMode_neverCallsServer() = runTest {
+        val s = FakeSettings(TranslationMode.DEVICE)
+        val c = FakeClient()
+        val t = translations(s, c)
+        t.prepare("a", french, null); t.prepare("b", french, null); advanceUntilIdle()
+        assertEquals(TranslationState.Offer("fr"), t.state("a").value)
+        t.translate("a"); t.translate("b")
+        assertEquals(listOf<TranslateBackend>(DeviceBackend, DeviceBackend), c.calls.map { it.first }, "no server, no fallback")
+        assertEquals(TranslationState.Shown("Hallo tout le monde, https://example.org/a?b=1&c=2 #nostr", "Offline Translator"), t.state("a").value)
+    }
+
+    @Test
+    fun packMissing_thenRetrySucceeds() = runTest {
+        val c = FakeClient().apply { answer = { TranslateResult.PackMissing } }
+        val t = translations(FakeSettings(TranslationMode.DEVICE), c)
+        t.prepare("a", french, null); advanceUntilIdle()
+        t.translate("a")
+        assertEquals(TranslationState.PackMissing, t.state("a").value)
+        c.answer = { texts -> TranslateResult.Ok(texts.map { it.replace("Bonjour", "Hallo") }) } // the pack was installed
+        t.translate("a")
+        val shown = t.state("a").value as TranslationState.Shown
+        assertEquals("Offline Translator", shown.host)
+        assertEquals(2, c.calls.size)
+        assertTrue(c.calls.all { it.first == DeviceBackend })
+    }
+
+    @Test
+    fun appMissing_state() = runTest {
+        val c = FakeClient().apply { answer = { TranslateResult.AppMissing } }
+        val t = translations(FakeSettings(TranslationMode.DEVICE), c)
+        t.prepare("a", french, null); advanceUntilIdle()
+        t.translate("a")
+        assertEquals(TranslationState.AppMissing, t.state("a").value)
+        t.translate("a")
+        assertEquals(2, c.calls.size, "a tap tries again")
+        assertEquals(TranslationState.AppMissing, t.state("a").value)
     }
 
     @Test

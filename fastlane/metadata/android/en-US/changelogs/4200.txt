@@ -1,0 +1,5 @@
+- Translate on your phone with Offline Translator (F-Droid): no text leaves your phone
+- Quotes in notifications show the quoted note
+- Light or dark reading in articles, one tap in the reader
+- Tor mode: direct messages go to your contact over a separate connection
+- Fixes

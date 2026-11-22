@@ -9,6 +9,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
@@ -52,6 +53,11 @@ object PlainShapes {
     val large = RoundedCornerShape(16.dp)
     val extraLarge = RoundedCornerShape(24.dp)
 }
+
+/** What the app theme was made from: the reader re-themes itself from it (backlog 51). */
+data class ThemeChoice(val mode: ThemeMode, val accent: Accent, val customHue: Float, val readerDark: Boolean? = null)
+
+val LocalThemeChoice = staticCompositionLocalOf { ThemeChoice(ThemeMode.SYSTEM, Accent.MONO, AccentSeed.DEFAULT_HUE) }
 
 /** Spec 4: monochrome base, accent only on the primary tokens, flat shapes, Inter/JetBrains Mono. */
 @Composable

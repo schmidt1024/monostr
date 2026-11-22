@@ -278,6 +278,7 @@ interface NostrSessionEntryPoint {
     fun feedTabs(): FeedTabsCache
     fun sessions(): SessionStore
     fun translationSettings(): com.monostr.app.translate.TranslationSettingsStore
+    fun readerTheme(): com.monostr.app.ui.article.ReaderThemeStore
     fun torSwitchControl(): com.monostr.app.net.TorSwitch
     fun torSwitchStore(): com.monostr.app.net.TorSwitchStore
     fun torController(): dagger.Lazy<TorController>
@@ -728,8 +729,16 @@ class NostrSession @Inject constructor(
             // note published before the first emission cannot carry the tag against the user's choice
             val publish = NostrPublishRepository(engine, indexRelays = NostrAuthorRelaysRepository.INDEXERS, clientTag = { uiSettings.clientTag.first() }, powBits = { uiSettings.powBits.first() })
             val dmRelays = NostrDmRelaysRepository(engine, authorRelays)
+            val dmDetached = DetachedSender(engine.ffiDispatcher, networkGate, torReady = torConnected(tor))
             val dms = DmSync(
-                NostrDmRepository(engine), dmRelays, dmStore, dmSettings, publish,
+                // backlog 99: in Tor mode the recipient's wrap goes over a detached connection (no signer, isolated port)
+                NostrDmRepository(
+                    engine,
+                    // only Tor counts: Unknown and Direct keep the session path (sendGate blocks Unknown anyway)
+                    torMode = { networkGate.mode.value is NetworkMode.Tor },
+                    torPeerLeg = { wrap, relays -> dmDetached.send(wrap, relays, DetachedSender.DM_CONNECT, torOnly = true, graceMs = DetachedSender.DM_GRACE_MS) },
+                ),
+                dmRelays, dmStore, dmSettings, publish,
                 engine::attachTemporary, engine::detachTemporary, engine.closed, engine.backgroundScope,
                 loadWrap = engine::eventById, authOk = engine.authenticated, authOkSeq = engine::authOkSeq,
                 authRejected = engine.authRejected, authRejection = engine::authRejection, gate = startupGate, sendGate = sendGate,

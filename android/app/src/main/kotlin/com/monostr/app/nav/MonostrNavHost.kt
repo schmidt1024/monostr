@@ -49,7 +49,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.monostr.app.ui.common.LocalNoteTranslator
 import com.monostr.app.ui.common.NoteTranslationViewModel
-import com.monostr.app.ui.common.TranslateConsentSheet
+import com.monostr.app.ui.common.TranslateConsentHost
 import com.monostr.app.ui.settings.SettingsSection
 import com.monostr.app.ui.common.QuoteLoader
 import com.monostr.app.ui.common.LocalTorSheets
@@ -276,15 +276,7 @@ private fun LoggedInNavHost(
     // spec 11.1: bookmarks are a tab, so they navigate like the other tabs
     val onBookmarks: () -> Unit = { nav.navigate(Routes.BOOKMARKS) { popUpTo(Routes.FEED); launchSingleTop = true } }
     // spec 2026-11-03: one consent sheet for every card's first «Translate»
-    val consentFor by translation.consentFor.collectAsStateWithLifecycle()
-    if (consentFor != null) {
-        val host by translation.host.collectAsStateWithLifecycle()
-        TranslateConsentSheet(
-            host = host, onTranslate = translation::consent, onDismiss = translation::dismissConsent,
-            article = consentFor == NoteTranslationViewModel.ARTICLE,
-            onSettings = { translation.dismissConsent(); nav.navigate(Routes.settings(SettingsSection.TRANSLATION)) },
-        )
-    }
+    TranslateConsentHost(translation, onSettings = { nav.navigate(Routes.settings(SettingsSection.TRANSLATION)) })
     CompositionLocalProvider(LocalMediaSettings provides mediaSettings, LocalQuoteLoader provides quoteLoader, LocalPollLoader provides pollLoader, LocalAddressLoader provides addressLoader, LocalOpenArticle provides openArticle, LocalOpenList provides openList, LocalLinkPreviewLoader provides linkPreviewLoader, LocalPreviewImageLoader provides media.previewImages.loader, LocalNoteTranslator provides translation) {
         NavHost(navController = nav, startDestination = Routes.FEED) {
             composable(Routes.FEED) {

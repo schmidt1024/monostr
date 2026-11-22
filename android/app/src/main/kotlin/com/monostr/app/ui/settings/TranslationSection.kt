@@ -35,12 +35,22 @@ import com.monostr.app.ui.theme.Spacing
  * Spec 2026-11-03: which server translates notes — monostr's, an own LibreTranslate server (address field, normalized
  * like the media server) or none — and what that server sees. Round 2 (privacy rule): what the server sees stands above
  * the choice, the choice is one card. [onSaveUrl] answers false for an address it refuses.
+ * Release 0.42.0: «On device» with Offline Translator when [deviceInstalled], else its row leads to the store
+ * ([onGetDeviceApp]) and the mode stays.
  */
 @Composable
-fun TranslationSection(mode: TranslationMode, customUrl: String, onMode: (TranslationMode) -> Unit, onSaveUrl: (String) -> Boolean, modifier: Modifier = Modifier) {
+fun TranslationSection(
+    mode: TranslationMode,
+    customUrl: String,
+    deviceInstalled: Boolean,
+    onMode: (TranslationMode) -> Unit,
+    onSaveUrl: (String) -> Boolean,
+    onGetDeviceApp: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Column(modifier) {
         Text(
-            stringResource(R.string.settings_translate_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            stringResource(if (mode == TranslationMode.DEVICE) R.string.settings_translate_hint_device else R.string.settings_translate_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = Spacing.l).testTag("translate-privacy-hint"),
         )
         SettingsGroup(stringResource(R.string.settings_translate_service)) {
@@ -49,6 +59,12 @@ fun TranslationSection(mode: TranslationMode, customUrl: String, onMode: (Transl
                 SettingsCardDivider(SETTINGS_ICON_INSET)
                 ModeRow(stringResource(R.string.settings_translate_custom), mode == TranslationMode.CUSTOM, "translate-mode-custom") { onMode(TranslationMode.CUSTOM) }
                 if (mode == TranslationMode.CUSTOM) CustomServerField(customUrl, onSaveUrl)
+                SettingsCardDivider(SETTINGS_ICON_INSET)
+                // release 0.42.0: the device (Offline Translator); while it is missing the tap opens its store page instead
+                ModeRow(
+                    stringResource(R.string.settings_translate_device), mode == TranslationMode.DEVICE, "translate-mode-device",
+                    subtitle = stringResource(if (deviceInstalled) R.string.settings_translate_device_private else R.string.settings_translate_device_get),
+                ) { if (deviceInstalled) onMode(TranslationMode.DEVICE) else onGetDeviceApp() }
                 SettingsCardDivider(SETTINGS_ICON_INSET)
                 ModeRow(stringResource(R.string.settings_translate_off), mode == TranslationMode.OFF, "translate-mode-off") { onMode(TranslationMode.OFF) }
             }
@@ -82,12 +98,15 @@ private fun CustomServerField(customUrl: String, onSaveUrl: (String) -> Boolean)
 }
 
 @Composable
-private fun ModeRow(label: String, selected: Boolean, tag: String, onClick: () -> Unit) {
+private fun ModeRow(label: String, selected: Boolean, tag: String, subtitle: String? = null, onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().heightIn(min = 56.dp).selectable(selected = selected, role = Role.RadioButton, onClick = onClick).padding(horizontal = Spacing.l, vertical = Spacing.xs).testTag(tag),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         RadioButton(selected = selected, onClick = null)
-        Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = Spacing.l))
+        Column(Modifier.padding(start = Spacing.l)) {
+            Text(label, style = MaterialTheme.typography.bodyLarge)
+            if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }

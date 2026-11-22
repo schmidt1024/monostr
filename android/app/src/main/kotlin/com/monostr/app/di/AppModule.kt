@@ -40,8 +40,14 @@ object AppModule {
     @Provides @Singleton fun torController(@ApplicationContext ctx: Context, gate: com.monostr.nostr.net.NetworkGate): com.monostr.app.net.TorController =
         com.monostr.app.net.TorController(com.monostr.app.net.AndroidTorEngine(ctx), CoroutineScope(SupervisorJob() + Dispatchers.Default)) { gate.torMode() }
     @Provides @Singleton fun uiSettings(@ApplicationContext ctx: Context): UiSettingsStore = PrefsUiSettingsStore(ctx.monostrPrefs)
-    @Provides @Singleton fun translationSettings(@ApplicationContext ctx: Context): com.monostr.app.translate.TranslationSettingsStore =
-        com.monostr.app.translate.PrefsTranslationSettingsStore(ctx.monostrPrefs)
+    /** The installed check behind the default mode (backlog 89): the translator is built lazily, on the check's IO thread. */
+    @Provides @Singleton fun translationSettings(
+        @ApplicationContext ctx: Context,
+        device: dagger.Lazy<com.monostr.app.translate.DeviceTranslator>,
+    ): com.monostr.app.translate.TranslationSettingsStore =
+        com.monostr.app.translate.PrefsTranslationSettingsStore(ctx.monostrPrefs, { device.get().isInstalled() })
+    @Provides @Singleton fun readerTheme(@ApplicationContext ctx: Context): com.monostr.app.ui.article.ReaderThemeStore =
+        com.monostr.app.ui.article.PrefsReaderThemeStore(ctx.monostrPrefs)
     @Provides @Singleton fun translateClient(http: OkHttpClient): com.monostr.app.translate.TranslateClient = com.monostr.app.translate.TranslateClient(http)
     @Provides @Singleton fun languageDetector(): com.monostr.app.translate.LanguageDetector = com.monostr.app.translate.LanguageDetector()
     @Provides @Singleton fun dmSettings(@ApplicationContext ctx: Context): DmSettingsStore = PrefsDmSettingsStore(ctx.monostrPrefs)

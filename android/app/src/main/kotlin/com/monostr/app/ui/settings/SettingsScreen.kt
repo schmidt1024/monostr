@@ -179,6 +179,7 @@ class SettingsViewModel @Inject constructor(
     private val hints: HintStore,
     private val translation: TranslationSettingsStore,
     private val sendGate: com.monostr.app.net.SendGate,
+    private val deviceTranslator: com.monostr.app.translate.DeviceTranslator,
 ) : ViewModel() {
     val controller = SettingsController(relayStore, { if (!session.applyRelays(it)) throw RelayListRefused() }, viewModelScope)
     private val relays: RelayStore = relayStore
@@ -313,6 +314,14 @@ class SettingsViewModel @Inject constructor(
     val translateMode: StateFlow<TranslationMode> = translation.mode.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TranslationMode.MONOSTR)
     val translateUrl: StateFlow<String> = translation.customUrl.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "")
     fun setTranslateMode(mode: TranslationMode) = viewModelScope.launch { translation.setMode(mode) }
+    private val _deviceInstalled = MutableStateFlow(false)
+    /** Whether Offline Translator offers its service; read by [checkDeviceTranslator] only (the translation page opening). */
+    val deviceInstalled: StateFlow<Boolean> = _deviceInstalled.asStateFlow()
+    fun checkDeviceTranslator() = viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) {
+        val installed = deviceTranslator.isInstalled()
+        _deviceInstalled.value = installed
+        translation.deviceAppChecked(installed) // the default mode follows an install or removal while none is stored
+    }
 
     /** False (nothing stored) for an address [TranslateUrl] refuses; blank clears the address. */
     fun setTranslateUrl(input: String): Boolean {

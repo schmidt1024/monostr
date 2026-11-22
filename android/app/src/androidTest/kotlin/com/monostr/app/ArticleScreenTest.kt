@@ -18,6 +18,7 @@ import com.monostr.app.data.PrefsRelayStore
 import com.monostr.app.session.NostrSessionEntryPoint
 import com.monostr.nostr.model.AddressRef
 import dagger.hilt.android.EntryPointAccessors
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import androidx.compose.ui.test.assertTextContains
 import androidx.core.os.LocaleListCompat
@@ -130,6 +131,69 @@ class ArticleScreenTest {
             rule.onNodeWithTag(like).performClick()
             rule.waitUntil(15_000) { relay.events.any { it.contains("\"kind\":7") && it.contains(ref.coordinate) } }
             assertTrue("the like names the author", relay.events.any { it.contains("\"kind\":7") && it.contains(bob.publicKey().toHex()) })
+        }
+    }
+
+    /**
+     * Backlog 51: the sun/moon icon in the reader's top bar switches the reader's theme (the icon and its description
+     * flip), stores the choice once for all articles, and the app behind keeps its own theme.
+     */
+    @Test
+    fun toggle_switchesReaderOnly_andPersistsAcrossArticles() {
+        val key = booleanPreferencesKey("reader_dark")
+        runBlocking { ctx.monostrPrefs.edit { it.remove(key) } }
+        runBlocking { runCatching { entry.session().logout() } }
+        reachFeed()
+        val ready = entry.session().requireReady()
+        val alice = Keys.generate()
+        val bob = Keys.generate()
+        val ts = System.currentTimeMillis()
+        val refs = (1..2).map { AddressRef(30023, bob.publicKey().toHex(), "rt$it-$ts") }
+        val articles = refs.mapIndexed { i, r ->
+            EventBuilder(Kind(30023u), "# Heading${i + 1} $ts\n\nBody text.")
+                .tags(listOf(Tag.parse(listOf("d", r.identifier)), Tag.parse(listOf("title", "Theme article ${i + 1} $ts"))))
+                .signWithKeys(bob)
+        }
+        val notes = refs.mapIndexed { i, r -> EventBuilder.textNote("themed${i + 1} $ts\n\nnostr:${r.toBech32()}").signWithKeys(alice) }
+        try {
+            LoopbackRelay().use { relay ->
+                runBlocking {
+                    entry.session().applyRelays(listOf(relay.url))
+                    ready.engine.save(EventBuilder.contactList(listOf(Contact(alice.publicKey(), null, null))).signWithKeys(me))
+                    ready.engine.save(EventBuilder.metadata(Metadata.fromJson("""{"name":"alice-rt-$ts"}""")).signWithKeys(alice))
+                    articles.forEach { ready.engine.save(it) }
+                    notes.forEach { ready.engine.save(it) }
+                }
+                fun open(i: Int) {
+                    showInFeed("themed$i $ts")
+                    val card = "address-card-${refs[i - 1].identifier.take(8)}"
+                    rule.onNodeWithTag("feed-list").performScrollToNode(hasTestTag(card))
+                    rule.waitUntil(15_000) { nodes("address-card-generic").isNotEmpty() }
+                    rule.onNodeWithTag(card).performTouchInput { click(Offset(centerX, 4.dp.toPx())) }
+                    rule.waitUntil(15_000) { nodes("article-title").isNotEmpty() }
+                    rule.waitUntil(15_000) { nodes("reader-theme-toggle").isNotEmpty() }
+                }
+                fun toggleDescription() = rule.onNodeWithTag("reader-theme-toggle")
+                    .fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.ContentDescription].first()
+                open(1)
+                // nothing stored yet: the reader follows the app (the emulator runs light)
+                assertEquals(null, runBlocking { entry.readerTheme().dark.first() })
+                val before = toggleDescription()
+                rule.onNodeWithTag("reader-theme-toggle").performClick()
+                rule.waitUntil(10_000) { runBlocking { entry.readerTheme().dark.first() } != null }
+                rule.waitUntil(10_000) { toggleDescription() != before }
+                val flipped = runBlocking { entry.readerTheme().dark.first() }
+                // the first tap stores the opposite of what the reader showed (the emulator runs light, so the reader showed light)
+                assertEquals(before.contains("Dark"), flipped == true)
+                androidx.test.espresso.Espresso.pressBack()
+                rule.waitUntil(15_000) { nodes("feed-list").isNotEmpty() }
+                // the second article opens with the stored choice, not the app's
+                open(2)
+                assertEquals(flipped, runBlocking { entry.readerTheme().dark.first() })
+                assertTrue("the icon differs from the first article's initial one", toggleDescription() != before)
+            }
+        } finally {
+            runBlocking { ctx.monostrPrefs.edit { it.remove(key) } }
         }
     }
 

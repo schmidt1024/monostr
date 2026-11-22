@@ -1,6 +1,9 @@
 package com.monostr.nostr.repo
 
+import kotlin.random.Random
+import kotlinx.coroutines.launch
 import com.monostr.nostr.NostrEngine
+import com.monostr.nostr.PublishResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -70,7 +73,28 @@ class NostrDmRepository(
     private val fetchTimeout: Duration = Duration.ofSeconds(10),
     /** How long a fetch an own relay refused for AUTH waits for that relay's AUTH OK before it asks again. */
     private val authWait: Duration = Duration.ofSeconds(5),
+    /**
+     * Backlog 99 (spec 2026-11-20-dm-peer-leg-detached): true while the app runs in Tor mode, read once per send.
+     * Then the recipient's wrap goes through [torPeerLeg], never over the session, whose connection to an own relay
+     * that is also the recipient's inbox has answered NIP-42 AUTH with the user's key (and shares the session's
+     * circuit). Outside Tor nothing changes: IP and timing link the legs there anyway, so a detached leg buys nothing.
+     */
+    private val torMode: () -> Boolean = { false },
+    /**
+     * Sends the recipient's wrap over a connection of its own (no signer, isolated Tor port): DetachedSender with
+     * torOnly. Deliberately no fallback to the session when it fails or throws: the DM then fails and can be retried.
+     */
+    private val torPeerLeg: suspend (wrap: Event, relays: List<String>) -> PublishResult = { _, _ -> error("no detached sender") },
+    /**
+     * Owner 2026-11-20 (review I2): in Tor mode the self copy goes out later, in the background, so a relay that gets both
+     * legs cannot pair the authenticated self copy with the anonymous peer wrap by arrival time. Cost accepted by the owner:
+     * if the app dies within the delay, the self copy is missing on other devices (the recipient still has the DM).
+     */
+    private val deferSelf: (suspend () -> Unit) -> Unit = { block ->
+        engine.backgroundScope.launch { delay(torSelfDelayMs()); block() }
+    },
 ) : DmRepository {
+
     private val me: String get() = requireNotNull(engine.pubkey) { "DMs need a signer" }
 
     override suspend fun send(peer: String, text: String, peerRelays: List<String>, ownRelays: List<String>): DmSendResult {
@@ -81,9 +105,16 @@ class NostrDmRepository(
             giftWrap(signer, receiver, rumor, emptyList()) to giftWrap(signer, PublicKey.parse(me), rumor, emptyList())
         }
         engine.save(forPeer); engine.save(forSelf)
-        val toPeer = engine.sendTo(peerRelays, forPeer.id().toHex())
-        val toSelf = engine.sendTo(ownRelays, forSelf.id().toHex())
-        return DmSendResult(rumor.id()!!.toHex(), rumor.createdAt().asSecs().toLong(), toPeer.sentToAny, toSelf.sentToAny, selfWrapId = forSelf.id().toHex())
+        val tor = torMode()
+        val toPeer = if (tor) torPeerLeg(forPeer, peerRelays) else engine.sendTo(peerRelays, forPeer.id().toHex())
+        val selfId = forSelf.id().toHex()
+        val sentToSelf = if (tor) {
+            deferSelf { engine.sendTo(ownRelays, selfId) }
+            false // not yet: it leaves later
+        } else {
+            engine.sendTo(ownRelays, selfId).sentToAny
+        }
+        return DmSendResult(rumor.id()!!.toHex(), rumor.createdAt().asSecs().toLong(), toPeer.sentToAny, sentToSelf, selfWrapId = selfId)
     }
 
     override suspend fun unwrap(wrap: Event, silent: Boolean): Unwrap {
@@ -164,7 +195,10 @@ class NostrDmRepository(
         .filter { inc -> inc.json.kind == 1059 && inc.json.tags.any { it.size >= 2 && it[0] == "p" && it[1] == me } }
         .map { it.event } // DmSync opens the wrap with the rust event
 
-    private companion object {
-        const val CLOSED_SETTLE_MS = 100L
+    companion object {
+        private const val CLOSED_SETTLE_MS = 100L
+
+        /** A random delay of 5 to 60 seconds for the self copy in Tor mode. */
+        fun torSelfDelayMs(random: Random = Random.Default): Long = random.nextLong(5_000L, 60_001L)
     }
 }

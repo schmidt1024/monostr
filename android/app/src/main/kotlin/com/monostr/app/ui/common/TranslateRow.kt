@@ -1,8 +1,14 @@
 package com.monostr.app.ui.common
 
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.Intent
+import androidx.annotation.StringRes
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,6 +22,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -23,22 +30,28 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.monostr.app.R
+import com.monostr.app.translate.DeviceBackend
+import com.monostr.app.translate.DeviceTranslator
 import com.monostr.app.translate.TranslateServer
 import com.monostr.app.translate.TranslationMode
+import com.monostr.app.translate.translateBackend
 import com.monostr.app.translate.TranslationSettingsStore
 import com.monostr.app.translate.TranslationState
 import com.monostr.app.translate.Translations
 import com.monostr.app.ui.theme.Spacing
 import com.monostr.nostr.StartupGate
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -47,6 +60,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 
 /** What a note card needs to offer a translation (spec 2026-11-03 «UI»); provided once by the logged-in nav host. */
@@ -69,16 +84,20 @@ val LocalNoteTranslator = staticCompositionLocalOf<NoteTranslator?> { null }
 class NoteTranslationViewModel @Inject constructor(
     private val translations: Translations,
     private val settings: TranslationSettingsStore,
+    private val device: DeviceTranslator,
 ) : ViewModel(), NoteTranslator {
     private val _consentFor = MutableStateFlow<String?>(null)
     /** The note (or [ARTICLE]) whose «Translate» waits for the consent sheet; null while no sheet shows. */
     val consentFor: StateFlow<String?> = _consentFor.asStateFlow()
     /** What «Translate» in the sheet runs. */
     private var pending: (() -> Unit)? = null
+    private val _deviceInstalled = MutableStateFlow(false)
+    /** Whether the sheet offers «Use Offline Translator instead»: checked each time the sheet is about to show, never on the feed path. */
+    val deviceInstalled: StateFlow<Boolean> = _deviceInstalled.asStateFlow()
 
     /** The host the consent sheet names: the one a translation would go to. */
     val host: StateFlow<String> = combine(settings.mode, settings.customUrl) { mode, url ->
-        if (mode == TranslationMode.CUSTOM && url.isNotBlank()) TranslateServer(url).host else TranslateServer.MONOSTR.host
+        translateBackend(mode, url)?.label ?: TranslateServer.MONOSTR.host
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TranslateServer.MONOSTR.host)
 
     /** The logged-in session's startup gate: no language detection before the feed's first page (final review I2). */
@@ -96,7 +115,13 @@ class NoteTranslationViewModel @Inject constructor(
     private fun ask(key: String, action: () -> Unit) {
         viewModelScope.launch {
             // read at the tap, never from a seeded default: a late-loading «true» must not be needed, a «false» must hold
-            if (settings.consentGiven.first()) action() else { pending = action; _consentFor.value = key }
+            if (settings.consentGiven.first()) action() else {
+                val installed = withContext(Dispatchers.Default) { device.isInstalled() }
+                _deviceInstalled.value = installed
+                settings.deviceAppChecked(installed) // an install after startup also moves the default mode
+                pending = action
+                _consentFor.value = key
+            }
         }
     }
 
@@ -111,11 +136,28 @@ class NoteTranslationViewModel @Inject constructor(
         }
     }
 
+    /**
+     * «Use Offline Translator instead»: the mode becomes DEVICE, then the waiting note or article is translated on the
+     * device. It waits until the notes use the device (the stored mode reaches them a moment later), so nothing goes to
+     * the server the sheet named; no server consent is stored.
+     */
+    fun useDevice() {
+        val action = pending ?: return
+        pending = null
+        _consentFor.value = null
+        viewModelScope.launch {
+            settings.setMode(TranslationMode.DEVICE)
+            withTimeoutOrNull(DEVICE_SWITCH_TIMEOUT_MS) { translations.awaitBackend(DeviceBackend) } ?: return@launch
+            action()
+        }
+    }
+
     fun dismissConsent() { pending = null; _consentFor.value = null }
 
     companion object {
         /** [consentFor] while an article's «Translate» waits. */
         const val ARTICLE = "article"
+        private const val DEVICE_SWITCH_TIMEOUT_MS = 5_000L
     }
 }
 
@@ -163,6 +205,8 @@ fun TranslateRow(
         TranslationState.Loading -> CircularProgressIndicator(
             strokeWidth = 2.dp, modifier = modifier.padding(vertical = Spacing.xs).size(14.dp).testTag("translate-loading-$id8"),
         )
+        TranslationState.PackMissing -> DeviceStateRow(R.string.translate_pack_missing, R.string.translate_open_device_app, "translate-pack-missing-$id8", "translate-retry-$id8", modifier, ::openDeviceTranslatorApp, onTranslate)
+        TranslationState.AppMissing -> DeviceStateRow(R.string.translate_app_missing, R.string.translate_get_app, "translate-app-missing-$id8", "translate-retry-$id8", modifier, ::openDeviceTranslatorStore, onTranslate)
         TranslationState.Failed -> Row(modifier.padding(vertical = Spacing.xs).testTag("translate-failed-$id8"), verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(R.string.translate_failed) + SEPARATOR, style = style, color = muted)
             Text(stringResource(R.string.translate_retry), style = style, color = accent, modifier = Modifier.clickable(role = Role.Button, onClick = onTranslate).testTag("translate-retry-$id8"))
@@ -184,6 +228,50 @@ fun TranslateRow(
 
 private const val SEPARATOR = " · "
 
+/**
+ * «Language pack missing  Open Offline Translator  Retry» / «Offline Translator not installed  Get it  Retry»: the first
+ * action opens the app or its store page, «Retry» ([onRetry]) tries again once the pack or the app is there. Gaps, not
+ * « · »: the row wraps on a phone, and a dot would hang alone at a line's end (owner 2026-11-12).
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DeviceStateRow(
+    @StringRes text: Int,
+    @StringRes action: Int,
+    tag: String,
+    retryTag: String,
+    modifier: Modifier,
+    open: (Context) -> Unit,
+    onRetry: () -> Unit,
+) {
+    val context = LocalContext.current
+    val style = MaterialTheme.typography.labelMedium
+    val accent = MaterialTheme.colorScheme.primary
+    FlowRow(modifier.padding(vertical = Spacing.xs).testTag(tag), horizontalArrangement = Arrangement.spacedBy(Spacing.m), itemVerticalAlignment = Alignment.CenterVertically) {
+        Text(stringResource(text), style = style, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(stringResource(action), style = style, color = accent, maxLines = 1, modifier = Modifier.clickable(role = Role.Button) { open(context) })
+        Text(stringResource(R.string.translate_retry), style = style, color = accent, maxLines = 1, modifier = Modifier.clickable(role = Role.Button, onClick = onRetry).testTag(retryTag))
+    }
+}
+
+/** Offline Translator's page in the store app (F-Droid), else on f-droid.org. */
+fun openDeviceTranslatorStore(context: Context) {
+    val market = Intent(Intent.ACTION_VIEW, "market://details?id=${DeviceTranslator.PKG}".toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    try {
+        context.startActivity(market)
+    } catch (_: ActivityNotFoundException) {
+        runCatching {
+            context.startActivity(Intent(Intent.ACTION_VIEW, "https://f-droid.org/packages/${DeviceTranslator.PKG}/".toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }
+    }
+}
+
+/** Opens Offline Translator (to download a language pack); its store page when it is gone. */
+fun openDeviceTranslatorApp(context: Context) {
+    val launch = context.packageManager.getLaunchIntentForPackage(DeviceTranslator.PKG)?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    if (launch == null || runCatching { context.startActivity(launch) }.isFailure) openDeviceTranslatorStore(context)
+}
+
 /** The note card's [TranslateRow] wired to [LocalNoteTranslator] for [noteId]. */
 @Composable
 fun NoteTranslateRow(state: TranslationState, noteId: String, modifier: Modifier = Modifier, belowText: Boolean = false) {
@@ -200,7 +288,7 @@ fun NoteTranslateRow(state: TranslationState, noteId: String, modifier: Modifier
 /** Spec 2026-11-03: asked once, on the first «Translate»; names the server and what it sees ([article]: an article's tap). «Settings» opens the section. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TranslateConsentSheet(host: String, onTranslate: () -> Unit, onSettings: () -> Unit, onDismiss: () -> Unit, article: Boolean = false) {
+fun TranslateConsentSheet(host: String, onTranslate: () -> Unit, onSettings: () -> Unit, onDismiss: () -> Unit, article: Boolean = false, onUseDevice: (() -> Unit)? = null) {
     GuardedModalBottomSheet(onDismissRequest = onDismiss, modifier = Modifier.testTag("translate-consent")) {
         Column(Modifier.fillMaxWidth().padding(horizontal = Spacing.xl)) {
             Text(stringResource(R.string.translate_consent_title), style = MaterialTheme.typography.titleLarge)
@@ -211,7 +299,31 @@ fun TranslateConsentSheet(host: String, onTranslate: () -> Unit, onSettings: () 
                 OutlinedButton(onClick = onSettings, modifier = Modifier.testTag("translate-consent-settings"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.translate_consent_settings)) }
                 Button(onClick = onTranslate, modifier = Modifier.testTag("translate-consent-translate"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.translate_consent_translate)) }
             }
+            if (onUseDevice != null) {
+                Spacer(Modifier.height(Spacing.s))
+                TextButton(onClick = onUseDevice, modifier = Modifier.align(Alignment.End).testTag("translate-consent-device"), shape = MaterialTheme.shapes.medium) {
+                    Text(stringResource(R.string.translate_consent_device))
+                }
+            }
             Spacer(Modifier.height(Spacing.xl))
         }
     }
+}
+
+/**
+ * The nav host's consent sheet for [translation]'s waiting «Translate»; with Offline Translator installed (checked as the
+ * sheet is about to show) it offers the device instead. [onSettings] opens the translation settings.
+ */
+@Composable
+fun TranslateConsentHost(translation: NoteTranslationViewModel, onSettings: () -> Unit) {
+    val consentFor by translation.consentFor.collectAsStateWithLifecycle()
+    if (consentFor == null) return
+    val host by translation.host.collectAsStateWithLifecycle()
+    val installed by translation.deviceInstalled.collectAsStateWithLifecycle()
+    TranslateConsentSheet(
+        host = host, onTranslate = translation::consent, onDismiss = translation::dismissConsent,
+        article = consentFor == NoteTranslationViewModel.ARTICLE,
+        onSettings = { translation.dismissConsent(); onSettings() },
+        onUseDevice = if (installed) translation::useDevice else null,
+    )
 }

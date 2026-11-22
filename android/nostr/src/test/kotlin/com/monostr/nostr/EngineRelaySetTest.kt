@@ -11,6 +11,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -165,6 +166,28 @@ class EngineRelaySetTest {
     }
 
     @Test
+    fun `an attachTemporary cancelled after its last add hands nothing back and leaves no relay behind`() = runTest {
+        // backlog 98: the loop finished (relay added, reference taken) but the cancellation lands on the way back from the
+        // FFI dispatcher; the caller never learns the reference, so the engine must give it back itself
+        SilentWsRelay(answerEose = true).use { normal ->
+            SilentWsRelay(answerEose = true).use { temp ->
+                val e = connectedEngine(dir, normal)
+                try {
+                    e.poolProbe = { at -> if (at == "added") currentCoroutineContext().job.cancel() }
+                    var returned: List<String>? = null
+                    launch(Dispatchers.IO) { returned = e.attachTemporary(listOf(temp.url)) }.join()
+                    e.poolProbe = null
+                    assertNull(returned, "attachTemporary returned $returned")
+                    assertTrue(e.temporaryRelayUrls().isEmpty(), "marks: ${e.temporaryRelayUrls()}")
+                    assertFalse(temp.url in e.client.relays().keys.map { it.toString().trimEnd('/') }, "still in the pool")
+                } finally {
+                    e.close()
+                }
+            }
+        }
+    }
+
+    @Test
     fun `an attachTemporary cancelled right after rust added the relay leaves no relay behind`() = runTest {
         SilentWsRelay(answerEose = true).use { normal ->
             SilentWsRelay(answerEose = true, recordRequests = true).use { temp ->
@@ -185,6 +208,69 @@ class EngineRelaySetTest {
                     assertTrue(e.temporaryRelayUrls().isEmpty(), "marks: ${e.temporaryRelayUrls()}")
                     Thread.sleep(300)
                     assertTrue(temp.requests.isEmpty(), "REQs on the relay: ${temp.requests}")
+                } finally {
+                    e.close()
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `a sendTo racing addRelays before its refresh keeps the user's new relay`() = runTest {
+        // backlog 100: the snapshot sendTo reads does not list X yet, X's add returns false (already in the pool),
+        // and the cleanup must not force-remove the user's own relay
+        SilentWsRelay(answerEose = true).use { normal ->
+            SilentWsRelay(acceptEvents = true).use { own ->
+                val e = connectedEngine(dir, normal)
+                try {
+                    val event = EventBuilder.textNote("a note").signWithKeys(Keys.generate())
+                    e.save(event)
+                    var raced = false
+                    e.poolProbe = { at ->
+                        if (at == "added" && !raced) {
+                            raced = true
+                            e.sendTo(listOf(own.url), event.id().toHex())
+                        }
+                    }
+                    e.addRelays(listOf(own.url))
+                    e.poolProbe = null
+                    assertTrue(raced, "the probe never ran")
+                    assertTrue(own.url in e.client.relays().keys.map { it.toString().trimEnd('/') }, "dropped from the pool")
+                    assertTrue(own.url in e.relayUrls(), "relayUrls: ${e.relayUrls()}")
+                } finally {
+                    e.close()
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `a second sendTo to the same foreign relay leaves the first one's transient mark alone`() = runTest {
+        // the inner sendTo finds the watcher's relay already in the pool: it must neither remove it nor unmark it,
+        // or the relay would enter the normal set (fetch/subscribe REQs) while the outer send still holds it
+        SilentWsRelay(answerEose = true).use { normal ->
+            SilentWsRelay(acceptEvents = true).use { watcher ->
+                val e = connectedEngine(dir, normal)
+                try {
+                    val event = EventBuilder.textNote("an intent").signWithKeys(Keys.generate())
+                    e.save(event)
+                    val seen = java.util.concurrent.CopyOnWriteArrayList<List<String>>()
+                    var raced = false
+                    e.poolProbe = { at ->
+                        if (at == "add-returned" && !raced) {
+                            raced = true
+                            e.sendTo(listOf(watcher.url), event.id().toHex())
+                            e.refreshRelaySetForTest()
+                            seen += e.relayUrls()
+                            seen += listOf(e.client.relays().keys.map { it.toString().trimEnd('/') }.filter { it == watcher.url }.joinToString())
+                        }
+                    }
+                    e.sendTo(listOf(watcher.url), event.id().toHex())
+                    e.poolProbe = null
+                    assertTrue(raced, "the probe never ran")
+                    assertFalse(watcher.url in seen[0], "normal set after the inner send: ${seen[0]}")
+                    assertEquals(listOf(watcher.url), seen[1], "the inner send removed the outer send's relay")
+                    assertFalse(watcher.url in e.client.relays().keys.map { it.toString().trimEnd('/') }, "left in the pool")
                 } finally {
                     e.close()
                 }

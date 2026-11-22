@@ -496,7 +496,6 @@
         <item quantity="other">%1$s, %2$s ve %3$d kişi daha notunu yeniden paylaştı</item>
     </plurals>
     <string name="notif_about_reply">Yanıt: “%1$s”</string>
-    <string name="notif_about_quote">Alıntı: “%1$s”</string>
     <string name="notif_tip_profile">profiline</string>
     <string name="avatar_of">%1$s profili</string>
     <string name="notif_note_missing">not yüklenmedi</string>
@@ -546,6 +545,8 @@
     <string name="address_missing">Etkinlik bulunamadı</string>
     <string name="address_deleted">Etkinlik silindi</string>
     <string name="article_title">Makale</string>
+    <string name="reader_dark_mode">Koyu okuma modu</string>
+    <string name="reader_light_mode">Açık okuma modu</string>
     <plurals name="article_read_time">
         <item quantity="one">%d dk okuma</item>
         <item quantity="other">%d dk okuma</item>
@@ -790,6 +791,14 @@
     <string name="translate_consent_body_article">Bu makalenin metni %1$s adresine gönderilir. Sunucu hangi makaleleri çevirdiğini ve IP adresini görür. Mesajlar asla çevrilmez.</string>
     <string name="translate_consent_translate">Çevir</string>
     <string name="translate_consent_settings">Ayarlar</string>
+    <string name="settings_translate_device">Cihazda (Offline Translator)</string>
+    <string name="settings_translate_device_private">Hiçbir şey telefonundan çıkmaz</string>
+    <string name="settings_translate_device_get">Offline Translator\'ı F-Droid\'den al</string>
+    <string name="translate_consent_device">Bunun yerine Offline Translator kullan</string>
+    <string name="translate_pack_missing">Dil paketi eksik</string>
+    <string name="translate_open_device_app">Offline Translator\'ı aç</string>
+    <string name="translate_app_missing">Offline Translator yüklü değil</string>
+    <string name="translate_get_app">Edin</string>
     <string name="settings_translate">Çeviri</string>
     <string name="settings_translate_monostr">Monostr (translate.monostr.com)</string>
     <string name="settings_translate_custom">Kendi LibreTranslate sunucun</string>
@@ -797,6 +806,7 @@
     <string name="settings_translate_url">Sunucu adresi</string>
     <string name="settings_translate_url_invalid">Geçersiz adres</string>
     <string name="settings_translate_hint">Çevirdiğin bir notun metni seçilen sunucuya gönderilir. Sunucu hangi notları çevirdiğini ve IP adresini görür. Mesajlar asla çevrilmez.</string>
+    <string name="settings_translate_hint_device">Notlar telefonunda Offline Translator ile çevrilir. Hiçbir metin telefonundan çıkmaz.</string>
     <string name="link_prompt_title">Bu bağlantı açılsın mı?</string>
     <string name="link_prompt_reason">Site IP adresinizi öğrenecek.</string>
     <string name="link_prompt_open">Aç</string>

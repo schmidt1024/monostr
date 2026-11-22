@@ -1,0 +1,5 @@
+- Traduza no seu telefone com o Offline Translator (F-Droid): nenhum texto sai do seu telefone
+- As citações nas notificações mostram a nota citada
+- Leitura clara ou escura dos artigos, com um toque no leitor
+- Modo Tor: as mensagens diretas vão ao seu contato por uma conexão separada
+- Correções

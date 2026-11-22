@@ -501,7 +501,6 @@
         <item quantity="other">%1$s, %2$s y %3$d personas más repostearon tu nota</item>
     </plurals>
     <string name="notif_about_reply">Respondiendo a: “%1$s”</string>
-    <string name="notif_about_quote">Citando: “%1$s”</string>
     <string name="notif_tip_profile">a tu perfil</string>
     <string name="avatar_of">Perfil de %1$s</string>
     <string name="notif_note_missing">nota no cargada</string>
@@ -552,6 +551,8 @@
     <string name="address_missing">Evento no encontrado</string>
     <string name="address_deleted">Evento eliminado</string>
     <string name="article_title">Artículo</string>
+    <string name="reader_dark_mode">Modo de lectura oscuro</string>
+    <string name="reader_light_mode">Modo de lectura claro</string>
     <plurals name="article_read_time">
         <item quantity="one">%d min de lectura</item>
         <item quantity="other">%d min de lectura</item>
@@ -799,6 +800,14 @@
     <string name="translate_consent_body_article">El texto de este artículo se envía a %1$s. El servidor ve qué artículos traduces y tu dirección IP. Los mensajes nunca se traducen.</string>
     <string name="translate_consent_translate">Traducir</string>
     <string name="translate_consent_settings">Ajustes</string>
+    <string name="settings_translate_device">En el dispositivo (Offline Translator)</string>
+    <string name="settings_translate_device_private">Nada sale de tu teléfono</string>
+    <string name="settings_translate_device_get">Consigue Offline Translator en F-Droid</string>
+    <string name="translate_consent_device">Usar Offline Translator en su lugar</string>
+    <string name="translate_pack_missing">Falta el paquete de idioma</string>
+    <string name="translate_open_device_app">Abrir Offline Translator</string>
+    <string name="translate_app_missing">Offline Translator no está instalado</string>
+    <string name="translate_get_app">Conseguir</string>
     <string name="settings_translate">Traducción</string>
     <string name="settings_translate_monostr">Monostr (translate.monostr.com)</string>
     <string name="settings_translate_custom">Servidor LibreTranslate propio</string>
@@ -806,6 +815,7 @@
     <string name="settings_translate_url">Dirección del servidor</string>
     <string name="settings_translate_url_invalid">Dirección no válida</string>
     <string name="settings_translate_hint">El texto de una nota que traduces se envía al servidor elegido. El servidor ve qué notas traduces y tu dirección IP. Los mensajes nunca se traducen.</string>
+    <string name="settings_translate_hint_device">Las notas se traducen en tu teléfono con Offline Translator. Ningún texto sale de tu teléfono.</string>
     <string name="link_prompt_title">¿Abrir este enlace?</string>
     <string name="link_prompt_reason">El sitio conocerá tu dirección IP.</string>
     <string name="link_prompt_open">Abrir</string>

@@ -1,5 +1,6 @@
 package com.monostr.app.dm
 
+import com.monostr.app.ui.withPerfLines
 import kotlinx.coroutines.test.runCurrent
 import com.monostr.nostr.StartupGate
 import com.monostr.app.ui.ManualGate
@@ -585,6 +586,25 @@ class DmSyncTest {
         r.dms.sync(interactive = false)
         assertFalse(r.store.isKnownWrap(id))
         assertEquals(2, r.repo.unwrapCalls.size, "the known-wrap fast path does not skip it")
+    }
+
+    @Test
+    fun `a send leaves perf marks without text or pubkeys`() {
+        val lines = withPerfLines {
+            runTest {
+                val r = Rig(eager(), own = OwnDmRelays.Found(listOf(relay)), peers = mapOf(bob to listOf("wss://bob.example.com")))
+                r.repo.sendResult = DmSendResult("1".repeat(64), 900, sentToPeer = true, sentToSelf = false)
+                assertEquals(DmStatus.SENT, r.dms.send(bob, "secret words"))
+                r.repo.sendError = java.io.IOException("tor not ready")
+                assertEquals(DmStatus.FAILED, r.dms.send(bob, "more secret words"))
+            }
+        }.filter { "dm send" in it }
+        assertEquals(4, lines.size, lines.toString())
+        assertTrue(lines[0].endsWith("dm send start"), lines[0])
+        assertTrue(Regex("dm send done peer=true self=false ms=\\d+$").containsMatchIn(lines[1]), lines[1])
+        assertTrue(lines[2].endsWith("dm send start"), lines[2])
+        assertTrue(lines[3].endsWith("dm send failed IOException"), lines[3])
+        assertTrue(lines.none { "secret" in it || bob in it })
     }
 
     @Test

@@ -205,4 +205,40 @@ class MdHtmlTest {
         val t = MdText("the docs", listOf(MdSpan.Link(4, 8, "https://y.org")))
         assertEquals("the <a data-i=\"0\">docs</a>", MdHtml.toHtml(t))
     }
+
+    @Test
+    fun `decode lenient accepts dropped bold`() {
+        val enc = MdHtml.encode(MdText("big deal", listOf(MdSpan.Bold(0, 3))))
+        assertEquals(MdText("big deal", emptyList()), MdHtml.decode("big deal", enc, strictFormatting = false))
+    }
+
+    @Test
+    fun `decode strict still rejects dropped bold`() {
+        val enc = MdHtml.encode(MdText("big deal", listOf(MdSpan.Bold(0, 3))))
+        assertNull(MdHtml.decode("big deal", enc))
+    }
+
+    @Test
+    fun `decode lenient still rejects a missing link`() {
+        val enc = MdHtml.encode(MdText("the docs", listOf(MdSpan.Link(4, 8, "https://y.org"))))
+        assertNull(MdHtml.decode("the docs", enc, strictFormatting = false))
+    }
+
+    @Test
+    fun `decode lenient still rejects unbalanced tags`() {
+        val enc = MdHtml.encode(MdText("a", emptyList()))
+        assertNull(MdHtml.decode("a</b>", enc, false))
+    }
+
+    @Test
+    fun `devicePlain roundTrip throughMdHtml`() {
+        val t = MdText(
+            "see the docs and run ls -la at https://example.org/x #nostr",
+            listOf(MdSpan.Link(8, 12, "https://y.org/d"), MdSpan.InlineCode(21, 26)),
+        )
+        val enc = MdHtml.encode(t)
+        val plain = DevicePlain.toPlain(enc.html)!!
+        val html = DevicePlain.fromPlain(plain.text, plain)!!
+        assertEquals(t, MdHtml.decode(html, enc))
+    }
 }

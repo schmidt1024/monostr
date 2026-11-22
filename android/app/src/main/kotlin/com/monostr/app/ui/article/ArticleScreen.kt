@@ -28,7 +28,17 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.LightMode
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
+import com.monostr.app.data.ThemeMode
+import com.monostr.app.ui.theme.LocalThemeChoice
+import com.monostr.app.ui.theme.MonostrTheme
+import com.monostr.app.ui.theme.isDark
+import kotlinx.coroutines.launch
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -118,12 +128,11 @@ import androidx.compose.ui.semantics.Role
 import com.monostr.app.translate.ArticleTranslationUi
 import com.monostr.app.translate.ArticleTranslator
 import com.monostr.app.translate.LanguageDetector
-import com.monostr.app.translate.TranslateClient
+import com.monostr.app.translate.TranslateRouter
 import com.monostr.app.translate.TranslationSettingsStore
 import com.monostr.app.translate.TranslationState
 import com.monostr.app.ui.common.LocalNoteTranslator
 import com.monostr.app.ui.common.TranslateRow
-import okhttp3.OkHttpClient
 import javax.inject.Inject
 
 @HiltViewModel
@@ -132,8 +141,9 @@ class ArticleViewModel @Inject constructor(
     handle: SavedStateHandle,
     factory: TipSheetFactory,
     translationSettings: TranslationSettingsStore,
+    private val readerTheme: ReaderThemeStore,
     detector: LanguageDetector,
-    http: OkHttpClient,
+    translateRouter: TranslateRouter,
 ) : androidx.lifecycle.ViewModel() {
     /** Taken first: the ViewModel is made at the route's first composition, the "article shown" mark counts from here. */
     private val openedAt = System.nanoTime() / 1_000_000
@@ -145,7 +155,7 @@ class ArticleViewModel @Inject constructor(
     val decorations = factory.decorations(viewModelScope)
     val tipSheet = factory.tipSheet(viewModelScope)
     /** Spec 2026-11-03 «Articles»: in this screen's scope, so leaving the reader cancels the requests; each call's timeout follows its length. */
-    val translator = ArticleTranslator(translationSettings, detector, TranslateClient(http), viewModelScope)
+    val translator = ArticleTranslator(translationSettings, detector, translateRouter, viewModelScope)
     val controller = ArticleController(
         ref, ready.addresses, ready.profiles, ready.publish, decorations, ready.counts, viewModelScope,
         mentions = com.monostr.app.ui.common.MentionResolver(ready.profiles, viewModelScope, kotlinx.coroutines.Dispatchers.Default),
@@ -155,6 +165,7 @@ class ArticleViewModel @Inject constructor(
         mute = ready.mute, muteScope = ready.engine.backgroundScope, translator = translator,
         sendGate = ready.sendGate,
     )
+    fun setReaderDark(dark: Boolean) { viewModelScope.launch { readerTheme.setDark(dark) } }
     val menu = ready.noteMenu(delete = controller::delete, mute = controller::mute)
 
     init {
@@ -199,6 +210,47 @@ fun ArticleScreen(
     onOpenVideo: (String) -> Unit = {},
     vm: ArticleViewModel = hiltViewModel(),
 ) {
+    val app = LocalThemeChoice.current
+    val appDark = isDark(app.mode)
+    val dark = app.readerDark ?: appDark
+    val mode = if (dark) (if (app.mode == ThemeMode.BLACK) ThemeMode.BLACK else ThemeMode.DARK) else ThemeMode.LIGHT
+    // the nested theme set the bar icons for the reader; the app theme does not re-run on the way back
+    val view = LocalView.current
+    DisposableEffect(appDark) {
+        onDispose {
+            val window = (view.context as? android.app.Activity)?.window
+            if (window != null) WindowCompat.getInsetsController(window, view).apply {
+                isAppearanceLightStatusBars = !appDark
+                isAppearanceLightNavigationBars = !appDark
+            }
+        }
+    }
+    MonostrTheme(mode, app.accent, app.customHue) {
+        ArticleScreenContent(
+            onBack, onOpenProfile, onOpenThread, onOpenArticle, onHashtag, onOpenMedia, onReply, onQuote, onQuoteNote, onOpenNoteMedia, onOpenVideo,
+            dark = dark, onToggleDark = remember(dark) { { vm.setReaderDark(!dark) } }, vm = vm,
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ArticleScreenContent(
+    onBack: () -> Unit,
+    onOpenProfile: (String) -> Unit,
+    onOpenThread: (String) -> Unit,
+    onOpenArticle: (AddressRef, Boolean) -> Unit,
+    onHashtag: (String) -> Unit,
+    onOpenMedia: (List<String>, Int) -> Unit,
+    onReply: (AddressRef, String?) -> Unit,
+    onQuote: (AddressRef) -> Unit,
+    onQuoteNote: (String) -> Unit,
+    onOpenNoteMedia: (String, Int) -> Unit,
+    onOpenVideo: (String) -> Unit,
+    dark: Boolean,
+    onToggleDark: () -> Unit,
+    vm: ArticleViewModel,
+) {
     val state by vm.controller.state.collectAsStateWithLifecycle()
     val names by vm.controller.names.collectAsStateWithLifecycle()
     val message by vm.controller.message.collectAsStateWithLifecycle()
@@ -217,6 +269,14 @@ fun ArticleScreen(
             TopAppBar(
                 title = { Text(stringResource(R.string.article_title)) },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back)) } },
+                actions = {
+                    IconButton(onClick = onToggleDark, modifier = Modifier.testTag("reader-theme-toggle")) {
+                        Icon(
+                            if (dark) Icons.Outlined.LightMode else Icons.Outlined.DarkMode,
+                            contentDescription = stringResource(if (dark) R.string.reader_light_mode else R.string.reader_dark_mode),
+                        )
+                    }
+                },
             )
         },
         snackbarHost = { MonostrSnackbarHost(snackbar) },
@@ -576,7 +636,7 @@ private fun ArticlePicture(url: String, ctx: RenderContext, index: Int, modifier
 private fun ArticleTranslateRows(translation: ArticleTranslationUi, translator: ArticleTranslator, id8: String) {
     val consent = LocalNoteTranslator.current ?: return
     if (translation.row == TranslationState.None) return
-    val onTranslate = { consent.withConsent(translator::translate) }
+    val onTranslate = { consent.withConsent(translator::translateWhenApplied) }
     Column(Modifier.padding(top = Spacing.s)) {
         TranslateRow(translation.row, id8, onTranslate = onTranslate, onOriginal = translator::showOriginal, onTranslation = translator::showTranslation)
         TranslateRow(translation.row, id8, onTranslate = onTranslate, onOriginal = translator::showOriginal, onTranslation = translator::showTranslation, belowText = true)

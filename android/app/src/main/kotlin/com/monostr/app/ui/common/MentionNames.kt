@@ -28,6 +28,13 @@ object MentionNames {
 
     fun label(pubkey: String, names: Map<String, String>): String = "@" + (names[pubkey] ?: Profile.shortPubkey(pubkey))
 
-    fun plain(text: String, names: Map<String, String>): String =
-        NoteLinks.annotate(text).joinToString("") { if (it is NoteSpan.Mention) label(it.pubkey, names) else it.text }
+    /** [noteLabel]: what a `nostr:note`/`nevent` link reads (the feed's «note»); null keeps its text. */
+    fun plain(text: String, names: Map<String, String>, noteLabel: String? = null): String =
+        NoteLinks.annotate(text).joinToString("") {
+            when {
+                it is NoteSpan.Mention -> label(it.pubkey, names)
+                it is NoteSpan.NoteRef && noteLabel != null -> noteLabel
+                else -> it.text
+            }
+        }
 }

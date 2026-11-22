@@ -23,11 +23,15 @@ import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** The server translations go to: monostr's, the own one when it has an address, else none (translation off). */
-internal fun translateServer(mode: TranslationMode, customUrl: String): TranslateServer? = when (mode) {
+/**
+ * Who translates: monostr's server, the own one when it has an address, Offline Translator on the device, else none
+ * (translation off). The device never falls back to a server.
+ */
+internal fun translateBackend(mode: TranslationMode, customUrl: String): TranslateBackend? = when (mode) {
     TranslationMode.MONOSTR -> TranslateServer.MONOSTR
     TranslationMode.CUSTOM -> customUrl.takeIf { it.isNotBlank() }?.let { TranslateServer(it) }
     TranslationMode.OFF -> null
+    TranslationMode.DEVICE -> DeviceBackend
 }
 
 /** What the note card shows about translating one note. */
@@ -37,12 +41,16 @@ sealed interface TranslationState {
     /** «Translate» button; [source] is the detected language. */
     data class Offer(val source: String) : TranslationState
     data object Loading : TranslationState
-    /** The note shows [text] (the translation), «Translated by [host]» / «Show original». */
+    /** The note shows [text] (the translation), «Translated by [host]» / «Show original»; [host] is the backend's label. */
     data class Shown(val text: String, val host: String) : TranslationState
     /** The note shows its original content; [text] keeps the translation so «Show translation» needs no network. */
     data class Original(val text: String, val host: String) : TranslationState
     /** «Translation failed · Retry»; [Translations.translate] retries. */
     data object Failed : TranslationState
+    /** On the device: Offline Translator has no language pack for the pair; a tap tries again ([Translations.translate]). */
+    data object PackMissing : TranslationState
+    /** On the device: Offline Translator is not installed or could not be reached; a tap tries again. */
+    data object AppMissing : TranslationState
 }
 
 /**
@@ -51,7 +59,7 @@ sealed interface TranslationState {
  * persisted; translations live as long as the process (bounded by [MAX_NOTES]).
  *
  * The mode is applied on top of the stored state: with translation off every note reads [TranslationState.None],
- * and turning it back on restores what was there. Detection only runs while a server is configured, one note at a time
+ * and turning it back on restores what was there. Detection only runs while a backend is configured, one note at a time
  * on [LanguageDetector.LANE], and not before the session's [StartupGate] opens ([useStartupGate]): the feed's first page
  * comes first (final review I2).
  */
@@ -59,16 +67,16 @@ sealed interface TranslationState {
 class Translations internal constructor(
     settings: TranslationSettingsStore,
     private val detect: (content: String, label: String?) -> String?,
-    private val translator: suspend (TranslateServer, List<String>, String, String) -> TranslateResult,
+    private val translator: suspend (TranslateBackend, List<String>, String, String) -> TranslateResult,
     private val target: () -> String,
     private val scope: CoroutineScope,
     private val detectDispatcher: CoroutineDispatcher,
     private val protect: (String) -> Shielded? = TokenShield::protect,
 ) {
-    @Inject constructor(settings: TranslationSettingsStore, detector: LanguageDetector, client: TranslateClient) : this(
+    @Inject constructor(settings: TranslationSettingsStore, detector: LanguageDetector, router: TranslateRouter) : this(
         settings,
         detector::detect,
-        client::translate,
+        { b, q, f, t -> router.translate(b, q, f, t) },
         { Languages.target(systemLocales()) },
         CoroutineScope(SupervisorJob() + Dispatchers.Default),
         LanguageDetector.LANE,
@@ -91,13 +99,13 @@ class Translations internal constructor(
         var inFlight: Deferred<Unit>? = null
     }
 
-    /** Guards [notes], every [Note] field and [server]. Never held across a suspension. */
+    /** Guards [notes], every [Note] field and [backend]. Never held across a suspension. */
     private val lock = Any()
     private val notes = object : LinkedHashMap<String, Note>(64, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Note>?) = size > MAX_NOTES
     }
     /** Null while translation is off (OFF, CUSTOM without address) or the settings are not loaded yet. */
-    private var server: TranslateServer? = null
+    private var backend: TranslateBackend? = null
     /** The target language the states were last set for; null before the first read. */
     private var current: String? = null
 
@@ -121,14 +129,24 @@ class Translations internal constructor(
         }
     }
 
+    /** The backend [translate] uses, once applied; [awaitBackend] waits on it. */
+    private val applied = MutableStateFlow<TranslateBackend?>(null)
+
+    /**
+     * Returns once [b] is the backend [translate] uses: a mode just stored (the consent sheet's switch to the device)
+     * reaches this instance a moment later, and a note must never go to the backend before it.
+     */
+    suspend fun awaitBackend(b: TranslateBackend) { applied.first { it == b } }
+
     init {
         scope.launch {
-            combine(settings.mode, settings.customUrl, ::translateServer).distinctUntilChanged().collect { s ->
+            combine(settings.mode, settings.customUrl, ::translateBackend).distinctUntilChanged().collect { s ->
                 val pending = synchronized(lock) {
-                    server = s
+                    backend = s
                     notes.values.forEach { publish(it) }
                     if (s == null) emptyList() else notes.values.filter { it.content != null && !it.detectStarted }
                 }
+                applied.value = s
                 pending.forEach { startDetection(it) }
             }
         }
@@ -143,7 +161,7 @@ class Translations internal constructor(
             if (n.content != null) return
             n.content = content
             n.label = label
-            if (server == null) return // detected when translation is turned on
+            if (backend == null) return // detected when translation is turned on
             n
         }
         startDetection(n)
@@ -153,7 +171,7 @@ class Translations internal constructor(
     suspend fun translate(noteId: String) {
         val job = synchronized(lock) {
             val n = notes[noteId] ?: return
-            val s = server ?: return
+            val s = backend ?: return
             val to = syncTarget()
             val source = n.source ?: return
             val content = n.content ?: return
@@ -184,7 +202,7 @@ class Translations internal constructor(
         }
     }
 
-    private suspend fun run(n: Note, s: TranslateServer, content: String, source: String, to: String) {
+    private suspend fun run(n: Note, s: TranslateBackend, content: String, source: String, to: String) {
         val result = try {
             translateOnce(s, content, source, to)
         } catch (e: CancellationException) {
@@ -195,19 +213,22 @@ class Translations internal constructor(
         }
         synchronized(lock) {
             n.inFlight = null
+            // a cached translation keeps its backend's label after a mode switch: intended, nothing new leaves the phone
             if (result is TranslationState.Shown) n.shown[to] = result
             val now = current ?: to
             if (now == to) set(n, result) else retarget(n, now, force = true) // the language was switched meanwhile: settle
         }
     }
 
-    private suspend fun translateOnce(s: TranslateServer, content: String, source: String, to: String): TranslationState {
+    private suspend fun translateOnce(s: TranslateBackend, content: String, source: String, to: String): TranslationState {
         // never send unshielded content: no shield, no request
         val shielded = protect(content) ?: return TranslationState.Failed
         return when (val r = translator(s, listOf(shielded.html), source, to)) {
             is TranslateResult.Ok -> r.texts.singleOrNull()?.let { TokenShield.restore(it, shielded) }
-                ?.let { TranslationState.Shown(it, s.host) } ?: TranslationState.Failed
+                ?.let { TranslationState.Shown(it, s.label) } ?: TranslationState.Failed
             TranslateResult.RateLimited, TranslateResult.Failed -> TranslationState.Failed
+            TranslateResult.PackMissing -> TranslationState.PackMissing
+            TranslateResult.AppMissing -> TranslationState.AppMissing
         }
     }
 
@@ -266,7 +287,7 @@ class Translations internal constructor(
 
     /** Caller holds [lock]. */
     private fun publish(n: Note) {
-        n.out.value = if (server == null) TranslationState.None else n.raw
+        n.out.value = if (backend == null) TranslationState.None else n.raw
     }
 
     companion object {

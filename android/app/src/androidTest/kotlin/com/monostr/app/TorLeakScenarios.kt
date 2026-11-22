@@ -240,6 +240,10 @@ class TorLeakScenarios {
                 val out = ready.engine.sendTo(listOf("wss://relay.monostr.com"), signed.id().toHex())
                 "accepted ${out.successRelays.size} failed ${out.failedRelays.keys}"
             }
+            step(label, "dm-peer-leg", 60_000) {
+                // backlog 99: a DM to the test account itself, never to a real person; in Tor mode its recipient leg is detached
+                "status ${ready.dms.send(ready.pubkey, "monostr Tor test, please ignore")}"
+            }
             step(label, "publish", 60_000) {
                 // our relay alone: a test event goes nowhere else
                 session.applyRelays(listOf("wss://relay.monostr.com"))

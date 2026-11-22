@@ -22,7 +22,7 @@ class ArticleTranslationTest {
         var inFlight = 0
         var maxInFlight = 0
         var answer: (Int, List<String>) -> TranslateResult = { _, texts -> TranslateResult.Ok(texts.map { "DE " + it }) }
-        suspend fun translate(server: TranslateServer, texts: List<String>, source: String, target: String, timeoutMs: Long): TranslateResult {
+        suspend fun translate(server: TranslateBackend, texts: List<String>, source: String, target: String, timeoutMs: Long): TranslateResult {
             calls += texts
             timeouts += timeoutMs
             inFlight++
@@ -197,6 +197,44 @@ class ArticleTranslationTest {
         assertEquals(bold, t.blocks.value[0])
         assertTrue(t.partial.value)
         assertFalse(t.stopped.value)
+    }
+
+    // backlog 89: Offline Translator takes one plain text per call and may drop the formatting
+
+    @Test
+    fun deviceBackend_sendsOnePiecePerCall_andFlattensBold() = runTest {
+        val c = FakeClient()
+        c.answer = { _, texts -> TranslateResult.Ok(texts.map { "DE " + it.replace("<b>", "").replace("</b>", "") }) }
+        val bold = MdBlock.Paragraph(MdText("very bold words", listOf(MdSpan.Bold(5, 9))))
+        val t = ArticleTranslation(c::translate, DeviceBackend, "fr", "de")
+        t.run("Le titre", null, listOf(bold) + (1..10).map(::para))
+        assertEquals(List(12) { 1 }, c.calls.map { it.size }, "short neighbours are not combined")
+        assertEquals(c.calls.map { ArticleTranslation.timeoutMs(it[0].length) }, c.timeouts, "each piece its own timeout")
+        assertEquals(MdText("DE very bold words", emptyList()), (t.blocks.value[0] as MdBlock.Paragraph).text, "translated, bold flattened")
+        assertEquals("DE paragraph number 10", (t.blocks.value[10] as MdBlock.Paragraph).text.text)
+        assertFalse(t.partial.value)
+    }
+
+    @Test
+    fun `a server keeps the strict formatting check`() = runTest {
+        val c = FakeClient()
+        c.answer = { _, texts -> TranslateResult.Ok(texts.map { it.replace("<b>", "").replace("</b>", "") }) }
+        val bold = MdBlock.Paragraph(MdText("very bold words", listOf(MdSpan.Bold(5, 9))))
+        val t = translation(c)
+        t.run("", null, listOf(bold))
+        assertEquals(bold, t.blocks.value[0])
+        assertTrue(t.partial.value)
+    }
+
+    @Test
+    fun `a missing pack stops the run`() = runTest {
+        val c = FakeClient()
+        c.answer = { _, _ -> TranslateResult.PackMissing }
+        val t = ArticleTranslation(c::translate, DeviceBackend, "fr", "de")
+        t.run("Le titre", null, (1..3).map(::para))
+        assertEquals(1, c.calls.size, "nothing after it")
+        assertTrue(t.stopped.value)
+        assertEquals(TranslateResult.PackMissing, t.stoppedBy.value)
     }
 
     @Test

@@ -500,7 +500,6 @@
         <item quantity="other">%1$s, %2$s and %3$d others reposted your note</item>
     </plurals>
     <string name="notif_about_reply">Replying to: “%1$s”</string>
-    <string name="notif_about_quote">Quoting: “%1$s”</string>
     <string name="notif_tip_profile">to your profile</string>
     <string name="avatar_of">Profile of %1$s</string>
     <string name="notif_note_missing">note not loaded</string>
@@ -551,6 +550,8 @@
     <string name="address_missing">Event not found</string>
     <string name="address_deleted">Event deleted</string>
     <string name="article_title">Article</string>
+    <string name="reader_dark_mode">Dark reading mode</string>
+    <string name="reader_light_mode">Light reading mode</string>
     <plurals name="article_read_time">
         <item quantity="one">%d min read</item>
         <item quantity="other">%d min read</item>
@@ -796,6 +797,14 @@
     <string name="translate_consent_body_article">The text of this article goes to %1$s. The server sees which articles you translate and your IP address. Messages are never translated.</string>
     <string name="translate_consent_translate">Translate</string>
     <string name="translate_consent_settings">Settings</string>
+    <string name="settings_translate_device">On device (Offline Translator)</string>
+    <string name="settings_translate_device_private">Nothing leaves your phone</string>
+    <string name="settings_translate_device_get">Get Offline Translator on F-Droid</string>
+    <string name="translate_consent_device">Use Offline Translator instead</string>
+    <string name="translate_pack_missing">Language pack missing</string>
+    <string name="translate_open_device_app">Open Offline Translator</string>
+    <string name="translate_app_missing">Offline Translator not installed</string>
+    <string name="translate_get_app">Get it</string>
     <string name="settings_translate">Translation</string>
     <string name="settings_translate_monostr">Monostr (translate.monostr.com)</string>
     <string name="settings_translate_custom">Own LibreTranslate server</string>
@@ -803,6 +812,7 @@
     <string name="settings_translate_url">Server address</string>
     <string name="settings_translate_url_invalid">Invalid address</string>
     <string name="settings_translate_hint">The text of a note you translate goes to the chosen server. The server sees which notes you translate and your IP address. Messages are never translated.</string>
+    <string name="settings_translate_hint_device">Notes are translated on your phone by Offline Translator. No text leaves your phone.</string>
     <string name="link_prompt_title">Open this link?</string>
     <string name="link_prompt_reason">The site will learn your IP address.</string>
     <string name="link_prompt_open">Open</string>

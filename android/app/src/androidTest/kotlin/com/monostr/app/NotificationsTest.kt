@@ -5,7 +5,12 @@ import android.os.Build
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -26,7 +31,10 @@ import rust.nostr.sdk.Contact
 import rust.nostr.sdk.Event
 import rust.nostr.sdk.EventBuilder
 import rust.nostr.sdk.Keys
+import rust.nostr.sdk.Kind
 import rust.nostr.sdk.Metadata
+import rust.nostr.sdk.Nip19Event
+import rust.nostr.sdk.Tag
 import rust.nostr.sdk.Timestamp
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.performSemanticsAction
@@ -137,5 +145,44 @@ class NotificationsTest {
         val key = "REPOST:${mine.id().toHex()}"
         rule.waitUntil(15_000) { nodes("notification-$key").isNotEmpty() }
         rule.onNodeWithText(ctx.getString(R.string.notif_reposted_one, "alice-p")).assertIsDisplayed()
+    }
+
+    private fun quoteOf(mine: Event, from: Keys, text: String): Event {
+        val uri = Nip19Event(mine.id(), me.publicKey(), Kind(1u), emptyList()).toNostrUri()
+        return EventBuilder.textNote("$text\n\n$uri").tags(listOf(Tag.parse(listOf("q", mine.id().toHex(), "", me.publicKey().toHex())), Tag.parse(listOf("p", me.publicKey().toHex())))).signWithKeys(from)
+    }
+
+    @Test
+    fun quoteRow_showsCard_cardOpensOwnNote() {
+        reachFeed()
+        val alice = Keys.generate()
+        follow(alice, """{"name":"alice-q"}""")
+        val mine = EventBuilder.textNote("quoted original ${System.currentTimeMillis()}").signWithKeys(me)
+        val quote = quoteOf(mine, alice, "my take")
+        seed(mine, quote)
+        openNotifications()
+        rule.waitUntil(15_000) { nodes("notification-${quote.id().toHex()}").isNotEmpty() }
+        rule.onNodeWithText("my take").assertIsDisplayed()
+        assertEquals(0, nodes("notification-about-${quote.id().toHex()}").size)
+        rule.waitUntil(15_000) { nodes("quote-${id8(mine)}").isNotEmpty() }
+        rule.waitUntil(15_000) { rule.onAllNodes(hasText("quoted original", substring = true)).fetchSemanticsNodes().isNotEmpty() } // loaded, so the tap has a target
+        // the card's centre can land on the author row (profile); the bottom padding only the card handles
+        rule.onNodeWithTag("quote-${id8(mine)}").performTouchInput { click(Offset(centerX, height - 4.dp.toPx())) }
+        rule.waitUntil(15_000) { nodes("note-text-${id8(mine)}").isNotEmpty() }
+    }
+
+    @Test
+    fun quoteRow_missingQuotedNote_noCard() {
+        reachFeed()
+        val alice = Keys.generate()
+        follow(alice, """{"name":"alice-m"}""")
+        val unseen = EventBuilder.textNote("never stored ${System.currentTimeMillis()}").signWithKeys(me)
+        val quote = quoteOf(unseen, alice, "quoting the unknown")
+        seed(quote)
+        openNotifications()
+        rule.waitUntil(15_000) { nodes("notification-${quote.id().toHex()}").isNotEmpty() }
+        rule.onNodeWithText("quoting the unknown").assertIsDisplayed()
+        Thread.sleep(2_000)
+        assertEquals(0, nodes("quote-${id8(unseen)}").size)
     }
 }

@@ -61,7 +61,7 @@ android {
     // the dependency list AGP would add to the APK signing block is encrypted for Google Play; F-Droid flags it as opaque
     dependenciesInfo { includeInApk = false; includeInBundle = false }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
-    buildFeatures { compose = true; buildConfig = true }
+    buildFeatures { compose = true; buildConfig = true; aidl = true }
     testOptions.unitTests.all { it.useJUnitPlatform() }
     packaging {
         // spec 2026-11-06 Tor 7.5: libtor.so is 14.4 MB raw, compressed in the APK and extracted at install

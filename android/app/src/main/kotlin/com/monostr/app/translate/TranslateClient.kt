@@ -21,9 +21,20 @@ import java.net.URI
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 
+/** Who translates: an open LibreTranslate server or the Offline Translator app on this phone. [label]: «Translated by …». */
+sealed interface TranslateBackend {
+    val label: String
+}
+
+/** The Offline Translator app (F-Droid `dev.davidv.translator`): nothing leaves the phone ([DeviceTranslator]). */
+data object DeviceBackend : TranslateBackend {
+    override val label = "Offline Translator"
+}
+
 /** An open LibreTranslate server (no API key). */
-data class TranslateServer(val url: String) {
+data class TranslateServer(val url: String) : TranslateBackend {
     val host: String get() = runCatching { URI(url).host }.getOrNull() ?: url
+    override val label: String get() = host
 
     companion object {
         val MONOSTR = TranslateServer("https://translate.monostr.com")
@@ -34,6 +45,10 @@ sealed interface TranslateResult {
     data class Ok(val texts: List<String>) : TranslateResult
     data object RateLimited : TranslateResult
     data object Failed : TranslateResult
+    /** Device only: Offline Translator has no language pack for this pair (`DETECTED_BUT_UNAVAILABLE`). */
+    data object PackMissing : TranslateResult
+    /** Device only: Offline Translator is not installed or its service could not be bound. */
+    data object AppMissing : TranslateResult
 }
 
 /**

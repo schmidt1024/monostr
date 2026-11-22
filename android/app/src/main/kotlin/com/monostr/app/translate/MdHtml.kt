@@ -14,7 +14,9 @@ import com.monostr.app.ui.common.NoteSpan
  *
  * [fromHtml] accepts `<strong>`/`<em>`/`<strike>`/`<del>`, any letter case, quote style and extra attributes, `<br>`
  * variants and the usual entities; any other tag, a crossed or unclosed tag, a changed frozen piece, a missing, extra or
- * unknown link index or a different number of formatting tags gives null, and the block keeps its original.
+ * unknown link index or a different number of formatting tags gives null, and the block keeps its original. For a
+ * plain-text translator (on-device) [decode] can be lenient about the formatting tags (`strictFormatting = false`): a
+ * different count is then fine, the formatting is just absent; everything else stays checked.
  *
  * A link whose display text is itself a URL or token (`<https://x>`, `[https://x](https://x)`) is not prose: that text
  * is frozen too and may come back only inside its own `<a>`. And since the reader finds links in the text outside link
@@ -197,7 +199,12 @@ object MdHtml {
 
     private class Open(val kind: Int, val start: Int, val link: Int)
 
-    internal fun decode(html: String, enc: Encoded): MdText? {
+    /**
+     * [strictFormatting] false: a `<b>`/`<i>`/`<s>` count that differs from the original's is accepted (a plain-text
+     * translator such as the on-device one drops them; the block then simply has no formatting). Link, frozen and
+     * reader-token checks stay.
+     */
+    internal fun decode(html: String, enc: Encoded, strictFormatting: Boolean = true): MdText? {
         val sb = StringBuilder(html.length)
         val spans = ArrayList<MdSpan>()
         val stack = ArrayList<Open>()
@@ -276,7 +283,7 @@ object MdHtml {
             }
         }
         if (stack.isNotEmpty() || frozenAt != enc.frozen.size) return null
-        if (!tags.contentEquals(enc.tags) || !linkTags.contentEquals(enc.linkTags)) return null
+        if ((strictFormatting && !tags.contentEquals(enc.tags)) || !linkTags.contentEquals(enc.linkTags)) return null
         val out = MdText(sb.toString(), spans.sortedWith(compareBy({ it.start }, { -it.end })))
         // the reader must find the same links in the translation as in the original
         return out.takeIf { readerTokens(it) == enc.readerTokens }

@@ -7,6 +7,7 @@ import com.monostr.nostr.SigningRejectedException
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -20,6 +21,8 @@ import rust.nostr.sdk.PublicKey
 import rust.nostr.sdk.giftWrap
 import rust.nostr.sdk.giftWrapFromSeal
 import rust.nostr.sdk.nip44Encrypt
+import com.monostr.nostr.PublishResult
+import java.io.IOException
 import java.nio.file.Path
 
 class DmRepositoryTest {
@@ -242,5 +245,95 @@ class DmRepositoryTest {
         assertEquals(own.id().toHex(), r.selfWrapId)
         assertEquals(r.rumorId, NostrDmRepository(e).unwrap(own, silent = false).ok().rumorId)
         e.close()
+    }
+
+    // backlog 99 (spec 2026-11-20-dm-peer-leg-detached): in Tor mode the peer wrap travels only over the detached leg
+
+    @Test
+    fun `in tor mode the peer wrap goes only through the detached leg`() = runTest {
+        val e = engine()
+        val calls = ArrayList<Pair<Event, List<String>>>()
+        val repo = NostrDmRepository(e, torMode = { true }, torPeerLeg = { wrap, relays ->
+            calls += wrap to relays
+            PublishResult(wrap.id().toHex(), 1059, listOf("wss://a.example"), mapOf("wss://b.example" to "auth-required: write"))
+        })
+        val result = repo.send(bob.publicKey().toHex(), "hi", listOf("wss://a.example", "wss://b.example"), emptyList())
+        assertEquals(1, calls.size)
+        val (wrap, relays) = calls.single()
+        assertEquals(listOf("wss://a.example", "wss://b.example"), relays)
+        assertEquals(1059, wrap.kind().asU16().toInt())
+        assertEquals(listOf(bob.publicKey().toHex()), wrap.tags().publicKeys().map { it.toHex() })
+        assertTrue(result.sentToPeer)
+        e.close()
+    }
+
+    @Test
+    fun `in tor mode a peer leg where every relay failed is not sent`() = runTest {
+        val e = engine()
+        var calls = 0
+        val repo = NostrDmRepository(e, torMode = { true }, torPeerLeg = { wrap, _ ->
+            calls++
+            PublishResult(wrap.id().toHex(), 1059, emptyList(), mapOf("wss://a.example" to "auth-required: write"))
+        })
+        val result = repo.send(bob.publicKey().toHex(), "hi", listOf("wss://a.example"), emptyList())
+        assertFalse(result.sentToPeer)
+        assertEquals(1, calls)
+        e.close()
+    }
+
+    @Test
+    fun `in tor mode a detached failure throws`() = runTest {
+        val e = engine()
+        val repo = NostrDmRepository(e, torMode = { true }, torPeerLeg = { _, _ -> throw IOException("tor not ready") })
+        assertThrows(IOException::class.java) { kotlinx.coroutines.runBlocking { repo.send(bob.publicKey().toHex(), "hi", listOf("wss://a.example"), emptyList()) } }
+        e.close()
+    }
+
+    @Test
+    fun `outside tor mode the detached leg is never used`() = runTest {
+        val e = engine()
+        val repo = NostrDmRepository(e, torMode = { false }, torPeerLeg = { _, _ -> error("detached leg used outside Tor") })
+        val result = repo.send(bob.publicKey().toHex(), "hi", emptyList(), emptyList())
+        assertFalse(result.sentToPeer)
+        e.close()
+    }
+
+    // backlog 99, owner 2026-11-20: in Tor mode the self copy leaves later, so a relay that gets both cannot pair them by time
+
+    @Test
+    fun `in tor mode the self copy is deferred and send returns before it`() = runTest {
+        val e = engine()
+        val deferred = ArrayList<suspend () -> Unit>()
+        val repo = NostrDmRepository(e, torMode = { true },
+            torPeerLeg = { wrap, _ -> PublishResult(wrap.id().toHex(), 1059, listOf("wss://a.example"), emptyMap()) },
+            deferSelf = { deferred += it })
+        val result = repo.send(bob.publicKey().toHex(), "hi", listOf("wss://a.example"), listOf("wss://self.example"))
+        assertEquals(1, deferred.size)
+        assertFalse(result.sentToSelf)
+        assertTrue(result.selfWrapId != null)
+        e.close()
+    }
+
+    @Test
+    fun `outside tor mode the self copy is never deferred`() = runTest {
+        val e = engine()
+        val repo = NostrDmRepository(e, torMode = { false }, deferSelf = { error("self copy deferred outside Tor") })
+        repo.send(bob.publicKey().toHex(), "hi", emptyList(), emptyList())
+        e.close()
+    }
+
+    @Test
+    fun `a failed detached leg defers no self copy`() = runTest {
+        val e = engine()
+        val deferred = ArrayList<suspend () -> Unit>()
+        val repo = NostrDmRepository(e, torMode = { true }, torPeerLeg = { _, _ -> throw IOException("tor not ready") }, deferSelf = { deferred += it })
+        assertThrows(IOException::class.java) { kotlinx.coroutines.runBlocking { repo.send(bob.publicKey().toHex(), "hi", listOf("wss://a.example"), listOf("wss://self.example")) } }
+        assertTrue(deferred.isEmpty())
+        e.close()
+    }
+
+    @Test
+    fun `the self copy delay lies between 5 and 60 seconds`() {
+        repeat(1_000) { val ms = NostrDmRepository.torSelfDelayMs(kotlin.random.Random(it)); assertTrue(ms in 5_000L..60_000L, "$ms") }
     }
 }

@@ -516,7 +516,6 @@
         <item quantity="other">%1$s, %2$s и ещё %3$d человек сделали репост вашей заметки</item>
     </plurals>
     <string name="notif_about_reply">В ответ на: «%1$s»</string>
-    <string name="notif_about_quote">Цитирует: «%1$s»</string>
     <string name="notif_tip_profile">в ваш профиль</string>
     <string name="avatar_of">Профиль %1$s</string>
     <string name="notif_note_missing">заметка не загружена</string>
@@ -570,6 +569,8 @@
     <string name="address_missing">Событие не найдено</string>
     <string name="address_deleted">Событие удалено</string>
     <string name="article_title">Статья</string>
+    <string name="reader_dark_mode">Тёмный режим чтения</string>
+    <string name="reader_light_mode">Светлый режим чтения</string>
     <plurals name="article_read_time">
         <item quantity="one">%d мин чтения</item>
         <item quantity="few">%d мин чтения</item>
@@ -826,6 +827,14 @@
     <string name="translate_consent_body_article">Текст этой статьи отправляется на %1$s. Сервер видит, какие статьи вы переводите, и ваш IP-адрес. Сообщения никогда не переводятся.</string>
     <string name="translate_consent_translate">Перевести</string>
     <string name="translate_consent_settings">Настройки</string>
+    <string name="settings_translate_device">На устройстве (Offline Translator)</string>
+    <string name="settings_translate_device_private">Ничто не покидает ваш телефон</string>
+    <string name="settings_translate_device_get">Установить Offline Translator из F-Droid</string>
+    <string name="translate_consent_device">Использовать Offline Translator вместо этого</string>
+    <string name="translate_pack_missing">Нет языкового пакета</string>
+    <string name="translate_open_device_app">Открыть Offline Translator</string>
+    <string name="translate_app_missing">Offline Translator не установлен</string>
+    <string name="translate_get_app">Установить</string>
     <string name="settings_translate">Перевод</string>
     <string name="settings_translate_monostr">Monostr (translate.monostr.com)</string>
     <string name="settings_translate_custom">Свой сервер LibreTranslate</string>
@@ -833,6 +842,7 @@
     <string name="settings_translate_url">Адрес сервера</string>
     <string name="settings_translate_url_invalid">Неверный адрес</string>
     <string name="settings_translate_hint">Текст заметки, которую вы переводите, отправляется на выбранный сервер. Сервер видит, какие заметки вы переводите, и ваш IP-адрес. Сообщения никогда не переводятся.</string>
+    <string name="settings_translate_hint_device">Заметки переводятся на вашем телефоне с помощью Offline Translator. Никакой текст не покидает ваш телефон.</string>
     <string name="link_prompt_title">Открыть эту ссылку?</string>
     <string name="link_prompt_reason">Сайт узнает ваш IP-адрес.</string>
     <string name="link_prompt_open">Открыть</string>

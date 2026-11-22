@@ -801,9 +801,11 @@ class NostrEngine private constructor(
      */
     suspend fun attachTemporary(urls: List<String>): List<String> {
         val held: List<String>
+        // outside the FFI block: a cancellation can land on the way back from the dispatcher after every add went
+        // through; the caller then never sees these references, so they are given back here (backlog 98)
+        val taken = ArrayList<String>()
         try { held = ffi {
         val known = snapshot().pool.keys + transient
-        val taken = ArrayList<String>()
         for (raw in urls) {
             val url = runCatching { RelayUrl.parse(raw.trim()) }.getOrNull() ?: continue
             // only the user's own list names a hidden service ([addRelays]); here every address is someone else's hint (Tor 7.4)
@@ -833,8 +835,12 @@ class NostrEngine private constructor(
                 dial { ignoringErrors { client.connectRelay(url) } }
             }
         }
-        taken
-        } } finally {
+        ArrayList(taken)
+        } } catch (e: Throwable) {
+            val orphaned = ArrayList(taken)
+            if (orphaned.isNotEmpty()) detachTemporary(orphaned)
+            throw e
+        } finally {
             withContext(NonCancellable) { refreshRelaySet() }
         }
         return held
@@ -1522,14 +1528,23 @@ class NostrEngine private constructor(
                     ffi { runCatching { client.addRoutedWriteRelay(url, socksPort) } }
                     true
                 }
-                if (!held && norm !in known) {
+                // an addRelays still joining it (pool add done or pending, refresh not yet): the user's relay, never transient (backlog 100)
+                if (!held && norm !in known && !joiningInFlight.containsKey(norm)) {
                     // spec wave 2 B1 (G9): marked before the pool has it, so no refresh in between takes it into the
                     // normal set and a concurrent fetch or subscribe never REQs the watcher's relay
-                    transient += norm
+                    // only the call that set the mark clears it: a concurrent sendTo to the same relay still holds it
+                    if (transient.add(norm)) attemptedNames += norm
                     touched = true
                     attempted += url
-                    attemptedNames += norm
-                    if (!ffi { runCatching { client.addRoutedWriteRelay(url, socksPort).also { poolProbe?.invoke("add-returned") } }.getOrDefault(false) }) continue
+                    val fresh = ffi { runCatching { client.addRoutedWriteRelay(url, socksPort).also { poolProbe?.invoke("add-returned") } } }
+                    if (fresh.getOrNull() == false) {
+                        // already in the pool: someone else's relay (e.g. an addRelays whose refresh has not run yet, so the
+                        // snapshot missed it). Not ours to remove (backlog 100); it is a target like any known relay.
+                        attempted -= url
+                        targets += url
+                        continue
+                    }
+                    if (fresh.isFailure) continue
                     added += url
                 }
                 targets += url

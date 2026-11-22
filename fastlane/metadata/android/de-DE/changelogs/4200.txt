@@ -1,0 +1,5 @@
+- Übersetzen direkt auf dem Telefon mit Offline Translator (F-Droid): kein Text verlässt dein Telefon
+- Zitate in Mitteilungen zeigen die zitierte Note
+- Artikel hell oder dunkel lesen, ein Tipp im Leser
+- Tor-Modus: Direktnachrichten gehen über eine eigene Verbindung an deinen Kontakt
+- Korrekturen
