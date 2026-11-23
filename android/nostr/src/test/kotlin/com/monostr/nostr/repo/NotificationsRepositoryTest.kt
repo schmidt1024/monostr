@@ -124,6 +124,22 @@ class NotificationsRepositoryTest {
     }
 
     @Test
+    fun `a reply carries its own NIP-10 thread root`() = runTest {
+        // backlog 81: a muted conversation matches by this, even when the parent note is not known
+        val e = NostrEngine.create(dir.resolve("lmdb").toString(), LocalSigner(me.secretKey().toHex()), emptyList())
+        val root = "a".repeat(64)
+        val parent = "b".repeat(64)
+        e.save(EventBuilder(Kind(1u), "deep").tags(listOf(
+            Tag.parse(listOf("e", root, "", "root")), Tag.parse(listOf("e", parent, "", "reply")), Tag.parse(listOf("p", me.publicKey().toHex())),
+        )).customCreatedAt(Timestamp.fromSecs(200u)).signWithKeys(alice))
+        val repo = NostrNotificationsRepository(e, NostrTipsRepository(e) { 1000 }) { 1000 }
+        val item = repo.list().single()
+        assertEquals(NotificationKind.REPLY, item.kind)
+        assertEquals(parent, item.aboutId)
+        assertEquals(root, item.rootId)
+    }
+
+    @Test
     fun `a NIP-22 comment on my note is a reply, and a comment parent is found`() = runTest {
         // backlog 31: Fediverse replies bridged by Mostr (ditto.pub) are kind 1111
         val e = NostrEngine.create(dir.resolve("lmdb").toString(), LocalSigner(me.secretKey().toHex()), emptyList())

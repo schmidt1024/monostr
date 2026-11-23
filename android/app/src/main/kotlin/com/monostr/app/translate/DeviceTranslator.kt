@@ -56,17 +56,20 @@ sealed interface DeviceReply {
 @Singleton
 class DeviceTranslator internal constructor(
     private val channel: DeviceChannel,
-    private val installed: () -> Boolean = { false },
+    private val state: () -> DeviceAppState = { DeviceAppState.MISSING },
 ) {
     @Inject constructor(@ApplicationContext context: Context) : this(
         BinderChannel(context.applicationContext, CoroutineScope(SupervisorJob() + Dispatchers.Default)),
-        { isInstalled(context.applicationContext) },
+        { appState(context.applicationContext) },
     )
 
     private val mutex = Mutex()
 
     /** Whether Offline Translator offers its service. A package query: on demand only (Settings, consent), never on the feed path. */
-    fun isInstalled(): Boolean = installed()
+    fun isInstalled(): Boolean = appState() == DeviceAppState.READY
+
+    /** [isInstalled] told apart: the app present without the service (too old) is not the app missing (backlog 104). Same rule: on demand only. */
+    fun appState(): DeviceAppState = state()
 
     /** Unbinds now and stops the idle timer (process trim); a later [translate] binds again. */
     fun release() = channel.release()
@@ -103,8 +106,15 @@ class DeviceTranslator internal constructor(
 
         internal fun serviceIntent(): Intent = Intent(ACTION).setPackage(PKG)
 
-        private fun isInstalled(context: Context): Boolean =
-            runCatching { context.packageManager.resolveService(serviceIntent(), 0) != null }.getOrDefault(false)
+        private fun appState(context: Context): DeviceAppState = runCatching {
+            val pm = context.packageManager
+            if (pm.resolveService(serviceIntent(), 0) != null) {
+                DeviceAppState.READY
+            } else {
+                pm.getPackageInfo(PKG, 0) // throws NameNotFoundException when absent
+                DeviceAppState.TOO_OLD
+            }
+        }.getOrDefault(DeviceAppState.MISSING)
     }
 }
 

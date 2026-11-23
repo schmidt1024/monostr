@@ -119,6 +119,7 @@ object Routes {
     const val SUPPORT = "support"
     const val ABOUT = "about"
     const val MUTED = "muted"
+    const val MUTED_THREADS = "muted-threads"
     const val SHOW_KEY = "show-key"
     const val LIST = "list/{address}"
     const val LIST_EDIT = "list-edit?address={address}&add={add}"
@@ -503,7 +504,7 @@ private fun LoggedInNavHost(
                     val back: () -> Unit = { if (entry.isResumed()) nav.popBackStack() }
                     when (SettingsPage.of(entry.arguments?.getString("page"))) {
                         SettingsPage.ACCOUNT -> AccountPage(vm, focus, back, onShowKey = { if (entry.isResumed()) nav.navigate(Routes.SHOW_KEY) })
-                        SettingsPage.PRIVACY -> PrivacyPage(vm, focus, back, onMuted = { if (entry.isResumed()) nav.navigate(Routes.MUTED) })
+                        SettingsPage.PRIVACY -> PrivacyPage(vm, focus, back, onMuted = { if (entry.isResumed()) nav.navigate(Routes.MUTED) }, onMutedThreads = { if (entry.isResumed()) nav.navigate(Routes.MUTED_THREADS) })
                         SettingsPage.RELAYS -> RelaysPage(vm, focus, back, onOpen = { if (entry.isResumed()) nav.navigate(Routes.settingsPage(it)) })
                         SettingsPage.DM_RELAYS -> DmRelaysPage(vm, focus, back)
                         SettingsPage.SEARCH_RELAYS -> SearchRelaysPage(vm, focus, back)
@@ -525,7 +526,8 @@ private fun LoggedInNavHost(
             // pops only this route: "no key" and ON_STOP may both close it
             composable(Routes.SHOW_KEY) { ShowKeyScreen(onBack = { nav.popBackStack(Routes.SHOW_KEY, inclusive = true) }) }
             composable(Routes.SUPPORT) { SupportScreen(onBack = { nav.popBackStack() }) }
-            composable(Routes.MUTED) { MutedScreen(onBack = { nav.popBackStack() }, onOpenProfile = { nav.navigate(Routes.profile(it)) }) }
+            composable(Routes.MUTED) { MutedScreen(threads = false, onBack = { nav.popBackStack() }, onOpenProfile = { nav.navigate(Routes.profile(it)) }) }
+            composable(Routes.MUTED_THREADS) { MutedScreen(threads = true, onBack = { nav.popBackStack() }, onOpenProfile = { nav.navigate(Routes.profile(it)) }) }
             composable(Routes.ABOUT) { AboutScreen(onBack = { nav.popBackStack() }, onOpenProfile = { nav.navigate(Routes.profile(it)) }) }
             composable(
                 "monero-setup?intro={intro}&upgrade={upgrade}",

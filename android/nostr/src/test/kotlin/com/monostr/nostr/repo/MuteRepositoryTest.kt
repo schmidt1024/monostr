@@ -4,6 +4,7 @@ import com.monostr.nostr.LocalSigner
 import com.monostr.nostr.NostrEngine
 import com.monostr.nostr.PublishResult
 import com.monostr.nostr.Signer
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
@@ -65,6 +66,66 @@ class MuteRepositoryTest {
         stored = e.query(Filter().kind(Kind(10000u)).author(me.publicKey())).single()
         assertEquals(listOf(listOf("t", "nsfw")), stored.tags().toVec().map { it.asVec() })
         assertFalse(a in repo.muted.value)
+        e.close()
+    }
+
+    private fun eTag(id: String) = JsonArray(listOf(JsonPrimitive("e"), JsonPrimitive(id)))
+
+    @Test
+    fun `the newest mute comes first, for accounts and conversations`() = runTest {
+        val e = engine(); seedEmptyList(e)
+        val repo = NostrMuteRepository(e, signer, now = { 2000 }, send = okSend(e))
+        repo.ensureLoaded()
+        repo.mute(a); repo.mute(b)
+        repo.muteThread(a); repo.muteThread(c); repo.muteThread(b)
+        assertEquals(listOf(b, a), repo.mutedNewestFirst.first())
+        assertEquals(listOf(b, c, a), repo.mutedThreadsNewestFirst.first())
+        assertEquals(setOf(a, b), repo.muted.value)
+        e.close()
+    }
+
+    @Test
+    fun `muteThread writes a private e tag and leaves the muted accounts alone`() = runTest {
+        val e = engine(); seedEmptyList(e)
+        val repo = NostrMuteRepository(e, signer, now = { 2000 }, send = okSend(e))
+        repo.ensureLoaded()
+        assertEquals(ListOutcome.Ok, repo.muteThread(a))
+        assertEquals(setOf(a), repo.mutedThreads.value)
+        assertTrue(repo.muted.value.isEmpty())
+        val stored = e.query(Filter().kind(Kind(10000u)).author(me.publicKey())).single()
+        assertTrue(stored.tags().toVec().map { it.asVec() }.none { it.firstOrNull() == "e" })
+        assertTrue(signer.nip44Decrypt(signer.pubkey, stored.content()).contains(eTag(a).toString()))
+        e.close()
+    }
+
+    @Test
+    fun `foreign thread entries are read and kept`() = runTest {
+        val e = engine()
+        e.save(EventBuilder(Kind(10000u), signer.nip44Encrypt(signer.pubkey, JsonArray(listOf(eTag(b))).toString()))
+            .tags(listOf(Tag.parse(listOf("e", a)), Tag.parse(listOf("e", "garbage")), Tag.parse(listOf("t", "x"))))
+            .customCreatedAt(Timestamp.fromSecs(1000u)).signWithKeys(me))
+        val repo = NostrMuteRepository(e, signer, now = { 2000 }, send = okSend(e))
+        repo.ensureLoaded()
+        assertEquals(setOf(a, b), repo.mutedThreads.value)
+        assertEquals(ListOutcome.Ok, repo.mute(c))
+        val stored = e.query(Filter().kind(Kind(10000u)).author(me.publicKey())).single()
+        val pub = stored.tags().toVec().map { it.asVec() }
+        assertTrue(listOf("e", a) in pub && listOf("e", "garbage") in pub && listOf("t", "x") in pub)
+        assertTrue(signer.nip44Decrypt(signer.pubkey, stored.content()).contains(eTag(b).toString()))
+        assertEquals(setOf(a, b), repo.mutedThreads.value)
+        e.close()
+    }
+
+    @Test
+    fun `unmuteThread removes the entry`() = runTest {
+        val e = engine()
+        e.save(EventBuilder(Kind(10000u), signer.nip44Encrypt(signer.pubkey, "[]")).tags(listOf(Tag.parse(listOf("e", a))))
+            .customCreatedAt(Timestamp.fromSecs(1000u)).signWithKeys(me))
+        val repo = NostrMuteRepository(e, signer, now = { 2000 }, send = okSend(e))
+        repo.ensureLoaded()
+        assertEquals(setOf(a), repo.mutedThreads.value)
+        assertEquals(ListOutcome.Ok, repo.unmuteThread(a))
+        assertFalse(a in repo.mutedThreads.value)
         e.close()
     }
 

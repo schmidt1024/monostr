@@ -22,6 +22,7 @@ import androidx.test.espresso.intent.matcher.IntentMatchers.hasData
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.monostr.app.data.Accent
 import com.monostr.app.data.ThemeMode
+import com.monostr.app.translate.DeviceAppState
 import com.monostr.app.translate.DeviceBackend
 import com.monostr.app.translate.DeviceReply
 import com.monostr.app.translate.DeviceTranslator
@@ -82,13 +83,13 @@ class TranslationDeviceModeTest {
         override suspend fun setConsentGiven() { if (modeFlow.value != TranslationMode.DEVICE) consent.value = true }
     }
 
-    private fun section(installed: Boolean, modes: MutableList<TranslationMode>, getApp: (() -> Unit)? = null) {
+    private fun section(state: DeviceAppState, modes: MutableList<TranslationMode>, getApp: (() -> Unit)? = null) {
         val mode = mutableStateOf(TranslationMode.MONOSTR)
         rule.setContent {
             val context = LocalContext.current
             MonostrTheme(ThemeMode.LIGHT, Accent.MONO) {
                 TranslationSection(
-                    mode.value, "", deviceInstalled = installed,
+                    mode.value, "", deviceState = state,
                     onMode = { modes += it; mode.value = it }, onSaveUrl = { true },
                     onGetDeviceApp = getApp ?: { openDeviceTranslatorStore(context) },
                 )
@@ -101,7 +102,7 @@ class TranslationDeviceModeTest {
         Intents.init()
         intending(anyIntent()).respondWith(Instrumentation.ActivityResult(Activity.RESULT_OK, null))
         val modes = mutableListOf<TranslationMode>()
-        section(installed = false, modes)
+        section(DeviceAppState.MISSING, modes)
         rule.onNodeWithText("Get Offline Translator on F-Droid", substring = true, useUnmergedTree = true).assertExists()
         rule.onNodeWithTag("translate-mode-device").performClick()
         rule.waitForIdle()
@@ -111,10 +112,23 @@ class TranslationDeviceModeTest {
     }
 
     @Test
+    fun deviceRow_tooOld_showsHintAndKeepsMode() {
+        val modes = mutableListOf<TranslationMode>()
+        var store = 0
+        section(DeviceAppState.TOO_OLD, modes) { store++ }
+        rule.onNodeWithText("too old", substring = true, useUnmergedTree = true).assertExists()
+        rule.onNodeWithTag("translate-mode-device").performClick()
+        rule.waitForIdle()
+        assertTrue("the mode stays", modes.isEmpty())
+        assertEquals("the tap leads to the store", 1, store)
+        rule.onNodeWithTag("translate-mode-monostr").assertIsSelected()
+    }
+
+    @Test
     fun deviceRow_installed_selectsDevice() {
         val modes = mutableListOf<TranslationMode>()
         var store = 0
-        section(installed = true, modes) { store++ }
+        section(DeviceAppState.READY, modes) { store++ }
         rule.onNodeWithText("Nothing leaves your phone", substring = true, useUnmergedTree = true).assertExists()
         rule.onNodeWithTag("translate-mode-device").performClick()
         rule.waitForIdle()
@@ -126,6 +140,7 @@ class TranslationDeviceModeTest {
     private fun consentSetup(
         installed: Boolean,
         mode: TranslationMode = TranslationMode.MONOSTR,
+        state: DeviceAppState = if (installed) DeviceAppState.READY else DeviceAppState.MISSING,
         reply: () -> TranslateResult? = { null },
     ): Triple<NoteTranslationViewModel, FakeSettings, MutableList<TranslateBackend>> {
         val settings = FakeSettings(mode)
@@ -138,7 +153,7 @@ class TranslationDeviceModeTest {
             scope = scope,
             detectDispatcher = Dispatchers.Default,
         )
-        val device = DeviceTranslator({ _, _, _ -> DeviceReply.Text("unused") }, { installed })
+        val device = DeviceTranslator({ _, _, _ -> DeviceReply.Text("unused") }, { state })
         val vm = NoteTranslationViewModel(translations, settings, device)
         rule.setContent {
             MonostrTheme(ThemeMode.LIGHT, Accent.MONO) {
@@ -172,6 +187,23 @@ class TranslationDeviceModeTest {
         vm.translate(NOTE)
         rule.waitUntil(5_000) { nodes("translate-consent").isNotEmpty() }
         assertTrue(nodes("translate-consent-device").isEmpty())
+        assertEquals(TranslationMode.MONOSTR, runBlocking { settings.mode.first() })
+        assertTrue(used.isEmpty())
+    }
+
+    @Test
+    fun consentSheet_tooOld_offersUpdateAndStoresNoConsent() {
+        Intents.init()
+        intending(anyIntent()).respondWith(Instrumentation.ActivityResult(Activity.RESULT_OK, null))
+        val (vm, settings, used) = consentSetup(installed = false, state = DeviceAppState.TOO_OLD)
+        vm.translate(NOTE)
+        rule.waitUntil(5_000) { nodes("translate-consent-device-update").isNotEmpty() }
+        assertTrue(nodes("translate-consent-device").isEmpty())
+        rule.onNodeWithTag("translate-consent-device-update").performClick()
+        rule.waitForIdle()
+        intended(allOf(hasAction(Intent.ACTION_VIEW), hasData("market://details?id=dev.davidv.translator")))
+        rule.waitUntil(5_000) { nodes("translate-consent").isEmpty() }
+        assertEquals(false, runBlocking { settings.consentGiven.first() })
         assertEquals(TranslationMode.MONOSTR, runBlocking { settings.mode.first() })
         assertTrue(used.isEmpty())
     }

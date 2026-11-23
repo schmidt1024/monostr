@@ -5,24 +5,34 @@ import com.monostr.nostr.PublishResult
 import com.monostr.nostr.Signer
 import com.monostr.nostr.StartupGate
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import rust.nostr.sdk.EventBuilder
 import java.time.Duration
 
 /**
- * NIP-51 mute list (kind 10000, spec 9): only `p` entries are read (public and private), new entries
- * are written privately, everything else in the list is preserved. [muted] is what the screens filter
+ * NIP-51 mute list (kind 10000, spec 9): `p` entries (accounts) and `e` entries (muted threads, backlog 81,
+ * by thread root id) are read (public and private), new entries are written privately, everything else in the list is preserved. [muted] is what the screens filter
  * against. Read-only when the private part cannot be read ([ListState.writable] false).
  */
 interface MuteRepository {
     /** Pubkeys (64 lower-case hex) of the muted accounts, public and private entries together; never the user's own. */
     val muted: StateFlow<Set<String>>
+    /** Thread root ids (64 lower-case hex) of the muted conversations, public and private entries together. */
+    val mutedThreads: StateFlow<Set<String>>
+    /** [muted] in list order, newest mute first (this app writes new entries first; NIP-51 has no per-entry time): for the Muted screens, not for lookups. */
+    val mutedNewestFirst: Flow<List<String>>
+    /** [mutedThreads] in list order, newest mute first. */
+    val mutedThreadsNewestFirst: Flow<List<String>>
     val state: StateFlow<ListState>
     suspend fun ensureLoaded(interactive: Boolean = true)
     suspend fun mute(pubkey: String): ListOutcome
     suspend fun unmute(pubkey: String): ListOutcome
+    suspend fun muteThread(rootId: String): ListOutcome
+    suspend fun unmuteThread(rootId: String): ListOutcome
     fun clear()
 }
 
@@ -39,21 +49,33 @@ class NostrMuteRepository(
     private val _muted = MutableStateFlow<Set<String>>(emptySet())
     override val muted: StateFlow<Set<String>> = _muted.asStateFlow()
 
+    private val _mutedThreads = MutableStateFlow<Set<String>>(emptySet())
+    override val mutedThreads: StateFlow<Set<String>> = _mutedThreads.asStateFlow()
+
+    // the sets are insertion-ordered (list order), the screens read the same order as lists
+    override val mutedNewestFirst: Flow<List<String>> = _muted.map { it.toList() }
+    override val mutedThreadsNewestFirst: Flow<List<String>> = _mutedThreads.map { it.toList() }
+
     // The set follows every state change synchronously through the list's hook (no collector, so it
     // also works without a watcher scope).
     private val list = NostrPrivateList(
-        engine, signer, kind = 10000, tag = "p", now = now, send = send,
+        engine, signer, kind = 10000, tag = "p", extraTag = "e", now = now, send = send,
         fetchTimeout = fetchTimeout, refreshTimeout = refreshTimeout, watch = watch,
         // another app may have written anything: only foreign 64-hex pubkeys count (a malformed entry
         // would break PublicKey.parse downstream, the own key would hide the user from themselves)
         gate = gate,
-        onState = { s -> _muted.value = s.ids.filter { it.matches(HEX64) && it != signer.pubkey }.toSet() },
+        onState = { s ->
+            _muted.value = s.ids.filter { it.matches(HEX64) && it != signer.pubkey }.toSet()
+            _mutedThreads.value = s.extraIds.filter { it.matches(HEX64) }.toSet()
+        },
     )
     override val state: StateFlow<ListState> get() = list.state
 
     override suspend fun ensureLoaded(interactive: Boolean) = list.ensureLoaded(interactive)
     override suspend fun mute(pubkey: String): ListOutcome = list.set(pubkey, present = true)
     override suspend fun unmute(pubkey: String): ListOutcome = list.set(pubkey, present = false)
+    override suspend fun muteThread(rootId: String): ListOutcome = list.set(rootId, present = true, entryTag = "e")
+    override suspend fun unmuteThread(rootId: String): ListOutcome = list.set(rootId, present = false, entryTag = "e")
     override fun clear() = list.clear()
 
     private companion object {

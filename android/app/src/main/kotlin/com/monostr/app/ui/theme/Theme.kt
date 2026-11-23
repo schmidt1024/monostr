@@ -2,6 +2,7 @@ package com.monostr.app.ui.theme
 
 import android.app.Activity
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Shapes
@@ -55,29 +56,25 @@ object PlainShapes {
 }
 
 /** What the app theme was made from: the reader re-themes itself from it (backlog 51). */
-data class ThemeChoice(val mode: ThemeMode, val accent: Accent, val customHue: Float, val readerDark: Boolean? = null)
+data class ThemeChoice(val mode: ThemeMode, val accent: Accent, val customHue: Float, val readerDark: Boolean? = null, val readerSepia: Boolean = false, val readerTextStep: Int = 1)
 
+// a reader-pref change (sheet tap) recomposes the app subtree reading this: only on a user tap, never on the feed path
 val LocalThemeChoice = staticCompositionLocalOf { ThemeChoice(ThemeMode.SYSTEM, Accent.MONO, AccentSeed.DEFAULT_HUE) }
 
-/** Spec 4: monochrome base, accent only on the primary tokens, flat shapes, Inter/JetBrains Mono. */
-@Composable
-fun MonostrTheme(mode: ThemeMode, accent: Accent, customHue: Float = AccentSeed.DEFAULT_HUE, content: @Composable () -> Unit) {
-    val dark = isDark(mode)
-    // Spec 4.3: status/navigation bar icons follow the in-app mode, not only the device night mode.
-    val view = LocalView.current
-    if (!view.isInEditMode) SideEffect {
-        val window = (view.context as? Activity)?.window ?: return@SideEffect
-        WindowCompat.getInsetsController(window, view).apply {
-            isAppearanceLightStatusBars = !dark
-            isAppearanceLightNavigationBars = !dark
-        }
-    }
-    val black = mode == ThemeMode.BLACK
+/** Backlog 102: the article reader's sepia paper, used in place of the light surfaces when the reader is light. */
+object ReaderSepia {
+    val paper = Color(0xFFF4ECD8)
+    val ink = Color(0xFF3B2F25)
+    val inkMuted = Color(0xFF6B5A48)
+}
+
+/** The Material colour scheme of the app theme; [sepia] repaints the light scheme only (backlog 102). */
+fun monostrColorScheme(dark: Boolean, black: Boolean, accent: Accent, customHue: Float, sepia: Boolean = false): ColorScheme {
     val a = AccentPalette.tokens(accent, dark, AccentSeed.fromHue(customHue), black)
     // the dark scheme paints on the brand grey, or on pure black for OLED
     val ds = MonoColors.darkSurface(black)
     val dc = MonoColors.darkSurfaceContainer(black)
-    val scheme = if (dark) {
+    return if (dark) {
         darkColorScheme(
             background = c(ds), surface = c(ds),
             surfaceContainer = c(dc), surfaceContainerLow = c(dc),
@@ -100,7 +97,7 @@ fun MonostrTheme(mode: ThemeMode, accent: Accent, customHue: Float = AccentSeed.
             tertiaryFixed = c(dc), tertiaryFixedDim = c(dc), onTertiaryFixed = c(MonoColors.DarkOnSurface), onTertiaryFixedVariant = c(MonoColors.DarkOnSurface),
         )
     } else {
-        lightColorScheme(
+        val light = lightColorScheme(
             background = c(MonoColors.LightSurface), surface = c(MonoColors.LightSurface),
             surfaceContainer = c(MonoColors.LightSurfaceContainer), surfaceContainerLow = c(MonoColors.LightSurfaceContainer),
             surfaceContainerHigh = c(MonoColors.LightSurfaceContainer), surfaceContainerHighest = c(MonoColors.LightSurfaceContainer),
@@ -121,7 +118,30 @@ fun MonostrTheme(mode: ThemeMode, accent: Accent, customHue: Float = AccentSeed.
             secondaryFixed = c(MonoColors.LightSurfaceContainer), secondaryFixedDim = c(MonoColors.LightSurfaceContainer), onSecondaryFixed = c(MonoColors.LightOnSurface), onSecondaryFixedVariant = c(MonoColors.LightOnSurface),
             tertiaryFixed = c(MonoColors.LightSurfaceContainer), tertiaryFixedDim = c(MonoColors.LightSurfaceContainer), onTertiaryFixed = c(MonoColors.LightOnSurface), onTertiaryFixedVariant = c(MonoColors.LightOnSurface),
         )
+        if (sepia) light.copy(
+            background = ReaderSepia.paper, surface = ReaderSepia.paper,
+            surfaceContainer = ReaderSepia.paper, surfaceContainerLow = ReaderSepia.paper,
+            surfaceContainerHigh = ReaderSepia.paper, surfaceContainerHighest = ReaderSepia.paper,
+            surfaceVariant = ReaderSepia.paper, surfaceBright = ReaderSepia.paper, surfaceDim = ReaderSepia.paper, surfaceContainerLowest = ReaderSepia.paper,
+            onBackground = ReaderSepia.ink, onSurface = ReaderSepia.ink, onSurfaceVariant = ReaderSepia.inkMuted,
+        ) else light
     }
+}
+
+/** Spec 4: monochrome base, accent only on the primary tokens, flat shapes, Inter/JetBrains Mono. */
+@Composable
+fun MonostrTheme(mode: ThemeMode, accent: Accent, customHue: Float = AccentSeed.DEFAULT_HUE, sepia: Boolean = false, content: @Composable () -> Unit) {
+    val dark = isDark(mode)
+    // Spec 4.3: status/navigation bar icons follow the in-app mode, not only the device night mode.
+    val view = LocalView.current
+    if (!view.isInEditMode) SideEffect {
+        val window = (view.context as? Activity)?.window ?: return@SideEffect
+        WindowCompat.getInsetsController(window, view).apply {
+            isAppearanceLightStatusBars = !dark
+            isAppearanceLightNavigationBars = !dark
+        }
+    }
+    val scheme = monostrColorScheme(dark, mode == ThemeMode.BLACK, accent, customHue, sepia)
     MaterialTheme(
         colorScheme = scheme,
         typography = MonostrTypography,

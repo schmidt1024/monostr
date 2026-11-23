@@ -90,7 +90,7 @@ class ListViewModel @Inject constructor(session: NostrSession, handle: SavedStat
     val tipSheet = factory.tipSheet(viewModelScope)
     val decorations = factory.decorations(viewModelScope)
     val deletions = ready.deletions
-    fun menuFor(feed: FeedController): NoteMenu = ready.noteMenu(delete = feed::delete, mute = feed::mute)
+    fun menuFor(feed: FeedController): NoteMenu = ready.noteMenu(delete = feed::delete, mute = feed::mute, muteThread = feed::muteThread, unmuteThread = feed::unmuteThread)
     init { controller.start() }
     override fun onCleared() { controller.close() }
 }

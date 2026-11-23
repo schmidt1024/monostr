@@ -5,12 +5,21 @@ import com.monostr.nostr.model.Note
 import com.monostr.nostr.repo.ListState
 
 /** The note menu of a screen (spec 2 and 9.4), built the same way on every screen. */
-fun Ready.noteMenu(delete: (Note) -> Unit, mute: (Note) -> Unit): NoteMenu = NoteMenu(
+fun Ready.noteMenu(
+    delete: (Note) -> Unit,
+    mute: (Note) -> Unit,
+    muteThread: (Note) -> Unit = {},
+    unmuteThread: (Note) -> Unit = {},
+): NoteMenu = NoteMenu(
     link = publish::noteLink,
     delete = delete,
     hasServerPictures = { pictures.candidates(it).isNotEmpty() },
     mute = mute,
     canMute = { offersMute(it.author, pubkey, this.mute.state.value) },
+    muteThread = muteThread,
+    unmuteThread = unmuteThread,
+    threadMuted = { it.threadKey() in this.mute.mutedThreads.value },
+    canMuteThread = { this.mute.state.value.let { l -> l.writable || !l.loaded } },
 )
 
 /**

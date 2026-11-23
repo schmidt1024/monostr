@@ -45,6 +45,7 @@ import com.monostr.app.ui.theme.MonostrTheme
 import com.monostr.nostr.nip55.AmberSigner
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -192,7 +193,7 @@ class MainActivity : ComponentActivity() {
             val accent by uiSettings.accent.collectAsState<Accent, Accent?>(initial = null)
             val customHue by uiSettings.customHue.collectAsState<Float, Float?>(initial = null)
             // the reader's own choice is read with the app theme: the article is on screen from the first frame (null inside the box = not chosen)
-            val readerDark by remember { readerTheme.dark.map { ReaderChoice(it) } }.collectAsState<ReaderChoice, ReaderChoice?>(initial = null)
+            val readerDark by remember { combine(readerTheme.dark, readerTheme.sepia, readerTheme.textStep) { dark, sepia, step -> ReaderChoice(dark, sepia, step) } }.collectAsState<ReaderChoice, ReaderChoice?>(initial = null)
             if (mode == null || accent == null || customHue == null || readerDark == null) {
                 Surface(modifier = Modifier.fillMaxSize(), color = Color(if (isSystemInDarkTheme()) MonoColors.DarkSurface else MonoColors.LightSurface)) {}
                 return@setContent
@@ -202,7 +203,7 @@ class MainActivity : ComponentActivity() {
                 val unit by tipSettings.amountUnit.collectAsState(initial = AmountUnit.XMR)
                 val canSend by sendGate.canSend.collectAsState()
                 CompositionLocalProvider(LocalQuickReactions provides quick, LocalAmountUnit provides unit, com.monostr.app.ui.common.LocalCanSend provides canSend,
-                    com.monostr.app.ui.theme.LocalThemeChoice provides com.monostr.app.ui.theme.ThemeChoice(mode!!, accent!!, customHue!!, readerDark!!.dark)) {
+                    com.monostr.app.ui.theme.LocalThemeChoice provides com.monostr.app.ui.theme.ThemeChoice(mode!!, accent!!, customHue!!, readerDark!!.dark, readerDark!!.sepia, readerDark!!.textStep)) {
                 // NIP-55: whenever the bridge has a new pending request, launch the signer once and
                 // hand the result back correlated by request id (a request can be superseded before
                 // the launcher's callback fires, e.g. after a config change).
@@ -237,4 +238,4 @@ class MainActivity : ComponentActivity() {
 }
 
 /** Distinguishes «not loaded yet» (null box) from «not chosen» (null inside). */
-private data class ReaderChoice(val dark: Boolean?)
+private data class ReaderChoice(val dark: Boolean?, val sepia: Boolean, val textStep: Int)

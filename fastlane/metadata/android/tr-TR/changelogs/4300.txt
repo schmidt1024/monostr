@@ -1,0 +1,5 @@
+- Bir notun menüsünden konuşmayı sessize al: akışından ve bildirimlerinden kaybolur
+- Makalelerde okuma seçenekleri: beyaz, sepya veya koyu ve beş yazı boyutu
+- Offline Translator telefonunda çeviri için çok eskiyse uyarır
+- Sessize alınan hesaplar ve konuşmalar kendi listelerinde, en yeniler üstte
+- Düzeltmeler

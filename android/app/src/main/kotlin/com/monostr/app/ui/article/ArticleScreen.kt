@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -28,9 +29,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Image
-import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
@@ -125,6 +124,9 @@ import com.monostr.nostr.model.NoteAddress
 import com.monostr.nostr.model.Note
 import dagger.hilt.android.lifecycle.HiltViewModel
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import com.monostr.app.translate.ArticleTranslationUi
 import com.monostr.app.translate.ArticleTranslator
 import com.monostr.app.translate.LanguageDetector
@@ -165,8 +167,12 @@ class ArticleViewModel @Inject constructor(
         mute = ready.mute, muteScope = ready.engine.backgroundScope, translator = translator,
         sendGate = ready.sendGate,
     )
-    fun setReaderDark(dark: Boolean) { viewModelScope.launch { readerTheme.setDark(dark) } }
-    val menu = ready.noteMenu(delete = controller::delete, mute = controller::mute)
+    fun setSwatch(swatch: ReaderSwatch) {
+        val (dark, sepia) = swatch.stores()
+        viewModelScope.launch { readerTheme.setDark(dark); if (sepia != null) readerTheme.setSepia(sepia) }
+    }
+    fun setReaderTextStep(step: Int) { viewModelScope.launch { readerTheme.setTextStep(step) } }
+    val menu = ready.noteMenu(delete = controller::delete, mute = controller::mute, muteThread = controller::muteThread, unmuteThread = controller::unmuteThread)
 
     init {
         // once per ViewModel (a rotation keeps it); a cached article is shown before the first frame (Main.immediate)
@@ -225,10 +231,10 @@ fun ArticleScreen(
             }
         }
     }
-    MonostrTheme(mode, app.accent, app.customHue) {
+    MonostrTheme(mode, app.accent, app.customHue, sepia = app.readerSepia) {
         ArticleScreenContent(
             onBack, onOpenProfile, onOpenThread, onOpenArticle, onHashtag, onOpenMedia, onReply, onQuote, onQuoteNote, onOpenNoteMedia, onOpenVideo,
-            dark = dark, onToggleDark = remember(dark) { { vm.setReaderDark(!dark) } }, vm = vm,
+            dark = dark, app = app, vm = vm,
         )
     }
 }
@@ -248,7 +254,7 @@ private fun ArticleScreenContent(
     onOpenNoteMedia: (String, Int) -> Unit,
     onOpenVideo: (String) -> Unit,
     dark: Boolean,
-    onToggleDark: () -> Unit,
+    app: com.monostr.app.ui.theme.ThemeChoice,
     vm: ArticleViewModel,
 ) {
     val state by vm.controller.state.collectAsStateWithLifecycle()
@@ -261,6 +267,8 @@ private fun ArticleScreenContent(
     LaunchedEffect(locales) { vm.translator.checkTarget() }
     val snackbar = remember { SnackbarHostState() }
     var tippersFor by remember { mutableStateOf<Note?>(null) }
+    var appearanceOpen by rememberSaveable { mutableStateOf(false) }
+    val readerAppearance = stringResource(R.string.reader_appearance)
     val uriHandler = LocalUriHandler.current
     MessageSnackbar(message, snackbar, onUnmute = vm.controller::unmute, onShown = vm.controller::clearMessage)
     Scaffold(
@@ -270,11 +278,9 @@ private fun ArticleScreenContent(
                 title = { Text(stringResource(R.string.article_title)) },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back)) } },
                 actions = {
-                    IconButton(onClick = onToggleDark, modifier = Modifier.testTag("reader-theme-toggle")) {
-                        Icon(
-                            if (dark) Icons.Outlined.LightMode else Icons.Outlined.DarkMode,
-                            contentDescription = stringResource(if (dark) R.string.reader_light_mode else R.string.reader_dark_mode),
-                        )
+                    IconButton(onClick = { appearanceOpen = true }, modifier = Modifier.testTag("reader-appearance")) {
+                        // «Aa» as the icon: the sheet holds colour and text size
+                        Text("Aa", style = MaterialTheme.typography.titleMedium, fontFamily = MonostrFonts.serif, modifier = Modifier.semantics { contentDescription = readerAppearance })
                     }
                 },
             )
@@ -319,6 +325,10 @@ private fun ArticleScreenContent(
             }
         }
     }
+    if (appearanceOpen) ReaderAppearanceSheet(
+        app = app, dark = dark,
+        onSwatch = { vm.setSwatch(it) }, onTextStep = vm::setReaderTextStep, onDismiss = { appearanceOpen = false },
+    )
     TipSheetHost(vm.tipSheet)
     tippersFor?.let { TippersDialog(it, load = vm.decorations::tippers, onDismiss = { tippersFor = null }) }
 }
@@ -499,14 +509,17 @@ private fun Header(s: ArticleUi.Shown, ctx: RenderContext, onOpenProfile: (Strin
  * and the replies below keep the app's faces.
  */
 private object ReaderType {
-    @Composable fun title() = MaterialTheme.typography.headlineMedium.let { it.copy(fontFamily = MonostrFonts.serif, fontWeight = FontWeight.Normal, lineHeight = it.fontSize * 1.25, letterSpacing = (-0.005).em) }
-    @Composable fun body() = MaterialTheme.typography.bodyLarge.copy(fontFamily = MonostrFonts.serif, fontSize = 18.sp, lineHeight = (18 * 1.55).sp)
+    /** Backlog 102: the chosen text step scales title, headings and body together (not the code, tables, cards and replies). */
+    private val scale @Composable get() = ReaderText.scale(LocalThemeChoice.current.readerTextStep)
+    private fun TextStyle.scaled(f: Float) = if (f == 1f) this else copy(fontSize = fontSize * f, lineHeight = lineHeight * f)
+    @Composable fun title() = MaterialTheme.typography.headlineMedium.let { it.copy(fontFamily = MonostrFonts.serif, fontWeight = FontWeight.Normal, lineHeight = it.fontSize * 1.25, letterSpacing = (-0.005).em) }.scaled(scale)
+    @Composable fun body() = MaterialTheme.typography.bodyLarge.copy(fontFamily = MonostrFonts.serif, fontSize = 18.sp, lineHeight = (18 * 1.55).sp).scaled(scale)
     @Composable fun quote() = body().copy(fontStyle = FontStyle.Italic)
     @Composable fun heading(level: Int) = when (level) {
         1 -> MaterialTheme.typography.headlineSmall
         2 -> MaterialTheme.typography.titleLarge
         else -> MaterialTheme.typography.titleMedium
-    }.copy(fontFamily = MonostrFonts.serif, fontWeight = FontWeight.Medium)
+    }.copy(fontFamily = MonostrFonts.serif, fontWeight = FontWeight.Medium).scaled(scale)
 }
 
 /** Keeps the text at a readable measure on tablets and in landscape: at most 640 dp wide, centred. */
@@ -529,7 +542,7 @@ private fun BlockView(block: MdBlock, ctx: RenderContext, quote: Boolean = false
         is MdBlock.ListBlock -> Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
             block.items.forEachIndexed { i, item ->
                 Row {
-                    Text(if (block.ordered) "${block.start + i}." else "•", style = if (quote) ReaderType.quote() else ReaderType.body(), modifier = Modifier.width(28.dp))
+                    Text(if (block.ordered) "${block.start + i}." else "•", style = if (quote) ReaderType.quote() else ReaderType.body(), modifier = Modifier.widthIn(min = 28.dp * ReaderText.scale(LocalThemeChoice.current.readerTextStep)))
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Spacing.xs)) { item.forEach { BlockView(it, ctx, quote) } }
                 }
             }

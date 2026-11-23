@@ -50,4 +50,41 @@ class ReaderThemeStoreTest {
         job.cancel()
         assertEquals(listOf<Boolean?>(null, true), seen)
     }
+
+    @Test
+    fun `sepia defaults off and persists`() = runTest {
+        val ds = store()
+        val s = PrefsReaderThemeStore(ds)
+        assertEquals(false, s.sepia.first())
+        s.setSepia(true)
+        assertEquals(true, PrefsReaderThemeStore(ds).sepia.first())
+        assertNull(s.dark.first())
+    }
+
+    @Test
+    fun `text step defaults to 1 persists and clamps`() = runTest {
+        val ds = store()
+        val s = PrefsReaderThemeStore(ds)
+        assertEquals(1, s.textStep.first())
+        s.setTextStep(3)
+        assertEquals(3, PrefsReaderThemeStore(ds).textStep.first())
+        s.setTextStep(99); assertEquals(4, s.textStep.first())
+        s.setTextStep(-5); assertEquals(0, s.textStep.first())
+        // a bad stored value reads clamped too
+        ds.edit { it[androidx.datastore.preferences.core.intPreferencesKey("reader_text_step")] = 42 }
+        assertEquals(4, s.textStep.first())
+        assertEquals(1.0f, ReaderText.scale(1))
+        assertEquals(1.5f, ReaderText.scale(7))
+    }
+
+    @Test
+    fun `swatch maps to the two stores and back`() {
+        assertEquals(false to false, ReaderSwatch.WHITE.stores())
+        assertEquals(false to true, ReaderSwatch.SEPIA.stores())
+        assertEquals(true to null, ReaderSwatch.DARK.stores())
+        assertEquals(ReaderSwatch.WHITE, ReaderSwatch.of(false, false))
+        assertEquals(ReaderSwatch.SEPIA, ReaderSwatch.of(false, true))
+        assertEquals(ReaderSwatch.DARK, ReaderSwatch.of(true, true))
+        assertEquals(ReaderSwatch.DARK, ReaderSwatch.of(true, false))
+    }
 }

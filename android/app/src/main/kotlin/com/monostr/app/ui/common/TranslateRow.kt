@@ -40,6 +40,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.monostr.app.R
+import com.monostr.app.translate.DeviceAppState
 import com.monostr.app.translate.DeviceBackend
 import com.monostr.app.translate.DeviceTranslator
 import com.monostr.app.translate.TranslateServer
@@ -91,9 +92,9 @@ class NoteTranslationViewModel @Inject constructor(
     val consentFor: StateFlow<String?> = _consentFor.asStateFlow()
     /** What «Translate» in the sheet runs. */
     private var pending: (() -> Unit)? = null
-    private val _deviceInstalled = MutableStateFlow(false)
-    /** Whether the sheet offers «Use Offline Translator instead»: checked each time the sheet is about to show, never on the feed path. */
-    val deviceInstalled: StateFlow<Boolean> = _deviceInstalled.asStateFlow()
+    private val _deviceState = MutableStateFlow(DeviceAppState.MISSING)
+    /** Whether the sheet offers «Use Offline Translator instead» (READY) or «Update» (TOO_OLD): checked each time the sheet is about to show, never on the feed path. */
+    val deviceState: StateFlow<DeviceAppState> = _deviceState.asStateFlow()
 
     /** The host the consent sheet names: the one a translation would go to. */
     val host: StateFlow<String> = combine(settings.mode, settings.customUrl) { mode, url ->
@@ -116,9 +117,9 @@ class NoteTranslationViewModel @Inject constructor(
         viewModelScope.launch {
             // read at the tap, never from a seeded default: a late-loading «true» must not be needed, a «false» must hold
             if (settings.consentGiven.first()) action() else {
-                val installed = withContext(Dispatchers.Default) { device.isInstalled() }
-                _deviceInstalled.value = installed
-                settings.deviceAppChecked(installed) // an install after startup also moves the default mode
+                val state = withContext(Dispatchers.Default) { device.appState() }
+                _deviceState.value = state
+                settings.deviceAppChecked(state == DeviceAppState.READY) // an install after startup also moves the default mode
                 pending = action
                 _consentFor.value = key
             }
@@ -288,7 +289,7 @@ fun NoteTranslateRow(state: TranslationState, noteId: String, modifier: Modifier
 /** Spec 2026-11-03: asked once, on the first «Translate»; names the server and what it sees ([article]: an article's tap). «Settings» opens the section. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TranslateConsentSheet(host: String, onTranslate: () -> Unit, onSettings: () -> Unit, onDismiss: () -> Unit, article: Boolean = false, onUseDevice: (() -> Unit)? = null) {
+fun TranslateConsentSheet(host: String, onTranslate: () -> Unit, onSettings: () -> Unit, onDismiss: () -> Unit, article: Boolean = false, onUseDevice: (() -> Unit)? = null, onUpdateDevice: (() -> Unit)? = null) {
     GuardedModalBottomSheet(onDismissRequest = onDismiss, modifier = Modifier.testTag("translate-consent")) {
         Column(Modifier.fillMaxWidth().padding(horizontal = Spacing.xl)) {
             Text(stringResource(R.string.translate_consent_title), style = MaterialTheme.typography.titleLarge)
@@ -305,6 +306,12 @@ fun TranslateConsentSheet(host: String, onTranslate: () -> Unit, onSettings: () 
                     Text(stringResource(R.string.translate_consent_device))
                 }
             }
+            if (onUpdateDevice != null) {
+                Spacer(Modifier.height(Spacing.s))
+                TextButton(onClick = onUpdateDevice, modifier = Modifier.align(Alignment.End).testTag("translate-consent-device-update"), shape = MaterialTheme.shapes.medium) {
+                    Text(stringResource(R.string.translate_consent_device_update))
+                }
+            }
             Spacer(Modifier.height(Spacing.xl))
         }
     }
@@ -319,11 +326,14 @@ fun TranslateConsentHost(translation: NoteTranslationViewModel, onSettings: () -
     val consentFor by translation.consentFor.collectAsStateWithLifecycle()
     if (consentFor == null) return
     val host by translation.host.collectAsStateWithLifecycle()
-    val installed by translation.deviceInstalled.collectAsStateWithLifecycle()
+    val deviceState by translation.deviceState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     TranslateConsentSheet(
         host = host, onTranslate = translation::consent, onDismiss = translation::dismissConsent,
         article = consentFor == NoteTranslationViewModel.ARTICLE,
         onSettings = { translation.dismissConsent(); onSettings() },
-        onUseDevice = if (installed) translation::useDevice else null,
+        onUseDevice = if (deviceState == DeviceAppState.READY) translation::useDevice else null,
+        // too old: the store, no consent stored, the sheet closes
+        onUpdateDevice = if (deviceState == DeviceAppState.TOO_OLD) ({ translation.dismissConsent(); openDeviceTranslatorStore(context) }) else null,
     )
 }

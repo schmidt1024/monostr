@@ -28,6 +28,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.monostr.app.R
+import com.monostr.app.translate.DeviceAppState
 import com.monostr.app.translate.TranslationMode
 import com.monostr.app.ui.theme.Spacing
 
@@ -35,14 +36,14 @@ import com.monostr.app.ui.theme.Spacing
  * Spec 2026-11-03: which server translates notes — monostr's, an own LibreTranslate server (address field, normalized
  * like the media server) or none — and what that server sees. Round 2 (privacy rule): what the server sees stands above
  * the choice, the choice is one card. [onSaveUrl] answers false for an address it refuses.
- * Release 0.42.0: «On device» with Offline Translator when [deviceInstalled], else its row leads to the store
+ * Release 0.42.0: «On device» with Offline Translator when [deviceState] is READY, else its row leads to the store
  * ([onGetDeviceApp]) and the mode stays.
  */
 @Composable
 fun TranslationSection(
     mode: TranslationMode,
     customUrl: String,
-    deviceInstalled: Boolean,
+    deviceState: DeviceAppState,
     onMode: (TranslationMode) -> Unit,
     onSaveUrl: (String) -> Boolean,
     onGetDeviceApp: () -> Unit,
@@ -63,8 +64,14 @@ fun TranslationSection(
                 // release 0.42.0: the device (Offline Translator); while it is missing the tap opens its store page instead
                 ModeRow(
                     stringResource(R.string.settings_translate_device), mode == TranslationMode.DEVICE, "translate-mode-device",
-                    subtitle = stringResource(if (deviceInstalled) R.string.settings_translate_device_private else R.string.settings_translate_device_get),
-                ) { if (deviceInstalled) onMode(TranslationMode.DEVICE) else onGetDeviceApp() }
+                    subtitle = stringResource(
+                        when (deviceState) {
+                            DeviceAppState.READY -> R.string.settings_translate_device_private
+                            DeviceAppState.TOO_OLD -> R.string.settings_translate_device_old
+                            DeviceAppState.MISSING -> R.string.settings_translate_device_get
+                        },
+                    ),
+                ) { if (deviceState == DeviceAppState.READY) onMode(TranslationMode.DEVICE) else onGetDeviceApp() }
                 SettingsCardDivider(SETTINGS_ICON_INSET)
                 ModeRow(stringResource(R.string.settings_translate_off), mode == TranslationMode.OFF, "translate-mode-off") { onMode(TranslationMode.OFF) }
             }

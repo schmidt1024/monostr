@@ -45,6 +45,9 @@ object TranslateUrl {
     }
 }
 
+/** Offline Translator on the device (backlog 104): absent, installed without the service (too old) or usable. */
+enum class DeviceAppState { MISSING, TOO_OLD, READY }
+
 /** Whether Offline Translator offers its service (a package query); the store asks it off the main thread. */
 fun interface DeviceAppCheck {
     suspend fun installed(): Boolean

@@ -66,6 +66,7 @@ import com.monostr.app.ui.common.NoteDeletions
 import com.monostr.app.ui.common.Message
 import com.monostr.app.ui.common.MuteActions
 import com.monostr.app.ui.common.asMessage
+import com.monostr.app.ui.common.threadKey
 import com.monostr.app.ui.common.NoteVisibility
 import com.monostr.app.ui.common.noteMenu
 import com.monostr.app.ui.common.UiText
@@ -240,6 +241,21 @@ class BookmarksController(
         muteActions?.unmute(pubkey) { m -> if (m == null) scope.launch { rebuild(listed()) } else _state.update { it.copy(message = m.asMessage()) } }
     }
 
+    /** Backlog 81: mutes the note's conversation; the list hides it at once, "Undo" brings it back. */
+    fun muteThread(note: Note) {
+        val key = note.threadKey()
+        muteActions?.muteThread(key) { m, ok ->
+            _state.update { it.copy(message = Message(m, undo = { unmuteThread(key) }.takeIf { ok })) }
+            if (!ok) scope.launch { rebuild(listed()) }
+        }
+    }
+
+    fun unmuteThread(note: Note) = unmuteThread(note.threadKey())
+
+    private fun unmuteThread(key: String) {
+        muteActions?.unmuteThread(key) { m -> if (m != null) _state.update { it.copy(message = m.asMessage()) } else scope.launch { rebuild(listed()) } }
+    }
+
     /** [row] without its note when [visibility] hides that note; the bookmark itself stays. */
     private fun filtered(row: BookmarkUi): BookmarkUi =
         if (row.note != null && visibility.visibleAnyPow(listOf(row.note)).isEmpty()) row.copy(note = null) else row
@@ -276,7 +292,7 @@ class BookmarksViewModel @Inject constructor(session: NostrSession, factory: Tip
     val decorations = factory.decorations(viewModelScope)
     val controller = BookmarksController(ready.bookmarks, BookmarkActions(ready.bookmarks, viewModelScope, background = ready.engine.backgroundScope, sendGate = ready.sendGate), ready.profiles, ready.publish, decorations, ready.counts, viewModelScope, mentions = MentionResolver(ready.profiles, viewModelScope, Dispatchers.Default), deletions = ready.deletions, visibility = ready.visibility, afterDelete = ready.afterNoteDelete, own = ready.ownReactions, mute = ready.mute, muteScope = ready.engine.backgroundScope, sendGate = ready.sendGate)
     val deletions = ready.deletions
-    val menu = ready.noteMenu(delete = controller::delete, mute = controller::mute)
+    val menu = ready.noteMenu(delete = controller::delete, mute = controller::mute, muteThread = controller::muteThread, unmuteThread = controller::unmuteThread)
     val tipSheet = factory.tipSheet(viewModelScope)
     val dmUnread: StateFlow<Int> = ready.dmStore.unreadTotalExcept(ready.muted).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
     init { controller.start() }

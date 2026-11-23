@@ -111,6 +111,7 @@ import com.monostr.app.ui.common.NoteDeletions
 import com.monostr.app.ui.common.Message
 import com.monostr.app.ui.common.MuteActions
 import com.monostr.app.ui.common.asMessage
+import com.monostr.app.ui.common.threadKey
 import com.monostr.app.ui.common.noteMenu
 import com.monostr.app.ui.common.offersMute
 import com.monostr.app.ui.common.userMessage
@@ -628,6 +629,18 @@ class ProfileController(
         muteActions?.unmute(pubkey) { m -> _state.update { s -> s.copy(message = m?.asMessage() ?: s.message) } }
     }
 
+    /** Backlog 81: mutes the note's conversation; the profile never applies the visibility filter, so only the mute entry changes; "Undo" lifts it again. */
+    fun muteThread(note: Note) {
+        val key = note.threadKey()
+        muteActions?.muteThread(key) { m, ok -> _state.update { it.copy(message = Message(m, undo = { unmuteThread(key) }.takeIf { ok })) } }
+    }
+
+    fun unmuteThread(note: Note) = unmuteThread(note.threadKey())
+
+    private fun unmuteThread(key: String) {
+        muteActions?.unmuteThread(key) { m -> if (m != null) _state.update { it.copy(message = m.asMessage()) } }
+    }
+
     fun follow() = writeFollow { it.follow(pubkey) }
     fun askUnfollow() = _state.update { it.copy(confirmUnfollow = true) }
     fun dismissUnfollow() = _state.update { it.copy(confirmUnfollow = false) }
@@ -697,7 +710,7 @@ class ProfileViewModel @Inject constructor(
         sendGate = ready.sendGate,
     )
     val deletions = ready.deletions
-    val menu = ready.noteMenu(delete = controller::delete, mute = controller::mute)
+    val menu = ready.noteMenu(delete = controller::delete, mute = controller::mute, muteThread = controller::muteThread, unmuteThread = controller::unmuteThread)
     val tipSheet = factory.tipSheet(viewModelScope)
     /** The user's own pending profile tips to this person; idle on the own profile (no tip button there). */
     val tipWatch = factory.profileTipWatch(pubkey, viewModelScope)

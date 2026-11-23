@@ -51,6 +51,8 @@ data class NotificationItem(
     val amount: Long?,
     /** NIP-13 difficulty of a reply, mention or quote; 0 otherwise. */
     val powBits: Int = 0,
+    /** Backlog 81: the NIP-10 thread root of a reply, so a muted conversation matches without the parent note being known. */
+    val rootId: String? = null,
 )
 
 /** The note a notification is about (spec 11-C §2.4). */
@@ -244,7 +246,7 @@ class NostrNotificationsRepository(
                 val refs = Nip10.parse(tags)
                 val quoted = tags.firstOrNull { it.size >= 2 && it[0] == "q" && HEX64.matches(it[1]) }?.get(1)
                 when {
-                    refs.replyToId != null -> NotificationItem(id, NotificationKind.REPLY, author, at, id, refs.replyToId, event.content, null, Nip13.effectiveBits(id, event.tags))
+                    refs.replyToId != null -> NotificationItem(id, NotificationKind.REPLY, author, at, id, refs.replyToId, event.content, null, Nip13.effectiveBits(id, event.tags), refs.rootId)
                     quoted != null -> NotificationItem(id, NotificationKind.QUOTE, author, at, id, quoted, event.content, null, Nip13.effectiveBits(id, event.tags))
                     else -> NotificationItem(id, NotificationKind.MENTION, author, at, id, null, event.content, null, Nip13.effectiveBits(id, event.tags))
                 }

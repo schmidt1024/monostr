@@ -1,0 +1,5 @@
+- Masque une conversation depuis le menu d'une note : elle disparaît de ton fil et de tes notifications
+- Options de lecture des articles : blanc, sépia ou sombre et cinq tailles de texte
+- Avertit quand Offline Translator est trop ancien pour traduire sur ton téléphone
+- Comptes et conversations masqués dans leurs propres listes, les plus récents en premier
+- Corrections

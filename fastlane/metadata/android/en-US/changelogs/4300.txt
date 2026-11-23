@@ -1,0 +1,5 @@
+- Mute a conversation from a note's menu: it leaves your feed and notifications
+- Reading options in articles: white, sepia or dark and five text sizes
+- Tells you when Offline Translator is too old to translate on your phone
+- Muted accounts and conversations in their own lists, newest first
+- Fixes

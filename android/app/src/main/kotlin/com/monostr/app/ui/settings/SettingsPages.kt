@@ -80,7 +80,8 @@ val SETTINGS_INDEX: List<SettingEntry> = listOf(
     SettingEntry("settings-ask-links", SettingsPage.PRIVACY, R.string.settings_ask_links, R.string.settings_ask_links_hint, listOf("url", "browser", "warning", "warnung")),
     SettingEntry("settings-link-previews", SettingsPage.PRIVACY, R.string.settings_link_previews, R.string.settings_link_previews_hint, listOf("preview", "vorschau", "url")),
     SettingEntry("settings-client-tag", SettingsPage.PRIVACY, R.string.settings_client_tag, R.string.settings_client_tag_hint, listOf("client", "via")),
-    SettingEntry("settings-muted", SettingsPage.PRIVACY, R.string.mute_settings_title, null, listOf("mute", "block", "blocked", "stumm", "blockiert")),
+    SettingEntry("settings-muted", SettingsPage.PRIVACY, R.string.mute_settings_title, null, listOf("mute", "muted", "block", "blocked", "accounts", "stumm", "blockiert", "konten")),
+    SettingEntry("settings-muted-threads", SettingsPage.PRIVACY, R.string.settings_muted_threads, null, listOf("mute", "conversation", "thread", "stumm", "unterhaltung")),
 
     page(SettingsPage.RELAYS, "nip-65", "server"),
     SettingEntry("settings-relay-input", SettingsPage.RELAYS, R.string.settings_relay_add, R.string.settings_suggested_relays_hint, listOf("wss", "server", "add", "hinzufügen", "publish", "reset")),
@@ -124,6 +125,7 @@ val SETTINGS_INDEX: List<SettingEntry> = listOf(
     page(SettingsPage.APPEARANCE, "dark", "dunkel", "theme", "farbe", "design", "black", "schwarz"),
     SettingEntry("settings-theme-mode", SettingsPage.APPEARANCE, R.string.settings_theme_mode, null, listOf("dark", "light", "black", "system", "hell", "dunkel", "schwarz", "amoled", "theme")),
     SettingEntry("settings-accent", SettingsPage.APPEARANCE, R.string.settings_accent, null, listOf("color", "colour", "farbe", "theme", "hue")),
+    SettingEntry("settings-article-view", SettingsPage.APPEARANCE, R.string.settings_article_view, null, listOf("article", "reader", "sepia", "paper", "text size", "font", "schrift", "artikel", "lesen")),
     SettingEntry("appearance-language", SettingsPage.APPEARANCE, R.string.settings_language, R.string.settings_language_text, listOf("sprache", "locale")),
 
     page(SettingsPage.HELP, "hilfe", "info", "donate", "spenden"),

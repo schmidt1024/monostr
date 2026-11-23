@@ -139,7 +139,7 @@ class ArticleScreenTest {
      * flip), stores the choice once for all articles, and the app behind keeps its own theme.
      */
     @Test
-    fun toggle_switchesReaderOnly_andPersistsAcrossArticles() {
+    fun appearanceSheet_switchesReaderOnly_andPersistsAcrossArticles() {
         val key = booleanPreferencesKey("reader_dark")
         runBlocking { ctx.monostrPrefs.edit { it.remove(key) } }
         runBlocking { runCatching { entry.session().logout() } }
@@ -171,26 +171,74 @@ class ArticleScreenTest {
                     rule.waitUntil(15_000) { nodes("address-card-generic").isNotEmpty() }
                     rule.onNodeWithTag(card).performTouchInput { click(Offset(centerX, 4.dp.toPx())) }
                     rule.waitUntil(15_000) { nodes("article-title").isNotEmpty() }
-                    rule.waitUntil(15_000) { nodes("reader-theme-toggle").isNotEmpty() }
+                    rule.waitUntil(15_000) { nodes("reader-appearance").isNotEmpty() }
                 }
-                fun toggleDescription() = rule.onNodeWithTag("reader-theme-toggle")
-                    .fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.ContentDescription].first()
                 open(1)
                 // nothing stored yet: the reader follows the app (the emulator runs light)
                 assertEquals(null, runBlocking { entry.readerTheme().dark.first() })
-                val before = toggleDescription()
-                rule.onNodeWithTag("reader-theme-toggle").performClick()
-                rule.waitUntil(10_000) { runBlocking { entry.readerTheme().dark.first() } != null }
-                rule.waitUntil(10_000) { toggleDescription() != before }
-                val flipped = runBlocking { entry.readerTheme().dark.first() }
-                // the first tap stores the opposite of what the reader showed (the emulator runs light, so the reader showed light)
-                assertEquals(before.contains("Dark"), flipped == true)
+                assertEquals(1, runBlocking { entry.readerTheme().textStep.first() })
+                // the Aa sheet is composed only once opened
+                assertTrue(nodes("reader-swatch-sepia").isEmpty())
+                rule.onNodeWithTag("reader-appearance").performClick()
+                rule.waitUntil(10_000) { nodes("reader-swatch-sepia").isNotEmpty() }
+                rule.onNodeWithTag("reader-swatch-sepia").performClick()
+                rule.waitUntil(10_000) { runBlocking { entry.readerTheme().sepia.first() } }
+                assertEquals(false, runBlocking { entry.readerTheme().dark.first() })
+                rule.onNodeWithTag("reader-text-larger").performClick()
+                rule.waitUntil(10_000) { runBlocking { entry.readerTheme().textStep.first() } == 2 }
+                rule.onNodeWithTag("reader-swatch-dark").performClick()
+                rule.waitUntil(10_000) { runBlocking { entry.readerTheme().dark.first() } == true }
+                androidx.test.espresso.Espresso.pressBack()
                 androidx.test.espresso.Espresso.pressBack()
                 rule.waitUntil(15_000) { nodes("feed-list").isNotEmpty() }
                 // the second article opens with the stored choice, not the app's
                 open(2)
-                assertEquals(flipped, runBlocking { entry.readerTheme().dark.first() })
-                assertTrue("the icon differs from the first article's initial one", toggleDescription() != before)
+                assertEquals(true, runBlocking { entry.readerTheme().dark.first() })
+            }
+        } finally {
+            runBlocking { ctx.monostrPrefs.edit { it.remove(key); it.remove(booleanPreferencesKey("reader_sepia")); it.remove(androidx.datastore.preferences.core.intPreferencesKey("reader_text_step")) } }
+        }
+    }
+
+    /**
+     * Backlog 102: the sepia choice of Settings › Appearance (the swatch buttons `reader-swatch-*`, the same as in the reader's sheet) lives in the
+     * [com.monostr.app.ui.article.ReaderThemeStore]; with it on, the reader still opens. The colours themselves are pinned
+     * by the unit tests (`ReaderSepiaTest`: contrast, and `monostrColorScheme` paints the paper in light only).
+     */
+    @Test
+    fun sepia_persistsAndReaderStillOpens() {
+        val key = booleanPreferencesKey("reader_sepia")
+        runBlocking { ctx.monostrPrefs.edit { it.remove(key) } }
+        runBlocking { runCatching { entry.session().logout() } }
+        reachFeed()
+        val ready = entry.session().requireReady()
+        val alice = Keys.generate()
+        val bob = Keys.generate()
+        val ts = System.currentTimeMillis()
+        val ref = AddressRef(30023, bob.publicKey().toHex(), "sepia-$ts")
+        val article = EventBuilder(Kind(30023u), "# Sepia heading $ts\n\nBody text.")
+            .tags(listOf(Tag.parse(listOf("d", ref.identifier)), Tag.parse(listOf("title", "Sepia article $ts"))))
+            .signWithKeys(bob)
+        val note = EventBuilder.textNote("sepia note $ts\n\nnostr:${ref.toBech32()}").signWithKeys(alice)
+        try {
+            assertFalse(runBlocking { entry.readerTheme().sepia.first() })
+            runBlocking { entry.readerTheme().setSepia(true) }
+            assertTrue(runBlocking { entry.readerTheme().sepia.first() })
+            LoopbackRelay().use { relay ->
+                runBlocking {
+                    entry.session().applyRelays(listOf(relay.url))
+                    ready.engine.save(EventBuilder.contactList(listOf(Contact(alice.publicKey(), null, null))).signWithKeys(me))
+                    ready.engine.save(EventBuilder.metadata(Metadata.fromJson("""{"name":"alice-sepia-$ts"}""")).signWithKeys(alice))
+                    ready.engine.save(article)
+                    ready.engine.save(note)
+                }
+                showInFeed("sepia note $ts")
+                val card = "address-card-${ref.identifier.take(8)}"
+                rule.onNodeWithTag("feed-list").performScrollToNode(hasTestTag(card))
+                rule.waitUntil(15_000) { nodes("address-card-generic").isNotEmpty() }
+                rule.onNodeWithTag(card).performTouchInput { click(Offset(centerX, 4.dp.toPx())) }
+                rule.waitUntil(15_000) { nodes("article-title").isNotEmpty() }
+                assertTrue(runBlocking { entry.readerTheme().sepia.first() })
             }
         } finally {
             runBlocking { ctx.monostrPrefs.edit { it.remove(key) } }

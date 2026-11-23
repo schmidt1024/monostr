@@ -891,11 +891,17 @@ class FakeMute(initial: Set<String> = emptySet(), writable: Boolean = true, var 
     override suspend fun ensureLoaded(interactive: Boolean) { loadCalls += interactive; loadGate?.await(); list.update { it.copy(loaded = true) } }
     /** When set, a write suspends here between the optimistic flip and the outcome (the publish in flight). */
     var gate: CompletableDeferred<Unit>? = null
+    override val mutedThreads = MutableStateFlow<Set<String>>(emptySet())
+    // the sets iterate newest first: a new mute goes to the front, like the real list
+    override val mutedNewestFirst: Flow<List<String>> = muted.map { it.toList() }
+    override val mutedThreadsNewestFirst: Flow<List<String>> = mutedThreads.map { it.toList() }
+    override suspend fun muteThread(rootId: String): ListOutcome { mutedThreads.value = linkedSetOf(rootId) + mutedThreads.value; return outcome }
+    override suspend fun unmuteThread(rootId: String): ListOutcome { mutedThreads.value -= rootId; return outcome }
     override suspend fun mute(pubkey: String) = set(pubkey, present = true)
     override suspend fun unmute(pubkey: String) = set(pubkey, present = false)
     private suspend fun set(pubkey: String, present: Boolean): ListOutcome {
         val before = muted.value
-        muted.value = if (present) before + pubkey else before - pubkey
+        muted.value = if (present) linkedSetOf(pubkey) + before else before - pubkey
         gate?.await()
         if (outcome != ListOutcome.Ok) muted.value = before
         list.update { it.copy(ids = muted.value.toList(), loaded = true) }

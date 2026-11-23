@@ -1,0 +1,5 @@
+- Silenzia una conversazione dal menu di una nota: sparisce dal feed e dalle notifiche
+- Opzioni di lettura negli articoli: bianco, seppia o scuro e cinque dimensioni del testo
+- Avviso quando Offline Translator è troppo vecchio per tradurre sul telefono
+- Account e conversazioni silenziati in liste proprie, i più recenti in alto
+- Correzioni

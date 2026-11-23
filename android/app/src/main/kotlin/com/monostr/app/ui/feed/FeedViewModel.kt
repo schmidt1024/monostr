@@ -33,6 +33,7 @@ import com.monostr.app.ui.common.NoteDeletions
 import com.monostr.app.ui.common.Message
 import com.monostr.app.ui.common.MuteActions
 import com.monostr.app.ui.common.asMessage
+import com.monostr.app.ui.common.threadKey
 import com.monostr.app.ui.common.NoteVisibility
 import com.monostr.app.ui.common.UiText
 import com.monostr.app.ui.common.noteMenu
@@ -242,7 +243,7 @@ class FeedController(
         // hidden (visibility); an unmute, also one reverted after a failed publish, restarts the list like a follow
         // change does, so the account's notes are asked for again. Restarting on every mute threw away the first
         // page on a cold start, when the mute list arrives from the relays seconds after the feed (2026-10-19).
-        scope.launch { merge(followChanges, unmutes(), visibility.relaxed, reopened).collect { if (liveOn) { startLive(); refresh() } } }
+        scope.launch { merge(followChanges, unmutes(), threadUnmutes(), visibility.relaxed, reopened).collect { if (liveOn) { startLive(); refresh() } } }
         // a raised minimum may leave too little to read: older pages fill up
         scope.launch { visibility.pow.drop(1).collect { if (it.on) { fillLeft = FILL_PAGES; fillUp() } } }
         // a newly muted account would keep its places in the live window until a restart: the live list alone
@@ -288,6 +289,15 @@ class FeedController(
     private fun unmutes(): Flow<Unit> = flow {
         var last = visibility.muted.value
         visibility.muted.drop(1).collect { now ->
+            if ((last - now).isNotEmpty()) emit(Unit)
+            last = now
+        }
+    }
+
+    /** Fires when a conversation left the muted set (Undo, Settings, thread hint): its notes are asked for again. */
+    private fun threadUnmutes(): Flow<Unit> = flow {
+        var last = visibility.mutedThreads.value
+        visibility.mutedThreads.drop(1).collect { now ->
             if ((last - now).isNotEmpty()) emit(Unit)
             last = now
         }
@@ -633,6 +643,18 @@ class FeedController(
         muteActions?.unmute(pubkey) { m -> if (m != null) _state.update { it.copy(message = m.asMessage()) } }
     }
 
+    /** Backlog 81: mutes the note's conversation; the list hides it at once, "Undo" restarts the list (see [start]) and brings it back. */
+    fun muteThread(note: Note) {
+        val key = note.threadKey()
+        muteActions?.muteThread(key) { m, ok -> _state.update { it.copy(message = Message(m, undo = { unmuteThread(key) }.takeIf { ok })) } }
+    }
+
+    fun unmuteThread(note: Note) = unmuteThread(note.threadKey())
+
+    private fun unmuteThread(key: String) {
+        muteActions?.unmuteThread(key) { m -> if (m != null) _state.update { it.copy(message = m.asMessage()) } }
+    }
+
     /** Visible note ids from the list; counts are requested for their targets (spec 4.2). */
     fun visible(noteIds: List<String>) {
         val wanted = noteIds.toSet()
@@ -730,7 +752,7 @@ class FeedViewModel @Inject constructor(session: NostrSession, private val facto
     val bookmarks = BookmarkActions(ready.bookmarks, viewModelScope, background = ready.engine.backgroundScope, sendGate = ready.sendGate)
     val controller = FeedController(ready.feed, ready.profiles, ready.publish, decorations, bookmarks, ready.counts, viewModelScope, conversations = ready.conversations, mentions = MentionResolver(ready.profiles, viewModelScope, Dispatchers.Default), followChanges = ready.follows.changes, deletions = ready.deletions, visibility = ready.visibility, afterDelete = ready.afterNoteDelete, own = ready.ownReactions, mute = ready.mute, muteScope = ready.engine.backgroundScope, snapshot = ready.feedSnapshot, forgetMisses = { ready.locator?.forget(notify = false) }, onFirstFresh = { ready.startupGate.open("feed fresh page") }, reopened = ready.engine.reopened, sendGate = ready.sendGate, lateRetryMs = FeedController.LATE_RETRY_MS, online = { ready.engine.connectedReadRelayUrls().isNotEmpty() })
     val deletions = ready.deletions
-    val menu = ready.noteMenu(delete = controller::delete, mute = controller::mute)
+    val menu = ready.noteMenu(delete = controller::delete, mute = controller::mute, muteThread = controller::muteThread, unmuteThread = controller::unmuteThread)
 
     /** Spec 2026-10-18 §4.3: Following plus one feed per pinned list. */
     val tabs = HomeTabsController(ready.feedTabs, ready.lists, viewModelScope, ready.pubkey, controller, ready.listSnapshots, ready.startupGate, sendGate = ready.sendGate) { source, scope, snapshot ->
@@ -738,7 +760,7 @@ class FeedViewModel @Inject constructor(session: NostrSession, private val facto
     }
 
     /** The note menu of [feed]: delete and mute go through the tab's own controller. */
-    fun menuFor(feed: FeedController): NoteMenu = if (feed === controller) menu else ready.noteMenu(delete = feed::delete, mute = feed::mute)
+    fun menuFor(feed: FeedController): NoteMenu = if (feed === controller) menu else ready.noteMenu(delete = feed::delete, mute = feed::mute, muteThread = feed::muteThread, unmuteThread = feed::unmuteThread)
     val tipSheet = factory.tipSheet(viewModelScope)
     val relayStates = ready.engine.relayStates()
 

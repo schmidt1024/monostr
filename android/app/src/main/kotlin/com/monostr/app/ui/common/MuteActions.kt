@@ -49,6 +49,38 @@ class MuteActions(
         }
     }
 
+    /** Backlog 81: mutes the conversation by its root id; [onResult] gets "Conversation muted" and true on success (the screen offers "Undo"). */
+    fun muteThread(rootId: String, onResult: (UiText, Boolean) -> Unit) {
+        if (!sendGate.canSend.value) return onResult(uiText(R.string.send_blocked_tor), false)
+        writes.launch {
+            val outcome = try {
+                mute.muteThread(rootId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                onResult(e.userMessage(), false)
+                return@launch
+            }
+            if (outcome == ListOutcome.Ok) onResult(uiText(R.string.mute_thread_done), true)
+            else onResult(failure(outcome), false)
+        }
+    }
+
+    /** Success is silent ([onResult] gets null). */
+    fun unmuteThread(rootId: String, onResult: (UiText?) -> Unit) {
+        if (!sendGate.canSend.value) return onResult(uiText(R.string.send_blocked_tor))
+        writes.launch {
+            val message = try {
+                mute.unmuteThread(rootId).let { if (it == ListOutcome.Ok) null else failure(it) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                e.userMessage()
+            }
+            onResult(message)
+        }
+    }
+
     /** The account's shown name from the stored profile (never a relay fetch); the short pubkey without one. */
     private suspend fun name(pubkey: String): String = try {
         profiles.local(listOf(pubkey)).firstOrNull()?.shownName ?: Profile.shortPubkey(pubkey)

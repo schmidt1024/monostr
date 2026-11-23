@@ -33,6 +33,27 @@ class DeviceTranslatorTest {
     }
 
     @Test
+    fun appState_missing_whenNoPackage() {
+        val t = DeviceTranslator(DeviceChannel { text, _, _ -> DeviceReply.Text(text) }, { DeviceAppState.MISSING })
+        assertEquals(DeviceAppState.MISSING, t.appState())
+        assertFalse(t.isInstalled())
+    }
+
+    @Test
+    fun appState_tooOld_isNotInstalled() {
+        val t = DeviceTranslator(DeviceChannel { text, _, _ -> DeviceReply.Text(text) }, { DeviceAppState.TOO_OLD })
+        assertEquals(DeviceAppState.TOO_OLD, t.appState())
+        assertFalse(t.isInstalled())
+    }
+
+    @Test
+    fun appState_ready_isInstalled() {
+        val t = DeviceTranslator(DeviceChannel { text, _, _ -> DeviceReply.Text(text) }, { DeviceAppState.READY })
+        assertEquals(DeviceAppState.READY, t.appState())
+        assertTrue(t.isInstalled())
+    }
+
+    @Test
     fun packMissing_mapsDetectedButUnavailable() = runTest {
         val t = DeviceTranslator(DeviceChannel { _, _, _ -> DeviceReply.PackMissing })
         assertEquals(TranslateResult.PackMissing, t.translate(listOf("hi"), "en", "de", null))

@@ -16,7 +16,7 @@ fun TranslationPage(vm: SettingsViewModel, focus: String?, onBack: () -> Unit) {
     SettingsPageScaffold(SettingsPage.TRANSLATION, focus, onBack, vm) {
         val translateMode by vm.translateMode.collectAsStateWithLifecycle()
         val translateUrl by vm.translateUrl.collectAsStateWithLifecycle()
-        val deviceInstalled by vm.deviceInstalled.collectAsStateWithLifecycle()
+        val deviceState by vm.deviceState.collectAsStateWithLifecycle()
         val context = LocalContext.current
         // the installed check: as the page opens and again on return (from the store), never on the feed path
         LifecycleResumeEffect(Unit) {
@@ -24,7 +24,7 @@ fun TranslationPage(vm: SettingsViewModel, focus: String?, onBack: () -> Unit) {
             onPauseOrDispose {}
         }
         TranslationSection(
-            translateMode, translateUrl, deviceInstalled,
+            translateMode, translateUrl, deviceState,
             onMode = { vm.setTranslateMode(it) }, onSaveUrl = vm::setTranslateUrl,
             onGetDeviceApp = { openDeviceTranslatorStore(context) },
         )

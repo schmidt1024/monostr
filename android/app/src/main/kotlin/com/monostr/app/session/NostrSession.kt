@@ -255,7 +255,7 @@ class Ready(
     val muted: StateFlow<Set<String>> get() = mute.muted
 
     /** The one filter of every note list: deleted notes and muted accounts. */
-    val visibility: NoteVisibility = NoteVisibility(deletions, mute.muted, powFilter)
+    val visibility: NoteVisibility = NoteVisibility(deletions, mute.muted, powFilter, mute.mutedThreads, pubkey)
 }
 
 /**
@@ -763,7 +763,7 @@ class NostrSession @Inject constructor(
                 if (bits <= 0) flowOf(PowFilter.OFF) else follows.followed().map { f -> if (f == null) PowFilter.OFF else PowFilter(bits, f + signer.pubkey) }
             }.stateIn(engine.backgroundScope, SharingStarted.Eagerly, PowFilter.OFF)
             // one pipeline for the badge, the screen and the tip check; started by the first of them (spec perf 3.6)
-            val notificationsStore = NotificationsStore(notifications, profiles, tipSettings, engine.backgroundScope, muted = mute.muted, pow = powFilter, me = signer.pubkey, startupGate = startupGate)
+            val notificationsStore = NotificationsStore(notifications, profiles, tipSettings, engine.backgroundScope, muted = mute.muted, pow = powFilter, mutedThreads = mute.mutedThreads, me = signer.pubkey, startupGate = startupGate)
             val relaySeen = SyncMarks(File(dir, RELAY_SEEN_FILE))
             val ownReactions = NostrOwnReactions(engine, scope = engine.backgroundScope, gate = startupGate, marks = syncMarks)
             // followers = the largest NIP-45 COUNT of the relays (0.22.4: no proprietary index any more)

@@ -16,6 +16,7 @@ import com.monostr.app.ui.common.NoteActions
 import com.monostr.app.ui.common.Message
 import com.monostr.app.ui.common.MuteActions
 import com.monostr.app.ui.common.asMessage
+import com.monostr.app.ui.common.threadKey
 import com.monostr.app.ui.common.NoteDeletions
 import com.monostr.app.ui.common.NoteVisibility
 import com.monostr.app.ui.common.UiText
@@ -317,6 +318,21 @@ class SearchController(
             if (m != null) _state.update { it.copy(message = m.asMessage()) }
             else if (_state.value.mode != SearchMode.IDLE) scope.launch { submit() }
         }
+    }
+
+    /** Backlog 81: mutes the note's conversation; the list hides it at once, "Undo" brings it back. */
+    fun muteThread(note: Note) {
+        val key = note.threadKey()
+        muteActions?.muteThread(key) { m, ok ->
+            _state.update { it.copy(message = Message(m, undo = { unmuteThread(key) }.takeIf { ok })) }
+            if (!ok && _state.value.mode != SearchMode.IDLE) scope.launch { submit() }
+        }
+    }
+
+    fun unmuteThread(note: Note) = unmuteThread(note.threadKey())
+
+    private fun unmuteThread(key: String) {
+        muteActions?.unmuteThread(key) { m -> if (m != null) _state.update { it.copy(message = m.asMessage()) } else if (_state.value.mode != SearchMode.IDLE) scope.launch { submit() } }
     }
 
     private fun onActionResult(message: UiText) {

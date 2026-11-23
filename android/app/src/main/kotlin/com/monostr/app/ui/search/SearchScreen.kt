@@ -103,7 +103,7 @@ class SearchViewModel @Inject constructor(session: NostrSession, factory: TipShe
     val bookmarks = BookmarkActions(ready.bookmarks, viewModelScope, background = ready.engine.backgroundScope, sendGate = ready.sendGate)
     val controller = SearchController(ready.search, ready.profiles, ready.publish, decorations, bookmarks, searchRelays.relays, viewModelScope, mentions = MentionResolver(ready.profiles, viewModelScope, Dispatchers.Default), deletions = ready.deletions, visibility = ready.visibility, afterDelete = ready.afterNoteDelete, own = ready.ownReactions, mute = ready.mute, muteScope = ready.engine.backgroundScope, recentSearches = recentSearches, sendGate = ready.sendGate, counts = ready.counts)
     val deletions = ready.deletions
-    val menu = ready.noteMenu(delete = controller::delete, mute = controller::mute)
+    val menu = ready.noteMenu(delete = controller::delete, mute = controller::mute, muteThread = controller::muteThread, unmuteThread = controller::unmuteThread)
     val tipSheet = factory.tipSheet(viewModelScope)
     val dmUnread: StateFlow<Int> = ready.dmStore.unreadTotalExcept(ready.muted).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
     /** Spec 2026-10-27 §6: «Entdecken» while the field is empty, for every account. */

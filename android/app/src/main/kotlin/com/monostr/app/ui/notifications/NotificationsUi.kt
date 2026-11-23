@@ -54,18 +54,30 @@ data class NotificationsUiState(
     val unread: Int get() = Unread.count(items, readAt)
 }
 
-/** Spec 9.3: replies, mentions and reactions of muted accounts are gone from the list and the badge; money is not noise, their tips stay. Replies, mentions and quotes below the proof of work minimum go too. */
+/** Spec 9.3 and backlog 81: replies, mentions and reactions of muted accounts are gone from the list and the badge; money is not noise, their tips stay (also in a muted conversation). Replies, mentions and quotes below the proof of work minimum go too. */
 object NotificationFilter {
-    fun visible(items: List<NotificationItem>, muted: Set<String>, pow: PowFilter = PowFilter.OFF): List<NotificationItem> =
-        if (muted.isEmpty() && !pow.on) items else items.filter { i ->
-            i.kind == NotificationKind.TIP || (i.from !in muted && !(i.kind in POW_KINDS && pow.hides(i.from, i.powBits)))
+    fun visible(
+        items: List<NotificationItem>,
+        muted: Set<String>,
+        pow: PowFilter = PowFilter.OFF,
+        threads: Set<String> = emptySet(),
+        about: Map<String, AboutNote> = emptyMap(),
+    ): List<NotificationItem> =
+        if (muted.isEmpty() && !pow.on && threads.isEmpty()) items else items.filter { i ->
+            i.kind == NotificationKind.TIP || (i.from !in muted && !(i.kind in POW_KINDS && pow.hides(i.from, i.powBits)) && (threads.isEmpty() || !inThread(i, threads, about)))
         }
+
+    /** Backlog 81: the event, the note it is about or that note's thread root is a muted conversation; no allocation. */
+    private fun inThread(i: NotificationItem, threads: Set<String>, about: Map<String, AboutNote>): Boolean {
+        val a = i.aboutId
+        return (i.noteId?.let { it in threads } == true) || (i.rootId?.let { it in threads } == true) || (a != null && (a in threads || ((about[a] as? AboutNote.Found)?.note?.rootId?.let { it in threads } == true)))
+    }
 
     /** What is a note of someone; a like or repost carries no proof of work of its own. */
     private val POW_KINDS = setOf(NotificationKind.REPLY, NotificationKind.MENTION, NotificationKind.QUOTE)
 }
 
 object Unread {
-    fun count(items: List<NotificationItem>, readAt: Long, muted: Set<String> = emptySet()): Int =
-        NotificationFilter.visible(items, muted).count { it.createdAt > readAt }
+    fun count(items: List<NotificationItem>, readAt: Long, muted: Set<String> = emptySet(), threads: Set<String> = emptySet(), about: Map<String, AboutNote> = emptyMap()): Int =
+        NotificationFilter.visible(items, muted, PowFilter.OFF, threads, about).count { it.createdAt > readAt }
 }

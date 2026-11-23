@@ -54,6 +54,8 @@ class NotificationsStore(
     private val scope: CoroutineScope,
     private val muted: StateFlow<Set<String>> = MutableStateFlow(emptySet()),
     private val pow: StateFlow<PowFilter> = MutableStateFlow(PowFilter.OFF),
+    /** Backlog 81: root ids of muted conversations; their replies, mentions and likes leave the list and the badge. */
+    private val mutedThreads: StateFlow<Set<String>> = MutableStateFlow(emptySet()),
     /** The user's pubkey: a like or repost of anybody else's note is no notification; null (tests) keeps everything. */
     private val me: String? = null,
     private val now: () -> Long = { System.currentTimeMillis() / 1000 },
@@ -110,7 +112,7 @@ class NotificationsStore(
         }
         scope.launch { settings.notificationsReadAt.collect { at -> _state.update { it.copy(readAt = at) } } }
         // the only writer of the rows: inputs change atomically, each snapshot renders the whole list
-        scope.launch { combine(inputs, muted, pow) { i, m, p -> Triple(i, m, p) }.collect { (i, m, p) -> publish(i, m, p) } }
+        scope.launch { combine(inputs, muted, pow, mutedThreads) { i, m, p, t -> Quad(i, m, p, t) }.collect { publish(it.i, it.m, it.p, it.t) } }
         scope.launch { lookUpParents() }
         scope.launch { _state.map(::texts).distinctUntilChanged().collect { mentions.track(MentionNames.collectTexts(it)) } }
         scope.launch { for (request in reloads) reload() }
@@ -277,9 +279,11 @@ class NotificationsStore(
         }
     }
 
-    private fun publish(i: Inputs, mutedNow: Set<String>, powNow: PowFilter) {
+    private data class Quad(val i: Inputs, val m: Set<String>, val p: PowFilter, val t: Set<String>)
+
+    private fun publish(i: Inputs, mutedNow: Set<String>, powNow: PowFilter, threadsNow: Set<String>) {
         val items = i.items ?: return
-        val visible = NotificationFilter.visible(items, mutedNow, powNow)
+        val visible = NotificationFilter.visible(items, mutedNow, powNow, threadsNow, i.about)
         // a like or repost says "your note": only for a note known to be the user's own (a forged tag could otherwise
         // put any excerpt under that sentence — security review); own notes are stored, so this is local
         fun verified(id: String?) = me == null || (id != null && id in i.own) || (i.about[id] as? AboutNote.Found)?.note?.author == me

@@ -505,6 +505,27 @@ class FeedControllerTest {
         assertEquals(2, feed.refreshCalls)
     }
 
+    @Test
+    fun `a conversation unmute restarts and refreshes, a thread mute only hides`() = runTest {
+        val threads = MutableStateFlow<Set<String>>(emptySet())
+        val root = note('1', alice, 1000)
+        val reply = note('2', bob, 900, replyTo = root.id, root = root.id)
+        val feed = FakeFeed().apply { current = listOf(root, reply) }
+        val deletions = NoteDeletions()
+        val c = FeedController(
+            feed, profiles, FakePublish(), decorations(), BookmarkActions(FakeBookmarks(), eager()), FakeCounts(), eager(),
+            deletions = deletions, visibility = NoteVisibility(deletions, MutableStateFlow(emptySet()), mutedThreads = threads),
+        )
+        c.start(); advanceUntilIdle()
+        assertEquals(1, feed.refreshCalls)
+        threads.value = setOf(root.id); advanceUntilIdle()
+        assertEquals(0, c.state.value.notes.size)
+        assertEquals(1, feed.refreshCalls, "muting a conversation asks the relays nothing new")
+        threads.value = emptySet(); advanceUntilIdle()
+        assertEquals(2, feed.refreshCalls, "an unmute restarts the list without any swipe")
+        assertEquals(2, c.state.value.notes.size)
+    }
+
     private fun TestScope.controller(
         feed: FakeFeed,
         deletions: NoteDeletions = NoteDeletions(),

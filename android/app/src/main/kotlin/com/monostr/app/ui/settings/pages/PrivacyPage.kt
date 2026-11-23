@@ -7,6 +7,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.monostr.app.R
 import com.monostr.app.ui.common.TorSettingsRow
+import com.monostr.app.ui.settings.LocalSettingFocus
 import com.monostr.app.ui.settings.SettingsCard
 import com.monostr.app.ui.settings.SettingsCardDivider
 import com.monostr.app.ui.settings.SettingsGroup
@@ -19,7 +20,7 @@ import com.monostr.app.ui.settings.settingAnchor
  * then what the app tells other parties, one card per section (round 2).
  */
 @Composable
-fun PrivacyPage(vm: SettingsViewModel, focus: String?, onBack: () -> Unit, onMuted: () -> Unit) {
+fun PrivacyPage(vm: SettingsViewModel, focus: String?, onBack: () -> Unit, onMuted: () -> Unit, onMutedThreads: () -> Unit) {
     SettingsPageScaffold(SettingsPage.PRIVACY, focus, onBack, vm) {
         SettingsCard(Modifier.settingAnchor("settings-tor")) { TorSettingsRow() }
         SettingsGroup(stringResource(R.string.settings_label_links)) {
@@ -33,10 +34,12 @@ fun PrivacyPage(vm: SettingsViewModel, focus: String?, onBack: () -> Unit, onMut
             val clientTag by vm.clientTag.collectAsStateWithLifecycle()
             SettingSwitch(stringResource(R.string.settings_client_tag), stringResource(R.string.settings_client_tag_hint), clientTag, vm::setClientTag, "settings-client-tag")
         }
-        SettingsGroup(stringResource(R.string.settings_label_people)) {
-            // round 2 (UX P2-1): a navigation row, not a grey outlined button that looks disabled
-            val muted by vm.mutedCount.collectAsStateWithLifecycle()
-            SettingsLinkRow(stringResource(R.string.mute_settings_title), muted.takeIf { it > 0 }?.toString(), "settings-muted", anchor = "settings-muted", onClick = onMuted)
+        SettingsGroup(stringResource(R.string.settings_label_muted)) {
+            // round 2 (UX P2-1): navigation rows, not grey outlined buttons that look disabled
+            val accounts by vm.mutedAccountsCount.collectAsStateWithLifecycle()
+            val threads by vm.mutedThreadsCount.collectAsStateWithLifecycle()
+            SettingsLinkRow(stringResource(R.string.mute_settings_accounts), accounts.takeIf { it > 0 }?.toString(), "settings-muted", anchor = "settings-muted", onClick = onMuted)
+            SettingsLinkRow(stringResource(R.string.mute_settings_threads), threads.takeIf { it > 0 }?.toString(), "settings-muted-threads", anchor = "settings-muted-threads", onClick = onMutedThreads)
         }
     }
 }

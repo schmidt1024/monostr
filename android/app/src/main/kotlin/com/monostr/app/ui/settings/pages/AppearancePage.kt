@@ -16,7 +16,10 @@ import com.monostr.app.ui.settings.SettingsPage
 import com.monostr.app.ui.settings.SettingsViewModel
 import com.monostr.app.ui.settings.ThemeModeControl
 import com.monostr.app.ui.settings.settingAnchor
+import com.monostr.app.ui.theme.LocalThemeChoice
 import com.monostr.app.ui.theme.Spacing
+import com.monostr.app.ui.theme.isDark
+import com.monostr.app.ui.article.ReaderAppearanceControls
 
 /** Appearance (round 2): theme, accent colour and the app language, each its own card under its label. */
 @Composable
@@ -30,6 +33,11 @@ fun AppearancePage(vm: SettingsViewModel, focus: String?, onBack: () -> Unit) {
         }
         SettingsGroup(stringResource(R.string.settings_accent), modifier = Modifier.settingAnchor("settings-accent")) {
             AccentList(mode, accent, customHue, vm::setAccent, vm::setCustomHue, rowPadding = Spacing.l)
+        }
+        SettingsGroup(stringResource(R.string.settings_article_view), modifier = Modifier.settingAnchor("settings-article-view")) {
+            val app = LocalThemeChoice.current
+            // the same resolution as the reader: no stored dark choice follows the app theme
+            ReaderAppearanceControls(app, app.readerDark ?: isDark(app.mode), vm::setReaderSwatch, vm::setReaderTextStep, Modifier.padding(Spacing.l))
         }
         SettingsGroup(stringResource(R.string.settings_language)) { AppLanguageRow() }
     }

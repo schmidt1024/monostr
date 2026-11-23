@@ -49,6 +49,13 @@ class NoteMenu(
     val mute: (Note) -> Unit = {},
     /** Whether the menu offers muting the note's author: someone else's note and a writable mute list (spec 9.1). */
     val canMute: (Note) -> Boolean = { false },
+    /** Mutes the note's conversation (backlog 81); [unmuteThread] lifts it again. */
+    val muteThread: (Note) -> Unit = {},
+    val unmuteThread: (Note) -> Unit = {},
+    /** Whether the note's conversation is muted now: the menu offers «Unmute conversation» then. */
+    val threadMuted: (Note) -> Boolean = { false },
+    /** Whether the menu offers muting the conversation: also for own notes, but not on a read-only list. */
+    val canMuteThread: (Note) -> Boolean = { false },
 )
 
 /** Spec 11.5 §3: avatar, name and handle of the focused note; the menu at the right. */
@@ -119,6 +126,21 @@ private fun NoteMenuButton(note: NoteUi, shown: Note, authorName: String, menu: 
                     onClick = { open = false; menu.mute(shown) },
                     modifier = Modifier.testTag("note-menu-mute"),
                 )
+            }
+            if (menu.canMuteThread(shown)) {
+                if (menu.threadMuted(shown)) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.unmute_thread)) },
+                        onClick = { open = false; menu.unmuteThread(shown) },
+                        modifier = Modifier.testTag("note-menu-unmute-thread"),
+                    )
+                } else {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.mute_thread)) },
+                        onClick = { open = false; menu.muteThread(shown) },
+                        modifier = Modifier.testTag("note-menu-mute-thread"),
+                    )
+                }
             }
             if (note.isOwn) {
                 DropdownMenuItem(

@@ -3,6 +3,7 @@ package com.monostr.app.ui.settings
 import com.monostr.app.data.GifMode
 import com.monostr.app.data.POW_DEFAULT
 import com.monostr.app.ui.common.Reactions
+import com.monostr.app.translate.DeviceAppState
 import com.monostr.app.translate.TranslateUrl
 import com.monostr.app.translate.TranslationMode
 import com.monostr.app.translate.TranslationSettingsStore
@@ -178,6 +179,7 @@ class SettingsViewModel @Inject constructor(
     private val dmSettings: DmSettingsStore,
     private val hints: HintStore,
     private val translation: TranslationSettingsStore,
+    private val readerTheme: com.monostr.app.ui.article.ReaderThemeStore,
     private val sendGate: com.monostr.app.net.SendGate,
     private val deviceTranslator: com.monostr.app.translate.DeviceTranslator,
 ) : ViewModel() {
@@ -214,7 +216,10 @@ class SettingsViewModel @Inject constructor(
     val renewBusy: StateFlow<Boolean> = _renewBusy.asStateFlow()
     val relayStates = session.requireReady().engine.relayStates()
     /** How many accounts are muted, for the row on Tor & privacy: the session's in-memory set, no extra read. */
-    val mutedCount: StateFlow<Int> = session.requireReady().muted.map { it.size }.distinctUntilChanged()
+    val mutedAccountsCount: StateFlow<Int> = session.requireReady().muted.map { it.size }.distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+    /** How many conversations are muted, for the row on Tor & privacy. */
+    val mutedThreadsCount: StateFlow<Int> = session.requireReady().mute.mutedThreads.map { it.size }.distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
     /** The overview's own data: the account card, the relay chip and the Monero chip. */
@@ -276,6 +281,11 @@ class SettingsViewModel @Inject constructor(
     val themeMode: StateFlow<ThemeMode> = uiSettings.themeMode.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ThemeMode.SYSTEM)
     val accent: StateFlow<Accent> = uiSettings.accent.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), Accent.DEFAULT)
     val customHue: StateFlow<Float> = uiSettings.customHue.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AccentSeed.DEFAULT_HUE)
+    fun setReaderSwatch(swatch: com.monostr.app.ui.article.ReaderSwatch) {
+        val (dark, sepia) = swatch.stores()
+        viewModelScope.launch { readerTheme.setDark(dark); if (sepia != null) readerTheme.setSepia(sepia) }
+    }
+    fun setReaderTextStep(step: Int) = viewModelScope.launch { readerTheme.setTextStep(step) }
     val blurSensitive: StateFlow<Boolean> = uiSettings.blurSensitive.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
     val mediaOnTap: StateFlow<Boolean> = uiSettings.mediaOnTap.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
     val gifMode: StateFlow<GifMode> = uiSettings.gifMode.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), GifMode.AUTO)
@@ -314,13 +324,13 @@ class SettingsViewModel @Inject constructor(
     val translateMode: StateFlow<TranslationMode> = translation.mode.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TranslationMode.MONOSTR)
     val translateUrl: StateFlow<String> = translation.customUrl.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "")
     fun setTranslateMode(mode: TranslationMode) = viewModelScope.launch { translation.setMode(mode) }
-    private val _deviceInstalled = MutableStateFlow(false)
-    /** Whether Offline Translator offers its service; read by [checkDeviceTranslator] only (the translation page opening). */
-    val deviceInstalled: StateFlow<Boolean> = _deviceInstalled.asStateFlow()
+    private val _deviceState = MutableStateFlow(DeviceAppState.MISSING)
+    /** Offline Translator's state; read by [checkDeviceTranslator] only (the translation page opening). */
+    val deviceState: StateFlow<DeviceAppState> = _deviceState.asStateFlow()
     fun checkDeviceTranslator() = viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) {
-        val installed = deviceTranslator.isInstalled()
-        _deviceInstalled.value = installed
-        translation.deviceAppChecked(installed) // the default mode follows an install or removal while none is stored
+        val state = deviceTranslator.appState()
+        _deviceState.value = state
+        translation.deviceAppChecked(state == DeviceAppState.READY) // the default mode follows an install or removal while none is stored
     }
 
     /** False (nothing stored) for an address [TranslateUrl] refuses; blank clears the address. */

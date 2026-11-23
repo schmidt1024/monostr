@@ -1,0 +1,5 @@
+- Unterhaltung über das Menü einer Note stummschalten: sie verschwindet aus Feed und Mitteilungen
+- Leseoptionen in Artikeln: weiss, Sepia oder dunkel und fünf Schriftgrössen
+- Hinweis, wenn Offline Translator zu alt ist, um auf dem Telefon zu übersetzen
+- Stummgeschaltete Konten und Unterhaltungen in eigenen Listen, neueste zuerst
+- Korrekturen

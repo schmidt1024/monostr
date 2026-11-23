@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.map
 import com.monostr.app.ui.common.MentionResolver
 import com.monostr.app.ui.common.NoteActions
 import com.monostr.app.ui.common.asMessage
+import com.monostr.app.ui.common.threadKey
 import com.monostr.app.ui.feed.NoteUi
 import com.monostr.app.ui.feed.target
 import com.monostr.app.ui.tips.TipDecorations
@@ -312,6 +313,18 @@ class ArticleController(
 
     fun unmute(pubkey: String) {
         muteActions?.unmute(pubkey) { m -> if (m != null) _message.value = m.asMessage() }
+    }
+
+    /** Backlog 81: mutes the note's conversation; the list hides it at once, "Undo" brings it back. */
+    fun muteThread(note: Note) {
+        val key = note.threadKey()
+        muteActions?.muteThread(key) { m, ok -> _message.value = Message(m, undo = { unmuteThread(key) }.takeIf { ok }) }
+    }
+
+    fun unmuteThread(note: Note) = unmuteThread(note.threadKey())
+
+    private fun unmuteThread(key: String) {
+        muteActions?.unmuteThread(key) { m -> if (m != null) _message.value = m.asMessage() }
     }
 
     private fun refresh(f: (NoteUi) -> NoteUi) {

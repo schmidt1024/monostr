@@ -3,6 +3,7 @@ package com.monostr.app.ui
 import com.monostr.app.R
 import com.monostr.app.ui.common.uiText
 import com.monostr.app.ui.settings.MutedController
+import com.monostr.app.ui.settings.MutedRoot
 import com.monostr.nostr.model.Profile
 import com.monostr.nostr.repo.ListOutcome
 import com.monostr.nostr.repo.ProfileRepository
@@ -115,5 +116,69 @@ class MutedControllerTest {
         assertEquals(Profile.empty(carol), c.state.value.entries.first { it.first == carol }.second)
         profiles.land(Profile(carol, "carol", "Carol", null, null, null)); runCurrent()
         assertEquals("Carol", c.state.value.entries.first { it.first == carol }.second.shownName)
+    }
+
+    @Test
+    fun `muted conversations are listed and unmuting removes the row`() = runTest {
+        val root = "d".repeat(64)
+        val mute = FakeMute()
+        mute.mutedThreads.value = setOf(root)
+        val c = MutedController(mute, FakeProfiles(), eager())
+        c.start(); runCurrent()
+        assertEquals(listOf(root), c.state.value.threads.map { it.rootId })
+        assertTrue(c.state.value.loaded)
+        c.unmuteThread(root); runCurrent()
+        assertTrue(c.state.value.threads.isEmpty())
+        assertEquals(null, c.state.value.message)
+    }
+
+    @Test
+    fun `a stored root shows its first line, a missing one stays without a snippet`() = runTest {
+        val stored = "d".repeat(64)
+        val missing = "e".repeat(64)
+        val mute = FakeMute()
+        mute.mutedThreads.value = setOf(stored, missing)
+        val c = MutedController(mute, FakeProfiles(), eager(), roots = { ids -> ids.filter { it == stored }.associateWith { MutedRoot("First line", bob) } })
+        c.start(); runCurrent()
+        assertEquals("First line", c.state.value.threads.first { it.rootId == stored }.snippet)
+        assertEquals(null, c.state.value.threads.first { it.rootId == missing }.snippet)
+    }
+
+    @Test
+    fun `a stored root with a stored author shows the author's picture, otherwise none`() = runTest {
+        val stored = "d".repeat(64)
+        val missing = "e".repeat(64)
+        val noProfile = "f".repeat(64)
+        val mute = FakeMute()
+        mute.mutedThreads.value = setOf(stored, missing, noProfile)
+        val profiles = FakeProfiles(mapOf(bob to bobProfile.copy(picture = "https://x/bob.png")))
+        val c = MutedController(mute, profiles, eager(), roots = { ids ->
+            mapOf(stored to MutedRoot("Hi", bob), noProfile to MutedRoot(null, carol)).filterKeys { it in ids }
+        })
+        c.start(); runCurrent()
+        assertEquals("https://x/bob.png", c.state.value.threads.first { it.rootId == stored }.picture)
+        assertEquals(null, c.state.value.threads.first { it.rootId == missing }.picture)
+        assertEquals(null, c.state.value.threads.first { it.rootId == noProfile }.picture)
+        // the author's profile landing later fills the picture in
+        profiles.land(Profile.empty(carol).copy(picture = "https://x/carol.png")); runCurrent()
+        assertEquals("https://x/carol.png", c.state.value.threads.first { it.rootId == noProfile }.picture)
+    }
+
+    @Test
+    fun `the newest mute is listed first, accounts and conversations`() = runTest {
+        val mute = FakeMute()
+        mute.mute(bob); mute.mute(carol)
+        mute.muteThread("d".repeat(64)); mute.muteThread("a".repeat(64))
+        val c = MutedController(mute, FakeProfiles(), eager())
+        c.start(); runCurrent()
+        assertEquals(listOf(carol, bob), c.state.value.entries.map { it.first })
+        assertEquals(listOf("a".repeat(64), "d".repeat(64)), c.state.value.threads.map { it.rootId })
+    }
+
+    @Test
+    fun `firstLine takes the first non-blank line and cuts at 80`() {
+        assertEquals("Hello", com.monostr.app.ui.settings.firstLine("\n  \nHello\nworld"))
+        assertEquals(null, com.monostr.app.ui.settings.firstLine("  \n "))
+        assertEquals(80, com.monostr.app.ui.settings.firstLine("x".repeat(200))!!.length)
     }
 }

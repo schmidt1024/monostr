@@ -32,6 +32,7 @@ import rust.nostr.sdk.Filter
 import rust.nostr.sdk.Keys
 import rust.nostr.sdk.Kind
 import rust.nostr.sdk.Metadata
+import rust.nostr.sdk.Tag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.performSemanticsAction
 
@@ -108,11 +109,11 @@ class MutedTest {
         rule.waitUntil(15_000) { !textShown(note.content()) }
     }
 
-    private fun openMutedList() {
+    private fun openMutedList(tag: String = "settings-muted") {
         rule.openSettingsPage(ctx, SettingsPage.PRIVACY)
-        rule.waitUntil(15_000) { nodes("settings-muted").isNotEmpty() }
-        rule.onNodeWithTag("settings-muted").performScrollTo()
-        rule.onNodeWithTag("settings-muted").performClick()
+        rule.waitUntil(15_000) { nodes(tag).isNotEmpty() }
+        rule.onNodeWithTag(tag).performScrollTo()
+        rule.onNodeWithTag(tag).performClick()
         rule.waitUntil(15_000) { nodes("muted-list").isNotEmpty() }
     }
 
@@ -148,8 +149,7 @@ class MutedTest {
         rule.onNodeWithContentDescription(str(R.string.action_back)).performClick()
         rule.waitUntil(15_000) { nodes("settings-cat-privacy").isNotEmpty() } // the overview lies under the page
         rule.onNodeWithContentDescription(str(R.string.action_back)).performClick()
-        rule.waitUntil(15_000) { nodes("feed-refresh").isNotEmpty() }
-        rule.onNodeWithTag("feed-refresh").performTouchInput { swipeDown() }
+        // the unmute restarts the list: the notes are back without any swipe-to-refresh
         rule.waitUntil(30_000) { textShown(note.content()) }
         assertTrue(key !in ready.mute.muted.value)
         // and the unmute reached a relay: a newer list is stored
@@ -176,5 +176,37 @@ class MutedTest {
         rule.waitUntil(15_000) { nodes("profile-muted-hint").isEmpty() }
         assertTrue(key !in entry.session().requireReady().mute.muted.value)
         assertEquals(0, nodes("profile-unmute").size)
+    }
+
+    @Test
+    fun muteConversation_hidesThreadFromFeed_unmuteFromSettings() {
+        val (alice, root, _) = seedAlice("alice-thread-mute")
+        val ready = entry.session().requireReady()
+        val rootId = root.id().toHex()
+        val reply = EventBuilder.textNote("Thread reply ${System.currentTimeMillis()}")
+            .tags(listOf(Tag.parse(listOf("e", rootId, "", "root")), Tag.parse(listOf("p", alice.publicKey().toHex()))))
+            .signWithKeys(alice)
+        show(reply)
+        rule.waitUntil(30_000) { textShown(reply.content()) }
+
+        rule.onNodeWithTag("note-menu-${reply.id().toHex().take(8)}").performClick()
+        rule.onNodeWithTag("note-menu-mute-thread").performClick()
+        rule.waitUntil(30_000) { textShown(str(R.string.mute_thread_done)) }
+        rule.waitUntil(15_000) { !textShown(reply.content()) && !textShown(root.content()) }
+        assertTrue(rootId in ready.mute.mutedThreads.value)
+
+        openMutedList("settings-muted-threads")
+        val r8 = rootId.take(8)
+        rule.waitUntil(15_000) { nodes("muted-thread-$r8").isNotEmpty() }
+        rule.onNodeWithTag("muted-thread-unmute-$r8").performClick()
+        rule.waitUntil(15_000) { nodes("muted-thread-$r8").isEmpty() }
+        assertTrue(rootId !in ready.mute.mutedThreads.value)
+        rule.onNodeWithContentDescription(str(R.string.action_back)).performClick()
+        rule.waitUntil(15_000) { nodes("settings-muted-threads").isNotEmpty() }
+        rule.onNodeWithContentDescription(str(R.string.action_back)).performClick()
+        rule.waitUntil(15_000) { nodes("settings-cat-privacy").isNotEmpty() }
+        rule.onNodeWithContentDescription(str(R.string.action_back)).performClick()
+        // the unmute restarts the list: the notes are back without any swipe-to-refresh
+        rule.waitUntil(30_000) { textShown(reply.content()) && textShown(root.content()) }
     }
 }

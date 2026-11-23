@@ -10,6 +10,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.map
 import com.monostr.app.ui.common.MentionResolver
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -59,6 +64,7 @@ import com.monostr.app.ui.common.NoteDeletions
 import com.monostr.app.ui.common.Message
 import com.monostr.app.ui.common.MuteActions
 import com.monostr.app.ui.common.asMessage
+import com.monostr.app.ui.common.threadKey
 import com.monostr.app.ui.common.NoteVisibility
 import com.monostr.app.ui.common.UiText
 import com.monostr.app.ui.common.noteMenu
@@ -288,6 +294,18 @@ class ThreadController(
         muteActions?.unmute(pubkey) { m -> if (m == null) scope.launch { refilter() } else _state.update { it.copy(message = m.asMessage()) } }
     }
 
+    /** Backlog 81: mutes the note's conversation; the list hides it at once, "Undo" brings it back. */
+    fun muteThread(note: Note) {
+        val key = note.threadKey()
+        muteActions?.muteThread(key) { m, ok -> _state.update { it.copy(message = Message(m, undo = { unmuteThread(key) }.takeIf { ok })) } }
+    }
+
+    fun unmuteThread(note: Note) = unmuteThread(note.threadKey())
+
+    private fun unmuteThread(key: String) {
+        muteActions?.unmuteThread(key) { m -> if (m != null) _state.update { it.copy(message = m.asMessage()) } }
+    }
+
     /**
      * The last thread as [ThreadRepository.observe] delivered it, before [visibility]: a note that was
      * filtered out (a muted account, unmuted again) comes back from here without a new emission.
@@ -327,9 +345,10 @@ class ThreadViewModel @Inject constructor(session: NostrSession, handle: SavedSt
     private val ready = session.requireReady()
     val decorations = factory.decorations(viewModelScope)
     val bookmarks = BookmarkActions(ready.bookmarks, viewModelScope, background = ready.engine.backgroundScope, sendGate = ready.sendGate)
-    val controller = ThreadController(checkNotNull(handle["id"]), ready.threads, ready.profiles, ready.publish, decorations, bookmarks, ready.counts, viewModelScope, mentions = MentionResolver(ready.profiles, viewModelScope, Dispatchers.Default), deletions = ready.deletions, visibility = ready.visibility, afterDelete = ready.afterNoteDelete, own = ready.ownReactions, mute = ready.mute, muteScope = ready.engine.backgroundScope, sendGate = ready.sendGate)
+    val controller = ThreadController(checkNotNull(handle["id"]), ready.threads, ready.profiles, ready.publish, decorations, bookmarks, ready.counts, viewModelScope, mentions = MentionResolver(ready.profiles, viewModelScope, Dispatchers.Default), deletions = ready.deletions, visibility = ready.visibility.withoutThreadMute(), afterDelete = ready.afterNoteDelete, own = ready.ownReactions, mute = ready.mute, muteScope = ready.engine.backgroundScope, sendGate = ready.sendGate)
     val deletions = ready.deletions
-    val menu = ready.noteMenu(delete = controller::delete, mute = controller::mute)
+    val mutedThreads = ready.mute.mutedThreads
+    val menu = ready.noteMenu(delete = controller::delete, mute = controller::mute, muteThread = controller::muteThread, unmuteThread = controller::unmuteThread)
     val tipSheet = factory.tipSheet(viewModelScope)
     init { controller.start() }
 }
@@ -350,6 +369,7 @@ fun ThreadScreen(
     val state by vm.controller.state.collectAsStateWithLifecycle()
     val names by vm.controller.names.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
+    val mutedThreads by vm.mutedThreads.collectAsStateWithLifecycle()
     var tippersFor by remember { mutableStateOf<Note?>(null) }
     LaunchedEffect(state.closed) { if (state.closed) onBack() }
     MessageSnackbar(state.message, snackbar, onUnmute = vm.controller::unmute, onShown = vm.controller::clearMessage)
@@ -370,14 +390,21 @@ fun ThreadScreen(
                 // coming back from a profile or a rotation keeps the position the user scrolled to.
                 // The ancestors arrive after the first view (spec 2026-10-16 §4): wait for them unless the user scrolls first
                 var scrolled by rememberSaveable(state.focusedId) { mutableStateOf(false) }
+                // backlog 81: the muted hint is the list's first item, so row i sits at item i + 1
+                val hintShown = state.items.firstOrNull { it.note.id == state.focusedId }?.target?.let { it.threadKey() in mutedThreads } == true
                 val focusedIndex = rows.indexOfFirst { it is ThreadRow.Focused }
                 LaunchedEffect(state.focusedId, focusedIndex) {
                     if (scrolled || focusedIndex <= 0) return@LaunchedEffect
-                    listState.scrollToItem(focusedIndex)
+                    listState.scrollToItem(focusedIndex + if (hintShown) 1 else 0)
                     scrolled = true
                 }
                 LaunchedEffect(listState.isScrollInProgress) { if (listState.isScrollInProgress) scrolled = true }
+                // backlog 81: the thread shows everything; a muted conversation says so and offers to lift it
+                val focused = state.items.firstOrNull { it.note.id == state.focusedId }?.target
                 LazyColumn(state = listState, modifier = Modifier.fillMaxSize().testTag("thread-list")) {
+                    if (focused != null && focused.threadKey() in mutedThreads) {
+                        item(key = "muted-hint") { ThreadMutedHint(onUnmute = { vm.controller.unmuteThread(focused) }) }
+                    }
                     itemsIndexed(rows, key = { _, row -> row.id }) { i, row ->
                         val next = rows.getOrNull(i + 1)
                         when (row) {
@@ -433,4 +460,13 @@ fun ThreadScreen(
     }
     TipSheetHost(vm.tipSheet)
     tippersFor?.let { TippersDialog(it, load = vm.decorations::tippers, onDismiss = { tippersFor = null }) }
+}
+
+/** Backlog 81: shown above a muted conversation that was opened anyway. */
+@Composable
+private fun ThreadMutedHint(onUnmute: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = Spacing.l), verticalAlignment = Alignment.CenterVertically) {
+        Text(stringResource(R.string.thread_muted_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+        TextButton(onClick = onUnmute, modifier = Modifier.testTag("thread-muted-unmute")) { Text(stringResource(R.string.unmute_thread)) }
+    }
 }
