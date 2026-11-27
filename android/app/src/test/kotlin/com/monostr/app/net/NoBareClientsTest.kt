@@ -67,7 +67,8 @@ class NoBareClientsTest {
         Rule(Regex("""OkHttpNetworkFetcherFactory\(\)""")),
         Rule(Regex("""\bImageLoader\(""")),
         Rule(Regex("""ImageLoader\.Builder\((?!.*callFactory)""")),
-        Rule(Regex("""ExoPlayer\.Builder\((?!.*setMediaSourceFactory)""")),
+        // the warm-up constructs the builder for its class initialisers only and never builds a player (backlog 116)
+        Rule(Regex("""ExoPlayer\.Builder\((?!.*setMediaSourceFactory)"""), setOf("app/src/main/kotlin/com/monostr/app/ui/media/VideoWarmUp.kt")),
         Rule(Regex("""\bDefaultHttpDataSource\b|\bDefaultDataSource\b|\bUdpDataSource\b""")),
         Rule(Regex("""\bDefaultMediaSourceFactory\("""), setOf("app/src/main/kotlin/com/monostr/app/ui/media/VideoPlayerScreen.kt")),
         // the platform's players and the retriever open a URL on their own; the retriever here only reads a picked local video

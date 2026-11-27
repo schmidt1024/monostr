@@ -25,6 +25,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.navigation
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.navArgument
 import com.monostr.app.MainActivity
 import com.monostr.app.data.TipSettingsStore
@@ -36,6 +37,7 @@ import com.monostr.app.ui.article.ArticleScreen
 import com.monostr.app.ui.bookmarks.BookmarksScreen
 import com.monostr.app.ui.common.LocalOpenArticle
 import com.monostr.app.ui.common.LocalOpenList
+import com.monostr.nostr.model.Hex64
 import com.monostr.nostr.model.AddressRef
 import com.monostr.app.ui.common.AddressLoader
 import com.monostr.app.ui.common.LocalAddressLoader
@@ -43,7 +45,7 @@ import com.monostr.app.ui.common.LocalQuoteLoader
 import com.monostr.app.ui.common.LocalPollLoader
 import com.monostr.app.ui.common.PollLoader
 import com.monostr.app.ui.common.PrefsPollSettings
-import com.monostr.app.data.monostrPrefs
+import com.monostr.app.data.AccountPrefs
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -62,6 +64,8 @@ import com.monostr.app.ui.dm.ConversationsScreen
 import com.monostr.app.ui.feed.FeedScreen
 import com.monostr.app.ui.lists.ListEditScreen
 import com.monostr.app.ui.lists.ListScreen
+import com.monostr.app.ui.accounts.AccountSwitcherHost
+import com.monostr.app.ui.accounts.AccountSwitcherSheet
 import com.monostr.app.ui.login.CreateAccountScreen
 import com.monostr.app.ui.login.LoginScreen
 import com.monostr.app.ui.media.LocalMediaSettings
@@ -74,7 +78,6 @@ import com.monostr.app.ui.profile.ProfileEditScreen
 import com.monostr.app.ui.profile.ProfileScreen
 import com.monostr.app.ui.search.SearchScreen
 import com.monostr.app.ui.follows.FollowsScreen
-import com.monostr.app.ui.settings.AboutScreen
 import com.monostr.app.ui.settings.MutedScreen
 import com.monostr.app.ui.settings.SettingsOverview
 import com.monostr.app.ui.settings.SettingsPage
@@ -117,10 +120,11 @@ object Routes {
     const val SEARCH = "search?q={q}"
     const val BOOKMARKS = "bookmarks"
     const val SUPPORT = "support"
-    const val ABOUT = "about"
     const val MUTED = "muted"
     const val MUTED_THREADS = "muted-threads"
     const val SHOW_KEY = "show-key"
+    const val ADD_ACCOUNT_KEY = "add-account-key"
+    const val ADD_ACCOUNT_CREATE = "add-account-create"
     const val LIST = "list/{address}"
     const val LIST_EDIT = "list-edit?address={address}&add={add}"
     /** Spec 2026-10-18 §2.3: the address is URL-encoded (a foreign `d` may hold any character). */
@@ -129,13 +133,14 @@ object Routes {
         val params = listOfNotNull(address?.let { "address=" + android.net.Uri.encode(it.toString()) }, add?.let { "add=$it" })
         return if (params.isEmpty()) "list-edit" else "list-edit?" + params.joinToString("&")
     }
-    fun thread(id: String) = "thread/$id"
+    /** Ids and pubkeys in a route are hex or name nothing ([Hex64.orNone]): a stranger's tag value with a slash found no destination and closed the app. */
+    fun thread(id: String) = "thread/${Hex64.orNone(id)}"
     /** Spec 2026-10-29 article reader: [naddr] is the bech32 `naddr1…` (letters and digits only, so no encoding). */
     fun article(naddr: String, foreign: Boolean = true) = "article/$naddr?foreign=$foreign"
-    fun profile(pubkey: String) = "profile/$pubkey"
+    fun profile(pubkey: String) = "profile/${Hex64.orNone(pubkey)}"
     /** Spec 2026-10-30 follow lists: [followers] opens the second tab. */
-    fun follows(pubkey: String, followers: Boolean) = "follows/$pubkey?followers=$followers"
-    fun dm(pubkey: String) = "dm/$pubkey"
+    fun follows(pubkey: String, followers: Boolean) = "follows/${Hex64.orNone(pubkey)}?followers=$followers"
+    fun dm(pubkey: String) = "dm/${Hex64.orNone(pubkey)}"
     /** Spec 2026-10-29 article reader: [article] is the bech32 `naddr1…` of the article commented on, [parent] the comment answered. */
     fun commentOn(article: String, parent: String? = null) = "compose?article=$article" + (parent?.let { "&parent=$it" } ?: "")
     fun compose(replyTo: String? = null, quote: String? = null, text: String? = null) = when {
@@ -172,16 +177,19 @@ object Routes {
 
 /** Spec 3.2/3.4: how the note cards treat media, from UiSettingsStore, provided once for the whole nav host. */
 @HiltViewModel
-class MediaSettingsViewModel @Inject constructor(ui: UiSettingsStore, val linkPreviews: LinkPreviews, val previewImages: PreviewImages) : ViewModel() {
+class MediaSettingsViewModel @Inject constructor(ui: UiSettingsStore, val accountPrefs: AccountPrefs, val linkPreviews: LinkPreviews, val previewImages: PreviewImages) : ViewModel() {
     val settings: StateFlow<MediaSettings> = combine(ui.blurSensitive, ui.mediaOnTap, ui.linkPreviews, ui.gifMode) { b, t, l, g -> MediaSettings(b, t, l, g) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, MediaSettings())
 }
 
 /** Spec 6: the receiving onboarding is offered once after login, skippable. */
 @HiltViewModel
-class OnboardingGateViewModel @Inject constructor(settings: TipSettingsStore) : ViewModel() {
+class OnboardingGateViewModel @Inject constructor(private val settings: TipSettingsStore) : ViewModel() {
+    /** No setup on this device and never answered: the intro is still open, [MoneroIntroGate] decides whether it comes. */
     val showIntro: StateFlow<Boolean?> = combine(settings.setup, settings.onboardingSeen) { setup, seen -> setup == null && !seen }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    suspend fun markSeen() { runCatching { settings.setOnboardingSeen() } }
 }
 
 @Composable
@@ -192,21 +200,51 @@ fun MonostrNavHost(session: NostrSession) {
     LaunchedEffect(state) { if (state is SessionState.Loading) session.restore() }
     // the app is visible with this session: what only the UI needs starts now (a background check's session leaves it out)
     LaunchedEffect(state) { (state as? SessionState.Active)?.ready?.startForegroundWork?.invoke() }
+    val owner = remember { ShownAccount() }
     when (val s = state) {
         SessionState.Loading -> StartScreen()
         is SessionState.LoggedOut -> {
+            owner.pubkey = null
             TorReturnForget()
             // spec 2026-10-17 §11: login is not a nav route; a saved flag switches to the create flow
             var creating by rememberSaveable { mutableStateOf(false) }
-            if (creating) CreateAccountScreen(onLeave = { creating = false }) else LoginScreen(onCreate = { creating = true })
+            // final review I2: a failed restore with other accounts kept offers the switcher (a working one, or removing the stale one)
+            val kept by session.accounts.collectAsState(initial = emptyList())
+            var switcher by rememberSaveable { mutableStateOf(false) }
+            val offerSwitcher = s.message == NostrSession.RESTORE_FAILED && kept.size > 1
+            if (creating) {
+                CreateAccountScreen(onLeave = { creating = false })
+            } else {
+                LoginScreen(onCreate = { creating = true }, onAccounts = if (offerSwitcher) ({ switcher = true }) else null)
+            }
+            // the login screen is the add flow here: «Add account» and «Sign in again» lead back to it
+            if (switcher && offerSwitcher && !creating) AccountSwitcherSheet(hiltViewModel(), onAdd = { switcher = false }, onDismiss = { switcher = false })
         }
-        is SessionState.Active -> LoggedInNavHost(s.ready)
+        // spec «Switch flow» step 5: another account is shown only by a fresh activity (MainActivity replaces this one on
+        // `switched`); until then this one shows the start screen, so it builds no screen (or takes no notification target) of it
+        is SessionState.Active -> if (owner.claim(s.ready.pubkey)) {
+            androidx.compose.runtime.key(s.ready.pubkey) { LoggedInNavHost(s.ready, created = session.wasCreatedHere(s.ready.pubkey)) }
+        } else {
+            StartScreen()
+        }
+    }
+}
+
+/** The account this activity shows: the first one active in it; the login screen in between frees it (a first login). */
+private class ShownAccount {
+    var pubkey: String? = null
+
+    fun claim(active: String): Boolean {
+        if (pubkey == null) pubkey = active
+        return pubkey == active
     }
 }
 
 @Composable
 private fun LoggedInNavHost(
     ready: Ready,
+    /** The account was created in this process: its Monero intro asks no relay first. */
+    created: Boolean = false,
     gate: OnboardingGateViewModel = hiltViewModel(),
     media: MediaSettingsViewModel = hiltViewModel(),
     translation: NoteTranslationViewModel = hiltViewModel(),
@@ -242,35 +280,37 @@ private fun LoggedInNavHost(
     val linkPreviewLoader = remember(ready) { LinkPreviewLoader(media.linkPreviews, ready.muted, ready.mute.state) }
     // polls spec 2026-11-12: votes fetched once per poll while this account is logged in; fetches and votes run in the host's scope
     val pollScope = rememberCoroutineScope()
-    val appContext = LocalContext.current.applicationContext
     val pollLoader = remember(ready) {
-        PollLoader(ready.polls, ready.follows.followed(), ready.muted, ready.pubkey, PrefsPollSettings(appContext.monostrPrefs), { System.currentTimeMillis() / 1000 }, pollScope)
+        PollLoader(ready.polls, ready.follows.followed(), ready.muted, ready.pubkey, PrefsPollSettings(media.accountPrefs), { System.currentTimeMillis() / 1000 }, pollScope)
     }
     var introShown by rememberSaveable { mutableStateOf(false) }
+    // backlog 121: the feed first; the intro only once the relays said for sure that nothing is set up, and only over the feed
+    var introDue by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(showIntro) {
-        if (showIntro == true && !introShown) {
+        if (showIntro == true && !introShown && !introDue) {
+            introDue = com.monostr.app.ui.monero.MoneroIntroGate.due(created, lookup = { ready.tips.ownMonero() }, markSeen = { gate.markSeen() })
+        }
+    }
+    val shownEntry by nav.currentBackStackEntryAsState()
+    val onFeed = shownEntry?.destination?.route == Routes.FEED
+    LaunchedEffect(introDue, onFeed, showIntro) {
+        if (introDue && onFeed && showIntro == true && !introShown) {
             introShown = true
             nav.navigate(Routes.moneroSetup(intro = true))
         }
     }
     // a tapped DM notification: open that chat once
-    val pendingDm by MainActivity.pendingDm.collectAsState()
-    LaunchedEffect(pendingDm) {
-        pendingDm?.let {
-            MainActivity.pendingDm.value = null
-            nav.navigate(Routes.dm(it))
-        }
-    }
-    // the "waiting for the signer" summary: open the Messages tab, where the parked messages unlock
-    val pendingMessages by MainActivity.pendingMessages.collectAsState()
-    LaunchedEffect(pendingMessages) {
-        if (pendingMessages) {
-            MainActivity.pendingMessages.value = false
-            nav.navigate(Routes.MESSAGES) { popUpTo(Routes.FEED); launchSingleTop = true }
-        }
+    // a tapped notification: only once its own account runs (never a chat of A inside B); taken atomically
+    val pendingOpen by MainActivity.pendingOpen.collectAsState()
+    LaunchedEffect(pendingOpen, ready.pubkey) {
+        val target = pendingOpen
+        if (!com.monostr.app.work.shouldConsume(target, ready.pubkey)) return@LaunchedEffect
+        if (!MainActivity.pendingOpen.compareAndSet(target, null)) return@LaunchedEffect
+        target!!.peer?.let { nav.navigate(Routes.dm(it)) }
+        if (target.messages) nav.navigate(Routes.MESSAGES) { popUpTo(Routes.FEED); launchSingleTop = true }
     }
     val onOpenMedia: (String, Int) -> Unit = { id, i -> nav.navigate(Routes.media(id, i)) }
-    val openArticle: (AddressRef, Boolean) -> Unit = { ref, foreign -> nav.navigate(Routes.article(ref.toBech32(), foreign)) }
+    val openArticle: (AddressRef, Boolean) -> Unit = { ref, foreign -> ref.toBech32OrNull()?.let { nav.navigate(Routes.article(it, foreign)) } }
     val openList: (ListAddress) -> Unit = { nav.navigate(Routes.list(it)) }
     val onOpenVideo: (String) -> Unit = { nav.navigate(Routes.video(it)) }
     val onMessages: () -> Unit = { nav.navigate(Routes.MESSAGES) { popUpTo(Routes.FEED); launchSingleTop = true } }
@@ -279,7 +319,17 @@ private fun LoggedInNavHost(
     // spec 2026-11-03: one consent sheet for every card's first «Translate»
     TranslateConsentHost(translation, onSettings = { nav.navigate(Routes.settings(SettingsSection.TRANSLATION)) })
     CompositionLocalProvider(LocalMediaSettings provides mediaSettings, LocalQuoteLoader provides quoteLoader, LocalPollLoader provides pollLoader, LocalAddressLoader provides addressLoader, LocalOpenArticle provides openArticle, LocalOpenList provides openList, LocalLinkPreviewLoader provides linkPreviewLoader, LocalPreviewImageLoader provides media.previewImages.loader, LocalNoteTranslator provides translation) {
+      // spec «Switcher UI»: one switcher for the feed's avatar and Settings; the add sheet's key login and create flow are routes here
+      AccountSwitcherHost(
+          onLoginWithKey = { nav.navigate(Routes.ADD_ACCOUNT_KEY) { launchSingleTop = true } },
+          onCreate = { nav.navigate(Routes.ADD_ACCOUNT_CREATE) { launchSingleTop = true } },
+      ) {
+        val tabNav = remember(nav) { com.monostr.app.ui.common.TabNav(onSettings = { nav.navigate(Routes.SETTINGS) }, onOwnProfile = { nav.navigate(Routes.profile(ready.pubkey)) }) }
+        CompositionLocalProvider(com.monostr.app.ui.common.LocalTabNav provides tabNav) {
         NavHost(navController = nav, startDestination = Routes.FEED) {
+            // spec «Adding an account»: the first login's screens; a login that works switches, and the activity recreates
+            composable(Routes.ADD_ACCOUNT_KEY) { LoginScreen(adding = true, onBack = { nav.popBackStack(Routes.ADD_ACCOUNT_KEY, inclusive = true) }) }
+            composable(Routes.ADD_ACCOUNT_CREATE) { CreateAccountScreen(onLeave = { nav.popBackStack(Routes.ADD_ACCOUNT_CREATE, inclusive = true) }, adding = true) }
             composable(Routes.FEED) {
                 FeedScreen(
                     onOpenThread = { nav.navigate(Routes.thread(it)) },
@@ -336,7 +386,7 @@ private fun LoggedInNavHost(
             }
             composable("dm/{pubkey}", arguments = listOf(navArgument("pubkey") { type = NavType.StringType })) {
                 ChatScreen(
-                    onBack = { nav.popBackStack() },
+                    onBack = { nav.back() },
                     onOpenProfile = { nav.navigate(Routes.profile(it)) },
                     onOpenThread = { nav.navigate(Routes.thread(it)) },
                     onHashtag = { nav.navigate(Routes.search(NoteLinks.searchFor(it))) },
@@ -362,7 +412,7 @@ private fun LoggedInNavHost(
             }
             composable("thread/{id}", arguments = listOf(navArgument("id") { type = NavType.StringType })) {
                 ThreadScreen(
-                    onBack = { nav.popBackStack() },
+                    onBack = { nav.back() },
                     onOpenProfile = { nav.navigate(Routes.profile(it)) },
                     onReply = { nav.navigate(Routes.compose(it)) },
                     onQuote = { nav.navigate(Routes.compose(quote = it)) },
@@ -377,12 +427,12 @@ private fun LoggedInNavHost(
                 arguments = listOf(navArgument("naddr") { type = NavType.StringType }, navArgument("foreign") { type = NavType.BoolType; defaultValue = true }),
             ) {
                 ArticleScreen(
-                    onBack = { nav.popBackStack() },
+                    onBack = { nav.back() },
                     onOpenProfile = { nav.navigate(Routes.profile(it)) },
                     onOpenThread = { nav.navigate(Routes.thread(it)) },
                     onOpenArticle = openArticle,
-                    onQuote = { nav.navigate(Routes.compose(text = "\n\nnostr:" + it.toBech32())) },
-                    onReply = { ref, parent -> nav.navigate(Routes.commentOn(ref.toBech32(), parent)) },
+                    onQuote = { ref -> ref.toBech32OrNull()?.let { nav.navigate(Routes.compose(text = "\n\nnostr:$it")) } },
+                    onReply = { ref, parent -> ref.toBech32OrNull()?.let { nav.navigate(Routes.commentOn(it, parent)) } },
                     onQuoteNote = { nav.navigate(Routes.compose(quote = it)) },
                     onOpenNoteMedia = onOpenMedia,
                     onOpenVideo = onOpenVideo,
@@ -392,7 +442,7 @@ private fun LoggedInNavHost(
             }
             composable("profile/{pubkey}", arguments = listOf(navArgument("pubkey") { type = NavType.StringType })) {
                 ProfileScreen(
-                    onBack = { nav.popBackStack() },
+                    onBack = { nav.back() },
                     onEditProfile = { nav.navigate(Routes.PROFILE_EDIT) },
                     onOpenThread = { nav.navigate(Routes.thread(it)) },
                     onReply = { nav.navigate(Routes.compose(it)) },
@@ -413,11 +463,11 @@ private fun LoggedInNavHost(
                 "follows/{pubkey}?followers={followers}",
                 arguments = listOf(navArgument("pubkey") { type = NavType.StringType }, navArgument("followers") { type = NavType.BoolType; defaultValue = false }),
             ) {
-                FollowsScreen(onBack = { nav.popBackStack() }, onOpenProfile = { nav.navigate(Routes.profile(it)) })
+                FollowsScreen(onBack = { nav.back() }, onOpenProfile = { nav.navigate(Routes.profile(it)) })
             }
             composable(Routes.LIST, arguments = listOf(navArgument("address") { type = NavType.StringType })) {
                 ListScreen(
-                    onBack = { nav.popBackStack() },
+                    onBack = { nav.back() },
                     onOpenProfile = { nav.navigate(Routes.profile(it)) },
                     onEdit = { nav.navigate(Routes.listEdit(it)) },
                     onOpenThread = { nav.navigate(Routes.thread(it)) },
@@ -436,7 +486,7 @@ private fun LoggedInNavHost(
                 ),
             ) {
                 // after a delete the list screen goes too (the edit screen is only opened from it for existing lists)
-                ListEditScreen(onDone = { deleted -> if (deleted) nav.popBackStack(Routes.LIST, inclusive = true) else nav.popBackStack() })
+                ListEditScreen(onDone = { deleted -> if (deleted) nav.popBackStack(Routes.LIST, inclusive = true) else nav.back() })
             }
             composable(
                 "compose?replyTo={replyTo}&quote={quote}&text={text}&article={article}&parent={parent}",
@@ -448,27 +498,27 @@ private fun LoggedInNavHost(
                     navArgument("parent") { type = NavType.StringType; nullable = true; defaultValue = null },
                 ),
             ) {
-                ComposeScreen(onDone = { nav.popBackStack() })
+                ComposeScreen(onDone = { nav.back() })
             }
             composable(
                 "media/{noteId}/{index}",
                 arguments = listOf(navArgument("noteId") { type = NavType.StringType }, navArgument("index") { type = NavType.IntType }),
             ) {
-                MediaViewerScreen(onBack = { nav.popBackStack() })
+                MediaViewerScreen(onBack = { nav.back() })
             }
             composable(
                 "media-urls?u={u}&i={i}",
                 arguments = listOf(navArgument("u") { type = NavType.StringType }, navArgument("i") { type = NavType.IntType; defaultValue = 0 }),
             ) {
-                MediaViewerScreen(onBack = { nav.popBackStack() })
+                MediaViewerScreen(onBack = { nav.back() })
             }
             composable(
                 "video?url={url}",
                 arguments = listOf(navArgument("url") { type = NavType.StringType }),
             ) { entry ->
-                VideoPlayerScreen(url = checkNotNull(entry.arguments?.getString("url")), onBack = { nav.popBackStack() })
+                VideoPlayerScreen(url = checkNotNull(entry.arguments?.getString("url")), onBack = { nav.back() })
             }
-            composable(Routes.PROFILE_EDIT) { ProfileEditScreen(onDone = { nav.popBackStack() }) }
+            composable(Routes.PROFILE_EDIT) { ProfileEditScreen(onDone = { nav.back() }) }
             // spec 2026-11-11: the overview and one page per category share one view model, scoped to this graph
             navigation(startDestination = Routes.SETTINGS_OVERVIEW, route = Routes.SETTINGS_GRAPH) {
                 composable(
@@ -479,14 +529,11 @@ private fun LoggedInNavHost(
                     SettingsOverview(
                         section = entry.arguments?.getString("section"),
                         vm = hiltViewModel<SettingsViewModel>(parent),
-                        onBack = { nav.popBackStack() },
+                        onBack = { nav.back() },
                         // a second tap during the push transition must not push the page twice
                         onOpen = { page, focus -> if (entry.isResumed()) nav.navigate(Routes.settingsPage(page, focus)) },
-                        onLogout = { nav.popBackStack() },
                         // the deep link opens its page from the first composition, before the entry is resumed
                         onRedirect = { page -> nav.navigate(Routes.settingsPage(page)) },
-                        // the sign-out dialog is the warning; the grant only where the key screen really opens
-                        onShowKey = { if (entry.isResumed()) { com.monostr.app.ui.settings.ShowKeyGate.grant(); nav.navigate(Routes.SHOW_KEY) } },
                     )
                 }
                 composable(
@@ -501,9 +548,9 @@ private fun LoggedInNavHost(
                     val focus = entry.arguments?.getString("focus")
                     // backlog 2026-11-11: every way off a page waits for it to be resumed, so a double tap during the
                     // transition neither pushes a screen twice nor pops two pages
-                    val back: () -> Unit = { if (entry.isResumed()) nav.popBackStack() }
+                    val back: () -> Unit = { if (entry.isResumed()) nav.back() }
                     when (SettingsPage.of(entry.arguments?.getString("page"))) {
-                        SettingsPage.ACCOUNT -> AccountPage(vm, focus, back, onShowKey = { if (entry.isResumed()) nav.navigate(Routes.SHOW_KEY) })
+                        SettingsPage.ACCOUNT -> AccountPage(vm, focus, back, onShowKey = { if (entry.isResumed()) nav.navigate(Routes.SHOW_KEY) }, onLogout = { nav.popBackStack(Routes.SETTINGS_GRAPH, inclusive = true) })
                         SettingsPage.PRIVACY -> PrivacyPage(vm, focus, back, onMuted = { if (entry.isResumed()) nav.navigate(Routes.MUTED) }, onMutedThreads = { if (entry.isResumed()) nav.navigate(Routes.MUTED_THREADS) })
                         SettingsPage.RELAYS -> RelaysPage(vm, focus, back, onOpen = { if (entry.isResumed()) nav.navigate(Routes.settingsPage(it)) })
                         SettingsPage.DM_RELAYS -> DmRelaysPage(vm, focus, back)
@@ -519,16 +566,15 @@ private fun LoggedInNavHost(
                         SettingsPage.TRANSLATION -> TranslationPage(vm, focus, back)
                         SettingsPage.APPEARANCE -> AppearancePage(vm, focus, back)
                         SettingsPage.HELP -> HelpPage(vm, focus, back, onOpenProfile = { if (entry.isResumed()) nav.navigate(Routes.profile(it)) })
-                        null -> LaunchedEffect(Unit) { nav.popBackStack() }
+                        null -> LaunchedEffect(Unit) { nav.back() }
                     }
                 }
             }
             // pops only this route: "no key" and ON_STOP may both close it
             composable(Routes.SHOW_KEY) { ShowKeyScreen(onBack = { nav.popBackStack(Routes.SHOW_KEY, inclusive = true) }) }
-            composable(Routes.SUPPORT) { SupportScreen(onBack = { nav.popBackStack() }) }
-            composable(Routes.MUTED) { MutedScreen(threads = false, onBack = { nav.popBackStack() }, onOpenProfile = { nav.navigate(Routes.profile(it)) }) }
-            composable(Routes.MUTED_THREADS) { MutedScreen(threads = true, onBack = { nav.popBackStack() }, onOpenProfile = { nav.navigate(Routes.profile(it)) }) }
-            composable(Routes.ABOUT) { AboutScreen(onBack = { nav.popBackStack() }, onOpenProfile = { nav.navigate(Routes.profile(it)) }) }
+            composable(Routes.SUPPORT) { SupportScreen(onBack = { nav.back() }) }
+            composable(Routes.MUTED) { MutedScreen(threads = false, onBack = { nav.back() }, onOpenProfile = { nav.navigate(Routes.profile(it)) }) }
+            composable(Routes.MUTED_THREADS) { MutedScreen(threads = true, onBack = { nav.back() }, onOpenProfile = { nav.navigate(Routes.profile(it)) }) }
             composable(
                 "monero-setup?intro={intro}&upgrade={upgrade}",
                 arguments = listOf(
@@ -536,11 +582,26 @@ private fun LoggedInNavHost(
                     navArgument("upgrade") { type = NavType.BoolType; defaultValue = false },
                 ),
             ) {
-                MoneroSetupScreen(onDone = { nav.popBackStack() })
+                MoneroSetupScreen(onDone = { nav.back() })
             }
         }
+        }
+      }
     }
 }
 
 /** Whether this entry is the settled top of the back stack; taps during a transition into another page arrive while it is not. */
+/**
+ * What a back arrow does: one screen back, never the last one, and nothing while a transition still runs.
+ *
+ * A bare `popBackStack()` also pops the start destination. A second tap on a back arrow during its screen's exit
+ * animation (the feed's wordmark sits where the arrow was) took the feed itself off the stack and left the app black
+ * until it was closed (owner, Pixel 2026-11-26 14:08).
+ */
+internal fun androidx.navigation.NavController.back() {
+    val top = currentBackStackEntry ?: return
+    if (previousBackStackEntry == null) return
+    if (top.lifecycle.currentState == androidx.lifecycle.Lifecycle.State.RESUMED) popBackStack()
+}
+
 private fun androidx.navigation.NavBackStackEntry.isResumed(): Boolean = lifecycle.currentState == androidx.lifecycle.Lifecycle.State.RESUMED

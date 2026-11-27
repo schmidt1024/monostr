@@ -10,6 +10,7 @@ Monostr, Monero ile bahşiş verilebilen bir Android Nostr istemcisidir.
 • Kişi ve not arama (NIP-50), beğeni, paylaşım, yanıt ve bahşiş bildirimleri
 • Relay listen (NIP-65); bir yazarın yazma relay'leri profili açıkken eklenir
 • Amber (NIP-55), anahtar veya parola korumalı anahtar yedeğiyle (ncryptsec, NIP-49) giriş; anahtarını bir parolayla yedekleyebilirsin de; açık ve koyu tema, 8 dil
+• Tek telefonda birden fazla hesap: avatarından geç; her biri kendi relay'lerini ve ayarlarını korur ve yeni Tor devreleri alır
 
 <b>Monero ile bahşiş</b>
 • Bir nota veya profile kendi cüzdan uygulamandan (Unstoppable, monfluo, Cake …) monero: bağlantısıyla bahşiş ver

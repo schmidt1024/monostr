@@ -71,8 +71,9 @@ fun NoteDetailHeader(note: NoteUi, onOpenProfile: (String) -> Unit, menu: NoteMe
         Spacer(Modifier.width(Spacing.m))
         Column(Modifier.weight(1f).clickable { onOpenProfile(shown.author) }) {
             Text(author.shownName, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            // the handle: the kind-0 nip05 claim (not verified here, shown as SearchScreen shows it), else the short npub
-            Text(author.nip05?.takeIf { it.isNotBlank() } ?: Npub.short(shown.author), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // the handle is the short npub, never the kind-0 nip05: that is a claim nobody checked, and any stranger can
+            // claim the address of a known account (owner 2026-11-26; checking it would tell its server whose profile is read)
+            Text(Npub.short(shown.author), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         if (menu != null) NoteMenuButton(note, shown, author.shownName, menu)
     }
@@ -153,24 +154,11 @@ private fun NoteMenuButton(note: NoteUi, shown: Note, authorName: String, menu: 
         }
     }
     if (confirm) {
-        GuardedAlertDialog(
-            onDismissRequest = { confirm = false },
-            title = { Text(stringResource(R.string.note_delete_title)) },
-            text = {
-                Column {
-                    Text(stringResource(R.string.note_delete_text))
-                    if (menu.hasServerPictures(shown)) {
-                        Spacer(Modifier.size(Spacing.s))
-                        Text(stringResource(R.string.note_delete_pictures))
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { confirm = false; menu.delete(shown) }, modifier = Modifier.testTag("note-delete-confirm")) {
-                    Text(stringResource(R.string.note_delete_confirm), color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = { TextButton(onClick = { confirm = false }) { Text(stringResource(R.string.action_cancel)) } },
+        val pictures = if (menu.hasServerPictures(shown)) "\n\n" + stringResource(R.string.note_delete_pictures) else ""
+        ConfirmDialog(
+            title = stringResource(R.string.note_delete_title), text = stringResource(R.string.note_delete_text) + pictures,
+            confirm = stringResource(R.string.note_delete_confirm), confirmTag = "note-delete-confirm", destructive = true,
+            onConfirm = { confirm = false; menu.delete(shown) }, onDismiss = { confirm = false },
         )
     }
 }

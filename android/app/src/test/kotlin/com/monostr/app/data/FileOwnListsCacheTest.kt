@@ -76,4 +76,19 @@ class FileOwnListsCacheTest {
         File(accountDir(dir, me), FileOwnListsCache.FILE).writeText("{broken")
         assertNull(cache.load(me))
     }
+
+    @Test
+    fun `a switched away session's view writes nothing, and the removal later leaves no file`() = runTest {
+        // Task 6 review: the close of a switch closes the old session's view; its screens live until the activity recreates
+        val cache = FileOwnListsCache(dir, UnconfinedTestDispatcher(testScheduler))
+        val old = SessionOwnListsCache(cache)
+        old.save(me, listOf(list))
+        old.close() // the switch closes the session
+        old.save(me, listOf(list.copy(title = "Late"))) // a late persist from a screen of the old session
+        assertEquals(listOf(list), cache.load(me))
+        cache.remove(me) // the account is removed afterwards
+        assertNull(old.load(me))
+        old.save(me, listOf(list))
+        assertFalse(File(accountDir(dir, me), FileOwnListsCache.FILE).exists())
+    }
 }

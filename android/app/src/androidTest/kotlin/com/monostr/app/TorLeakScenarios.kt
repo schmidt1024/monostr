@@ -35,7 +35,6 @@ import com.monostr.app.data.PrefsPendingTipStore
 import com.monostr.app.data.Presets.DEFAULT_WATCHER
 import com.monostr.app.data.linkpreview.LinkPreviewFetcher
 import com.monostr.app.data.linkpreview.PreviewImages
-import com.monostr.app.data.monostrPrefs
 import com.monostr.app.media.ImageTarget
 import com.monostr.app.net.TorState
 import com.monostr.app.session.NostrSessionEntryPoint
@@ -483,7 +482,7 @@ class TorLeakScenarios {
         val oneTime = Keys.generate()
         val prepared = TipRequest.prepare(info, recipient, null, 1_000_000_000L, TipType.TIP, "monostr Tor test, must never arrive", now, sender = com.monostr.tips.TipSender(oneTime.publicKey().toHex(), oneTime.secretKey().toHex()), anonymous = true)
         val signed = EventBuilder(Kind(prepared.unsignedEvent.kind.toUShort()), prepared.unsignedEvent.content).tags(prepared.unsignedEvent.tags.map { rust.nostr.sdk.Tag.parse(it) }).signWithKeys(oneTime)
-        val tips = PrefsPendingTipStore(app.monostrPrefs)
+        val tips = PrefsPendingTipStore(deps.accountPrefs())
         tips.add(
             PendingTip(
                 intentId = signed.id().toHex(), noteId = null, amount = 1_000_000_000L, createdAt = now, recipient = recipient,
@@ -656,7 +655,7 @@ class TorLeakScenarios {
         val oneTime = Keys.generate()
         val prepared = TipRequest.prepare(info, recipient, null, 1_000_000_000L, TipType.TIP, "monostr Tor test, please ignore", now, sender = com.monostr.tips.TipSender(oneTime.publicKey().toHex(), oneTime.secretKey().toHex()), anonymous = true)
         val signed = EventBuilder(Kind(prepared.unsignedEvent.kind.toUShort()), prepared.unsignedEvent.content).tags(prepared.unsignedEvent.tags.map { rust.nostr.sdk.Tag.parse(it) }).signWithKeys(oneTime)
-        PrefsPendingTipStore(app.monostrPrefs).add(
+        PrefsPendingTipStore(deps.accountPrefs()).add(
             PendingTip(
                 intentId = signed.id().toHex(), noteId = null, amount = 1_000_000_000L, createdAt = now, recipient = recipient,
                 anonEvent = signed.asJson(), anonRelays = listOf("wss://relay.monostr.com"), underTor = false,

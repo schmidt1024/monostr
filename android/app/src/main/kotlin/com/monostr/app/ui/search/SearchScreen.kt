@@ -143,7 +143,7 @@ fun SearchScreen(
     var tippersFor by remember { mutableStateOf<Note?>(null) }
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { vm.controller.nav.collect { when (it) { is SearchNav.Profile -> onOpenProfile(it.pubkey); is SearchNav.Thread -> onOpenThread(it.noteId) } } }
-    LaunchedEffect(Unit) { if (state.query.isEmpty()) runCatching { focus.requestFocus() } }
+    // no focus on entering the tab: the keyboard covered the Discover lists and the recent searches (backlog 115; X focuses on a tap)
     MessageSnackbar(state.message, snackbar, onUnmute = vm.controller::unmute, onShown = vm.controller::clearMessage)
     DeletionMessages(vm.deletions, snackbar)
     val hashtag: (String) -> Unit = { vm.controller.onQueryChange(NoteLinks.searchFor(it)); vm.controller.submit() }
@@ -232,7 +232,7 @@ fun SearchScreen(
                                 Spacer(Modifier.width(Spacing.m))
                                 Column {
                                     Text(p.shownName, style = MaterialTheme.typography.titleSmall)
-                                    Text(p.nip05 ?: Npub.short(p.pubkey), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(Npub.short(p.pubkey), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
                             HorizontalDivider()

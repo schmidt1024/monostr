@@ -74,21 +74,6 @@ class TorWorkerDeviceTest {
 
     private fun libtorMapped() = File("/proc/self/maps").readText().let { "libtor" in it }
 
-    private class Squatter(port: Int) : AutoCloseable {
-        private val listener = ServerSocket(port, 50, InetAddress.getByAddress(byteArrayOf(127, 0, 0, 1)))
-        val accepted = AtomicInteger(0)
-        init {
-            thread(isDaemon = true) {
-                while (!listener.isClosed) {
-                    val s = runCatching { listener.accept() }.getOrNull() ?: break
-                    accepted.incrementAndGet()
-                    runCatching { s.close() }
-                }
-            }
-        }
-        override fun close() = listener.close()
-    }
-
     /** The periodic run a login or a switch schedules must not run beside the one under test; it enqueues off the caller's thread. */
     private fun noPeriodicRun() {
         Thread.sleep(1_000)
@@ -138,8 +123,8 @@ class TorWorkerDeviceTest {
         val ports = gate.torMode()
         session.loginLocal(key())
         session.release()
-        val heard = Squatter(ports.sessionPort).use { shared ->
-            Squatter(ports.isolatedPort).use { isolated ->
+        val heard = TorSquatter(ports.sessionPort).use { shared ->
+            TorSquatter(ports.isolatedPort).use { isolated ->
                 switch.turnOn()
                 noPeriodicRun()
                 assertEquals(TorState.Off, tor.state.value)
@@ -151,10 +136,10 @@ class TorWorkerDeviceTest {
                 assertTrue("a session started without Tor", session.state.value is SessionState.Loading)
                 assertEquals(TorState.Off, tor.state.value)
                 noTorProcessWithin(5_000)
-                shared.accepted.get() + isolated.accepted.get()
+                shared.heard + isolated.heard
             }
         }
-        assertEquals("the squatter heard from us", 0, heard)
+        assertEquals("the squatter heard from us", emptyList<String>(), heard)
     }
 
     @Test

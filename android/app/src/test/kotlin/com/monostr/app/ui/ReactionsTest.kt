@@ -24,6 +24,9 @@ class ReactionsTest {
         assertEquals(listOf("🔥"), Reactions.add(listOf("🔥"), "two words"))
         val full = List(Reactions.MAX_QUICK) { "e$it" }
         assertEquals(full, Reactions.add(full, "🚀"))
+        assertEquals(5, Reactions.MAX_QUICK)
+        // a list stored when twelve were allowed keeps its first five
+        assertEquals(listOf("🔥", "🤙", "🚀", "🙏", "😂"), Reactions.decode("""["🔥","🤙","🚀","🙏","😂","💯","👀"]"""))
         assertNull(Reactions.clean(""))
     }
 

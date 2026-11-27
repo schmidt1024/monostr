@@ -1,5 +1,11 @@
 package com.monostr.app.ui.dm
 
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.FloatingActionButtonDefaults
+import androidx.compose.material3.FloatingActionButton
+import com.monostr.app.ui.common.TabBarActions
 import com.monostr.app.ui.common.TorBannerSlot
 import com.monostr.app.ui.common.MonostrSnackbarHost
 import com.monostr.app.data.dm.unreadTotalExcept
@@ -89,6 +95,10 @@ class ConversationsViewModel @Inject constructor(session: NostrSession) : ViewMo
         followsRefresh = ready.followsRefresh,
     )
     val dmUnread: StateFlow<Int> = ready.dmStore.unreadTotalExcept(ready.muted).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
+    /** «New message»: people already on this phone, never a search relay; not the own account. */
+    suspend fun people(query: String): List<com.monostr.nostr.model.Profile> =
+        ready.search.profilesLocal(query.trim()).filter { it.pubkey != ready.pubkey }
     init {
         ready.dms.adoptOwnList() // idempotent; the sync itself runs from session start
         controller.start()
@@ -122,9 +132,20 @@ fun ConversationsScreen(
     val hide = rememberHideOnScroll()
     val listState = rememberLazyListState()
     ShowBarsWhenStuck(hide, listState, hasList = !state.loading)
+    var newMessage by rememberSaveable { mutableStateOf(false) }
+    if (newMessage) NewMessageSheet(search = vm::people, onPick = { newMessage = false; onOpenChat(it) }, onDismiss = { newMessage = false })
     Scaffold(
         modifier = Modifier.nestedScroll(hide.connection),
-        topBar = { Column { TopAppBar(title = { Text(stringResource(R.string.messages_title)) }); TorBannerSlot() } },
+        topBar = { Column { TopAppBar(title = { Text(stringResource(R.string.messages_title)) }, actions = { TabBarActions() }); TorBannerSlot() } },
+        floatingActionButton = {
+            // as the feed's compose button: round, see-through while the bars are scrolled away
+            FloatingActionButton(
+                onClick = { newMessage = true },
+                containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary,
+                elevation = FloatingActionButtonDefaults.elevation(0.dp, 0.dp, 0.dp, 0.dp), shape = CircleShape,
+                modifier = Modifier.graphicsLayer { alpha = 1f - (1f - FAB_SCROLL_ALPHA) * hide.hiddenFraction }.testTag("fab-new-message"),
+            ) { Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.messages_new)) }
+        },
         bottomBar = { HideOnScrollFooter(hide) { MonostrBottomBar(BottomTab.MESSAGES, unread = 0, dmUnread = dmUnread, onFeed = onFeed, onSearch = onSearch, onBookmarks = onBookmarks, onMessages = hide::show, onNotifications = onNotifications, windowInsets = WindowInsets(0)) } },
         snackbarHost = { MonostrSnackbarHost(snackbar) },
     ) { padding ->
@@ -214,3 +235,5 @@ private fun ConversationRow(row: ConversationUi, onOpenChat: (String) -> Unit) {
     }
     HorizontalDivider()
 }
+
+private const val FAB_SCROLL_ALPHA = 0.45f

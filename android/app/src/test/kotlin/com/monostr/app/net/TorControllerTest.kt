@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
@@ -52,6 +53,8 @@ class TorControllerTest {
             delay(stopTakesMs)
             calls += "stop"
         }
+
+        override suspend fun newIdentity() = false
     }
 
     private fun TestScope.controller(engine: TorEngine, pick: () -> NetworkMode.Tor = { ports }) =
@@ -409,6 +412,7 @@ class TorControllerTest {
             var stopped = 0
             override suspend fun start(ports: NetworkMode.Tor): Flow<TorState> { delay(Long.MAX_VALUE); error("unreachable") }
             override suspend fun stop() { stopped++ }
+            override suspend fun newIdentity() = false
         }
         val c = controller(engine)
         c.acquire("a")
@@ -478,6 +482,7 @@ class TorControllerTest {
             val engine = object : TorEngine {
                 override suspend fun start(ports: NetworkMode.Tor): Flow<TorState> { calls += "start"; return case }
                 override suspend fun stop() { calls += "stop" }
+                override suspend fun newIdentity() = false
             }
             val c = controller(engine)
             c.acquire("a")
@@ -699,6 +704,7 @@ class TorControllerTest {
             }
         }
         override suspend fun stop() = delay(100)
+        override suspend fun newIdentity() = false
     }
 
     @Test
@@ -734,6 +740,7 @@ class TorControllerTest {
         val engine = object : TorEngine {
             override suspend fun start(ports: NetworkMode.Tor): Flow<TorState> = throw IOException("wss://secret.example")
             override suspend fun stop() = throw IllegalStateException("wss://secret.example")
+            override suspend fun newIdentity() = false
         }
         val c = TorController(engine, backgroundScope, graceMs = grace, bootstrapTimeoutMs = timeout, log = { logged += it }) { ports }
         c.acquire("a")
@@ -770,6 +777,7 @@ class TorControllerTest {
                 return flow { emit(TorState.Connected); delay(Long.MAX_VALUE) }
             }
             override suspend fun stop() { if (running.get() > 0) running.decrementAndGet() }
+            override suspend fun newIdentity() = false
         }
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val c = TorController(engine, scope, graceMs = 1, bootstrapTimeoutMs = 60_000, log = {}) { ports }
@@ -841,5 +849,23 @@ class TorControllerTest {
         assertTrue(!isTorProcessName("com.monostr.app"))
         assertTrue(!isTorProcessName("com.monostr.app.tor"))
         assertTrue(!isTorProcessName(""))
+    }
+
+    @Test
+    fun `traffic waits while a session waits for a fresh route`() = runTest {
+        val engine = FakeEngine()
+        val c = controller(engine)
+        val seen = mutableListOf<Boolean>()
+        val watch = backgroundScope.launch { torConnected(dagger.Lazy { c }).collect { seen += it } }
+        connected(engine, c)
+        assertTrue(c.routeReadyNow)
+        c.setRoutePending(true)
+        runCurrent()
+        assertTrue(!c.routeReadyNow, "Connected, but the new account's route is not fresh yet")
+        c.setRoutePending(false)
+        runCurrent()
+        assertTrue(c.routeReadyNow)
+        assertEquals(listOf(false, true, false, true), seen)
+        watch.cancel()
     }
 }

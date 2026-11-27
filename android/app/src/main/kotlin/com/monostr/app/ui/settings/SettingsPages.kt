@@ -11,7 +11,7 @@ object SettingsSection {
 
 /** The subpages of Settings (spec 2026-11-11). [parent] is set for second-level pages. */
 enum class SettingsPage(val id: String, @StringRes val title: Int, @StringRes val subtitle: Int?, val parent: SettingsPage? = null) {
-    ACCOUNT("account", R.string.settings_page_account, null),
+    ACCOUNT("account", R.string.accounts_title, null),
     PRIVACY("privacy", R.string.settings_page_privacy, R.string.settings_sub_privacy),
     RELAYS("relays", R.string.settings_relays, R.string.settings_sub_relays),
     DM_RELAYS("dm-relays", R.string.settings_dm_relays, null, parent = RELAYS),

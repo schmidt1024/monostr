@@ -147,4 +147,23 @@ class CreateAccountControllerTest {
         assertEquals(CreateStep.Name, c.state.value.step)
         assertFalse(c.state.value.busy)
     }
+
+    @Test
+    fun `second account publishes default relays`() = runTest {
+        val rec = Rec()
+        val active = listOf("wss://personal.example")
+        val c = CreateAccountController(
+            rec,
+            relays = { createRelays(hasAccounts = true, activeRelays = { active }) },
+            dmRelays = listOf("wss://dm"),
+        )
+        c.toFollow()
+        c.finish()
+        assertEquals(com.monostr.app.data.PrefsRelayStore.DEFAULT_RELAYS, rec.setup!!.relays)
+    }
+
+    @Test
+    fun `first account keeps the relays it has`() = runTest {
+        assertEquals(listOf("wss://x"), createRelays(hasAccounts = false, activeRelays = { listOf("wss://x") }))
+    }
 }

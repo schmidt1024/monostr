@@ -12,6 +12,7 @@
     <string name="action_remove">Supprimer</string>
     <string name="action_send">Envoyer</string>
     <string name="action_send_again">Renvoyer</string>
+    <string name="action_copy">Copier</string>
     <string name="action_copy_address">Copier l\'adresse</string>
     <string name="action_copy_uri">Copier l\'URI</string>
     <string name="state_sending">Envoi…</string>
@@ -281,6 +282,8 @@
     <string name="setup_verify_word">Mot n° %1$d</string>
     <string name="setup_verify_wrong">Au moins un mot est incorrect.</string>
     <string name="setup_back_to_seed">Retour à la phrase seed</string>
+    <string name="setup_discard_title">Supprimer ce portefeuille ?</string>
+    <string name="setup_discard_text">Ces 25 mots ne fonctionneront plus ensuite. Recommencer crée un nouveau portefeuille.</string>
     <string name="setup_existing_title">Portefeuille existant</string>
     <string name="setup_address_label">Adresse principale (4… / 5…)</string>
     <string name="setup_view_key_label">Clé de visualisation privée (64 hex)</string>
@@ -303,6 +306,7 @@
     <string name="setup_address_title">Recevoir des Monero</string>
     <string name="setup_address_field">Adresse Monero (4… / 8…)</string>
     <string name="setup_address_hint">Cette adresse est publique. Utilisez de préférence une sous-adresse réservée à Nostr.</string>
+    <string name="setup_address_looking">Recherche sur vos relais d\'une adresse déjà utilisée…</string>
     <string name="setup_address_publish">Publier</string>
     <string name="setup_no_wallet_link">Pas encore de portefeuille Monero ? En créer un ici</string>
     <string name="setup_address_done">D\'autres peuvent maintenant vous envoyer des Monero, aussi depuis Amethyst et Ditto.</string>
@@ -417,7 +421,7 @@
     <string name="settings_preset_add">Ajouter un préréglage</string>
     <string name="settings_preset_remove">Supprimer le préréglage</string>
     <string name="settings_adopt_relays">Remplacer ces relais par ma liste publiée (NIP-65)</string>
-    <string name="settings_logout">Se déconnecter</string>
+    <string name="settings_logout">Retirer le compte de ce téléphone</string>
     <string name="settings_msg_presets_saved">Montants enregistrés</string>
     <string name="settings_msg_disabled">Pourboires Monero désactivés</string>
     <string name="settings_msg_view_key_deleted">Clé de visualisation supprimée localement</string>
@@ -456,7 +460,10 @@
     <string name="notifications_checking">Interrogation de vos relais…</string>
     <string name="notifications_error_load">Impossible de charger les notifications</string>
     <string name="messages_title">Messages</string>
-    <string name="messages_empty">Pas encore de messages. Ouvrez un profil et touchez « Message ».</string>
+    <string name="messages_empty">Pas encore de messages. Touche + pour écrire le premier.</string>
+    <string name="messages_new">Nouveau message</string>
+    <string name="messages_new_hint">Rechercher des personnes sur ce téléphone</string>
+    <string name="messages_new_none">Personne trouvé. Tu peux aussi ouvrir un profil et toucher « Message ».</string>
     <plurals name="messages_requests">
         <item quantity="one">Demande (%1$d)</item>
         <item quantity="many">Demandes (%1$d)</item>
@@ -582,6 +589,7 @@
     <string name="compose_quote_hint">Citation</string>
     <string name="profile_edit">Modifier le profil</string>
     <string name="feed_profile">Mon profil</string>
+    <string name="feed_profile_more_accounts">%1$s, autres comptes</string>
     <string name="profile_edit_title">Modifier le profil</string>
     <string name="profile_edit_banner">URL de la bannière</string>
     <string name="profile_edit_picture">URL de l\'image</string>
@@ -618,11 +626,11 @@
     <string name="about_feedback">Retours sur Nostr</string>
     <string name="about_issues">Signaler un problème</string>
     <string name="about_license">Licence : %1$s</string>
-    <string name="dm_relay_hint_missing">relay.monostr.com manque dans votre liste de réception : les utilisateurs de Monostr risquent de ne pas vous joindre.</string>
+    <string name="dm_relay_hint_missing">relay.monostr.com manque dans vos relais de messages : les utilisateurs de Monostr risquent de ne pas vous joindre.</string>
     <string name="dm_relay_hint_add">Ajouter</string>
-    <string name="dm_relay_hint_second">Un second relais de réception rend vos messages plus fiables.</string>
+    <string name="dm_relay_hint_second">Un second relais de messages rend vos messages plus fiables.</string>
     <string name="dm_relay_hint_dismiss">Masquer</string>
-    <string name="dm_relay_hint_replace">Votre liste de réception est pleine. Quel relais relay.monostr.com doit-il remplacer ?</string>
+    <string name="dm_relay_hint_replace">Vos relais de messages sont au complet. Quel relais relay.monostr.com doit-il remplacer ?</string>
     <string name="upload_error_nsfw">Ce serveur n\'accepte pas les contenus pour adultes. Vous pouvez choisir un autre serveur de médias dans les paramètres.</string>
     <string name="upload_error_too_large">Image trop volumineuse pour ce serveur</string>
     <string name="upload_error_quota">Votre espace sur ce serveur est plein</string>
@@ -696,6 +704,9 @@
     <string name="create_finish">C’est parti</string>
     <string name="create_cancel_text">Annuler ? La clé sera supprimée.</string>
     <string name="create_cancel_yes">Supprimer</string>
+    <string name="create_step">Étape %1$d sur %2$d</string>
+    <string name="unsaved_title">Annuler les modifications ?</string>
+    <string name="unsaved_keep">Continuer la modification</string>
     <string name="create_cancel_no">Continuer</string>
     <string name="settings_show_key">Afficher la clé privée (nsec)</string>
     <string name="settings_show_key_title">Ta clé</string>
@@ -866,6 +877,7 @@
     <string name="link_prompt_tor">Votre navigateur n’utilise pas le Tor de Monostr.</string>
     <string name="link_prompt_copy">Copier le lien</string>
     <string name="link_prompt_torbrowser">Ouvrir dans Tor Browser</string>
+    <string name="link_prompt_torbrowser_copy">Copier et ouvrir Tor Browser</string>
     <string name="link_prompt_copied">Lien copié</string>
     <string name="link_prompt_torbrowser_failed">Impossible d’ouvrir Tor Browser.</string>
     <string name="tor_desc_connecting">Tor : connexion en cours</string>
@@ -882,7 +894,6 @@
         <item quantity="other">%d pourboires en attente seront annulés.</item>
     </plurals>
     <!-- settings overview -->
-    <string name="settings_page_account">Compte et clé</string>
     <string name="settings_page_privacy">Tor et confidentialité</string>
     <string name="settings_page_monero">Monero et pourboires</string>
     <string name="settings_page_notifications">Notifications</string>
@@ -938,7 +949,7 @@
     <string name="settings_monero_delete_view_key_action">Supprimer</string>
     <string name="settings_monero_payto_remove_q">Retirer ton adresse Monero ?</string>
     <string name="settings_monero_payto_remove_text">Elle est retirée de ton profil public : plus personne ne pourra t\'y envoyer de pourboire.</string>
-    <string name="settings_logout_q">Se déconnecter ?</string>
+    <string name="settings_logout_q">Retirer le compte de ce téléphone ?</string>
     <string name="settings_logout_key_warning">Ta clé n\'est que sur ce téléphone. Sans copie, tu ne pourras plus te reconnecter.</string>
     <string name="settings_logout_show_key">Afficher la clé</string>
     <string name="settings_monero_active">Actif</string>
@@ -949,12 +960,17 @@
     <string name="settings_monero_receipts_replaces">Une configuration ici remplace celle de l\'autre appareil.</string>
     <string name="settings_media_server_save">Enregistrer le serveur de médias</string>
     <string name="settings_show_key_sub">Quiconque l\'a contrôle ton compte.</string>
+    <string name="settings_key_lock">Demander le verrouillage de l\'écran</string>
+    <string name="settings_key_lock_hint">Avant d\'afficher la clé privée.</string>
+    <string name="settings_key_lock_none">Configure d\'abord un verrouillage d\'écran sur ce téléphone.</string>
     <string name="settings_no_name">Pas encore de nom</string>
     <string name="settings_copy_npub">Copier la npub</string>
     <string name="settings_dm_relays_sub">Boîte de réception de tes MP · NIP-17</string>
     <string name="settings_publish_list">Publier la liste</string>
     <string name="settings_use_published_list">Utiliser la liste publiée</string>
     <string name="relay_removed">Relais retiré</string>
+    <string name="list_member_removed">Retiré de la liste</string>
+    <string name="settings_reaction_removed">Réaction supprimée</string>
     <string name="relay_remove_named">Retirer %1$s</string>
     <string name="settings_chip_relays_spoken">%1$d sur %2$d connectés</string>
     <string name="settings_tip_amounts">Montants de pourboire</string>
@@ -983,4 +999,31 @@
     <string name="poll_hours">Heures</string>
     <string name="poll_minutes">Minutes</string>
     <string name="poll_remove">Supprimer le sondage</string>
+    <string name="accounts_title">Comptes</string>
+    <string name="accounts_page_hint">Chaque compte garde ses propres relais, réglages et apparence.</string>
+    <string name="accounts_other">Autres comptes</string>
+    <string name="accounts_switch_label">Changer de compte</string>
+    <string name="accounts_switch_hint">Appui long pour changer de compte</string>
+    <string name="accounts_add">Ajouter un compte</string>
+    <string name="accounts_active">Actif</string>
+    <string name="accounts_busy">Attends la fin de l\'envoi</string>
+    <string name="accounts_sign_in_again">Reconnecte-toi</string>
+    <string name="accounts_switch_failed">Impossible de changer de compte</string>
+    <string name="accounts_now_using">Tu utilises maintenant %1$s</string>
+    <string name="accounts_now_using_tor">Tu utilises maintenant %1$s · nouvelle route Tor dans %2$d s</string>
+    <string name="accounts_tor_stalled">En attente d\'une nouvelle route Tor…</string>
+    <string name="accounts_remove_text">Les messages, brouillons et réglages de %1$s sur ce téléphone seront supprimés.</string>
+    <string name="accounts_remove_failed">Impossible de retirer le compte</string>
+    <string name="accounts_already_using">Tu utilises déjà %1$s</string>
+    <string name="add_account_amber">Se connecter avec Amber</string>
+    <string name="add_account_recommended">Recommandé</string>
+    <string name="add_account_get_amber">Obtenir Amber</string>
+    <string name="add_account_get_amber_hint">Garde tes clés en dehors de Monostr</string>
+    <string name="add_account_key">Se connecter avec une clé</string>
+    <string name="add_account_create">Créer un autre compte</string>
+    <string name="logout_keep_settings">Conserver mes réglages sur cet appareil</string>
+    <string name="logout_keep_settings_hint">Chiffrés avec ta clé. Ils reviennent à la prochaine connexion.</string>
+    <string name="logout_keep_failed_title">Réglages non conservés</string>
+    <string name="logout_keep_failed_text">Ton signataire n\'a pas chiffré les réglages, rien n\'a donc été supprimé. Se déconnecter sans les conserver ?</string>
+    <string name="accounts_keep_failed">Réglages non conservés : ton signataire n\'a pas répondu. Le compte n\'a pas été supprimé.</string>
 </resources>

@@ -130,6 +130,18 @@ class FollowCountsRepositoryTest {
     }
 
     @Test
+    fun `the profile's own pubkey in its list is not counted as a follow`() = runTest {
+        // backlog 108: a list made by Amethyst names the account itself
+        val e = engine()
+        e.save(contacts(pk, "e".repeat(64), at = 10))
+        SilentWsRelay().use { silent ->
+            val repo = NostrFollowCountsRepository(e, countRelays = emptyList(), indexRelays = listOf(silent.url), timeout = Duration.ofSeconds(5), now = { 10L * 86_400 })
+            assertEquals(1, withContext(Dispatchers.Default) { withTimeout(1_500) { repo.counts(pk).first() } }.following)
+        }
+        e.close()
+    }
+
+    @Test
     fun `a stored list shows its following at once, also when it is old and the index relay is slow`() = runTest {
         // backlog 41: the followers came at once, the following only after the index relays' timeout
         val e = engine()

@@ -27,11 +27,16 @@ class AmberSigner(
     val packageName: String,
     override val pubkey: String,
     private val bridge: SignerBridge,
+    /** [SignerTrust.check]: the signer is still the app of the login and, given an authority, owns it. Tests have no package manager. */
+    private val trusted: (authority: String?) -> Boolean = { SignerTrust.check(context, packageName, it) },
 ) : Signer {
+    /** Before anything goes to the signer activity. Off the main thread: it asks the package manager. */
+    private suspend fun requireTrusted() = withContext(Dispatchers.IO) { if (!trusted(null)) throw SignerChangedException() }
 
     override suspend fun sign(event: UnsignedEvent): Event {
         val json = unsignedJson(event)
         viaContentResolver(json)?.let { return checked(event, it) }
+        requireTrusted()
         val request = Nip55.signEvent(json, pubkey, packageName, java.util.UUID.randomUUID().toString())
         val (ok, response) = bridge.request(request)
         return when (val outcome = Nip55.parseSignResponse(ok, response)) {
@@ -91,6 +96,7 @@ class AmberSigner(
     /** Resolver first (silent once permitted), then the signer activity; no answer either way means the signer has no NIP-44. */
     private suspend fun nip44(op: Nip55.Nip44Op, text: String, peerPubkey: String): String {
         viaResolverText(Nip55.nip44Query(packageName, op, text, peerPubkey, pubkey))?.let { return it }
+        requireTrusted()
         val request = Nip55.nip44Request(op, text, peerPubkey, pubkey, packageName, java.util.UUID.randomUUID().toString())
         val (ok, response) = bridge.request(request)
         return when (val outcome = Nip55.parseNip44Response(ok, response)) {
@@ -118,8 +124,11 @@ class AmberSigner(
      * With a null projection Amber answered nothing and every request fell back to the signer activity.
      */
     private fun resolverQuery(q: Nip55.ResolverQuery): android.database.Cursor? {
+        val uri = Uri.parse(q.uri)
+        // the text goes only to the app of the login, and only when that app owns the authority (bug bounty 2026-11-26)
+        if (!trusted(uri.authority)) return null
         val args = q.selectionArgs.toTypedArray()
-        return context.contentResolver.query(Uri.parse(q.uri), args, "1", args, null)
+        return context.contentResolver.query(uri, args, "1", args, null)
     }
 
     /** The event JSON a NIP-55 signer expects: everything but id and sig, with our pubkey. */

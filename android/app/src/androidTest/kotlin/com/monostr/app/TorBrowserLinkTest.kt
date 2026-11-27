@@ -54,10 +54,15 @@ class TorBrowserLinkTest {
 
     @After fun release() { runCatching { Intents.release() } }
 
-    private fun show(torOn: Boolean, found: String?) {
+    private fun show(torOn: Boolean, found: String?, launchOnly: String? = null) {
+        val base = finder(found)
+        val torBrowser = object : TorBrowserFinder {
+            override fun find(url: String) = base.find(url)
+            override fun launchOnly() = launchOnly
+        }
         rule.setContent {
             MaterialTheme {
-                LinkPromptHost(alwaysOpen = false, onAlwaysOpen = {}, torOn = { torOn }, torBrowser = finder(found)) {
+                LinkPromptHost(alwaysOpen = false, onAlwaysOpen = {}, torOn = { torOn }, torBrowser = torBrowser) {
                     val handler = LocalUriHandler.current
                     TextButton(onClick = { handler.openUri(url) }, modifier = Modifier.testTag("tap-link")) { Text("link") }
                 }
@@ -97,6 +102,26 @@ class TorBrowserLinkTest {
         assertTrue(nodes("link-torbrowser").isEmpty())
         rule.onNodeWithTag("link-copy").assertIsDisplayed()
         rule.onNodeWithTag("link-open").assertIsDisplayed()
+    }
+
+    /** Tor Browser 16.0 takes no link from another app (Pixel 2026-11-26): one tap copies the link and starts it as its icon would. */
+    @Test
+    fun aTorBrowserThatTakesNoLinksOffersCopyAndOpen() {
+        stubViews()
+        show(torOn = true, found = null, launchOnly = "org.torproject.torbrowser")
+        rule.waitUntil(10_000) { nodes("link-torbrowser-copy").isNotEmpty() }
+        assertTrue(nodes("link-torbrowser").isEmpty())
+        assertTrue("the plain copy gives way to the combined button", nodes("link-copy").isEmpty())
+        rule.onNodeWithTag("link-open").assertIsDisplayed()
+        // not installed here: the start fails for real, the link is copied all the same and no browser opens
+        rule.onNodeWithTag("link-torbrowser-copy").performClick()
+        rule.waitUntil(10_000) { nodes("link-prompt").isEmpty() }
+        var text: String? = null
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            text = ctx.getSystemService(ClipboardManager::class.java).primaryClip?.getItemAt(0)?.text?.toString()
+        }
+        assertEquals(url, text)
+        assertTrue("no view goes to the default browser", views().isEmpty())
     }
 
     @Test

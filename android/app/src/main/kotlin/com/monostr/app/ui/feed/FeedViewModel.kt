@@ -746,7 +746,7 @@ fun Ready.listFeed(factory: TipSheetFactory, source: FeedSource.Authors, scope: 
 )
 
 @HiltViewModel
-class FeedViewModel @Inject constructor(session: NostrSession, private val factory: TipSheetFactory, settings: TipSettingsStore, private val hints: HintStore) : ViewModel() {
+class FeedViewModel @Inject constructor(private val session: NostrSession, private val factory: TipSheetFactory, settings: TipSettingsStore, private val hints: HintStore) : ViewModel() {
     private val ready = session.requireReady()
     val decorations = factory.decorations(viewModelScope)
     val bookmarks = BookmarkActions(ready.bookmarks, viewModelScope, background = ready.engine.backgroundScope, sendGate = ready.sendGate)
@@ -770,6 +770,15 @@ class FeedViewModel @Inject constructor(session: NostrSession, private val facto
     val dmUnread: StateFlow<Int> = ready.dmStore.unreadTotalExcept(ready.muted).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
     val selfPubkey: String = ready.pubkey
+
+    /** Spec 2026-11-25 (owner pick C): two or more accounts on this device; nothing of them is shown, only that there are more. */
+    val hasMoreAccounts: StateFlow<Boolean> = session.accounts.map { it.size >= 2 }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    suspend fun switchHintSeen(): Boolean = session.switchHintSeen()
+
+    suspend fun markSwitchHintSeen() = session.markSwitchHintSeen()
+
     /** Spec 5: the own picture for the top-bar avatar; follows an edit through the profile cache. */
     val self: StateFlow<Profile> = ready.profiles.observe(ready.pubkey).stateIn(viewModelScope, SharingStarted.Eagerly, Profile.empty(ready.pubkey))
 

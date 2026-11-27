@@ -1,5 +1,8 @@
 package com.monostr.app.ui.compose
 
+import androidx.compose.material3.minimumInteractiveComponentSize
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.selection.toggleable
 import com.monostr.nostr.PerfTrace
 import com.monostr.app.net.SendGate
 import android.content.Context
@@ -87,6 +90,7 @@ import com.monostr.app.media.UploadedMedia
 import com.monostr.app.media.UploadException
 import com.monostr.app.media.VideoLimits
 import com.monostr.app.media.VideoRules
+import com.monostr.app.session.AccountBusy
 import com.monostr.app.session.NostrSession
 import com.monostr.app.ui.common.Avatar
 import com.monostr.app.ui.common.QuoteCard
@@ -117,6 +121,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -204,6 +210,11 @@ class ComposeController(
     private val account: String = "",
     /** Outlives the screen: the save on leaving still runs after the screen's scope is cancelled. */
     private val background: CoroutineScope? = null,
+    /**
+     * Outlives the session too (final review M2): a switch from a notification closes the session, and with it [background], while
+     * the composer is open; the last save still lands, in [account]'s own file ([drafts] binds it). Null: [background].
+     */
+    private val draftWrites: CoroutineScope? = null,
     private val draftDelayMs: Long = 1_000,
     private val now: () -> Long = { System.currentTimeMillis() / 1000 },
     /** pubkey → shown name from the local database only (no network); restored drafts show their mentions with it. */
@@ -219,6 +230,8 @@ class ComposeController(
     private val sendGate: SendGate = SendGate.OPEN,
     /** Polls task 6: creates the poll; null in tests without polls (then no poll tool). */
     private val polls: PollRepository? = null,
+    /** Counts the publish and every upload as work an account switch must not cut off. */
+    private val busy: AccountBusy = AccountBusy(),
 ) {
     private val _state = MutableStateFlow(ComposeUiState(pollOffered = polls != null && replyToId == null && quoteId == null && articleRef == null))
     val state: StateFlow<ComposeUiState> = _state.asStateFlow()
@@ -385,7 +398,7 @@ class ComposeController(
         if (drafts == null || !draftLoaded || consumed) return
         saveJob?.cancel()
         val draft = currentDraft()
-        (background ?: scope).launch { saveDraft(draft) }
+        (draftWrites ?: background ?: scope).launch { saveDraft(draft) }
     }
 
     /** True when written (an empty draft removes the key). */
@@ -520,35 +533,39 @@ class ComposeController(
     /** The tile's progress is half encode, half upload. */
     private fun startVideoUpload(up: MediaUploader, id: Long, source: String) {
         uploads[id] = scope.launch {
-            try {
-                val media = up.uploadVideo(
-                    source,
-                    onPreparing = { p -> patch(id) { it.copy(preparing = p, progress = p / 2) } },
-                    onProgress = { p -> patch(id) { it.copy(preparing = null, progress = 0.5f + p / 2) } },
-                )
-                patch(id) { it.copy(uploaded = media, preparing = null, progress = 1f) }
-                scheduleSave()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Throwable) {
-                // an encode can end in an Error (out of memory on a large video): the tile says so, the app stays open
-                val message = if (e is UploadException.TooLarge) uiText(R.string.upload_video_too_large) else e.uploadMessage()
-                patch(id) { it.copy(error = message, preparing = null) }
+            busy.track {
+                try {
+                    val media = up.uploadVideo(
+                        source,
+                        onPreparing = { p -> patch(id) { it.copy(preparing = p, progress = p / 2) } },
+                        onProgress = { p -> patch(id) { it.copy(preparing = null, progress = 0.5f + p / 2) } },
+                    )
+                    patch(id) { it.copy(uploaded = media, preparing = null, progress = 1f) }
+                    scheduleSave()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    // an encode can end in an Error (out of memory on a large video): the tile says so, the app stays open
+                    val message = if (e is UploadException.TooLarge) uiText(R.string.upload_video_too_large) else e.uploadMessage()
+                    patch(id) { it.copy(error = message, preparing = null) }
+                }
             }
         }
     }
 
     private fun startUpload(up: MediaUploader, id: Long, source: String) {
         uploads[id] = scope.launch {
-            try {
-                // a waiting upload holds no slot; cancelling it (remove) simply leaves the queue
-                val media = uploadSlots.withPermit { up.upload(source, ImageTarget.NOTE) { p -> patch(id) { it.copy(progress = p) } } }
-                patch(id) { it.copy(uploaded = media, progress = 1f) }
-                scheduleSave()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                patch(id) { it.copy(error = e.uploadMessage()) }
+            busy.track {
+                try {
+                    // a waiting upload holds no slot; cancelling it (remove) simply leaves the queue
+                    val media = uploadSlots.withPermit { up.upload(source, ImageTarget.NOTE) { p -> patch(id) { it.copy(progress = p) } } }
+                    patch(id) { it.copy(uploaded = media, progress = 1f) }
+                    scheduleSave()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    patch(id) { it.copy(error = e.uploadMessage()) }
+                }
             }
         }
     }
@@ -617,9 +634,10 @@ class ComposeController(
             return
         }
         val draft = currentDraft()
-        bg.launch {
-            // the draft stored before still names its pictures: only the others go
-            if (!saveDraft(draft)) uploaded.filter { it.sha256 !in stored }.forEach { uploader?.discard(it) }
+        (draftWrites ?: bg).launch {
+            // the draft stored before still names its pictures: only the others go, and only by a session still running (never
+            // a request of this account after a switch)
+            if (!saveDraft(draft)) bg.launch { uploaded.filter { it.sha256 !in stored }.forEach { uploader?.discard(it) } }
         }
     }
 
@@ -680,51 +698,58 @@ class ComposeController(
         _state.update { it.copy(sending = true, error = null) }
         PerfTrace.mark("compose send tap reply=${replyToId != null} article=${articleRef != null}")
         scope.launch {
-            try {
-                val parent = _state.value.replyTo
-                val quoted = _state.value.quoted
-                val pending = pendingEventId
-                val media = attachments.mapNotNull { it.uploaded?.toAttachment() }
-                val sensitive = _state.value.sensitive
-                val result = when {
-                    pending != null -> publish.resend(pending)
-                    // polls task 6: the end counts from the moment of sending
-                    poll != null -> checkNotNull(polls).create(text, poll.filled(), now() + poll.seconds, noPreview)
-                    articleRef != null -> publish.comment(text, checkNotNull(_state.value.article), parent, media, sensitive, noPreview)
-                    // polls task 4: a reply to a poll is a comment (NIP-22), also one to a comment under it when the poll is known
-                    parent != null && parent.isPoll -> publish.comment(text, parent, null, media, sensitive, noPreview)
-                    parent != null && pollRoot != null -> publish.comment(text, checkNotNull(pollRoot), parent, media, sensitive, noPreview)
-                    parent != null -> publish.reply(text, parent, media, sensitive, noPreview)
-                    quoted != null -> publish.quote(text, quoted, media, sensitive)
-                    else -> publish.post(text, media, sensitive, noPreview)
+            busy.track<Unit> {
+                try {
+                    val parent = _state.value.replyTo
+                    val quoted = _state.value.quoted
+                    val pending = pendingEventId
+                    val media = attachments.mapNotNull { it.uploaded?.toAttachment() }
+                    val sensitive = _state.value.sensitive
+                    val result = when {
+                        pending != null -> publish.resend(pending)
+                        // polls task 6: the end counts from the moment of sending
+                        poll != null -> checkNotNull(polls).create(text, poll.filled(), now() + poll.seconds, noPreview)
+                        articleRef != null -> publish.comment(text, checkNotNull(_state.value.article), parent, media, sensitive, noPreview)
+                        // polls task 4: a reply to a poll is a comment (NIP-22), also one to a comment under it when the poll is known
+                        parent != null && parent.isPoll -> publish.comment(text, parent, null, media, sensitive, noPreview)
+                        parent != null && pollRoot != null -> publish.comment(text, checkNotNull(pollRoot), parent, media, sensitive, noPreview)
+                        parent != null -> publish.reply(text, parent, media, sensitive, noPreview)
+                        quoted != null -> publish.quote(text, quoted, media, sensitive)
+                        else -> publish.post(text, media, sensitive, noPreview)
+                    }
+                    PerfTrace.mark("compose send result ok=${result.successRelays.size} failed=${result.failedRelays}")
+                    pendingEventId = if (result.sentToAny) null else result.eventId
+                    if (!result.sentToAny && !sendGate.canSend.value) {
+                        // Tor went during the send. The text stays a draft, not only a stored event nobody sends; a tap with Tor back sends that same event
+                        consumed = false
+                        _state.update { it.copy(sending = false, pendingResend = true, error = uiText(R.string.send_blocked_tor)) }
+                        scheduleSave()
+                        return@track
+                    }
+                    // spec 2026-10-16 §8.2: sent, or stored for a resend that names the pictures: the draft is done
+                    clearDraft()
+                    PerfTrace.mark("compose send draft cleared")
+                    _state.update {
+                        it.copy(
+                            sending = false, done = result.sentToAny, pendingResend = !result.sentToAny,
+                            error = if (result.sentToAny) null else uiText(R.string.compose_notice_offline),
+                        )
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    if (firstSend) consumed = false // no event was produced: the pictures are unused again; a stored event still names them
+                    _state.update { it.copy(sending = false, error = e.userMessage()) }
+                    scheduleSave() // the save cancelled by the tap on Send
                 }
-                PerfTrace.mark("compose send result ok=${result.successRelays.size} failed=${result.failedRelays}")
-                pendingEventId = if (result.sentToAny) null else result.eventId
-                if (!result.sentToAny && !sendGate.canSend.value) {
-                    // Tor went during the send. The text stays a draft, not only a stored event nobody sends; a tap with Tor back sends that same event
-                    consumed = false
-                    _state.update { it.copy(sending = false, pendingResend = true, error = uiText(R.string.send_blocked_tor)) }
-                    scheduleSave()
-                    return@launch
-                }
-                // spec 2026-10-16 §8.2: sent, or stored for a resend that names the pictures: the draft is done
-                clearDraft()
-                PerfTrace.mark("compose send draft cleared")
-                _state.update {
-                    it.copy(
-                        sending = false, done = result.sentToAny, pendingResend = !result.sentToAny,
-                        error = if (result.sentToAny) null else uiText(R.string.compose_notice_offline),
-                    )
-                }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                if (firstSend) consumed = false // no event was produced: the pictures are unused again; a stored event still names them
-                _state.update { it.copy(sending = false, error = e.userMessage()) }
-                scheduleSave() // the save cancelled by the tap on Send
             }
         }
     }
+}
+
+/** The composer's draft saves that must outlive the session (a switch closes it while the composer is open); bound to their account. */
+private object DraftWrites {
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 }
 
 @HiltViewModel
@@ -733,6 +758,7 @@ class ComposeViewModel @Inject constructor(
     handle: SavedStateHandle,
     @ApplicationContext context: Context,
     drafts: DraftStore,
+    busy: AccountBusy,
 ) : ViewModel() {
     private val ready = session.requireReady()
     val quoteId: String? = handle["quote"]
@@ -742,7 +768,7 @@ class ComposeViewModel @Inject constructor(
         suggester = MentionSuggester(ready.feed, ready.profiles, ready.search, ready.pubkey),
         uploader = ready.media,
         release = { ReceivedImages.release(it, received) },
-        drafts = drafts, account = ready.pubkey, background = ready.engine.backgroundScope,
+        drafts = drafts, account = ready.pubkey, background = ready.engine.backgroundScope, draftWrites = DraftWrites.scope,
         localNames = { keys -> ready.profiles.local(keys).associate { it.pubkey to it.shownName } },
         prefill = handle["text"],
         articleRef = handle.get<String>("article")?.let { NoteAddress.decode("nostr:$it") },
@@ -750,6 +776,7 @@ class ComposeViewModel @Inject constructor(
         addresses = ready.addresses,
         sendGate = ready.sendGate,
         polls = ready.polls,
+        busy = busy,
     )
     val prefill: String? = handle["text"]
     /** The user's own picture beside the text, like X's editor (2026-10-30). */
@@ -939,16 +966,18 @@ fun ComposeScreen(onDone: () -> Unit, vm: ComposeViewModel = hiltViewModel()) {
                     state.attachments, enabled = !state.sending && !state.pendingResend,
                     onRemove = vm.controller::removeAttachment, onRetry = vm.controller::retry,
                 )
-                Row(Modifier.fillMaxWidth().padding(top = Spacing.s), verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    Modifier.fillMaxWidth().padding(top = Spacing.s)
+                        .toggleable(state.sensitive, enabled = !state.sending && !state.pendingResend, role = Role.Switch, onValueChange = vm.controller::setSensitive)
+                        .testTag("compose-sensitive"),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     Column(Modifier.weight(1f)) {
                         Text(stringResource(R.string.compose_sensitive), style = MaterialTheme.typography.bodyMedium)
                         Text(stringResource(R.string.compose_sensitive_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Spacer(Modifier.width(Spacing.l))
-                    Switch(
-                        checked = state.sensitive, onCheckedChange = vm.controller::setSensitive,
-                        enabled = !state.sending && !state.pendingResend, modifier = Modifier.testTag("compose-sensitive"),
-                    )
+                    Switch(checked = state.sensitive, onCheckedChange = null, enabled = !state.sending && !state.pendingResend)
                 }
             }
             // like X: the tools right under what is written, not at the screen's foot; with the keyboard open they sit on it

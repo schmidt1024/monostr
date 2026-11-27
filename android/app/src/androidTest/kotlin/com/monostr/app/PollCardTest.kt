@@ -15,7 +15,6 @@ import androidx.datastore.preferences.core.edit
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.monostr.app.data.PrefsRelayStore
-import com.monostr.app.data.monostrPrefs
 import com.monostr.app.session.NostrSessionEntryPoint
 import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.runBlocking
@@ -41,6 +40,8 @@ class PollCardTest {
     @get:Rule val rule = createAndroidComposeRule<MainActivity>()
     private val secret = "0000000000000000000000000000000000000000000000000000000000000001"
     private val me = Keys.parse(secret)
+    /** The test account's own settings file: the fixed key logs into the file it left on earlier runs. */
+    private val myPrefs get() = entry.accountPrefs().storeFor(me.publicKey().toHex())
     private val ctx get() = InstrumentationRegistry.getInstrumentation().targetContext
     private val entry get() = EntryPointAccessors.fromApplication(ctx, NostrSessionEntryPoint::class.java)
     // unmerged: the own-vote check sits inside a bar that merges its children for screen readers
@@ -88,7 +89,7 @@ class PollCardTest {
     fun firstVoteAsksOnceThenVotesShowResultsWithTheOwnChoice() {
         runBlocking {
             runCatching { entry.session().logout() }
-            ctx.monostrPrefs.edit { it.remove(booleanPreferencesKey("polls.first_vote_shown")) }
+            myPrefs.edit { it.remove(booleanPreferencesKey("polls.first_vote_shown")) }
         }
         reachFeed()
         val ready = entry.session().requireReady()

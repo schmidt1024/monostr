@@ -1,0 +1,5 @@
+- Più account: aggiungili, cambiali e rimuovili dal tuo avatar o nelle Impostazioni; ognuno mantiene i propri relay e le proprie impostazioni
+- Esci rimuove l'account da questo telefono e può conservarne le impostazioni, cifrate con la tua chiave
+- Blocco schermo facoltativo prima di mostrare la chiave privata
+- Con le versioni recenti di Tor Browser: copia il link e apri Tor Browser
+- Sicurezza rafforzata e correzioni

@@ -17,7 +17,15 @@ class OwnDataNotAnswered : Exception("a write-only relay did not answer")
  * [found]: the relays returned at least one event; [completed]: an empty result proves there is none anywhere (see
  * [fetchOwn]); [writeOnlyAnswered]: the write-only relays answered, or there are none. A found event is a base for a write only with it.
  */
-internal class OwnFetch(val found: Boolean, val completed: Boolean, val writeOnlyAnswered: Boolean)
+internal class OwnFetch(
+    val found: Boolean, val completed: Boolean, val writeOnlyAnswered: Boolean,
+    /**
+     * Like [completed], but more than half of the configured relays instead of every one: enough for a question whose
+     * wrong answer costs little (whether to offer the Monero intro), never for a write. One dead relay in the list
+     * would otherwise leave such a question open for good.
+     */
+    val mostAnswered: Boolean = completed,
+)
 
 /** The notification loop that records CLOSED gets this long to land a frame that came in just before the fetch returned. */
 private const val CLOSED_SETTLE_MS = 100L
@@ -41,9 +49,13 @@ internal suspend fun NostrEngine.fetchOwn(filter: Filter, timeout: Duration): Ow
     val inTime = System.nanoTime() - started < timeout.toNanos()
     val everyRelay = configured.isNotEmpty() && connectedBefore.containsAll(configured)
     // only where it decides anything: an empty, otherwise complete fetch
-    if (events.isEmpty() && inTime && everyRelay && !closedSince(mark, configured)) {
+    val mostBefore = connectedBefore.count { it in configured } * 2 > configured.size
+    if (events.isEmpty() && inTime && (everyRelay || mostBefore) && !closedSince(mark, configured)) {
         withContext(Dispatchers.Default) { delay(CLOSED_SETTLE_MS) }
     }
-    val completed = inTime && everyRelay && asked.writeOnlyAnswered && connectedNormalRelayUrls().containsAll(configured) && !closedSince(mark, configured)
-    return OwnFetch(events.isNotEmpty(), completed, asked.writeOnlyAnswered)
+    val connectedAfter = connectedNormalRelayUrls()
+    val unrefused = inTime && asked.writeOnlyAnswered && !closedSince(mark, configured)
+    val completed = unrefused && everyRelay && connectedAfter.containsAll(configured)
+    val throughout = configured.count { it in connectedBefore && it in connectedAfter }
+    return OwnFetch(events.isNotEmpty(), completed, asked.writeOnlyAnswered, mostAnswered = unrefused && throughout * 2 > configured.size)
 }

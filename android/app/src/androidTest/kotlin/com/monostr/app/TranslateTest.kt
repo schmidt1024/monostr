@@ -21,7 +21,6 @@ import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.monostr.app.data.PrefsRelayStore
-import com.monostr.app.data.monostrPrefs
 import com.monostr.app.session.NostrSessionEntryPoint
 import com.monostr.app.translate.Languages
 import com.monostr.app.translate.TranslationMode
@@ -95,7 +94,9 @@ class TranslateTest {
         }
         server.start()
         runBlocking {
-            ctx.monostrPrefs.edit { it.remove(booleanPreferencesKey("translate.consent")) }
+            // logged out the stores write the global file, which the fresh test account adopts at login
+            runCatching { entry.session().logout() }
+            entry.accountPrefs().edit { it.remove(booleanPreferencesKey("translate.consent")) }
             entry.translationSettings().setCustomUrl("http://localhost:${server.port}")
             entry.translationSettings().setMode(TranslationMode.CUSTOM)
         }
@@ -107,7 +108,7 @@ class TranslateTest {
             runCatching { entry.session().applyRelays(PrefsRelayStore.DEFAULT_RELAYS) }
             entry.translationSettings().setMode(TranslationMode.MONOSTR)
             entry.translationSettings().setCustomUrl("")
-            ctx.monostrPrefs.edit { it.remove(booleanPreferencesKey("translate.consent")) }
+            entry.accountPrefs().edit { it.remove(booleanPreferencesKey("translate.consent")) }
         }
         relay.close()
         server.shutdown()

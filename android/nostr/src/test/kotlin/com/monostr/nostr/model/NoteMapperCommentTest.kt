@@ -60,4 +60,22 @@ class NoteMapperCommentTest {
         val n = NoteMapper.note(comment(listOf(listOf("A", live), listOf("K", "30311"), listOf("a", live), listOf("k", "30311"))))!!
         assertNull(n.articleParent)
     }
+
+    /** Bug bounty 2026-11-26: tag values of a stranger reached navigation routes unchecked. */
+    @Test
+    fun `p tags that are no pubkeys are no mentions`() {
+        val pk = "d".repeat(64)
+        val n = NoteMapper.note(comment(listOf(listOf("e", parent), listOf("p", "x/y"), listOf("p", "jack"), listOf("p", pk), listOf("p", "D".repeat(64)))))!!
+        assertEquals(listOf(pk), n.mentionedPubkeys)
+    }
+
+    @Test
+    fun `a repost whose e tag is no id reposts nothing`() {
+        val repost = EventBuilder(Kind(6u), "").tags(listOf(Tag.parse(listOf("e", "a/b")))).signWithKeys(keys)
+        var asked: String? = null
+        val n = NoteMapper.note(repost, resolveRepost = { asked = it; null })!!
+        assertNull(asked)
+        assertNull(n.repostOf)
+        assertNull(n.repostedId)
+    }
 }

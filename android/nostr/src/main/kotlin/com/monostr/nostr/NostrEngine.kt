@@ -119,6 +119,7 @@ class NostrEngine private constructor(
      */
     fun holdConnections() {
         if (!route.compareAndSet(true, false)) return
+        trace { "hold socks $socksPort" }
         told.value = false
         scope.launch(ffiDispatcher) { disconnectIfHeld() }
     }
@@ -129,6 +130,7 @@ class NostrEngine private constructor(
      */
     suspend fun openConnections(): Boolean {
         if (closing || !route.compareAndSet(false, true)) return false
+        trace { "open socks $socksPort" }
         // the first minute's grace of the fetches counts from this connection, not from the session's start: after a hold every
         // relay connects anew, and a fetch asked before that is answered empty at once (Pixel 2026-11-08, worker after Tor came back)
         connectedAt = System.nanoTime()
@@ -152,6 +154,70 @@ class NostrEngine private constructor(
     private suspend fun disconnectIfHeld() {
         if (route.value) return
         routeTurn.withLock { if (!route.value) runCatching { client.disconnect() } }
+        if (holdSweep?.isActive == true) return
+        holdSweep = scope.launch(ffiDispatcher) {
+            // under routeTurn, as the disconnect above: an opening engine's relays are not ours to end; read anew each round, a
+            // relay may join a held engine
+            endStragglers({ runCatching { client.relays() }.getOrNull().orEmpty().values }) { routeTurn.withLock { if (route.value || closing) false else { it(); true } } }
+        }
+    }
+
+    @Volatile private var holdSweep: Job? = null
+
+    /**
+     * Every relay leaves the pool through here. A relay removed while rust-nostr dials it or waits for its retry can miss its end
+     * like one that is disconnected ([endStragglers]), and nothing of the pool reaches it afterwards (Pixel 2026-11-27: purplepag.es,
+     * attached for one lookup, dialled on for good): so the relay itself is kept and watched until it stays terminated.
+     */
+    private suspend fun evict(url: RelayUrl, force: Boolean = true) {
+        val old = runCatching { client.relay(url) }.getOrNull()
+        try {
+            if (force) client.forceRemoveRelay(url) else client.removeRelay(url)
+        } finally {
+            // a removal that was not forced may leave the relay in the pool: that one is not ours to end
+            if (old != null && (force || runCatching { client.relay(url) }.isFailure)) {
+                trace { "evict $url ${runCatching { old.status() }.getOrNull()} socks $socksPort" }
+                sweeper.launch { endStragglers({ listOf(old) }) { it(); true } }
+            }
+        }
+    }
+
+    /**
+     * Backlog 118: a disconnect that lands while rust-nostr is dialling a relay is lost. The relay stays «connecting» and its
+     * retries go on for as long as the process runs, on a pool that was shut down too: every 10 to 30 s a dial to our SOCKS port,
+     * which outside Connected may belong to another app. So each relay not terminated is ended again, until all of them stayed
+     * terminated for [SWEEP_QUIET_MS] or [SWEEP_MAX_MS] passed. That long, because a relay reads «terminated» while the dial it
+     * was in still hangs in tor or while it sleeps before its next retry (up to a minute each), and turns back only then (emulator
+     * 2026-11-26: after more than 3 s). [guarded] runs one round's disconnects and says whether to go on.
+     */
+    private suspend fun endStragglers(pool: suspend () -> Collection<rust.nostr.sdk.Relay>, guarded: suspend (round: () -> Unit) -> Boolean): String {
+        var rounds = 0
+        var finds = 0
+        var lastFound = -1L
+        val seen = LinkedHashSet<String>()
+        val began = System.nanoTime()
+        var quietSince = began
+        while (true) {
+            var found = false
+            val relays = pool()
+            val goOn = guarded {
+                relays.forEach { relay ->
+                    val status = runCatching { relay.status() }.getOrNull()
+                    if (status != null && status != RelayStatus.TERMINATED) {
+                        found = true
+                        trace { "sweep ends ${relay.url()} $status socks $socksPort closing $closing" }
+                        if (trackLive) seen += "${relay.url()}=$status"
+                        runCatching { relay.disconnect() }
+                    }
+                }
+            }
+            val now = System.nanoTime()
+            rounds++
+            if (found) { quietSince = now; finds++; lastFound = (now - began) / 1_000_000 }
+            if (!goOn || now - quietSince >= SWEEP_QUIET_MS * 1_000_000 || now - began >= SWEEP_MAX_MS * 1_000_000)
+                return "sweep: $rounds rounds, $finds with stragglers $seen, last at +$lastFound ms, ended +${(now - began) / 1_000_000} ms"
+            delay(SWEEP_EVERY_MS)
+        }
     }
 
     /**
@@ -297,6 +363,7 @@ class NostrEngine private constructor(
         for (r in raw) {
             incomingDecodes.incrementAndGet()
             val json = runCatching { EventJson.decode(r.event.asJson()) }.getOrNull() ?: continue
+            if (dropFarFuture(r.event, json, System.currentTimeMillis() / 1000)) continue
             val relay = runCatching { r.relay.toString().trimEnd('/') }.getOrDefault("")
             _incoming.tryEmit(Incoming(r.event, json, relay, r.subscriptionId))
         }
@@ -349,7 +416,7 @@ class NostrEngine private constructor(
                 if (norm !in temporary) return@withLock false
                 val previousRefs = temporaryRefs[norm] ?: 1
                 // unmarked only after the relay left the pool (a refresh in between must not cache it as normal)
-                ignoringErrors { client.forceRemoveRelay(parsed) }
+                ignoringErrors { evict(parsed) }
                 temporary.remove(norm)
                 temporaryRefs.remove(norm)
                 try {
@@ -434,7 +501,7 @@ class NostrEngine private constructor(
     suspend fun removeRelays(urls: List<String>) {
         try {
             // under temporaryMutex: a renew running meanwhile must not add a removed relay back (spec 2026-10-23 §7)
-            temporaryMutex.withLock { ffi { urls.forEach { url -> runCatching { client.removeRelay(RelayUrl.parse(url)) } } } }
+            temporaryMutex.withLock { ffi { urls.forEach { url -> runCatching { evict(RelayUrl.parse(url), force = false) } } } }
             // a removed relay is no longer joining, whatever an earlier failed refresh left behind
             urls.forEach { url -> runCatching { RelayUrl.parse(url).toString().trimEnd('/') }.getOrNull()?.let(joining::remove) }
             poolProbe?.invoke("removed")
@@ -507,7 +574,7 @@ class NostrEngine private constructor(
     /** Removes [url] from the pool if it is there (harmless when it is not); cancellation cannot interrupt it. For a pool add that was cancelled or failed midway: rust may have inserted the relay already. */
     private suspend fun dropFromPool(url: RelayUrl) {
         withContext(NonCancellable + ffiDispatcher) {
-            if (runCatching { client.relay(url) }.isSuccess) ignoringErrors { client.forceRemoveRelay(url) }
+            if (runCatching { client.relay(url) }.isSuccess) ignoringErrors { evict(url) }
         }
     }
 
@@ -818,7 +885,7 @@ class NostrEngine private constructor(
                 temporary += norm
                 temporaryRefs[norm] = 1
                 val added = try {
-                    client.addTemporaryRelay(url, socksPort).also { poolProbe?.invoke("add-returned") }
+                    client.addTemporaryRelay(url, socksPort).also { trace { "temp $url socks $socksPort route ${route.value}" };  poolProbe?.invoke("add-returned") }
                 } catch (e: CancellationException) {
                     // rust may have inserted the relay before the cancellation landed: out of the pool first, unmarked after
                     dropFromPool(url)
@@ -865,7 +932,7 @@ class NostrEngine private constructor(
                         leaving += norm
                         gone += norm
                         poolProbe?.invoke("removing")
-                        ignoringErrors { client.forceRemoveRelay(url) }
+                        ignoringErrors { evict(url) }
                         temporaryRefs.remove(norm)
                         temporary.remove(norm)
                         attachedAt.remove(norm)
@@ -1154,12 +1221,28 @@ class NostrEngine private constructor(
     }
 
     /** Local database query, each event read once in Kotlin (spec wave 2 B3): one `asJson` per event, no tag reads over the FFI. */
-    suspend fun queryDecoded(filter: Filter): List<JsonEvent> =
-        ffi { client.database().query(filter).toVec().map { EventJson.decode(it.asJson()) } }
+    suspend fun queryDecoded(filter: Filter): List<JsonEvent> = queryBoth(filter).map { it.second }
 
     /** [queryDecoded] with each rust event kept beside its decoded form ([com.monostr.nostr.repo.Withdrawn.filterDecoded], NoteMapper). */
-    suspend fun queryBoth(filter: Filter): List<Pair<Event, JsonEvent>> =
-        ffi { client.database().query(filter).toVec().map { it to EventJson.decode(it.asJson()) } }
+    suspend fun queryBoth(filter: Filter): List<Pair<Event, JsonEvent>> = ffi {
+        val now = System.currentTimeMillis() / 1000
+        client.database().query(filter).toVec().mapNotNull { event ->
+            // one stored event that does not read, or a bogus one, must not take the whole list with it (bug bounty 2026-11-26)
+            val json = runCatching { EventJson.decode(event.asJson()) }.getOrNull() ?: return@mapNotNull null
+            if (dropFarFuture(event, json, now)) null else event to json
+        }
+    }
+
+    /**
+     * True for an event dated more than a day ahead ([EventJson.isFarFuture]), which is then deleted as well: no clock is
+     * that wrong, and as the «newest» it would sit on top of every list and keep a real replaceable event (profile, relay
+     * list) from ever replacing it. Costs the usual event one comparison, no FFI call.
+     */
+    private fun dropFarFuture(event: Event, json: JsonEvent, nowSeconds: Long): Boolean {
+        if (!EventJson.isFarFuture(json.createdAt, nowSeconds)) return false
+        scope.launch(ffiDispatcher) { runCatching { client.database().delete(Filter().id(event.id())) } }
+        return true
+    }
 
     suspend fun eventById(idHex: String): Event? = ffi { client.database().eventById(rust.nostr.sdk.EventId.parse(idHex)) }
 
@@ -1289,6 +1372,7 @@ class NostrEngine private constructor(
                 }
                 val ev = next.event ?: break // every relay ended, or the timeout
                 val json = runCatching { EventJson.decode(ev.asJson()) }.getOrNull() ?: continue
+                if (dropFarFuture(ev, json, System.currentTimeMillis() / 1000)) continue
                 if (progress.add(json)) events += ev
                 if (progress.met) {
                     // a grace lets the other relays' answers in flight still arrive
@@ -1568,7 +1652,7 @@ class NostrEngine private constructor(
         } finally {
             withContext(NonCancellable + ffiDispatcher) {
                 try {
-                    attempted.forEach { runCatching { if (runCatching { client.relay(it) }.isSuccess) client.forceRemoveRelay(it) } }
+                    attempted.forEach { runCatching { if (runCatching { client.relay(it) }.isSuccess) evict(it) } }
                     if (touched) refreshRelaySet()
                 } finally {
                     // unmarked only after the trailing refresh
@@ -1914,7 +1998,7 @@ class NostrEngine private constructor(
                         ignoringErrors { stored = relay.subscriptions() }
                         if (!temp && norm in writeOnly) stored = stored.filterKeys { !active.containsKey(it) }
                         if (!temp && runCatching { relay.stats().success() > 0uL }.getOrDefault(false)) connectedOnce += norm
-                        ignoringErrors { client.forceRemoveRelay(url) }
+                        ignoringErrors { evict(url) }
                         suspend fun add() = runCatching {
                             if (temp) client.addTemporaryRelay(url, socksPort) else client.addRoutedRelay(url, socksPort)
                         }.isSuccess
@@ -1976,15 +2060,55 @@ class NostrEngine private constructor(
      */
     suspend fun close() {
         closing = true
+        trace { "close socks $socksPort route ${route.value} ${runCatching { kotlinx.coroutines.runBlocking { client.relays() }.map { (u, r) -> "$u=${r.status()}" } }.getOrNull()}" }
+        // read before the shutdown empties the pool: the sweep below needs the relays themselves
+        val pool = runCatching { client.relays() }.getOrNull().orEmpty()
+        val tracked = if (trackLive && socksPort != null) pool else null
         withContext(NonCancellable + ffiDispatcher) {
             runCatching { client.disconnect() }
             runCatching { client.shutdown() }
             notifications?.let { job -> withTimeoutOrNull(CLOSE_JOIN_MS) { job.join() } }
         }
         scope.cancel()
+        val bornAt = live[this]
+        sweeper.launch { val note = endStragglers({ pool.values }) { it(); true }; if (bornAt != null) sweepNotes[bornAt] = note }
+        live.remove(this)?.let { born -> if (tracked != null) synchronized(closedLately) { closedLately += ("closed ${System.currentTimeMillis()} $born" to tracked); if (closedLately.size > 12) closedLately.removeAt(0) } }
+    }
+
+    /** Tests only, see [trackLive]: this engine's port, route and each pool relay with its status. */
+    private suspend fun liveLine(born: String): String {
+        val relays = runCatching { client.relays().map { (url, relay) -> "$url=${relay.status()}" } }.getOrElse { listOf("relays unread: $it") }
+        return "socks $socksPort route ${route.value} told ${told.value} closing $closing $relays $born"
     }
 
     companion object {
+        /**
+         * Tests only (backlog 118, a squatter on the SOCKS port heard a dial in full runs): while set, every engine notes where
+         * it was created until it is closed, so a failure can name the engines alive at that moment. Off in the app: nothing is kept.
+         */
+        @Volatile var trackLive = false
+        private val live = java.util.concurrent.ConcurrentHashMap<NostrEngine, String>()
+        private val sweepNotes = java.util.concurrent.ConcurrentHashMap<String, String>()
+        private val closedLately = ArrayList<Pair<String, Map<RelayUrl, rust.nostr.sdk.Relay>>>()
+
+        /** Tests only: the engines created under [trackLive] and not closed, then the last closed ones that had a SOCKS port. */
+        fun liveReport(): List<String> = kotlinx.coroutines.runBlocking { live.map { (engine, born) -> engine.liveLine(born) } } +
+            synchronized(closedLately) { closedLately.toList() }.map { (line, relays) -> line + " " + sweepNotes.entries.firstOrNull { line.endsWith(it.key) }?.value + " " + relays.map { (url, relay) -> "$url=${runCatching { relay.status() }.getOrElse { "?" }}" } }
+
+        private val traced = java.util.concurrent.ConcurrentLinkedDeque<String>()
+
+        /** Tests only, with [trackLive]: what the engines did lately, for the failure that needs the order of things. */
+        private inline fun trace(line: () -> String) {
+            if (!trackLive) return
+            traced.addLast("${System.currentTimeMillis() % 1_000_000} ${line()}")
+            while (traced.size > 80) traced.pollFirst()
+        }
+
+        fun traceReport(): List<String> = traced.toList()
+
+        private fun bornNow(): String = "born ${System.currentTimeMillis()} at " +
+            Throwable().stackTrace.filter { it.className.startsWith("com.monostr") }.drop(1).take(6).joinToString(" < ") { "${it.fileName}:${it.lineNumber}" }
+
         const val LOG_TAG = "Monostr"
         /** Backlog 36: how long a fresh read of the own relay list waits for the relays (the caller shows busy meanwhile). */
         private val OWN_LIST_TIMEOUT: Duration = Duration.ofSeconds(5)
@@ -2019,6 +2143,12 @@ class NostrEngine private constructor(
         private const val RESTART_MIN_MS = 100L
         private const val RESTART_MAX_MS = 5_000L
         private const val CLOSE_JOIN_MS = 2_000L
+        /** [endStragglers]: how often it looks, how long everything has to stay terminated, and when it gives up. */
+        private const val SWEEP_EVERY_MS = 250L
+        private const val SWEEP_QUIET_MS = 130_000L
+        private const val SWEEP_MAX_MS = 300_000L
+        /** Outlives the engines: a closed engine's scope is gone when its stragglers are ended. */
+        private val sweeper = CoroutineScope(SupervisorJob() + Dispatchers.IO + CoroutineExceptionHandler { _, _ -> })
         /** Spec D8: an early-exit fetch whose stream sends no CLOSE when dropped ends after at most 5 s (Task 0 results). */
         internal val EARLY_EXIT_CAP: Duration? = Duration.ofSeconds(5)
         /** How long a publish waits for lost relay connections to come back before it sends. */
@@ -2071,6 +2201,8 @@ class NostrEngine private constructor(
             val engine = NostrEngine(client, signer, scope, nostrSigner, authIds, ffi, socksPort, held, authPolicy)
             // before the first relay joins: until then the policy refuses every AUTH
             authPolicy.ownList = engine::isOwnListRelay
+            if (trackLive) live[engine] = bornNow()
+            trace { "create socks $socksPort held $held $relays" }
             engine.addRelays(relays)
             engine
         }

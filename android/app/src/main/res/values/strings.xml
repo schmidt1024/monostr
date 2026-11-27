@@ -13,6 +13,7 @@
     <string name="action_remove">Remove</string>
     <string name="action_send">Send</string>
     <string name="action_send_again">Send again</string>
+    <string name="action_copy">Copy</string>
     <string name="action_copy_address">Copy address</string>
     <string name="action_copy_uri">Copy URI</string>
     <string name="state_sending">Sending…</string>
@@ -256,7 +257,7 @@
     <string name="setup_skip">Later</string>
     <string name="setup_watcher_info">Watcher %1$s · %2$s · height %3$d</string>
     <string name="setup_privacy">The watcher sees every incoming payment of this wallet. That is why you should use a separate wallet just for tips.</string>
-    <string name="setup_watcher_privacy">The watcher stores only what it needs: your Nostr public key, the wallet address with its view key, and the open tip intents and receipts (which are public on Nostr anyway). No IP addresses are logged or stored. Disabling tips deletes your account at the watcher; its scanner keeps the address and view key marked inactive until the operator purges them.</string>
+    <string name="setup_watcher_privacy">The watcher stores only what it needs: your Nostr public key, the wallet address with its view key and the open tip intents and receipts (which are public on Nostr anyway). No IP addresses are logged or stored. Disabling tips deletes your account at the watcher; its scanner keeps the address and view key marked inactive until the operator purges them.</string>
     <string name="setup_path_new_hint">Creates a fresh 25-word seed on this phone. Monostr only watches incoming tips; to spend them, import the seed into Cake Wallet, Monerujo or Feather.</string>
     <string name="setup_path_existing_hint">Paste the primary address and the private view key from Cake Wallet, Monerujo or Feather.</string>
     <string name="setup_announced_warning">This account already receives tips at %1$s…%2$s, set up on another device. Setting up here replaces that address.</string>
@@ -282,6 +283,8 @@
     <string name="setup_verify_word">Word no. %1$d</string>
     <string name="setup_verify_wrong">At least one word is wrong.</string>
     <string name="setup_back_to_seed">Back to the seed</string>
+    <string name="setup_discard_title">Discard this wallet?</string>
+    <string name="setup_discard_text">These 25 words will not work afterwards. Starting again makes a new wallet.</string>
     <string name="setup_existing_title">Existing wallet</string>
     <string name="setup_address_label">Primary address (4… / 5…)</string>
     <string name="setup_view_key_label">Private view key (64 hex)</string>
@@ -304,6 +307,7 @@
     <string name="setup_address_title">Receive Monero</string>
     <string name="setup_address_field">Monero address (4… / 8…)</string>
     <string name="setup_address_hint">This address is public. Best use a subaddress only for Nostr.</string>
+    <string name="setup_address_looking">Checking your relays for an address you already use…</string>
     <string name="setup_address_publish">Publish</string>
     <string name="setup_no_wallet_link">No Monero wallet yet? Create one here</string>
     <string name="setup_address_done">Others can now send you Monero, also from Amethyst and Ditto.</string>
@@ -354,7 +358,7 @@
     <string name="settings_dm_preview_text">Show message text in notifications</string>
     <string name="settings_search_relays">Search relays</string>
     <string name="settings_search_relays_hint">Used only for name and full-text search (NIP-50), never for the feed. Your search terms go to these relays.</string>
-    <string name="settings_search_relays_reset">Reset to defaults</string>
+    <string name="settings_search_relays_reset">Restore defaults</string>
     <string name="settings_suggested_relays">Suggested relays</string>
     <string name="settings_suggested_relays_hint">Paid Monero relays: reading is free, posting after a one-time XMR payment on the relay\'s website. Source: pmnr.xmr.rocks</string>
     <string name="settings_suggested_relay_fee">Paid Monero relay · %1$s XMR to post</string>
@@ -375,11 +379,11 @@
     <string name="settings_ask_links">Ask before opening links</string>
     <string name="settings_ask_links_hint">The site you open learns your IP address.</string>
     <string name="settings_link_previews">Link previews</string>
-    <string name="settings_link_previews_hint">Shows title and picture of linked pages. Those sites, and the servers of their pictures, then see your IP address.</string>
+    <string name="settings_link_previews_hint">Shows title and picture of linked pages. Those sites and the servers of their pictures then see your IP address.</string>
     <string name="link_preview_cd">Link preview: %1$s, %2$s</string>
     <string name="link_preview_remove">Remove preview</string>
     <string name="settings_author_relays">Connect the author\'s relays temporarily</string>
-    <string name="settings_author_relays_hint">Notes are also fetched from other people\'s own relays and from relays a note names: when you open a profile, when a note answers or quotes one your relays don\'t have, and for polls and linked articles. Those relays see your IP address and which notes you look at.</string>
+    <string name="settings_author_relays_hint">Notes are also fetched from other people\'s own relays and from relays a note names: when you open a profile, when a note answers or quotes one your relays don\'t have and for polls and linked articles. Those relays see your IP address and which notes you look at.</string>
     <string name="settings_pow">Proof of work when sending</string>
     <string name="settings_pow_hint">Some relays only take notes with proof of work (NIP-13). More bits are accepted more widely but take longer to send.</string>
     <string name="settings_pow_off">Off</string>
@@ -419,7 +423,7 @@
     <string name="settings_preset_add">Add preset</string>
     <string name="settings_preset_remove">Remove preset</string>
     <string name="settings_adopt_relays">Replace these relays with my published list (NIP-65)</string>
-    <string name="settings_logout">Sign out</string>
+    <string name="settings_logout">Remove account from this phone</string>
     <string name="settings_msg_presets_saved">Presets saved</string>
     <string name="settings_msg_disabled">Monero tips disabled</string>
     <string name="settings_msg_view_key_deleted">View key deleted locally</string>
@@ -458,7 +462,10 @@
     <string name="notifications_checking">Asking your relays…</string>
     <string name="notifications_error_load">Notifications could not be loaded</string>
     <string name="messages_title">Messages</string>
-    <string name="messages_empty">No messages yet. Open a profile and tap “Message”.</string>
+    <string name="messages_empty">No messages yet. Tap + to write the first one.</string>
+    <string name="messages_new">New message</string>
+    <string name="messages_new_hint">Search people on this phone</string>
+    <string name="messages_new_none">Nobody found. You can also open a profile and tap “Message”.</string>
     <plurals name="messages_requests">
         <item quantity="one">Request (%1$d)</item>
         <item quantity="other">Requests (%1$d)</item>
@@ -472,7 +479,7 @@
     <string name="messages_error_load">Messages could not be loaded</string>
     <string name="chat_input_hint">Message</string>
     <string name="chat_send">Send</string>
-    <string name="chat_retry">Retry</string>
+    <string name="chat_retry">Try again</string>
     <string name="chat_status_sending">Sending…</string>
     <string name="chat_status_failed">Not sent</string>
     <string name="chat_error_send">Message could not be sent</string>
@@ -581,6 +588,7 @@
     <string name="compose_quote_hint">Quote</string>
     <string name="profile_edit">Edit profile</string>
     <string name="feed_profile">My profile</string>
+    <string name="feed_profile_more_accounts">%1$s, more accounts</string>
     <string name="profile_edit_title">Edit profile</string>
     <string name="profile_edit_banner">Banner URL</string>
     <string name="profile_edit_picture">Picture URL</string>
@@ -617,11 +625,11 @@
     <string name="about_feedback">Feedback on Nostr</string>
     <string name="about_issues">Report a problem</string>
     <string name="about_license">Licence: %1$s</string>
-    <string name="dm_relay_hint_missing">relay.monostr.com is missing from your inbox list, so Monostr users may not reach you.</string>
+    <string name="dm_relay_hint_missing">relay.monostr.com is missing from your message relays, so Monostr users may not reach you.</string>
     <string name="dm_relay_hint_add">Add</string>
-    <string name="dm_relay_hint_second">A second inbox relay makes your messages more reliable.</string>
+    <string name="dm_relay_hint_second">A second message relay makes your messages more reliable.</string>
     <string name="dm_relay_hint_dismiss">Hide</string>
-    <string name="dm_relay_hint_replace">Your inbox list is full. Which relay should relay.monostr.com replace?</string>
+    <string name="dm_relay_hint_replace">Your message relays are full. Which relay should relay.monostr.com replace?</string>
     <string name="upload_error_nsfw">This server does not accept adult content. You can choose another media server in the settings.</string>
     <string name="upload_error_too_large">Picture too large for this server</string>
     <string name="upload_error_quota">Your storage on this server is full</string>
@@ -646,7 +654,7 @@
     <string name="settings_media_server">Media server</string>
     <string name="settings_media_server_hint">Pictures you attach are uploaded to this Blossom server. They are public.</string>
     <string name="settings_media_server_invalid">Must be an https:// address without a path</string>
-    <string name="settings_media_server_reset">Default</string>
+    <string name="settings_media_server_reset">Restore default</string>
     <string name="about_media">Pictures you upload go to %1$s by default and are public to anyone who has the link. You can use your own Blossom server instead: Settings › Content &amp; media › Media server. To report a picture on %1$s, send its link to the Monostr project account on Nostr.</string>
     <string name="note_menu">More</string>
     <string name="note_menu_copy_link">Copy link</string>
@@ -694,6 +702,9 @@
     <string name="create_finish">Let\'s go</string>
     <string name="create_cancel_text">Cancel? The key will be discarded.</string>
     <string name="create_cancel_yes">Discard</string>
+    <string name="create_step">Step %1$d of %2$d</string>
+    <string name="unsaved_title">Discard changes?</string>
+    <string name="unsaved_keep">Keep editing</string>
     <string name="create_cancel_no">Keep going</string>
     <string name="settings_show_key">Show private key (nsec)</string>
     <string name="settings_show_key_title">Your key</string>
@@ -701,7 +712,7 @@
     <string name="settings_show_key_confirm">Show</string>
     <string name="settings_show_key_cancel">Cancel</string>
     <!-- lists -->
-    <string name="action_retry">Retry</string>
+    <string name="action_retry">Try again</string>
     <string name="list_save_failed">Couldn\'t save, try again</string>
     <string name="feed_tab_following">Following</string>
     <string name="feed_tab_menu_open">Open list</string>
@@ -760,7 +771,7 @@
     </plurals>
     <string name="discover_show_all">Show all</string>
     <string name="discover_failed">Could not load</string>
-    <string name="discover_retry">Retry</string>
+    <string name="discover_retry">Try again</string>
     <string name="discover_dismiss">Hide suggestions</string>
     <string name="create_who_rotten">Monero news (Revuo)</string>
     <string name="create_who_shortwave">Monero user, tests apps</string>
@@ -807,7 +818,7 @@
     <string name="translate_original">Show original</string>
     <string name="translate_show_translation">Show translation</string>
     <string name="translate_failed">Translation failed</string>
-    <string name="translate_retry">Retry</string>
+    <string name="translate_retry">Try again</string>
     <string name="translate_partial">Some parts could not be translated</string>
     <string name="translate_consent_title">Translate notes?</string>
     <string name="translate_consent_body">The text of this note goes to %1$s. The server sees which notes you translate and your IP address. Messages are never translated.</string>
@@ -863,6 +874,7 @@
     <string name="link_prompt_tor">Your browser does not use Monostr\'s Tor.</string>
     <string name="link_prompt_copy">Copy link</string>
     <string name="link_prompt_torbrowser">Open in Tor Browser</string>
+    <string name="link_prompt_torbrowser_copy">Copy and open Tor Browser</string>
     <string name="link_prompt_copied">Link copied</string>
     <string name="link_prompt_torbrowser_failed">Tor Browser could not be opened.</string>
     <string name="tor_desc_connecting">Tor: connecting</string>
@@ -879,7 +891,6 @@
         <item quantity="other">%d pending tips will be dropped.</item>
     </plurals>
     <!-- settings overview -->
-    <string name="settings_page_account">Account &amp; key</string>
     <string name="settings_page_privacy">Tor &amp; privacy</string>
     <string name="settings_page_monero">Monero &amp; tips</string>
     <string name="settings_page_notifications">Notifications</string>
@@ -935,7 +946,7 @@
     <string name="settings_monero_delete_view_key_action">Delete</string>
     <string name="settings_monero_payto_remove_q">Remove your Monero address?</string>
     <string name="settings_monero_payto_remove_text">It is taken off your public profile, so people can no longer tip you there.</string>
-    <string name="settings_logout_q">Sign out?</string>
+    <string name="settings_logout_q">Remove account from this phone?</string>
     <string name="settings_logout_key_warning">Your key is only on this phone. Without a copy you can\'t sign in again.</string>
     <string name="settings_logout_show_key">Show key</string>
     <string name="settings_monero_active">Active</string>
@@ -946,12 +957,17 @@
     <string name="settings_monero_receipts_replaces">A setup here replaces the one on the other device.</string>
     <string name="settings_media_server_save">Save media server</string>
     <string name="settings_show_key_sub">Anyone who has it controls your account.</string>
+    <string name="settings_key_lock">Ask for screen lock</string>
+    <string name="settings_key_lock_hint">Before the private key is shown.</string>
+    <string name="settings_key_lock_none">Set a screen lock on this phone first.</string>
     <string name="settings_no_name">No name yet</string>
     <string name="settings_copy_npub">Copy npub</string>
     <string name="settings_dm_relays_sub">Inbox for your DMs · NIP-17</string>
     <string name="settings_publish_list">Publish list</string>
     <string name="settings_use_published_list">Use published list</string>
     <string name="relay_removed">Relay removed</string>
+    <string name="list_member_removed">Removed from the list</string>
+    <string name="settings_reaction_removed">Reaction removed</string>
     <string name="relay_remove_named">Remove %1$s</string>
     <string name="settings_chip_relays_spoken">%1$d of %2$d connected</string>
     <string name="settings_tip_amounts">Tip amounts</string>
@@ -980,4 +996,31 @@
     <string name="poll_hours">Hours</string>
     <string name="poll_minutes">Minutes</string>
     <string name="poll_remove">Remove poll</string>
+    <string name="accounts_title">Accounts</string>
+    <string name="accounts_page_hint">Each account keeps its own relays, settings and looks.</string>
+    <string name="accounts_other">Other accounts</string>
+    <string name="accounts_switch_label">Switch account</string>
+    <string name="accounts_switch_hint">Long-press to switch accounts</string>
+    <string name="accounts_add">Add account</string>
+    <string name="accounts_active">Active</string>
+    <string name="accounts_busy">Wait until the upload/sending is done</string>
+    <string name="accounts_sign_in_again">Sign in again</string>
+    <string name="accounts_switch_failed">Couldn\'t switch the account</string>
+    <string name="accounts_now_using">Now using %1$s</string>
+    <string name="accounts_now_using_tor">Now using %1$s · fresh Tor route in %2$d s</string>
+    <string name="accounts_tor_stalled">Waiting for a fresh Tor route…</string>
+    <string name="accounts_remove_text">Messages, drafts and settings of %1$s on this phone are deleted.</string>
+    <string name="accounts_remove_failed">Couldn\'t remove the account</string>
+    <string name="accounts_already_using">Already using %1$s</string>
+    <string name="add_account_amber">Sign in with Amber</string>
+    <string name="add_account_recommended">Recommended</string>
+    <string name="add_account_get_amber">Get Amber</string>
+    <string name="add_account_get_amber_hint">Keeps your keys outside Monostr</string>
+    <string name="add_account_key">Sign in with key</string>
+    <string name="add_account_create">Create another account</string>
+    <string name="logout_keep_settings">Keep my settings on this device</string>
+    <string name="logout_keep_settings_hint">Encrypted with your key. They come back when you log in again.</string>
+    <string name="logout_keep_failed_title">Settings not kept</string>
+    <string name="logout_keep_failed_text">Your signer did not encrypt the settings, so nothing was removed. Log out without keeping them?</string>
+    <string name="accounts_keep_failed">Settings not kept: your signer did not answer. The account was not removed.</string>
 </resources>

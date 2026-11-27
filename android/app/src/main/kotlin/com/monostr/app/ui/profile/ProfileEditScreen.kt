@@ -1,6 +1,7 @@
 package com.monostr.app.ui.profile
 
 import androidx.activity.compose.rememberLauncherForActivityResult
+import com.monostr.app.ui.common.rememberLeaveGuard
 import com.monostr.app.ui.common.MonostrSnackbarHost
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -87,11 +88,19 @@ fun ProfileEditScreen(onDone: () -> Unit, vm: ProfileEditViewModel = hiltViewMod
     val pickPicture = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         uri?.let { vm.controller.upload(PictureField.PICTURE, it.toString()) }
     }
+    // typed but not saved: leaving asks first (backlog 111); nothing to lose while it loads or right after a save
+    val back = rememberLeaveGuard(dirty = !state.loading && !state.saving && state.form != state.original, onLeave = onDone)
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.profile_edit_title)) },
-                navigationIcon = { IconButton(onClick = onDone) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back)) } },
+                navigationIcon = { IconButton(onClick = back) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back)) } },
+                // in the bar as in the list editor and the composer (backlog 115): always in reach, also with the keyboard open
+                actions = {
+                    TextButton(onClick = vm.controller::save, enabled = state.canSave, modifier = Modifier.testTag("edit-save")) {
+                        Text(stringResource(if (state.saving) R.string.state_sending else R.string.profile_edit_save))
+                    }
+                },
             )
         },
         snackbarHost = { MonostrSnackbarHost(snackbar) },
@@ -123,9 +132,6 @@ fun ProfileEditScreen(onDone: () -> Unit, vm: ProfileEditViewModel = hiltViewMod
                 EditField(f.about, R.string.profile_edit_about, "edit-about", singleLine = false) { v -> vm.controller.update { it.copy(about = v) } }
                 EditField(f.nip05, R.string.profile_edit_nip05, "edit-nip05") { v -> vm.controller.update { it.copy(nip05 = v) } }
                 EditField(f.website, R.string.profile_edit_website, "edit-website", invalid = state.websiteInvalid, errorText = R.string.profile_website_invalid) { v -> vm.controller.update { it.copy(website = v) } }
-                Button(onClick = vm.controller::save, enabled = state.canSave, modifier = Modifier.fillMaxWidth().testTag("edit-save"), shape = MaterialTheme.shapes.medium) {
-                    Text(stringResource(if (state.saving) R.string.state_sending else R.string.profile_edit_save))
-                }
             }
         }
     }

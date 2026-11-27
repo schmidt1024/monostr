@@ -54,6 +54,12 @@ sealed class OwnPayto {
     data object Unknown : OwnPayto()
 }
 
+/**
+ * What the own relays say about receiving Monero ([TipsRepository.ownMonero]). [FOUND]: a payto entry or a tip address;
+ * [NONE]: most relays answered and none has either; [UNKNOWN]: no complete answer.
+ */
+enum class OwnMonero { FOUND, NONE, UNKNOWN }
+
 /** Outcome of [TipsRepository.setOwnPayto]. */
 enum class PaytoWrite { Published, NotPublished, Unknown }
 
@@ -116,6 +122,11 @@ interface TipsRepository {
     suspend fun fetchPayto(pubkey: String, relays: List<String>)
     /** The own Monero payto entry after one relay fetch of the own kind 10133. */
     suspend fun ownPayto(): OwnPayto
+    /**
+     * Whether this account already receives Monero, after one relay fetch of the own kinds 10037 and 10133 (the request
+     * [paymentInfo] makes for the own key). Only an answer of more than half of the relays counts as [OwnMonero.NONE].
+     */
+    suspend fun ownMonero(): OwnMonero = OwnMonero.UNKNOWN
     /**
      * Sets (or with null removes) the Monero entry of the own kind 10133, keeping every other tag as it is.
      * Reads like [ownPayto] first: [PaytoWrite.Unknown] and nothing sent when that is unknown; nothing sent and
@@ -285,6 +296,18 @@ class NostrTipsRepository(
     }
 
     override suspend fun ownPayto(): OwnPayto = readOwnPayto().state
+
+    override suspend fun ownMonero(): OwnMonero {
+        val self = requireNotNull(engine.pubkey) { "needs a logged-in user" }
+        val fetch = engine.fetchOwn(infoFetchFilter(self), fetchTimeout)
+        // the database keeps the newest of each, whether stored before or just fetched
+        return when {
+            cachedPayto(self) != null || cachedPaymentInfo(self) is PaymentInfo.Enabled -> OwnMonero.FOUND
+            // a wrong «none» only shows the intro once more, so most relays are enough (one dead relay must not leave it open)
+            fetch.mostAnswered -> OwnMonero.NONE
+            else -> OwnMonero.UNKNOWN
+        }
+    }
 
     override suspend fun setOwnPayto(address: String?): PaytoWrite {
         val read = readOwnPayto()

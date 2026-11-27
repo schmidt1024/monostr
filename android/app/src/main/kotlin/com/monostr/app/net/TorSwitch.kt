@@ -9,9 +9,9 @@ import dagger.Lazy
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -24,9 +24,17 @@ interface SwitchedSession {
     suspend fun rebuild()
 }
 
-/** Tor is usable: only then the ports are ours. Builds nothing of Tor before someone collects, which happens in Tor mode only. */
-fun torConnected(tor: Lazy<TorController>): Flow<Boolean> =
-    flow { emitAll(tor.get().state) }.map { it == TorState.Connected }.distinctUntilChanged()
+/**
+ * Tor is usable: only then the ports are ours, and no session waits for a fresh route ([TorController.routeReady]). Builds nothing
+ * of Tor before someone collects, which happens in Tor mode only.
+ */
+fun torConnected(tor: Lazy<TorController>): Flow<Boolean> = flow { emitAll(tor.get().routeReady) }
+
+/**
+ * Tor itself is connected, whether or not a session waits for a fresh route. For a background run that has to start the session
+ * whose start sets or clears that wait (a restore that failed with it pending); the session's own traffic still waits for its route.
+ */
+fun torRunning(tor: Lazy<TorController>): Flow<Boolean> = flow { emitAll(tor.get().state) }.map { it == TorState.Connected }.distinctUntilChanged()
 
 /**
  * The deliberate change between Direct and Tor (spec 2026-11-06 5.2, 5.4). The marker comes first: when it cannot be written, nothing

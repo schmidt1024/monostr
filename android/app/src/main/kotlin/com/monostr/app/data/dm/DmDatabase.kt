@@ -501,7 +501,7 @@ class DmDatabase(context: Context, pubkey: String) :
                 "(SELECT x.content FROM messages x WHERE x.peer = m.peer ORDER BY x.created_at DESC LIMIT 1) AS last_content " +
                 "FROM messages m CROSS JOIN (SELECT $FLOOR_SQL AS v) f LEFT JOIN conversations c ON c.peer = m.peer GROUP BY m.peer ORDER BY last_at DESC" // sql
 
-        private fun fileName(pubkey: String) = "dms-${pubkey.take(16)}.db"
+        private fun fileName(pubkey: String) = "dms-${com.monostr.app.data.pk16(pubkey)}.db"
 
         fun delete(context: Context, pubkey: String) = context.deleteDatabase(fileName(pubkey))
     }

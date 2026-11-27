@@ -12,6 +12,7 @@
     <string name="action_remove">Kaldır</string>
     <string name="action_send">Gönder</string>
     <string name="action_send_again">Tekrar gönder</string>
+    <string name="action_copy">Kopyala</string>
     <string name="action_copy_address">Adresi kopyala</string>
     <string name="action_copy_uri">URI\'yi kopyala</string>
     <string name="state_sending">Gönderiliyor…</string>
@@ -279,6 +280,8 @@
     <string name="setup_verify_word">%1$d. kelime</string>
     <string name="setup_verify_wrong">En az bir kelime yanlış.</string>
     <string name="setup_back_to_seed">Seed\'e geri dön</string>
+    <string name="setup_discard_title">Bu cüzdan silinsin mi?</string>
+    <string name="setup_discard_text">Bu 25 kelime sonrasında çalışmaz. Yeniden başlamak yeni bir cüzdan oluşturur.</string>
     <string name="setup_existing_title">Mevcut cüzdan</string>
     <string name="setup_address_label">Ana adres (4… / 5…)</string>
     <string name="setup_view_key_label">Özel görüntüleme anahtarı (64 hex)</string>
@@ -301,6 +304,7 @@
     <string name="setup_address_title">Monero al</string>
     <string name="setup_address_field">Monero adresi (4… / 8…)</string>
     <string name="setup_address_hint">Bu adres herkese açıktır. En iyisi yalnızca Nostr için bir alt adres kullanmak.</string>
+    <string name="setup_address_looking">Relay\'lerinde zaten kullandığın bir adres aranıyor…</string>
     <string name="setup_address_publish">Yayınla</string>
     <string name="setup_no_wallet_link">Henüz Monero cüzdanın yok mu? Buradan oluştur</string>
     <string name="setup_address_done">Artık başkaları sana Amethyst ve Ditto üzerinden de Monero gönderebilir.</string>
@@ -350,7 +354,7 @@
     <string name="settings_dm_preview_text">Bildirimlerde mesaj metnini göster</string>
     <string name="settings_search_relays">Arama röleleri</string>
     <string name="settings_search_relays_hint">Yalnızca ad ve tam metin araması için (NIP-50), akış için asla. Arama terimlerin bu rölelere gider.</string>
-    <string name="settings_search_relays_reset">Varsayılanlara sıfırla</string>
+    <string name="settings_search_relays_reset">Varsayılanlara dön</string>
     <string name="settings_suggested_relays">Önerilen röleler</string>
     <string name="settings_suggested_relays_hint">Ücretli Monero röleleri: okuma ücretsiz, yazma rölenin sitesinde tek seferlik XMR ödemesinden sonra. Kaynak: pmnr.xmr.rocks</string>
     <string name="settings_suggested_relay_fee">Ücretli Monero rölesi · yazmak için %1$s XMR</string>
@@ -415,7 +419,7 @@
     <string name="settings_preset_add">Ön ayar ekle</string>
     <string name="settings_preset_remove">Ön ayarı kaldır</string>
     <string name="settings_adopt_relays">Bu relay\'leri yayınlanmış listemle değiştir (NIP-65)</string>
-    <string name="settings_logout">Çıkış yap</string>
+    <string name="settings_logout">Hesabı bu telefondan kaldır</string>
     <string name="settings_msg_presets_saved">Hazır tutarlar kaydedildi</string>
     <string name="settings_msg_disabled">Monero bahşişleri kapatıldı</string>
     <string name="settings_msg_view_key_deleted">Görüntüleme anahtarı yerelden silindi</string>
@@ -454,7 +458,10 @@
     <string name="notifications_checking">Relay\'leriniz sorgulanıyor…</string>
     <string name="notifications_error_load">Bildirimler yüklenemedi</string>
     <string name="messages_title">Mesajlar</string>
-    <string name="messages_empty">Henüz mesaj yok. Bir profil açıp “Mesaj”a dokun.</string>
+    <string name="messages_empty">Henüz mesaj yok. İlkini yazmak için + simgesine dokun.</string>
+    <string name="messages_new">Yeni mesaj</string>
+    <string name="messages_new_hint">Bu telefondaki kişilerde ara</string>
+    <string name="messages_new_none">Kimse bulunamadı. Bir profili açıp “Mesaj”a da dokunabilirsin.</string>
     <plurals name="messages_requests">
         <item quantity="one">İstekler (%1$d)</item>
         <item quantity="other">İstekler (%1$d)</item>
@@ -468,7 +475,7 @@
     <string name="messages_error_load">Mesajlar yüklenemedi</string>
     <string name="chat_input_hint">Mesaj</string>
     <string name="chat_send">Gönder</string>
-    <string name="chat_retry">Yeniden dene</string>
+    <string name="chat_retry">Tekrar dene</string>
     <string name="chat_status_sending">Gönderiliyor…</string>
     <string name="chat_status_failed">Gönderilmedi</string>
     <string name="chat_error_send">Mesaj gönderilemedi</string>
@@ -576,6 +583,7 @@
     <string name="compose_quote_hint">Alıntı</string>
     <string name="profile_edit">Profili düzenle</string>
     <string name="feed_profile">Profilim</string>
+    <string name="feed_profile_more_accounts">%1$s, diğer hesaplar</string>
     <string name="profile_edit_title">Profili düzenle</string>
     <string name="profile_edit_banner">Banner URL\'si</string>
     <string name="profile_edit_picture">Resim URL\'si</string>
@@ -612,11 +620,11 @@
     <string name="about_feedback">Nostr\'da geri bildirim</string>
     <string name="about_issues">Sorun bildir</string>
     <string name="about_license">Lisans: %1$s</string>
-    <string name="dm_relay_hint_missing">relay.monostr.com gelen kutusu listende yok, bu yüzden Monostr kullanıcıları sana ulaşamayabilir.</string>
+    <string name="dm_relay_hint_missing">relay.monostr.com mesaj rölelerinde yok, bu yüzden Monostr kullanıcıları sana ulaşamayabilir.</string>
     <string name="dm_relay_hint_add">Ekle</string>
-    <string name="dm_relay_hint_second">İkinci bir gelen kutusu relay\'i mesajlarını daha güvenilir kılar.</string>
+    <string name="dm_relay_hint_second">İkinci bir mesaj rölesi mesajlarını daha güvenilir kılar.</string>
     <string name="dm_relay_hint_dismiss">Gizle</string>
-    <string name="dm_relay_hint_replace">Gelen kutusu listen dolu. relay.monostr.com hangi relay\'in yerine geçsin?</string>
+    <string name="dm_relay_hint_replace">Mesaj rölelerin dolu. relay.monostr.com hangi rölenin yerine geçsin?</string>
     <string name="upload_error_nsfw">Bu sunucu yetişkin içeriği kabul etmiyor. Ayarlardan başka bir medya sunucusu seçebilirsin.</string>
     <string name="upload_error_too_large">Resim bu sunucu için çok büyük</string>
     <string name="upload_error_quota">Bu sunucudaki alanın dolu</string>
@@ -633,7 +641,7 @@
     <string name="compose_attach">Resim ekle</string>
     <string name="compose_attach_limit">Notta en fazla 20 resim</string>
     <string name="compose_attachment_remove">Resmi kaldır</string>
-    <string name="upload_retry">Yeniden dene</string>
+    <string name="upload_retry">Tekrar dene</string>
     <string name="compose_sensitive">Hassas içerik</string>
     <string name="compose_sensitive_hint">Okuyanlar resimleri dokunana kadar bulanık görür.</string>
     <string name="profile_edit_pick">Resim seç</string>
@@ -689,6 +697,9 @@
     <string name="create_finish">Başlayalım</string>
     <string name="create_cancel_text">İptal edilsin mi? Anahtar silinecek.</string>
     <string name="create_cancel_yes">Sil</string>
+    <string name="create_step">Adım %1$d / %2$d</string>
+    <string name="unsaved_title">Değişiklikler silinsin mi?</string>
+    <string name="unsaved_keep">Düzenlemeye devam et</string>
     <string name="create_cancel_no">Devam et</string>
     <string name="settings_show_key">Özel anahtarı göster (nsec)</string>
     <string name="settings_show_key_title">Anahtarın</string>
@@ -696,7 +707,7 @@
     <string name="settings_show_key_confirm">Göster</string>
     <string name="settings_show_key_cancel">İptal</string>
     <!-- lists -->
-    <string name="action_retry">Yeniden dene</string>
+    <string name="action_retry">Tekrar dene</string>
     <string name="list_save_failed">Kaydedilemedi, tekrar dene</string>
     <string name="feed_tab_following">Takip edilenler</string>
     <string name="feed_tab_menu_open">Listeyi aç</string>
@@ -857,6 +868,7 @@
     <string name="link_prompt_tor">Tarayıcınız Monostr\'un Tor\'unu kullanmaz.</string>
     <string name="link_prompt_copy">Bağlantıyı kopyala</string>
     <string name="link_prompt_torbrowser">Tor Browser\'da aç</string>
+    <string name="link_prompt_torbrowser_copy">Kopyala ve Tor Browser\'ı aç</string>
     <string name="link_prompt_copied">Bağlantı kopyalandı</string>
     <string name="link_prompt_torbrowser_failed">Tor Browser açılamadı.</string>
     <string name="tor_desc_connecting">Tor: bağlanıyor</string>
@@ -872,7 +884,6 @@
         <item quantity="other">Bekleyen %d bahşiş silinecek.</item>
     </plurals>
     <!-- settings overview -->
-    <string name="settings_page_account">Hesap ve anahtar</string>
     <string name="settings_page_privacy">Tor ve gizlilik</string>
     <string name="settings_page_monero">Monero ve bahşişler</string>
     <string name="settings_page_notifications">Bildirimler</string>
@@ -928,7 +939,7 @@
     <string name="settings_monero_delete_view_key_action">Sil</string>
     <string name="settings_monero_payto_remove_q">Monero adresin kaldırılsın mı?</string>
     <string name="settings_monero_payto_remove_text">Herkese açık profilinden kaldırılır; artık kimse sana oradan bahşiş gönderemez.</string>
-    <string name="settings_logout_q">Çıkış yapılsın mı?</string>
+    <string name="settings_logout_q">Hesap bu telefondan kaldırılsın mı?</string>
     <string name="settings_logout_key_warning">Anahtarın yalnızca bu telefonda. Bir kopyası olmadan yeniden giriş yapamazsın.</string>
     <string name="settings_logout_show_key">Anahtarı göster</string>
     <string name="settings_monero_active">Etkin</string>
@@ -939,12 +950,17 @@
     <string name="settings_monero_receipts_replaces">Burada kurmak diğer cihazdaki kurulumun yerini alır.</string>
     <string name="settings_media_server_save">Medya sunucusunu kaydet</string>
     <string name="settings_show_key_sub">Ona sahip olan hesabını kontrol eder.</string>
+    <string name="settings_key_lock">Ekran kilidini iste</string>
+    <string name="settings_key_lock_hint">Özel anahtar gösterilmeden önce.</string>
+    <string name="settings_key_lock_none">Önce bu telefonda bir ekran kilidi ayarla.</string>
     <string name="settings_no_name">Henüz ad yok</string>
     <string name="settings_copy_npub">npub\'ı kopyala</string>
     <string name="settings_dm_relays_sub">DM\'lerinin gelen kutusu · NIP-17</string>
     <string name="settings_publish_list">Listeyi yayınla</string>
     <string name="settings_use_published_list">Yayınlanan listeyi kullan</string>
     <string name="relay_removed">Röle kaldırıldı</string>
+    <string name="list_member_removed">Listeden çıkarıldı</string>
+    <string name="settings_reaction_removed">Tepki kaldırıldı</string>
     <string name="relay_remove_named">%1$s kaldır</string>
     <string name="settings_chip_relays_spoken">%2$d röleden %1$d bağlı</string>
     <string name="settings_tip_amounts">Bahşiş tutarları</string>
@@ -973,4 +989,31 @@
     <string name="poll_hours">Saat</string>
     <string name="poll_minutes">Dakika</string>
     <string name="poll_remove">Anketi kaldır</string>
+    <string name="accounts_title">Hesaplar</string>
+    <string name="accounts_page_hint">Her hesabın kendi röleleri, ayarları ve görünümü vardır.</string>
+    <string name="accounts_other">Diğer hesaplar</string>
+    <string name="accounts_switch_label">Hesap değiştir</string>
+    <string name="accounts_switch_hint">Hesap değiştirmek için basılı tutun</string>
+    <string name="accounts_add">Hesap ekle</string>
+    <string name="accounts_active">Etkin</string>
+    <string name="accounts_busy">Yükleme/gönderme bitene kadar bekle</string>
+    <string name="accounts_sign_in_again">Yeniden giriş yap</string>
+    <string name="accounts_switch_failed">Hesap değiştirilemedi</string>
+    <string name="accounts_now_using">Şu an %1$s kullanılıyor</string>
+    <string name="accounts_now_using_tor">Şu an %1$s kullanılıyor · yeni Tor rotası %2$d sn içinde</string>
+    <string name="accounts_tor_stalled">Yeni bir Tor rotası bekleniyor…</string>
+    <string name="accounts_remove_text">%1$s hesabının bu telefondaki mesajları, taslakları ve ayarları silinir.</string>
+    <string name="accounts_remove_failed">Hesap kaldırılamadı</string>
+    <string name="accounts_already_using">Zaten %1$s kullanılıyor</string>
+    <string name="add_account_amber">Amber ile giriş yap</string>
+    <string name="add_account_recommended">Önerilen</string>
+    <string name="add_account_get_amber">Amber\'ı edin</string>
+    <string name="add_account_get_amber_hint">Anahtarlarını Monostr dışında tutar</string>
+    <string name="add_account_key">Anahtarla giriş yap</string>
+    <string name="add_account_create">Başka bir hesap oluştur</string>
+    <string name="logout_keep_settings">Ayarlarımı bu cihazda sakla</string>
+    <string name="logout_keep_settings_hint">Anahtarınla şifrelenir. Tekrar giriş yaptığında geri gelir.</string>
+    <string name="logout_keep_failed_title">Ayarlar saklanmadı</string>
+    <string name="logout_keep_failed_text">İmzalayıcın ayarları şifrelemedi, bu yüzden hiçbir şey kaldırılmadı. Ayarları saklamadan çıkış yapılsın mı?</string>
+    <string name="accounts_keep_failed">Ayarlar saklanmadı: imzalayıcın yanıt vermedi. Hesap kaldırılmadı.</string>
 </resources>

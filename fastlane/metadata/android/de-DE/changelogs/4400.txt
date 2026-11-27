@@ -1,0 +1,5 @@
+- Mehrere Konten: hinzufügen, wechseln und entfernen über den Avatar oder in den Einstellungen; jedes behält eigene Relays und Einstellungen
+- Abmelden entfernt das Konto von diesem Telefon und kann seine Einstellungen behalten, verschlüsselt mit deinem Schlüssel
+- Optionale Bildschirmsperre, bevor der private Schlüssel gezeigt wird
+- Mit neueren Tor-Browser-Versionen: Link kopieren und Tor Browser öffnen
+- Sicherheitshärtung und Korrekturen

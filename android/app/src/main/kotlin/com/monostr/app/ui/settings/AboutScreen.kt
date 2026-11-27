@@ -39,27 +39,6 @@ import com.monostr.app.ui.theme.Spacing
 import com.monostr.nostr.Npub
 import com.monostr.nostr.blossom.BlossomAuth
 
-/** Spec 5: app name with logo, version and build, a Beta badge until 1.0, feedback profile, issues, licence. */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun AboutScreen(onBack: () -> Unit, onOpenProfile: (String) -> Unit) {
-    val uriHandler = LocalUriHandler.current
-    val issues = SupportLinks.issuesUrl(BuildConfig.REPO_URL)
-    Scaffold(topBar = {
-        TopAppBar(
-            title = { Text(stringResource(R.string.about_title)) },
-            navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back)) } },
-        )
-    }) { padding ->
-        AboutContent(
-            versionName = BuildConfig.VERSION_NAME, versionCode = BuildConfig.VERSION_CODE, beta = BuildConfig.BETA,
-            feedbackPubkey = Npub.decodeOrNull(BuildConfig.FEEDBACK_NPUB), issuesUrl = issues, license = BuildConfig.LICENSE,
-            onFeedback = onOpenProfile, onIssues = { uriHandler.openUri(issues) },
-            mediaHost = BlossomAuth.host(MediaServer.DEFAULT).orEmpty(), modifier = Modifier.padding(padding),
-        )
-    }
-}
-
 @Composable
 fun AboutContent(
     versionName: String,

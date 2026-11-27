@@ -1,5 +1,6 @@
 package com.monostr.app.ui.common
 
+import com.monostr.app.ui.theme.MonostrFonts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -139,7 +140,7 @@ fun PasswordBackupDialog(secretHex: String, onDismiss: () -> Unit) {
                     }
                     step == PasswordBackupState.Step.Busy -> CircularProgressIndicator(Modifier.testTag("backup-busy"))
                     else -> {
-                        Text(state.ncryptsec.orEmpty(), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("backup-ncryptsec"))
+                        Text(state.ncryptsec.orEmpty(), fontFamily = MonostrFonts.mono, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("backup-ncryptsec"))
                         OutlinedButton(
                             onClick = {
                                 copySecret(context, state.ncryptsec.orEmpty(), NSEC_CLIP_LABEL)

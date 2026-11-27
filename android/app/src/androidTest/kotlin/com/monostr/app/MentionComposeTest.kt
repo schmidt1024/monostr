@@ -20,6 +20,7 @@ import com.monostr.app.session.NostrSessionEntryPoint
 import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.runBlocking
 import org.junit.After
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -147,7 +148,11 @@ class MentionComposeTest {
         rule.onNodeWithTag("compose-send").performClick()
         val ready = entry.session().requireReady()
         val mine = Filter().kind(Kind(1u)).author(me.publicKey()).limit(20u)
-        rule.waitUntil(15_000) { runBlocking { ready.engine.query(mine) }.any { it.content() == content } }
+        try {
+            rule.waitUntil(15_000) { runBlocking { ready.engine.query(mine) }.any { it.content() == content } }
+        } catch (e: androidx.compose.ui.test.ComposeTimeoutException) {
+            throw AssertionError("expected a note «$content», stored: ${runBlocking { ready.engine.query(mine) }.map { "«${it.content()}»" }}", e)
+        }
     }
 
     /** Review fix: the keyboard sees "@name"; rewriting it to a shorter "@nam" takes the whole mention, no plain-text leftover. */
@@ -162,7 +167,14 @@ class MentionComposeTest {
         sendsExactly("hello bye")
     }
 
-    /** Backspace sent to the focused field as a key event, so the soft keyboard (Gboard on the AVD) handles it first. */
+    /**
+     * Backspace sent to the focused field as a key event, so the soft keyboard (Gboard on the AVD) handles it first. Gboard
+     * answers the first backspace with a rewrite of the word before the cursor, which takes the whole mention at once (spec 8:
+     * a keyboard rewrite of a shown name removes the token); a hardware key takes the space first. So the test asks for what
+     * holds on both ways: after at most two backspaces nothing of the mention is left, and the note that goes out carries none.
+     * Until 2026-11-27 it asked for the exact text «hello bye» and passed only because the account's database outlived the
+     * logout between the tests (backlog 120): it found the note of the test before.
+     */
     @Test
     fun backspaceThroughTheSoftKeyboardRemovesTheWholeMention() {
         val ts = System.currentTimeMillis() % 100_000
@@ -170,13 +182,24 @@ class MentionComposeTest {
         rule.onNodeWithTag("compose-text").performClick()
         rule.waitForIdle()
         Thread.sleep(1_500) // the keyboard comes up
-        repeat(2) {
+        fun mentionShown() = rule.onAllNodesWithText("Ime Test", substring = true).fetchSemanticsNodes().isNotEmpty()
+        var presses = 0
+        while (mentionShown() && presses < 2) {
             InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand("input keyevent 67").close()
+            presses++
             Thread.sleep(700)
+            rule.waitForIdle()
         }
-        rule.waitUntil(5_000) { rule.onAllNodesWithText("@Ime Test", substring = true).fetchSemanticsNodes().isEmpty() }
+        assertFalse("the mention is still shown after $presses backspaces", mentionShown())
         rule.onNodeWithTag("compose-text").performTextInput("bye")
-        sendsExactly("hello bye")
+        rule.onNodeWithTag("compose-send").performClick()
+        val ready = entry.session().requireReady()
+        val mine = Filter().kind(Kind(1u)).author(me.publicKey()).limit(20u)
+        fun sent() = runBlocking { ready.engine.query(mine) }.filter { it.content().contains("bye") }
+        rule.waitUntil(15_000) { sent().isNotEmpty() }
+        val note = sent().single()
+        assertEquals("nothing of the mention in the text", "hellobye", note.content().replace(" ", ""))
+        assertTrue("no p tag for a removed mention", note.tags().toVec().none { it.asVec().firstOrNull() == "p" })
     }
 
     /** The text survives a recreation (rotation); after an offline send the field is frozen for "send again". */

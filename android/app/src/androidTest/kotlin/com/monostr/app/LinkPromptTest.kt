@@ -193,9 +193,9 @@ class LinkPromptTest {
         rule.waitUntil(15_000) { toggle("settings-ask-links") == ToggleableState.Off }
         rule.onNodeWithTag("settings-ask-links").performScrollTo().performClick()
         rule.waitUntil(15_000) { toggle("settings-ask-links") == ToggleableState.On }
-        Espresso.pressBack()
+        pressBackSayingFocus()
         rule.waitUntil(15_000) { nodes("settings-cat-privacy").isNotEmpty() } // the overview lies under the page
-        Espresso.pressBack()
+        pressBackSayingFocus()
         rule.waitUntil(15_000) { nodes("feed-list").isNotEmpty() }
         Intents.init()
         intending(hasAction(Intent.ACTION_VIEW)).respondWith(Instrumentation.ActivityResult(Activity.RESULT_OK, null))

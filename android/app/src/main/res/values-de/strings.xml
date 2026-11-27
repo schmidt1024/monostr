@@ -12,6 +12,7 @@
     <string name="action_remove">Entfernen</string>
     <string name="action_send">Senden</string>
     <string name="action_send_again">Erneut senden</string>
+    <string name="action_copy">Kopieren</string>
     <string name="action_copy_address">Adresse kopieren</string>
     <string name="action_copy_uri">URI kopieren</string>
     <string name="state_sending">Sende…</string>
@@ -279,6 +280,8 @@
     <string name="setup_verify_word">Wort Nr. %1$d</string>
     <string name="setup_verify_wrong">Mindestens ein Wort stimmt nicht.</string>
     <string name="setup_back_to_seed">Zurück zum Seed</string>
+    <string name="setup_discard_title">Dieses Wallet verwerfen?</string>
+    <string name="setup_discard_text">Diese 25 Wörter funktionieren danach nicht mehr. Ein neuer Anlauf erzeugt ein neues Wallet.</string>
     <string name="setup_existing_title">Bestehende Wallet</string>
     <string name="setup_address_label">Hauptadresse (4… / 5…)</string>
     <string name="setup_view_key_label">Privater View-Key (64 Hex)</string>
@@ -301,6 +304,7 @@
     <string name="setup_address_title">Monero empfangen</string>
     <string name="setup_address_field">Monero-Adresse (4… / 8…)</string>
     <string name="setup_address_hint">Diese Adresse ist öffentlich. Am besten eine Subadresse nur für Nostr.</string>
+    <string name="setup_address_looking">Deine Relays werden nach einer bestehenden Adresse gefragt …</string>
     <string name="setup_address_publish">Veröffentlichen</string>
     <string name="setup_no_wallet_link">Noch keine Monero-Wallet? Hier eine erstellen</string>
     <string name="setup_address_done">Andere können dir jetzt Monero senden, auch aus Amethyst und Ditto.</string>
@@ -350,7 +354,7 @@
     <string name="settings_dm_preview_text">Text in Benachrichtigung zeigen</string>
     <string name="settings_search_relays">Such-Relays</string>
     <string name="settings_search_relays_hint">Nur für Namens- und Volltextsuche (NIP-50), nie für den Feed. Deine Suchbegriffe gehen an diese Relays.</string>
-    <string name="settings_search_relays_reset">Auf Standard zurücksetzen</string>
+    <string name="settings_search_relays_reset">Standard wiederherstellen</string>
     <string name="settings_suggested_relays">Vorgeschlagene Relays</string>
     <string name="settings_suggested_relays_hint">Bezahlte Monero-Relays: Lesen ist frei, Schreiben nach einmaliger XMR-Zahlung auf der Website des Relays. Quelle: pmnr.xmr.rocks</string>
     <string name="settings_suggested_relay_fee">Bezahltes Monero-Relay · %1$s XMR zum Schreiben</string>
@@ -415,7 +419,7 @@
     <string name="settings_preset_add">Preset hinzufügen</string>
     <string name="settings_preset_remove">Preset entfernen</string>
     <string name="settings_adopt_relays">Diese Relays durch meine veröffentlichte Liste ersetzen (NIP-65)</string>
-    <string name="settings_logout">Abmelden</string>
+    <string name="settings_logout">Konto von diesem Gerät entfernen</string>
     <string name="settings_msg_presets_saved">Presets gespeichert</string>
     <string name="settings_msg_disabled">Monero-Tips abgeschaltet</string>
     <string name="settings_msg_view_key_deleted">View-Key lokal gelöscht</string>
@@ -454,7 +458,10 @@
     <string name="notifications_checking">Relays werden gefragt…</string>
     <string name="notifications_error_load">Mitteilungen konnten nicht geladen werden</string>
     <string name="messages_title">Nachrichten</string>
-    <string name="messages_empty">Noch keine Nachrichten. Öffne ein Profil und tippe auf «Nachricht».</string>
+    <string name="messages_empty">Noch keine Nachrichten. Tippe auf +, um die erste zu schreiben.</string>
+    <string name="messages_new">Neue Nachricht</string>
+    <string name="messages_new_hint">Personen auf diesem Gerät suchen</string>
+    <string name="messages_new_none">Niemand gefunden. Du kannst auch ein Profil öffnen und «Nachricht» antippen.</string>
     <plurals name="messages_requests">
         <item quantity="one">Anfrage (%1$d)</item>
         <item quantity="other">Anfragen (%1$d)</item>
@@ -576,6 +583,7 @@
     <string name="compose_quote_hint">Zitat</string>
     <string name="profile_edit">Profil bearbeiten</string>
     <string name="feed_profile">Mein Profil</string>
+    <string name="feed_profile_more_accounts">%1$s, weitere Konten</string>
     <string name="profile_edit_title">Profil bearbeiten</string>
     <string name="profile_edit_banner">Banner-URL</string>
     <string name="profile_edit_picture">Bild-URL</string>
@@ -612,11 +620,11 @@
     <string name="about_feedback">Feedback auf Nostr</string>
     <string name="about_issues">Problem melden</string>
     <string name="about_license">Lizenz: %1$s</string>
-    <string name="dm_relay_hint_missing">relay.monostr.com fehlt in deiner Inbox-Liste, Monostr-Nutzer erreichen dich so eventuell nicht.</string>
+    <string name="dm_relay_hint_missing">relay.monostr.com fehlt in deinen Nachrichten-Relays, Monostr-Nutzer erreichen dich so eventuell nicht.</string>
     <string name="dm_relay_hint_add">Hinzufügen</string>
-    <string name="dm_relay_hint_second">Ein zweites Inbox-Relay erhöht die Zuverlässigkeit.</string>
+    <string name="dm_relay_hint_second">Ein zweites Nachrichten-Relay erhöht die Zuverlässigkeit.</string>
     <string name="dm_relay_hint_dismiss">Ausblenden</string>
-    <string name="dm_relay_hint_replace">Deine Inbox-Liste ist voll. Welches Relay soll relay.monostr.com ersetzen?</string>
+    <string name="dm_relay_hint_replace">Deine Nachrichten-Relays sind voll. Welches Relay soll relay.monostr.com ersetzen?</string>
     <string name="upload_error_nsfw">Dieser Server nimmt keine Inhalte für Erwachsene an. In den Einstellungen kannst du einen anderen Medien-Server wählen.</string>
     <string name="upload_error_too_large">Bild zu gross für diesen Server</string>
     <string name="upload_error_quota">Dein Speicher auf diesem Server ist voll</string>
@@ -633,7 +641,7 @@
     <string name="compose_attach">Bilder hinzufügen</string>
     <string name="compose_attach_limit">Höchstens 20 Bilder pro Note</string>
     <string name="compose_attachment_remove">Bild entfernen</string>
-    <string name="upload_retry">Erneut</string>
+    <string name="upload_retry">Erneut versuchen</string>
     <string name="compose_sensitive">Sensibler Inhalt</string>
     <string name="compose_sensitive_hint">Leser sehen die Bilder verdeckt, bis sie tippen.</string>
     <string name="profile_edit_pick">Bild wählen</string>
@@ -689,6 +697,9 @@
     <string name="create_finish">Los geht\'s</string>
     <string name="create_cancel_text">Abbrechen? Der Schlüssel wird verworfen.</string>
     <string name="create_cancel_yes">Verwerfen</string>
+    <string name="create_step">Schritt %1$d von %2$d</string>
+    <string name="unsaved_title">Änderungen verwerfen?</string>
+    <string name="unsaved_keep">Weiter bearbeiten</string>
     <string name="create_cancel_no">Weitermachen</string>
     <string name="settings_show_key">Privaten Schlüssel anzeigen (nsec)</string>
     <string name="settings_show_key_title">Dein Schlüssel</string>
@@ -754,7 +765,7 @@
     </plurals>
     <string name="discover_show_all">Alle anzeigen</string>
     <string name="discover_failed">Konnte nicht laden</string>
-    <string name="discover_retry">Nochmals</string>
+    <string name="discover_retry">Erneut versuchen</string>
     <string name="discover_dismiss">Vorschläge ausblenden</string>
     <string name="create_who_rotten">Monero-News (Revuo)</string>
     <string name="create_who_shortwave">Monero-Nutzer, testet Apps</string>
@@ -809,7 +820,7 @@
     <string name="translate_consent_translate">Übersetzen</string>
     <string name="translate_consent_settings">Einstellungen</string>
     <string name="settings_translate_device">Auf dem Gerät (Offline Translator)</string>
-    <string name="settings_translate_device_private">Nichts verlässt dein Handy</string>
+    <string name="settings_translate_device_private">Nichts verlässt dein Gerät</string>
     <string name="settings_translate_device_get">Offline Translator auf F-Droid holen</string>
     <string name="settings_translate_device_old">Dein Offline Translator ist zu alt. Aktualisieren (F-Droid)</string>
     <string name="translate_consent_device">Stattdessen Offline Translator verwenden</string>
@@ -857,6 +868,7 @@
     <string name="link_prompt_tor">Dein Browser nutzt nicht das Tor von Monostr.</string>
     <string name="link_prompt_copy">Link kopieren</string>
     <string name="link_prompt_torbrowser">In Tor Browser öffnen</string>
+    <string name="link_prompt_torbrowser_copy">Kopieren und Tor Browser öffnen</string>
     <string name="link_prompt_copied">Link kopiert</string>
     <string name="link_prompt_torbrowser_failed">Tor Browser liess sich nicht öffnen.</string>
     <string name="tor_desc_connecting">Tor: verbindet</string>
@@ -872,7 +884,6 @@
         <item quantity="other">%d offene Tips werden verworfen.</item>
     </plurals>
     <!-- settings overview -->
-    <string name="settings_page_account">Konto &amp; Schlüssel</string>
     <string name="settings_page_privacy">Tor &amp; Privatsphäre</string>
     <string name="settings_page_monero">Monero &amp; Tips</string>
     <string name="settings_page_notifications">Benachrichtigungen</string>
@@ -928,7 +939,7 @@
     <string name="settings_monero_delete_view_key_action">Löschen</string>
     <string name="settings_monero_payto_remove_q">Monero-Adresse entfernen?</string>
     <string name="settings_monero_payto_remove_text">Sie verschwindet aus deinem öffentlichen Profil, dort kann dir dann niemand mehr Tips senden.</string>
-    <string name="settings_logout_q">Abmelden?</string>
+    <string name="settings_logout_q">Konto von diesem Gerät entfernen?</string>
     <string name="settings_logout_key_warning">Dein Schlüssel ist nur auf diesem Telefon. Ohne Kopie kannst du dich nicht mehr anmelden.</string>
     <string name="settings_logout_show_key">Schlüssel anzeigen</string>
     <string name="settings_monero_active">Aktiv</string>
@@ -939,12 +950,17 @@
     <string name="settings_monero_receipts_replaces">Eine Einrichtung hier ersetzt die auf dem anderen Gerät.</string>
     <string name="settings_media_server_save">Medien-Server speichern</string>
     <string name="settings_show_key_sub">Wer ihn hat, kontrolliert dein Konto.</string>
+    <string name="settings_key_lock">Bildschirmsperre verlangen</string>
+    <string name="settings_key_lock_hint">Bevor der private Schlüssel angezeigt wird.</string>
+    <string name="settings_key_lock_none">Richte zuerst eine Bildschirmsperre auf diesem Gerät ein.</string>
     <string name="settings_no_name">Noch kein Name</string>
     <string name="settings_copy_npub">npub kopieren</string>
     <string name="settings_dm_relays_sub">Posteingang für DMs · NIP-17</string>
     <string name="settings_publish_list">Liste veröffentlichen</string>
     <string name="settings_use_published_list">Veröffentlichte Liste übernehmen</string>
     <string name="relay_removed">Relay entfernt</string>
+    <string name="list_member_removed">Aus der Liste entfernt</string>
+    <string name="settings_reaction_removed">Reaktion entfernt</string>
     <string name="relay_remove_named">%1$s entfernen</string>
     <string name="settings_chip_relays_spoken">%1$d von %2$d verbunden</string>
     <string name="settings_tip_amounts">Tip-Beträge</string>
@@ -973,4 +989,31 @@
     <string name="poll_hours">Stunden</string>
     <string name="poll_minutes">Minuten</string>
     <string name="poll_remove">Umfrage entfernen</string>
+    <string name="accounts_title">Konten</string>
+    <string name="accounts_page_hint">Jedes Konto hat eigene Relays, Einstellungen und Darstellung.</string>
+    <string name="accounts_other">Weitere Konten</string>
+    <string name="accounts_switch_label">Konto wechseln</string>
+    <string name="accounts_switch_hint">Lange drücken, um das Konto zu wechseln</string>
+    <string name="accounts_add">Konto hinzufügen</string>
+    <string name="accounts_active">Aktiv</string>
+    <string name="accounts_busy">Warte, bis das Hochladen/Senden fertig ist</string>
+    <string name="accounts_sign_in_again">Erneut anmelden</string>
+    <string name="accounts_switch_failed">Das Konto konnte nicht gewechselt werden</string>
+    <string name="accounts_now_using">Jetzt als %1$s angemeldet</string>
+    <string name="accounts_now_using_tor">Jetzt als %1$s angemeldet · frische Tor-Route in %2$d s</string>
+    <string name="accounts_tor_stalled">Warte auf eine frische Tor-Route…</string>
+    <string name="accounts_remove_text">Nachrichten, Entwürfe und Einstellungen von %1$s auf diesem Telefon werden gelöscht.</string>
+    <string name="accounts_remove_failed">Das Konto konnte nicht entfernt werden</string>
+    <string name="accounts_already_using">Bereits als %1$s angemeldet</string>
+    <string name="add_account_amber">Mit Amber anmelden</string>
+    <string name="add_account_recommended">Empfohlen</string>
+    <string name="add_account_get_amber">Amber holen</string>
+    <string name="add_account_get_amber_hint">Hält deine Schlüssel ausserhalb von Monostr</string>
+    <string name="add_account_key">Mit Schlüssel anmelden</string>
+    <string name="add_account_create">Weiteres Konto erstellen</string>
+    <string name="logout_keep_settings">Einstellungen auf diesem Gerät behalten</string>
+    <string name="logout_keep_settings_hint">Mit deinem Schlüssel verschlüsselt. Beim nächsten Anmelden sind sie wieder da.</string>
+    <string name="logout_keep_failed_title">Einstellungen nicht gesichert</string>
+    <string name="logout_keep_failed_text">Dein Signer hat die Einstellungen nicht verschlüsselt, darum wurde nichts entfernt. Ohne Einstellungen abmelden?</string>
+    <string name="accounts_keep_failed">Einstellungen nicht gesichert: Dein Signer hat nicht geantwortet. Das Konto wurde nicht entfernt.</string>
 </resources>

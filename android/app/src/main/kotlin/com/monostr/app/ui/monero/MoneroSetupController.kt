@@ -2,7 +2,7 @@ package com.monostr.app.ui.monero
 
 import com.monostr.app.net.SendGate
 import com.monostr.app.R
-import com.monostr.app.data.KeystoreSecretStore
+import com.monostr.app.data.SecretNames
 import com.monostr.app.data.MoneroSetup
 import com.monostr.app.data.Presets
 import com.monostr.app.data.SecretStore
@@ -122,6 +122,12 @@ data class SetupState(
      * background: the watcher step offers to keep it, the choose step warns that going on replaces it.
      */
     val announced: String? = null,
+    /**
+     * The address step is open and the relays are still being asked for what this account already has (own payto,
+     * announced tip address): the step says so, since its answer may fill the field, open the watcher step or close
+     * the intro (backlog 121: the owner took the empty form for the final word and tapped «Later»).
+     */
+    val looking: Boolean = false,
 )
 
 /**
@@ -155,6 +161,7 @@ class MoneroSetupController(
     private val sendGate: SendGate = SendGate.OPEN,
 ) {
     private val startsAtWatcher = upgrade
+    private val viewKeyName = SecretNames.viewKey(selfPubkey)
     private val _state = MutableStateFlow(
         SetupState(step = if (upgrade) SetupStep.Watcher(Presets.DEFAULT_WATCHER, loading = true) else SetupStep.Address("", loading = true), intro = intro),
     )
@@ -197,6 +204,11 @@ class MoneroSetupController(
     /** The differing own payto the user agreed to replace on [SetupStep.Done]; a retry may replace it too. */
     private var retryReplacing: String? = null
     private var paytoRetry: Job? = null
+    /** For [back]: the step the watcher step was opened from, the last choice, and the step before the confirmation. */
+    private var watcherOrigin: SetupStep? = null
+    private var lastChoose: SetupStep.Choose? = null
+    private var beforeConfirm: SetupStep? = null
+    private var personalInput: SetupStep.Personal? = null
 
     fun start() {
         starting = scope.launch {
@@ -210,26 +222,30 @@ class MoneroSetupController(
                 // ready before the confirm step asks whether the tip address replaces it
                 paytoLookup()
             } else {
-                _state.update { it.copy(step = SetupStep.Address("")) }
-                launch { prefillOwnPayto() }
+                _state.update { it.copy(step = SetupStep.Address(""), looking = true) }
             }
+            val prefill = if (_state.value.looking) launch { prefillOwnPayto() } else null
             if (existing != null) return@launch
             // set up on another device or before a reinstall: the watcher step offers to keep that tip address
             val asked = System.nanoTime()
             val announced = announcedAddress()
             log("announced tip address (relays): ${(System.nanoTime() - asked) / 1_000_000} ms")
-            if (announced == null) return@launch
-            var switched = false
-            _state.update { s ->
-                val step = s.step
-                // only an untouched field: typed or pasted input and a shown error stay
-                switched = step is SetupStep.Address && !step.loading && s.error == null && (step.input.isEmpty() || step.input == prefilled)
-                if (switched) s.copy(step = SetupStep.Watcher(url), announced = announced, error = null) else s.copy(announced = announced)
+            if (announced != null) {
+                var switched = false
+                _state.update { s ->
+                    val step = s.step
+                    // only an untouched field: typed or pasted input and a shown error stay
+                    switched = step is SetupStep.Address && !step.loading && s.error == null && (step.input.isEmpty() || step.input == prefilled)
+                    if (switched) s.copy(step = SetupStep.Watcher(url), announced = announced, error = null) else s.copy(announced = announced)
+                }
+                if (switched) {
+                    watcherForAnnounced = true
+                    prefetch()
+                }
             }
-            if (switched) {
-                watcherForAnnounced = true
-                prefetch()
-            }
+            // both answers are in (or given up): the address step no longer says it is looking
+            prefill?.join()
+            _state.update { it.copy(looking = false) }
         }
     }
 
@@ -326,6 +342,7 @@ class MoneroSetupController(
     fun upgrade() = openWatcher()
 
     private fun openWatcher() {
+        watcherOrigin = _state.value.step.takeIf { it is SetupStep.Address || it is SetupStep.AddressDone }
         watcherForAnnounced = false
         _state.update { it.copy(step = SetupStep.Watcher(url), error = null) }
         prefetch()
@@ -445,7 +462,8 @@ class MoneroSetupController(
                 network = net
                 val stored = existing
                 // a personal setup's address does not belong to the stored view key (D5)
-                val canReuse = stored != null && !stored.isPersonal && stored.network == loaded.network && secrets.get(KeystoreSecretStore.SECRET_VIEW_KEY) != null
+                val canReuse = stored != null && !stored.isPersonal && stored.network == loaded.network && secrets.get(viewKeyName) != null
+                lastChoose = SetupStep.Choose(loaded, canReuse)
                 _state.update { it.copy(step = SetupStep.Choose(loaded, canReuse), error = null) }
             } catch (e: TimeoutCancellationException) {
                 prefetched?.cancel()
@@ -495,6 +513,7 @@ class MoneroSetupController(
         val address = k.address(network)
         pendingAddress = address
         pendingViewKey = k.viewSecret.copyOf()
+        beforeConfirm = SetupStep.Verify(positions)
         // spec payto §4: a different own payto is asked about before anything is published; the spinner shows meanwhile
         _state.update { it.copy(step = SetupStep.Registering, error = null) }
         scope.launch {
@@ -556,7 +575,7 @@ class MoneroSetupController(
     /** Spec 6.5: move the stored wallet to the newly chosen watcher. */
     fun reuseStored() {
         val stored = existing ?: return
-        val raw = secrets.get(KeystoreSecretStore.SECRET_VIEW_KEY) ?: return fail(ERR_VIEW_KEY_FORMAT)
+        val raw = secrets.get(viewKeyName) ?: return fail(ERR_VIEW_KEY_FORMAT)
         val hex = raw.trim().lowercase()
         if (!isHex64(hex)) return fail(ERR_VIEW_KEY_FORMAT)
         val address = runCatching { Address.parse(stored.address) }.getOrNull() ?: return fail(ERR_ADDRESS)
@@ -571,6 +590,8 @@ class MoneroSetupController(
      * payto is read; until then confirming waits.
      */
     private fun toConfirm(address: String) {
+        // the wallet's fields or the choice, for [back]
+        beforeConfirm = _state.value.step.takeIf { it is SetupStep.Existing || it is SetupStep.Choose }
         val known = knownPayto
         if (known != null) {
             paytoAsked = true
@@ -589,6 +610,7 @@ class MoneroSetupController(
     }
 
     fun startPersonal() {
+        personalInput = null
         watcherForAnnounced = false
         _state.update { it.copy(step = SetupStep.Personal("", ""), error = null) }
     }
@@ -639,6 +661,7 @@ class MoneroSetupController(
                 val tip = status.address.encode()
                 val known = knownPayto
                 paytoAsked = known != null
+                personalInput = (_state.value.step as? SetupStep.Personal)?.copy(loading = false, slow = false, retry = false)
                 _state.update { it.copy(step = SetupStep.PersonalConfirm(status, profile.relays, known?.address?.takeIf { a -> a != tip }, paytoPending = known == null), error = null) }
                 // outside the check: cancelling or leaving the check must not leave the question pending
                 if (known == null) scope.launch {
@@ -719,6 +742,53 @@ class MoneroSetupController(
         val step = _state.value.step as? SetupStep.Confirm ?: return
         if (step.paytoPending || refused()) return
         register(restoreHeight = step.restoreHeight)
+    }
+
+    /** What the back arrow and the system's back do at the current step. */
+    enum class Back {
+        /** One step back was taken. */
+        STEPPED,
+        /** The first step, or a finished one: the setup closes. */
+        LEAVE,
+        /** The seed is on screen: going back makes another wallet, so the screen asks first and then calls [discardSeed]. */
+        ASK_DISCARD,
+        /** Nothing: the registration is on its way. */
+        STAY,
+    }
+
+    /**
+     * One step back (UX review 2026-11-26, backlog 110): the arrow and the back gesture closed the whole setup from any
+     * step, also after the 25 words were written down, and the next attempt made another wallet. What was typed stays.
+     */
+    fun back(): Back {
+        val to: SetupStep = when (val step = _state.value.step) {
+            is SetupStep.Address, is SetupStep.AddressDone, is SetupStep.Done -> return Back.LEAVE
+            SetupStep.Registering -> return Back.STAY
+            is SetupStep.Watcher -> {
+                val origin = watcherOrigin ?: return Back.LEAVE
+                check?.cancel(); check = null
+                dropPrefetch()
+                origin.let { if (it is SetupStep.Address) it.copy(loading = false) else it }
+            }
+            is SetupStep.Choose -> { backToWatcher(); return Back.STEPPED }
+            is SetupStep.Personal -> { backToWatcher(); return Back.STEPPED }
+            is SetupStep.PersonalConfirm -> personalInput ?: SetupStep.Personal("", "")
+            is SetupStep.Seed -> return Back.ASK_DISCARD
+            is SetupStep.Verify -> { backToSeed(); return Back.STEPPED }
+            is SetupStep.Existing -> lastChoose ?: return Back.LEAVE
+            is SetupStep.Confirm -> beforeConfirm ?: lastChoose ?: return Back.LEAVE
+        }
+        _state.update { it.copy(step = to, error = null) }
+        return Back.STEPPED
+    }
+
+    /** The user agreed to lose the wallet of the seed step: its keys go, the choice comes back. */
+    fun discardSeed() {
+        if (_state.value.step !is SetupStep.Seed) return
+        val choose = lastChoose
+        wipe()
+        positions = emptyList()
+        if (choose == null) finish() else _state.update { it.copy(step = choose, error = null) }
     }
 
     fun skip() {
@@ -873,7 +943,7 @@ class MoneroSetupController(
                     withContext(NonCancellable) { undoRegistration(old) }
                     throw e
                 }
-                secrets.put(KeystoreSecretStore.SECRET_VIEW_KEY, viewKey.toHex())
+                secrets.put(viewKeyName, viewKey.toHex())
                 settings.setSetup(MoneroSetup(address.encode(), url, watcherPubkey, NetworkTag.toTag(network), now(), amountsHidden = hidden))
                 settings.setOnboardingSeen()
                 if (old != null && !old.isPersonal && old.watcherUrl != url) {
@@ -925,7 +995,7 @@ class MoneroSetupController(
         if (!sendGate.canSend.value) return
         try {
             if (previous != null && previous.watcherUrl == url) {
-                val key = secrets.get(KeystoreSecretStore.SECRET_VIEW_KEY)?.trim()?.lowercase()?.takeIf(::isHex64)?.hexToBytes()
+                val key = secrets.get(viewKeyName)?.trim()?.lowercase()?.takeIf(::isHex64)?.hexToBytes()
                 val address = runCatching { Address.parse(previous.address) }.getOrNull()
                 if (key != null && address != null) {
                     try {

@@ -92,6 +92,10 @@ fun LinkPromptHost(alwaysOpen: Boolean, onAlwaysOpen: () -> Unit, torOn: () -> B
     val torBrowserPkg by produceState<String?>(null, url, torChoices) {
         value = if (torChoices) withContext(Dispatchers.IO) { runCatching { finder.find(url) }.getOrNull() } else null
     }
+    // a Tor Browser that takes no links (16.0 on): one tap copies the link and brings it to the front, as its icon would
+    val torBrowserLaunch by produceState<String?>(null, url, torChoices) {
+        value = if (torChoices) withContext(Dispatchers.IO) { runCatching { finder.find(url) ?: finder.launchOnly() }.getOrNull() } else null
+    }
     val failedText = stringResource(R.string.link_prompt_torbrowser_failed)
     val copiedText = stringResource(R.string.link_prompt_copied)
     fun openInTorBrowser(pkg: String) {
@@ -99,6 +103,14 @@ fun LinkPromptHost(alwaysOpen: Boolean, onAlwaysOpen: () -> Unit, torOn: () -> B
         asked = null
         // never the default browser: a failed start only says so
         val started = runCatching { context.startActivity(ViewLaunch(android.content.Intent.ACTION_VIEW, current, pkg).toIntent()) }.isSuccess
+        if (!started) Toast.makeText(context, failedText, Toast.LENGTH_SHORT).show()
+    }
+    fun copyAndOpenTorBrowser(pkg: String) {
+        val current = asked ?: return
+        asked = null
+        copyToClipboard(context, current, copiedText, label = "Monostr link")
+        // the launcher intent resumes a running Tor Browser, tabs and circuits untouched; never the default browser
+        val started = runCatching { context.startActivity(checkNotNull(context.packageManager.getLaunchIntentForPackage(pkg))) }.isSuccess
         if (!started) Toast.makeText(context, failedText, Toast.LENGTH_SHORT).show()
     }
     fun copyLink() {
@@ -123,9 +135,14 @@ fun LinkPromptHost(alwaysOpen: Boolean, onAlwaysOpen: () -> Unit, torOn: () -> B
             }
             FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.s)) {
                 OutlinedButton({ answer(false) }, Modifier.testTag("link-cancel"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.link_prompt_cancel)) }
-                if (torChoices) OutlinedButton({ copyLink() }, Modifier.testTag("link-copy"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.link_prompt_copy)) }
                 val pkg = torBrowserPkg.takeIf { torChoices }
-                if (pkg != null) {
+                val launch = torBrowserLaunch.takeIf { torChoices && pkg == null }
+                if (torChoices && launch == null) OutlinedButton({ copyLink() }, Modifier.testTag("link-copy"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.link_prompt_copy)) }
+                if (launch != null) {
+                    OutlinedButton({ answer(true) }, Modifier.testTag("link-open"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.link_prompt_open)) }
+                    // last: its label is long and takes a row of its own (owner 2026-11-26)
+                    Button({ copyAndOpenTorBrowser(launch) }, Modifier.testTag("link-torbrowser-copy"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.link_prompt_torbrowser_copy)) }
+                } else if (pkg != null) {
                     Button({ openInTorBrowser(pkg) }, Modifier.testTag("link-torbrowser"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.link_prompt_torbrowser)) }
                     // beside Tor Browser the default browser is the less private choice, so it steps back
                     OutlinedButton({ answer(true) }, Modifier.testTag("link-open"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.link_prompt_open)) }

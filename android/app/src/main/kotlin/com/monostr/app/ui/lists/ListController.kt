@@ -162,6 +162,17 @@ class ListController(
         writeScope.launch {
             val r = attempt { lists.setMember(address, pubkey, present = false) } ?: SaveResult.Failed
             if (r != SaveResult.Ok) _state.update { it.copy(message = Message(uiText(R.string.list_save_failed), retry = { removeMember(pubkey) })) }
+            // one tap removed it for everyone to see: the same «Undo» as a removed relay (backlog 114)
+            else _state.update { it.copy(message = Message(uiText(R.string.list_member_removed), undo = { restoreMember(pubkey) })) }
+        }
+    }
+
+    /** The «Undo» of [removeMember]. */
+    private fun restoreMember(pubkey: String) {
+        if (refused()) return
+        writeScope.launch {
+            val r = attempt { lists.setMember(address, pubkey, present = true) } ?: SaveResult.Failed
+            if (r != SaveResult.Ok) _state.update { it.copy(message = Message(uiText(R.string.list_save_failed), retry = { restoreMember(pubkey) })) }
         }
     }
 

@@ -2,6 +2,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- security review 2026-11-26: the optional screen-lock prompt before the key is shown (KeyLock); no fingerprint data reaches the app -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <!-- spec 2026-10-16 §7: saving a picture on Android 8–9; from 10 on MediaStore needs no permission -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
     <queries>

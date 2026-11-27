@@ -34,4 +34,26 @@ class EngineQueryDecodedTest {
         assertTrue(e.queryDecoded(Filter().kind(Kind(7u))).isEmpty())
         e.close()
     }
+
+    /** Bug bounty 2026-11-26: one event dated past the signed range made every database read that met it throw, for good. */
+    @Test
+    fun `an event dated far in the future is left out of the reads and deleted, the rest still reads`() = runTest {
+        val e = NostrEngine.create(dir.resolve("lmdb").toString(), null, emptyList())
+        val author = Keys.generate()
+        val now = System.currentTimeMillis() / 1000
+        val good = EventBuilder.textNote("good").customCreatedAt(Timestamp.fromSecs(now.toULong())).signWithKeys(author)
+        val ahead = EventBuilder.textNote("clock ahead").customCreatedAt(Timestamp.fromSecs((now + 900).toULong())).signWithKeys(author)
+        val overflow = EventBuilder.textNote("overflow").customCreatedAt(Timestamp.fromSecs(9223372036854775808uL)).signWithKeys(author)
+        val nextYear = EventBuilder.textNote("next year").customCreatedAt(Timestamp.fromSecs((now + 400 * 86_400).toULong())).signWithKeys(author)
+        listOf(good, ahead, overflow, nextYear).forEach { e.save(it) }
+        val filter = Filter().kind(Kind(1u))
+        assertEquals(4, e.query(filter).size)
+        assertEquals(setOf("good", "clock ahead"), e.queryDecoded(filter).map { it.content }.toSet())
+        assertEquals(setOf("good", "clock ahead"), e.queryBoth(filter).map { it.second.content }.toSet())
+        // the delete runs beside the read
+        val end = System.nanoTime() + 5_000_000_000
+        while (e.query(filter).size != 2 && System.nanoTime() < end) Thread.sleep(20)
+        assertEquals(setOf("good", "clock ahead"), e.query(filter).map { it.content() }.toSet())
+        e.close()
+    }
 }

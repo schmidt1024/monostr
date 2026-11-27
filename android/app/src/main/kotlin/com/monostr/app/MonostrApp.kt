@@ -9,6 +9,7 @@ import android.app.ActivityManager
 import android.app.Application
 import android.os.Process
 import android.os.SystemClock
+import com.monostr.app.media.MediaHttp
 import com.monostr.app.media.VideoFrameExtractor
 import com.monostr.app.media.VideoFrameFetcher
 import com.monostr.app.media.VideoFrameKeyer
@@ -45,6 +46,8 @@ class MonostrApp : Application(), SingletonImageLoader.Factory {
     @Inject lateinit var deviceTranslator: dagger.Lazy<com.monostr.app.translate.DeviceTranslator>
     /** False in :tor, which runs nothing of the app. */
     @Volatile private var appProcess = false
+    /** Lazy: built off the main thread (the secret store opens its file). */
+    @Inject lateinit var accountMigration: dagger.Lazy<com.monostr.app.data.AccountMigration>
     private val pictureScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /**
@@ -53,7 +56,7 @@ class MonostrApp : Application(), SingletonImageLoader.Factory {
      * The listener drops pictures our media hosts no longer have (see StaleMediaCheck, owner 2026-11-12).
      */
     override fun newImageLoader(context: PlatformContext): ImageLoader {
-        pictureScope.launch { uiSettings.get().mediaServer.collect { uploadServer = it } }
+        pictureScope.launch { uiSettings.get().mediaServer.collect { uploadServer = it; mediaHttp.get().ownServer = it } }
         lateinit var loader: ImageLoader
         val check = StaleMediaCheck(
             pictureScope,
@@ -67,25 +70,12 @@ class MonostrApp : Application(), SingletonImageLoader.Factory {
         return loader
     }
 
-    /**
-     * The gated client with an address check: a stranger's picture or avatar URL must not make the app reach into the
-     * user's LAN or loopback (router pages, local services). The own media server is exempt, it may be self-hosted at
-     * home; debug builds allow any address for the loopback device tests.
-     */
-    private val pictureHttp by lazy {
-        val base = http.get()
-        val check = com.monostr.app.data.linkpreview.AddressCheckInterceptor(
-            if (BuildConfig.DEBUG) com.monostr.app.data.linkpreview.AddressPolicy.ANY else com.monostr.app.data.linkpreview.AddressPolicy.PUBLIC_ONLY,
-            base.dns,
-        )
-        base.newBuilder().addNetworkInterceptor { chain ->
-            val own = uploadServer?.let { runCatching { java.net.URI(it).host }.getOrNull() }
-            if (own != null && chain.request().url.host.equals(own, ignoreCase = true)) chain.proceed(chain.request()) else check.intercept(chain)
-        }.build()
-    }
+    /** [MediaHttp]: the gated client with the address check; lazy as [http]. */
+    @Inject lateinit var mediaHttp: dagger.Lazy<MediaHttp>
+    private val pictureHttp get() = mediaHttp.get().client
 
-    /** Spec 2026-11-12: a video without a poster gets one from its first frame, read through the same gated client. */
-    private val videoFrames by lazy { VideoFrameExtractor({ http.get() }, VideoFrameStore(java.io.File(cacheDir, "video_frames"))) }
+    /** Spec 2026-11-12: a video without a poster gets one from its first frame, read through the picture client: gated and with its address check (bug bounty 2026-11-26). */
+    private val videoFrames by lazy { VideoFrameExtractor({ pictureHttp }, VideoFrameStore(java.io.File(cacheDir, "video_frames"))) }
 
     private fun coil3.ComponentRegistry.Builder.addVideoFrames() {
         add(VideoFrameFetcher.Factory { videoFrames })
@@ -115,6 +105,8 @@ class MonostrApp : Application(), SingletonImageLoader.Factory {
             val pid = Process.myPid()
             // one background writer: a mark on the main thread must not wait for the disk (it would skew what it measures)
             val writer = java.util.concurrent.Executors.newSingleThreadExecutor()
+            // a main thread stall past 0.7 s logs its stack (owner 2026-11-26: the chat arrow «did nothing» during a 3.3 s stall)
+            MainThreadWatchdog.start(report = { PerfTrace.mark(it) })
             PerfTrace.sink = { line ->
                 println(line)
                 if (log != null) {
@@ -122,6 +114,10 @@ class MonostrApp : Application(), SingletonImageLoader.Factory {
                     writer.execute { runCatching { log.appendText("${java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.ROOT).format(java.util.Date(at))} [$pid] $line\n") } }
                 }
             }
+        }
+        // settings readers wait until the active account's file is known (AccountPrefs); the layout of older versions moves first
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            runCatching { accountMigration.get().runAndActivate() }
         }
         // the gate stays Unknown (everything blocked) until the setting is read; read off the main thread, no runBlocking
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {

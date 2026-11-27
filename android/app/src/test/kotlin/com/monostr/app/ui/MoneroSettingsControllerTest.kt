@@ -3,7 +3,7 @@ import com.monostr.app.session.AdoptResult
 import com.monostr.app.ui.common.uiText
 import com.monostr.app.R
 
-import com.monostr.app.data.KeystoreSecretStore
+import com.monostr.app.data.SecretNames
 import com.monostr.app.data.MoneroSetup
 import com.monostr.app.ui.settings.MoneroSettingsController
 import com.monostr.app.ui.settings.MoneroSettingsState
@@ -38,11 +38,11 @@ class MoneroSettingsControllerTest {
     fun `presets are validated and stored, monero can be disabled, view key deleted, relays adopted`() = runTest {
         val setup = MoneroSetup("4addr", "https://w.example", "c".repeat(64), "mainnet", 1)
         val settings = FakeTipSettings(setup = setup)
-        val secrets = FakeSecrets().apply { put(KeystoreSecretStore.SECRET_VIEW_KEY, "ab".repeat(32)) }
+        val secrets = FakeSecrets().apply { put(SecretNames.viewKey(self), "ab".repeat(32)) }
         val tips = FakeTips()
         val gateway = FakeWatcherGateway()
         var adoptResult = AdoptResult.ADOPTED
-        val c = MoneroSettingsController(settings, secrets, tips, gateway, { adoptResult }, eager())
+        val c = MoneroSettingsController(settings, secrets, tips, gateway, { adoptResult }, eager(), selfPubkey = self)
         c.start()
         advanceUntilIdle()
         assertEquals(setup, c.state.value.setup)
@@ -71,7 +71,7 @@ class MoneroSettingsControllerTest {
         c.deleteViewKey()
         advanceUntilIdle()
         assertFalse(c.state.value.hasViewKey)
-        assertNull(secrets.get(KeystoreSecretStore.SECRET_VIEW_KEY))
+        assertNull(secrets.get(SecretNames.viewKey(self)))
         c.disable()
         advanceUntilIdle()
         assertEquals(listOf("https://w.example"), gateway.unregistered)

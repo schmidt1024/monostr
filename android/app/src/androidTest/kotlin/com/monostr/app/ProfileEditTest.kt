@@ -103,7 +103,7 @@ class ProfileEditTest {
         rule.waitUntil(15_000) { nodes("edit-name").isNotEmpty() }
         rule.onNodeWithTag("edit-name").performTextClearance()
         rule.onNodeWithTag("edit-name").performTextInput(newName)
-        rule.onNodeWithTag("edit-save").performScrollTo().performClick() // the button sits below the fields, behind the keyboard
+        rule.onNodeWithTag("edit-save").performClick() // in the top bar since 2026-11-26
         // saved = back on the own profile, which already shows the new name
         rule.waitUntil(30_000) { nodes("profile-edit").isNotEmpty() && rule.onAllNodesWithText(newName).fetchSemanticsNodes().isNotEmpty() }
         // what the app sent: the newest kind 0 the relay received

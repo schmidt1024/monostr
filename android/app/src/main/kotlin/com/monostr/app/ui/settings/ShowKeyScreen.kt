@@ -1,5 +1,6 @@
 package com.monostr.app.ui.settings
 
+import com.monostr.app.ui.theme.MonostrFonts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -110,7 +111,7 @@ fun ShowKeyScreen(onBack: () -> Unit, vm: ShowKeyViewModel = hiltViewModel()) {
             Modifier.padding(padding).padding(Spacing.l).fillMaxSize().verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(Spacing.l),
         ) {
-            Text(key.nsec, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("show-key-nsec"))
+            Text(key.nsec, fontFamily = MonostrFonts.mono, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("show-key-nsec"))
             OutlinedButton(
                 onClick = {
                     copySecret(context, key.nsec, NSEC_CLIP_LABEL)
@@ -130,7 +131,7 @@ fun ShowKeyScreen(onBack: () -> Unit, vm: ShowKeyViewModel = hiltViewModel()) {
             Text(stringResource(R.string.create_backup_warning), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
             Column {
                 Text(stringResource(R.string.create_npub_label), style = MaterialTheme.typography.labelLarge)
-                Text(key.npub, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("show-key-npub"))
+                Text(key.npub, fontFamily = MonostrFonts.mono, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("show-key-npub"))
             }
         }
     }

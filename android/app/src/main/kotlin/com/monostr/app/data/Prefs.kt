@@ -23,7 +23,14 @@ val Context.monostrPrefs: DataStore<Preferences> by preferencesDataStore(
 )
 
 /** Which signer the user logged in with. Amber sessions keep pubkey and signer package. */
-data class SessionInfo(val pubkey: String, val signerType: SignerType, val amberPackage: String?)
+data class SessionInfo(
+    val pubkey: String,
+    val signerType: SignerType,
+    val amberPackage: String?,
+    /** Display only, for the account switcher; refreshed from the own profile while the account is active. */
+    val name: String? = null,
+    val picture: String? = null,
+)
 
 enum class SignerType { LOCAL, AMBER }
 
@@ -56,31 +63,6 @@ fun isValidRelayUrl(url: String): Boolean {
     if (u.any { it.isWhitespace() }) return false
     val uri = runCatching { java.net.URI(u) }.getOrNull() ?: return false
     return (uri.scheme == "wss" || uri.scheme == "ws") && !uri.host.isNullOrBlank()
-}
-
-class PrefsSessionStore(private val store: DataStore<Preferences>) : SessionStore {
-    override val session: Flow<SessionInfo?> = store.data.map { p ->
-        val pubkey = p[PUBKEY] ?: return@map null
-        val type = p[SIGNER]?.let { runCatching { SignerType.valueOf(it) }.getOrNull() } ?: return@map null
-        SessionInfo(pubkey, type, p[AMBER_PACKAGE])
-    }
-
-    override suspend fun save(info: SessionInfo) {
-        store.edit { p ->
-            p[PUBKEY] = info.pubkey; p[SIGNER] = info.signerType.name
-            if (info.amberPackage != null) p[AMBER_PACKAGE] = info.amberPackage else p.remove(AMBER_PACKAGE)
-        }
-    }
-
-    override suspend fun clear() {
-        store.edit { p -> p.remove(PUBKEY); p.remove(SIGNER); p.remove(AMBER_PACKAGE) }
-    }
-
-    private companion object {
-        val PUBKEY = stringPreferencesKey("session.pubkey")
-        val SIGNER = stringPreferencesKey("session.signer")
-        val AMBER_PACKAGE = stringPreferencesKey("session.amber_package")
-    }
 }
 
 class PrefsRelayStore(private val store: DataStore<Preferences>) : RelayStore, RelayModeStore {

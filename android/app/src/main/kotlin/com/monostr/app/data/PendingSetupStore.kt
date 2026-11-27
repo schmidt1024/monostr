@@ -6,7 +6,6 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.monostr.app.session.PendingSetup
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.Json
@@ -19,25 +18,27 @@ interface PendingSetupStore {
     suspend fun remove(pubkey: String)
 }
 
+/** Bound to [pubkey]'s own file ([ownedBy]), as the drafts. */
 class PrefsPendingSetupStore(private val store: DataStore<Preferences>) : PendingSetupStore {
     /** A failed read yields no record instead of crashing the session start (the official DataStore pattern). */
-    private val data: Flow<Preferences> = store.data.catch { if (it is IOException) emit(emptyPreferences()) else throw it }
+    private suspend fun data(pubkey: String): Preferences =
+        store.ownedBy(pubkey)?.data?.catch { if (it is IOException) emit(emptyPreferences()) else throw it }?.first() ?: emptyPreferences()
 
     private fun key(pubkey: String) = stringPreferencesKey("$PREFIX$pubkey")
 
     /** An unreadable record counts as none: nothing is published from it. */
     override suspend fun load(pubkey: String): PendingSetup? =
-        data.first()[key(pubkey)]?.let { raw -> runCatching { json.decodeFromString(PendingSetup.serializer(), raw) }.getOrNull() }
+        data(pubkey)[key(pubkey)]?.let { raw -> runCatching { json.decodeFromString(PendingSetup.serializer(), raw) }.getOrNull() }
 
     override suspend fun save(pubkey: String, setup: PendingSetup) {
-        store.edit { it[key(pubkey)] = json.encodeToString(PendingSetup.serializer(), setup) }
+        store.ownedBy(pubkey)?.edit { it[key(pubkey)] = json.encodeToString(PendingSetup.serializer(), setup) }
     }
 
     override suspend fun remove(pubkey: String) {
-        store.edit { it.remove(key(pubkey)) }
+        store.ownedBy(pubkey)?.edit { it.remove(key(pubkey)) }
     }
 
-    private companion object {
+    internal companion object {
         const val PREFIX = "pending_setup."
         val json = Json { ignoreUnknownKeys = true }
     }

@@ -1,5 +1,10 @@
 package com.monostr.app.ui.lists
 
+import androidx.compose.material3.minimumInteractiveComponentSize
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.selection.toggleable
+import com.monostr.app.ui.common.ConfirmDialog
+import com.monostr.app.ui.common.rememberLeaveGuard
 import com.monostr.app.ui.common.GuardedAlertDialog
 import com.monostr.app.ui.common.MonostrSnackbarHost
 import androidx.compose.foundation.layout.Column
@@ -67,11 +72,12 @@ fun ListEditScreen(onDone: (deleted: Boolean) -> Unit, vm: ListEditViewModel = h
     val snackbar = remember { SnackbarHostState() }
     MessageSnackbar(state.message, snackbar, onUnmute = {}, onShown = vm.controller::clearMessage)
     LaunchedEffect(state.done) { if (state.done) onDone(state.deleted) }
+    val back = rememberLeaveGuard(dirty = state.dirty, onLeave = { onDone(false) })
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(if (state.isNew) R.string.list_create else R.string.list_edit_title)) },
-                navigationIcon = { IconButton(onClick = { onDone(false) }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back)) } },
+                navigationIcon = { IconButton(onClick = back) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back)) } },
                 actions = {
                     TextButton(onClick = vm.controller::save, enabled = state.canSave, modifier = Modifier.testTag("list-save")) { Text(stringResource(R.string.list_save)) }
                 },
@@ -98,12 +104,12 @@ fun ListEditScreen(onDone: (deleted: Boolean) -> Unit, vm: ListEditViewModel = h
                 shape = MaterialTheme.shapes.medium,
             )
             Spacer(Modifier.height(Spacing.s))
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().toggleable(state.private, role = Role.Switch, onValueChange = vm.controller::setPrivate).testTag("list-private"), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f).padding(end = Spacing.l)) {
                     Text(stringResource(R.string.list_private), style = MaterialTheme.typography.titleSmall)
                     Text(stringResource(R.string.list_private_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                Switch(checked = state.private, onCheckedChange = vm.controller::setPrivate, modifier = Modifier.testTag("list-private"))
+                Switch(checked = state.private, onCheckedChange = null)
             }
             if (!state.isNew) {
                 Spacer(Modifier.height(Spacing.xl))
@@ -124,11 +130,10 @@ fun ListEditScreen(onDone: (deleted: Boolean) -> Unit, vm: ListEditViewModel = h
         )
     }
     if (state.confirmDelete) {
-        GuardedAlertDialog(
-            onDismissRequest = vm.controller::dismissDelete,
-            text = { Text(stringResource(R.string.list_delete_text)) },
-            confirmButton = { TextButton(onClick = vm.controller::delete, modifier = Modifier.testTag("list-delete-confirm")) { Text(stringResource(R.string.list_delete_confirm)) } },
-            dismissButton = { TextButton(onClick = vm.controller::dismissDelete) { Text(stringResource(R.string.action_cancel)) } },
+        ConfirmDialog(
+            title = null, text = stringResource(R.string.list_delete_text),
+            confirm = stringResource(R.string.list_delete_confirm), confirmTag = "list-delete-confirm", destructive = true,
+            onConfirm = vm.controller::delete, onDismiss = vm.controller::dismissDelete,
         )
     }
 }

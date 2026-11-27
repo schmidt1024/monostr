@@ -17,7 +17,7 @@ class AmberSignerTest {
     fun `a dismissed signer prompt ends in SigningRejectedException`() = runTest {
         val bridge = SignerBridge()
         // No content resolver on the JVM: the resolver attempt finds nothing and the signer activity is asked.
-        val signer = AmberSigner(ContextWrapper(null), "com.greenart7c3.nostrsigner", "c".repeat(64), bridge)
+        val signer = AmberSigner(ContextWrapper(null), "com.greenart7c3.nostrsigner", "c".repeat(64), bridge, trusted = { true })
         val signing = async { runCatching { signer.sign(UnsignedEvent(24242, "Upload", emptyList(), 1_700_000_000)) } }
         val pending = bridge.pending.filterNotNull().first()
         bridge.complete(pending.id, resultOk = false, response = null)
@@ -25,12 +25,33 @@ class AmberSignerTest {
         assertTrue(error is SigningRejectedException, "was $error")
     }
 
+    /** Bug bounty 2026-11-26: another app under the signer's name gets nothing to sign. */
+    @Test
+    fun `a signer app that is no longer the one of the login is not asked`() = runTest {
+        val bridge = SignerBridge()
+        val signer = AmberSigner(ContextWrapper(null), "com.greenart7c3.nostrsigner", "c".repeat(64), bridge, trusted = { false })
+        val error = runCatching { signer.sign(UnsignedEvent(1, "secret", emptyList(), 1_700_000_000)) }.exceptionOrNull()
+        assertTrue(error is SignerChangedException, "was $error")
+        assertTrue(bridge.pending.first() == null, "nothing reached the signer activity")
+        assertTrue(runCatching { signer.nip44Encrypt("d".repeat(64), "secret") }.exceptionOrNull() is SignerChangedException)
+        assertTrue(signer.nip44DecryptSilent("d".repeat(64), "payload") == null)
+    }
+
+    @Test
+    fun `the first use pins the signer, later only the pinned one is trusted`() {
+        assertTrue(SignerTrust.verdict(pinned = null, installed = "aa", matchesPinned = false) == SignerTrust.Verdict.PIN)
+        assertTrue(SignerTrust.verdict(pinned = "aa", installed = "aa", matchesPinned = true) == SignerTrust.Verdict.TRUSTED)
+        assertTrue(SignerTrust.verdict(pinned = "aa", installed = "bb", matchesPinned = false) == SignerTrust.Verdict.REFUSED)
+        assertTrue(SignerTrust.verdict(pinned = "aa", installed = null, matchesPinned = false) == SignerTrust.Verdict.REFUSED)
+        assertTrue(SignerTrust.verdict(pinned = null, installed = null, matchesPinned = false) == SignerTrust.Verdict.REFUSED)
+    }
+
     private val skA = "1".repeat(64)
     private val skB = "2".repeat(64)
 
     private suspend fun answered(asPubkey: String, answer: suspend (UnsignedEvent) -> String): Result<com.monostr.tips.event.Event> = kotlinx.coroutines.coroutineScope {
         val bridge = SignerBridge()
-        val signer = AmberSigner(ContextWrapper(null), "com.greenart7c3.nostrsigner", asPubkey, bridge)
+        val signer = AmberSigner(ContextWrapper(null), "com.greenart7c3.nostrsigner", asPubkey, bridge, trusted = { true })
         val request = UnsignedEvent(1, "hello", listOf(listOf("t", "x")), 1_700_000_000)
         val signing = async { runCatching { signer.sign(request) } }
         val pending = bridge.pending.filterNotNull().first()

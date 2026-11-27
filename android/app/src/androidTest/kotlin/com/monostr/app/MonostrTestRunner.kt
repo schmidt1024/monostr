@@ -8,6 +8,10 @@ import com.monostr.app.net.TorRestartSeam
 class MonostrTestRunner : AndroidJUnitRunner() {
     override fun onCreate(arguments: Bundle?) {
         TorRestartSeam.inProcess = arguments?.getString("realEnd") != "true"
+        // backlog 118: a squatter that hears a dial names the engines alive then
+        com.monostr.nostr.NostrEngine.trackLive = true
+        // backlog 121: the intro at once, as the login helpers of the tests expect it
+        com.monostr.app.ui.monero.MoneroIntroGate.askFirst = false
         super.onCreate(arguments)
     }
 }

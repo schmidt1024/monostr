@@ -8,7 +8,7 @@ import com.monostr.app.data.AmountUnit
 import kotlinx.coroutines.flow.combine
 import com.monostr.app.R
 import com.monostr.app.data.HintStore
-import com.monostr.app.data.KeystoreSecretStore
+import com.monostr.app.data.SecretNames
 import com.monostr.app.data.MoneroSetup
 import com.monostr.app.data.Presets
 import com.monostr.app.data.SecretStore
@@ -99,6 +99,8 @@ class MoneroSettingsController(
     /** Whether anything may leave now; open only in tests. */
     private val sendGate: SendGate = SendGate.OPEN,
 ) {
+    /** The view key belongs to [selfPubkey]; without one (tests) there is none. */
+    private val viewKeyName: String? = selfPubkey?.let(SecretNames::viewKey)
     private var statusJob: Job? = null
     private var supportJob: Job? = null
     private var paytoJob: Job? = null
@@ -115,7 +117,7 @@ class MoneroSettingsController(
         scope.launch {
             settings.setup.collect { s ->
                 setupLoaded = true
-                _state.update { it.copy(setup = s, hasViewKey = secrets.get(KeystoreSecretStore.SECRET_VIEW_KEY) != null) }
+                _state.update { it.copy(setup = s, hasViewKey = viewKeyName?.let(secrets::get) != null) }
                 // after a reinstall or on a second device "not set up" would be wrong: tips still arrive at the announced address
                 if (s == null && selfPubkey != null) readAnnounced(selfPubkey, forced = false) else { announcedJob?.cancel(); _state.update { it.copy(announced = null) } }
                 // read in the background: relays may be slow and must not hold back the rest of the state
@@ -357,7 +359,7 @@ class MoneroSettingsController(
     }
 
     fun deleteViewKey() {
-        secrets.remove(KeystoreSecretStore.SECRET_VIEW_KEY)
+        viewKeyName?.let(secrets::remove)
         _state.update { it.copy(hasViewKey = false, message = uiText(R.string.settings_msg_view_key_deleted)) }
     }
 

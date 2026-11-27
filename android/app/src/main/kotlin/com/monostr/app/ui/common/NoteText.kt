@@ -41,7 +41,8 @@ import com.monostr.nostr.model.Article
 @Composable
 fun NoteText(
     content: String,
-    onOpen: () -> Unit,
+    /** A tap on the text outside its links; null where there is nothing to open (a chat bubble, the bio): no ripple, no dead «double-tap to activate» (backlog 112). */
+    onOpen: (() -> Unit)?,
     onHashtag: (String) -> Unit,
     onOpenProfile: (String) -> Unit,
     onOpenNote: (String) -> Unit,
@@ -119,7 +120,7 @@ fun NoteText(
                 text, style = style, maxLines = lines, overflow = TextOverflow.Ellipsis,
                 onTextLayout = { if (collapsible && !expanded && !overflowing && it.hasVisualOverflow) overflowing = true },
                 // nothing competes with the selection gestures in the opened note
-                modifier = if (selectable) modifier else modifier.clickable(onClick = onOpen),
+                modifier = if (selectable || onOpen == null) modifier else modifier.clickable(onClick = onOpen),
             )
         }
         if (selectable) SelectionContainer { body() } else body()

@@ -16,6 +16,7 @@ import androidx.work.WorkerParameters
 import com.monostr.app.MainActivity
 import com.monostr.app.R
 import com.monostr.app.data.DmSettingsStore
+import com.monostr.app.data.pk16
 import com.monostr.app.session.NostrSession
 import com.monostr.app.session.Ready
 import com.monostr.app.session.SessionState
@@ -27,9 +28,9 @@ import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 
-/** Local notifications for received direct messages, tagged [TAG] so logout can cancel exactly these. */
+/** Local notifications for received direct messages, tagged per account ([AccountNotifications.dmTag]) so removal cancels exactly these. */
 class DmNotifier(private val context: Context) {
-    fun show(n: DmNotification) {
+    fun show(account: String, n: DmNotification) {
         if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
         val compat = NotificationManagerCompat.from(context)
         if (!compat.areNotificationsEnabled()) return
@@ -38,10 +39,12 @@ class DmNotifier(private val context: Context) {
         if (n.peer.isNotEmpty()) intent.putExtra(MainActivity.EXTRA_OPEN_DM, n.peer) else intent.putExtra(MainActivity.EXTRA_OPEN_MESSAGES, true)
         // only our own notifications may open a chat: another app could start the exported activity with any pubkey
         intent.putExtra(MainActivity.EXTRA_OPEN_TOKEN, OpenToken.get(context))
+        // a tap while another account is active switches to this one first
+        intent.putExtra(MainActivity.EXTRA_ACCOUNT, account)
         // one PendingIntent per peer: the request code is a 32-bit hash, and two peers sharing it shared the tap target
-        intent.data = android.net.Uri.parse("monostr-dm:" + n.peer.ifEmpty { "messages" })
+        intent.data = android.net.Uri.parse("monostr-dm:" + pk16(account) + "/" + n.peer.ifEmpty { "messages" })
         // the summary has no peer; its own request code keeps it from sharing a PendingIntent slot
-        val requestCode = if (n.peer.isNotEmpty()) n.peer.hashCode() else DmNotificationPlanner.PENDING_ID
+        val requestCode = AccountNotifications.requestCode(account, if (n.peer.isNotEmpty()) n.peer else "dm-pending")
         val open = PendingIntent.getActivity(context, requestCode, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val notification = NotificationCompat.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_notification)
@@ -53,16 +56,10 @@ class DmNotifier(private val context: Context) {
             .setOnlyAlertOnce(true)
             .setAutoCancel(true)
             .build()
-        compat.notify(TAG, n.id, notification)
+        compat.notify(AccountNotifications.dmTag(account), n.id, notification)
     }
 
-    fun cancel(id: Int) = NotificationManagerCompat.from(context).cancel(TAG, id)
-
-    /** Removes every DM notification (logout); tip notifications stay. */
-    fun cancelAll() {
-        val manager = context.getSystemService(NotificationManager::class.java)
-        manager.activeNotifications.filter { it.tag == TAG }.forEach { manager.cancel(TAG, it.id) }
-    }
+    fun cancel(account: String, id: Int) = NotificationManagerCompat.from(context).cancel(AccountNotifications.dmTag(account), id)
 
     private fun ensureChannel() {
         val manager = context.getSystemService(NotificationManager::class.java)
@@ -72,7 +69,6 @@ class DmNotifier(private val context: Context) {
 
     companion object {
         const val CHANNEL = "dms"
-        const val TAG = "dm"
         private const val GROUP = "dms"
     }
 }
@@ -147,12 +143,12 @@ internal suspend fun checkDms(context: Context, session: NostrSession, ready: Re
         muted = ready.muted.value,
     )
     val notifier = DmNotifier(context)
-    plan.forEach { notifier.show(it) }
+    plan.forEach { notifier.show(ready.pubkey, it) }
     try {
         if (selection.pending > 0) store.setPendingSummaryShown(true)
         // the wraps were unwrapped meanwhile (chat tab): drop the stale summary; the next parked wrap may post again
         if (totalPending == 0) {
-            notifier.cancel(DmNotificationPlanner.PENDING_ID)
+            notifier.cancel(ready.pubkey, DmNotificationPlanner.PENDING_ID)
             store.setPendingSummaryShown(false)
         }
         store.setLastNotified(selection.watermark)

@@ -1,5 +1,21 @@
 package com.monostr.app.ui.feed
 
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.flow.first
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material3.Surface
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
+import com.monostr.app.ui.common.GuardedPopup
+import androidx.compose.ui.window.PopupPositionProvider
 import com.monostr.app.ui.common.GuardedAlertDialog
 import com.monostr.app.ui.common.MonostrSnackbarHost
 import com.monostr.app.ui.common.SNACKBAR_MARGIN
@@ -23,6 +39,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.TextButton
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import com.monostr.app.ui.accounts.LocalOpenAccounts
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -127,6 +145,22 @@ fun FeedScreen(
     val discoverUi by vm.discover.state.collectAsStateWithLifecycle()
     if (discoverShown && discoverUi.sections.any { it.rows.isNotEmpty() }) LaunchedEffect(Unit) { PerfTrace.mark("discover block shown") }
     val amountsPrompt by vm.amountsPrompt.collectAsStateWithLifecycle()
+    val moreAccounts by vm.hasMoreAccounts.collectAsStateWithLifecycle()
+    // owner pick C: read lazily, once the badge is due (after the feed shows). The flag is set when the hint ends, not when it
+    // appears: adding the second account recreates the activity, and a hint cut short by that must come again.
+    var switchHint by remember { mutableStateOf(false) }
+    LaunchedEffect(moreAccounts) {
+        if (moreAccounts && !vm.switchHintSeen()) {
+            switchHint = true
+            // an outside cancel (the badge goes, the screen leaves) hides the popup but does not mark the hint as seen
+            try {
+                withTimeoutOrNull(SWITCH_HINT_MS) { snapshotFlow { switchHint }.first { !it } }
+            } finally {
+                switchHint = false
+            }
+            vm.markSwitchHintSeen()
+        }
+    }
     val snackbar = remember { SnackbarHostState() }
     DiscoverFollowAllHost(discoverUi, snackbar, vm.discover)
     val scope = rememberCoroutineScope()
@@ -155,9 +189,12 @@ fun FeedScreen(
     MessageSnackbar(tabs.message, snackbar, onUnmute = {}, onShown = vm.tabs::clearMessage)
     DeletionMessages(vm.deletions, snackbar)
     Scaffold(
-        modifier = Modifier.nestedScroll(hide.connection),
+        // any touch ends the hint without consuming it; always attached, so the modifier chain never changes under a running tap
+        modifier = Modifier.nestedScroll(hide.connection).pointerInput(Unit) {
+            awaitPointerEventScope { while (true) { awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial); switchHint = false } }
+        },
         topBar = { HideOnScrollHeader(hide) { Column {
-            FeedTopBar(relays.map { it.state }, self.picture, toTop, onSettings, onProfile = { onOpenProfile(vm.selfPubkey) }, relays = relays, onManageRelays = onManageRelays)
+            FeedTopBar(relays.map { it.state }, self.picture, toTop, onSettings, onProfile = { onOpenProfile(vm.selfPubkey) }, relays = relays, onManageRelays = onManageRelays, moreAccounts = moreAccounts, switchHint = switchHint, onHintDismiss = { switchHint = false })
             TorBannerSlot()
             // spec 2026-10-18 §2.1: only with a pinned list; it hides and returns with the other bars
             if (tabs.showRow) {
@@ -271,6 +308,7 @@ fun FeedScreen(
 internal fun FeedTopBar(
     relayStates: List<RelayState>, picture: String?, onToTop: () -> Unit, onSettings: () -> Unit, onProfile: () -> Unit,
     relays: List<RelayInfo> = emptyList(), onManageRelays: () -> Unit = {},
+    moreAccounts: Boolean = false, switchHint: Boolean = false, onHintDismiss: () -> Unit = {},
 ) {
     var relaySheet by rememberSaveable { mutableStateOf(false) }
     if (relaySheet) RelayStatusSheet(relays, onManage = { relaySheet = false; onManageRelays() }, onDismiss = { relaySheet = false })
@@ -303,17 +341,71 @@ internal fun FeedTopBar(
             if (LocalTorActive.current) TorBarIcon()
             RelayDot(relayStates, onClick = { relaySheet = true })
             IconButton(onClick = onSettings, modifier = Modifier.testTag("feed-settings")) { Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.feed_settings)) }
-            val selfLabel = stringResource(R.string.feed_profile)
-            IconButton(onClick = onProfile, modifier = Modifier.testTag("feed-profile")) {
+            // the badge says only that there are more accounts, never which or how many (spec 2026-11-25)
+            val selfLabel = if (moreAccounts) stringResource(R.string.feed_profile_more_accounts, stringResource(R.string.feed_profile)) else stringResource(R.string.feed_profile)
+            // spec «Switcher UI»: tap opens the own profile, a long-press the account switcher (X as design reference)
+            val openAccounts = LocalOpenAccounts.current
+            Box(
+                Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .combinedClickable(role = Role.Button, onClick = onProfile, onLongClick = openAccounts, onLongClickLabel = stringResource(R.string.accounts_switch_label))
+                    .testTag("feed-profile"),
+                contentAlignment = Alignment.Center,
+            ) {
                 if (picture.isNullOrBlank()) {
                     Icon(Icons.Outlined.AccountCircle, contentDescription = selfLabel, modifier = Modifier.size(28.dp))
                 } else {
                     AsyncImage(model = picture, contentDescription = selfLabel, contentScale = ContentScale.Crop, modifier = Modifier.size(28.dp).clip(CircleShape))
                 }
+                if (moreAccounts) AccountsBadge(Modifier.align(Alignment.BottomEnd).padding(end = Spacing.xs + Spacing.xxs, bottom = Spacing.xs + Spacing.xxs))
+                if (switchHint) SwitchHint(onHintDismiss)
             }
         },
     )
 }
+
+/** Spec 2026-11-25 (owner pick C): a chevron in a circle in the theme colours on the avatar's corner; no description of its own. */
+@Composable
+private fun AccountsBadge(modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .size(BADGE_SIZE)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+            .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+            .testTag("feed-accounts-badge"),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(BADGE_SIZE - 4.dp))
+    }
+}
+
+/** The one-time tooltip under the avatar, right-aligned with it; a tap on it ends it (the host ends it on any touch). */
+@Composable
+private fun SwitchHint(onDismiss: () -> Unit) {
+    val below = remember {
+        object : PopupPositionProvider {
+            override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize, layoutDirection: LayoutDirection, popupContentSize: IntSize) =
+                IntOffset((anchorBounds.right - popupContentSize.width).coerceAtLeast(0), anchorBounds.bottom)
+        }
+    }
+    GuardedPopup(below) {
+        Surface(
+            color = MaterialTheme.colorScheme.inverseSurface,
+            contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+            shape = MaterialTheme.shapes.small,
+            modifier = Modifier.padding(horizontal = Spacing.s).clickable(onClick = onDismiss).testTag("switch-hint"),
+        ) {
+            Text(stringResource(R.string.accounts_switch_hint), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = Spacing.m, vertical = Spacing.s))
+        }
+    }
+}
+
+private val BADGE_SIZE = 14.dp
+
+/** How long the one-time hint stays. */
+private const val SWITCH_HINT_MS = 6_000L
 
 /** Spec 4: "Enjoying Monostr?" with Support and Hide; both end it for good. */
 @Composable

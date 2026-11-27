@@ -1,0 +1,5 @@
+- Several accounts: add, switch and remove them from your avatar or in Settings; each keeps its own relays and settings
+- Log out removes the account from this phone and can keep its settings, encrypted with your key
+- Optional screen lock before your private key is shown
+- With newer Tor Browser versions: copy the link and open Tor Browser
+- Security hardening and fixes

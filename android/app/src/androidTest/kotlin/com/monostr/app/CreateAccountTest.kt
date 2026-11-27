@@ -30,6 +30,7 @@ import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -137,7 +138,7 @@ class CreateAccountTest {
         assertNotNull(runBlocking { entry.pendingSetup().load(pk) })
         runBlocking { entry.session().logout() }
         rule.waitUntil(15_000) { nodes("login-secret").isNotEmpty() }
-        assertFalse(secure())
+        assertTrue(secure()) // the login has the key field (security review 2026-11-26)
         assertNull(runBlocking { entry.pendingSetup().load(pk) })
     }
 
@@ -184,20 +185,38 @@ class CreateAccountTest {
         assertTrue(own.isEmpty())
     }
 
-    /** Final review I2: a session kept after a failed restore is another account's; its state goes before the new login. */
+    /**
+     * Spec «Adding an account» (replaces final review I2, where another account was wiped at a login): an account kept on the
+     * device, here as a failed restore leaves it, stays with its data when another one logs in; the new one is added and active,
+     * and nothing of the kept one's drafts, pending setup or never-copied settings reaches the new one's file.
+     */
     @Test
-    fun aKeptSessionOfAnotherAccountIsClearedBeforeTheLogin() {
+    fun aKeptAccountStaysWithItsDataWhenAnotherLogsIn() {
         val a = NewKeys.generate()
         val b = NewKeys.generate()
+        val server = "https://media.a.example"
         runBlocking {
             entry.sessions().save(SessionInfo(a.pubkey, SignerType.LOCAL, null))
+            // as a failed restore leaves it: a's settings file is the active one
+            entry.accountPrefs().activate(a.pubkey)
             entry.drafts().save(a.pubkey, "new", Draft("from a", updatedAt = System.currentTimeMillis() / 1000))
             entry.pendingSetup().save(a.pubkey, orphan())
+            entry.uiSettings().setMediaServer(server)
             entry.session().loginLocal(LocalSigner(b.secretHex))
         }
         assertEquals(b.pubkey, runBlocking { entry.sessions().session.first() }?.pubkey)
-        assertTrue(runBlocking { entry.drafts().all(a.pubkey) }.isEmpty())
-        assertNull(runBlocking { entry.pendingSetup().load(a.pubkey) })
+        assertEquals(setOf(a.pubkey, b.pubkey), runBlocking { entry.session().accounts.first() }.map { it.pubkey }.toSet())
+        // a keeps everything in its own file
+        val aFile = entry.accountPrefs().storeFor(a.pubkey)
+        assertEquals(listOf("from a"), runBlocking { com.monostr.app.data.PrefsDraftStore(aFile).all(a.pubkey) }.map { it.text })
+        assertNotNull(runBlocking { com.monostr.app.data.PrefsPendingSetupStore(aFile).load(a.pubkey) })
+        assertEquals(server, runBlocking { com.monostr.app.data.PrefsUiSettingsStore(aFile).mediaServer.first() })
+        // b's file, the active one now, holds none of it (the stores keyed by a pubkey read that account's own file: b's is read directly)
+        val bFile = entry.accountPrefs().storeFor(b.pubkey)
+        assertTrue(runBlocking { com.monostr.app.data.PrefsDraftStore(bFile).all(a.pubkey) }.isEmpty())
+        assertTrue(runBlocking { com.monostr.app.data.PrefsDraftStore(bFile).all(b.pubkey) }.isEmpty())
+        assertNull(runBlocking { com.monostr.app.data.PrefsPendingSetupStore(bFile).load(a.pubkey) })
+        assertNotEquals(server, runBlocking { entry.uiSettings().mediaServer.first() })
     }
 
     /** Spec 2026-10-17 §7: a restart with the persisted session publishes the account's open record. */

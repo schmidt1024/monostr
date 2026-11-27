@@ -28,22 +28,27 @@ fun MonostrSnackbarHost(state: SnackbarHostState, modifier: Modifier = Modifier)
  */
 @Composable
 fun MonostrSnackbar(data: SnackbarData, modifier: Modifier = Modifier) {
+    MonostrSnackbar(data.visuals.message, modifier, data.visuals.actionLabel, data::performAction)
+}
+
+/** The same card for a [message] that may change while it is shown (the switch notice's countdown), outside a [SnackbarHostState]. */
+@Composable
+fun MonostrSnackbar(message: String, modifier: Modifier = Modifier, actionLabel: String? = null, onAction: () -> Unit = {}) {
     val scheme = MaterialTheme.colorScheme
     val dark = scheme.surface.luminance() < 0.5f
     val container = if (dark) scheme.surfaceContainerHighest else SnackbarDefaults.color
     val content = if (dark) scheme.onSurface else SnackbarDefaults.contentColor
     val actionColor = if (dark) scheme.primary else SnackbarDefaults.actionColor
     val shape = SnackbarDefaults.shape
-    val label = data.visuals.actionLabel
     Snackbar(
         // the margin Material's own snackbar keeps, outside the hairline
         modifier = modifier.padding(SNACKBAR_MARGIN).then(if (dark) Modifier.border(1.dp, scheme.outlineVariant, shape) else Modifier),
-        action = label?.let { { TextButton(onClick = { data.performAction() }, colors = ButtonDefaults.textButtonColors(contentColor = actionColor)) { Text(it) } } },
+        action = actionLabel?.let { { TextButton(onClick = onAction, colors = ButtonDefaults.textButtonColors(contentColor = actionColor)) { Text(it) } } },
         shape = shape,
         containerColor = container,
         contentColor = content,
         actionContentColor = actionColor,
-    ) { Text(data.visuals.message) }
+    ) { Text(message) }
 }
 
 /** Space around the snackbar card inside its host (Material's own value). */

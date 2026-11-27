@@ -1,10 +1,16 @@
 package com.monostr.app.ui.login
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import com.monostr.app.ui.common.SecureWindow
 import com.monostr.app.ui.common.TorLoginRow
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.size
@@ -46,6 +52,8 @@ import androidx.lifecycle.viewModelScope
 import com.monostr.app.R
 import com.monostr.app.session.NostrSession
 import com.monostr.app.session.SessionState
+import com.monostr.app.ui.accounts.AccountNotice
+import com.monostr.app.ui.accounts.AccountNotices
 import com.monostr.app.ui.common.asString
 import com.monostr.app.ui.theme.Spacing
 import com.monostr.nostr.LocalSigner
@@ -69,6 +77,7 @@ class LoginViewModel @Inject constructor(
         bridge = session.bridge,
         amberAvailable = AmberSigner.isInstalled(context),
         restoreMessage = (session.state.value as? SessionState.LoggedOut)?.message,
+        onAlreadyActive = { session.activePubkey()?.let { AccountNotices.post(AccountNotice.AlreadyUsing(it)) } },
         scryptMemory = {
             val info = android.app.ActivityManager.MemoryInfo()
             context.getSystemService(android.app.ActivityManager::class.java)?.getMemoryInfo(info)
@@ -81,8 +90,23 @@ class LoginViewModel @Inject constructor(
 }
 
 @Composable
-fun LoginScreen(onCreate: () -> Unit = {}, vm: LoginViewModel = hiltViewModel()) {
+fun LoginScreen(
+    onCreate: () -> Unit = {}, vm: LoginViewModel = hiltViewModel(), adding: Boolean = false, onBack: () -> Unit = {},
+    /** Final review I2: the restore failed and other accounts are kept; opens the switcher (switch to one, or remove the stale one). */
+    onAccounts: (() -> Unit)? = null,
+) {
     val state by vm.controller.state.collectAsStateWithLifecycle()
+    // the key field is masked, but a paste preview or the recents thumbnail must not show it either
+    SecureWindow()
+    // spec «Adding an account»: the add sheet's «Log in with key» is this screen with the key form only (Amber, create and Tor live elsewhere then)
+    if (adding) BackHandler(enabled = !state.busy, onBack = onBack)
+    // final review M8: the key of the account that runs: «Already using …» tells it, the screen closes
+    LaunchedEffect(state.alreadyActive) {
+        if (state.alreadyActive) {
+            vm.controller.alreadyActiveShown()
+            onBack()
+        }
+    }
     var secret by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") } // plain remember: never saved state
     val needsPassword = Nip49.isNcryptsec(secret)
@@ -117,8 +141,16 @@ fun LoginScreen(onCreate: () -> Unit = {}, vm: LoginViewModel = hiltViewModel())
             Spacer(Modifier.height(Spacing.s))
             Text(it.asString(), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
         }
+        if (onAccounts != null && !adding) {
+            Spacer(Modifier.height(Spacing.s))
+            OutlinedButton(onClick = onAccounts, enabled = !state.busy, modifier = Modifier.fillMaxWidth().testTag("login-accounts"), shape = MaterialTheme.shapes.medium) {
+                Text(stringResource(R.string.accounts_switch_label))
+            }
+        }
         Spacer(Modifier.height(Spacing.xxxl)) // the lockup stands apart from the form
-        if (state.amberAvailable) {
+        if (adding) {
+            // the key form only: Amber is the add sheet's first row
+        } else if (state.amberAvailable) {
             Button(onClick = vm::loginWithAmber, enabled = !state.busy, modifier = Modifier.fillMaxWidth().testTag("login-amber"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.login_amber)) }
             Spacer(Modifier.height(Spacing.xl))
             Text(stringResource(R.string.login_or_key), style = MaterialTheme.typography.labelLarge)
@@ -147,10 +179,17 @@ fun LoginScreen(onCreate: () -> Unit = {}, vm: LoginViewModel = hiltViewModel())
         }
         Spacer(Modifier.height(Spacing.s))
         OutlinedButton(onClick = { vm.loginWithSecret(secret, password) }, enabled = !state.busy && secret.isNotBlank() && (!needsPassword || password.isNotEmpty()), modifier = Modifier.fillMaxWidth().testTag("login-secret-button"), shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.login_button)) }
-        Spacer(Modifier.height(Spacing.l))
-        // spec 2026-10-17 §2: the way in for someone without a key
-        TextButton(onClick = onCreate, enabled = !state.busy, modifier = Modifier.fillMaxWidth().testTag("login-create")) { Text(stringResource(R.string.login_create)) }
-        TorLoginRow()
+        if (!adding) {
+            Spacer(Modifier.height(Spacing.l))
+            // spec 2026-10-17 §2: the way in for someone without a key
+            TextButton(onClick = onCreate, enabled = !state.busy, modifier = Modifier.fillMaxWidth().testTag("login-create")) { Text(stringResource(R.string.login_create)) }
+            TorLoginRow()
+        }
+      }
+      if (adding) {
+          IconButton(onClick = onBack, enabled = !state.busy, modifier = Modifier.align(Alignment.TopStart).testTag("login-back")) {
+              Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
+          }
       }
     }
 }

@@ -64,6 +64,25 @@ class LoginControllerTest {
         assertEquals(uiText(R.string.login_error_signer), c.state.value.error)
     }
 
+    /** Final review M8: the running account's own key entered on the add screen: no error, the screen is told to close. */
+    @Test
+    fun `the running account's own key is reported, not shown as an error`() = runTest {
+        val actions = object : LoginActions {
+            override suspend fun loginLocal(signer: LocalSigner) =
+                throw com.monostr.app.session.SwitchRefusedException(com.monostr.app.session.SwitchResult.AlreadyActive)
+            override suspend fun loginAmber(pubkey: String, packageName: String) = Unit
+        }
+        var told = 0
+        val c = LoginController(actions, SignerBridge(), amberAvailable = false, onAlreadyActive = { told++ })
+        c.loginWithSecret("0000000000000000000000000000000000000000000000000000000000000001")
+        assertTrue(c.state.value.alreadyActive)
+        assertNull(c.state.value.error)
+        assertFalse(c.state.value.busy)
+        assertEquals(1, told)
+        c.alreadyActiveShown()
+        assertFalse(c.state.value.alreadyActive)
+    }
+
     @Test
     fun `engine or keystore failures show a fixed message, never the exception text`() = runTest {
         val actions = object : LoginActions {

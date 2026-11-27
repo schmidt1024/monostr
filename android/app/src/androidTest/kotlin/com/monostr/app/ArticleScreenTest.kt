@@ -24,7 +24,6 @@ import androidx.compose.ui.test.assertTextContains
 import androidx.core.os.LocaleListCompat
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
-import com.monostr.app.data.monostrPrefs
 import com.monostr.app.translate.Languages
 import com.monostr.app.translate.TranslationMode
 import okhttp3.mockwebserver.Dispatcher
@@ -60,6 +59,8 @@ class ArticleScreenTest {
     @get:Rule val rule = createAndroidComposeRule<MainActivity>()
     private val secret = "0000000000000000000000000000000000000000000000000000000000000001"
     private val me = Keys.parse(secret)
+    /** The test account's own settings file: the fixed key logs into the file it left on earlier runs. */
+    private val myPrefs get() = entry.accountPrefs().storeFor(me.publicKey().toHex())
     private val ctx get() = InstrumentationRegistry.getInstrumentation().targetContext
     private val entry get() = EntryPointAccessors.fromApplication(ctx, NostrSessionEntryPoint::class.java)
     private fun nodes(tag: String) = rule.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes()
@@ -141,7 +142,7 @@ class ArticleScreenTest {
     @Test
     fun appearanceSheet_switchesReaderOnly_andPersistsAcrossArticles() {
         val key = booleanPreferencesKey("reader_dark")
-        runBlocking { ctx.monostrPrefs.edit { it.remove(key) } }
+        runBlocking { myPrefs.edit { it.remove(key) } }
         runBlocking { runCatching { entry.session().logout() } }
         reachFeed()
         val ready = entry.session().requireReady()
@@ -196,7 +197,7 @@ class ArticleScreenTest {
                 assertEquals(true, runBlocking { entry.readerTheme().dark.first() })
             }
         } finally {
-            runBlocking { ctx.monostrPrefs.edit { it.remove(key); it.remove(booleanPreferencesKey("reader_sepia")); it.remove(androidx.datastore.preferences.core.intPreferencesKey("reader_text_step")) } }
+            runBlocking { myPrefs.edit { it.remove(key); it.remove(booleanPreferencesKey("reader_sepia")); it.remove(androidx.datastore.preferences.core.intPreferencesKey("reader_text_step")) } }
         }
     }
 
@@ -208,7 +209,7 @@ class ArticleScreenTest {
     @Test
     fun sepia_persistsAndReaderStillOpens() {
         val key = booleanPreferencesKey("reader_sepia")
-        runBlocking { ctx.monostrPrefs.edit { it.remove(key) } }
+        runBlocking { myPrefs.edit { it.remove(key) } }
         runBlocking { runCatching { entry.session().logout() } }
         reachFeed()
         val ready = entry.session().requireReady()
@@ -241,7 +242,7 @@ class ArticleScreenTest {
                 assertTrue(runBlocking { entry.readerTheme().sepia.first() })
             }
         } finally {
-            runBlocking { ctx.monostrPrefs.edit { it.remove(key) } }
+            runBlocking { myPrefs.edit { it.remove(key) } }
         }
     }
 
@@ -275,9 +276,11 @@ class ArticleScreenTest {
         }
         server.start()
         runBlocking { runCatching { entry.session().logout() } }
+        // logged out the stores write the global file, which an account that already has a file never adopts
+        entry.accountPrefs().activate(me.publicKey().toHex())
         try {
             runBlocking {
-                ctx.monostrPrefs.edit { it.remove(booleanPreferencesKey("translate.consent")) }
+                myPrefs.edit { it.remove(booleanPreferencesKey("translate.consent")) }
                 entry.translationSettings().setCustomUrl("http://127.0.0.1:${server.port}")
                 entry.translationSettings().setMode(TranslationMode.CUSTOM)
             }
@@ -337,7 +340,7 @@ class ArticleScreenTest {
             runBlocking {
                 entry.translationSettings().setMode(TranslationMode.MONOSTR)
                 entry.translationSettings().setCustomUrl("")
-                ctx.monostrPrefs.edit { it.remove(booleanPreferencesKey("translate.consent")) }
+                myPrefs.edit { it.remove(booleanPreferencesKey("translate.consent")) }
             }
             server.shutdown()
         }

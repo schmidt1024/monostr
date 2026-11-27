@@ -164,10 +164,11 @@ class TorUiTest {
         assertEquals("nothing collects Tor's state with the switch off", 0, ui.state.subscriptionCount.value)
         assertEquals(0, ui.turning.subscriptionCount.value)
         assertEquals(0, ui.error.subscriptionCount.value)
-        // the bar as it was, by centres as the buttons draw less than their 48 dp: 4 dp from the right, the avatar, the settings, the 34 dp dot
+        // the bar as it was, by centres as the buttons draw less than their 48 dp: 4 dp from the right, the avatar, the settings, the dot
+        // (a 48 dp target since its tap opens the relay sheet, owner 2026-11-12; this test still held the 34 dp dot until 2026-11-26)
         near(360f - 4 - 24, centre("feed-profile"))
         near(360f - 4 - 72, centre("feed-settings"))
-        near(360f - 4 - 96 - 17, centre("relay-dot"))
+        near(360f - 4 - 96 - 24, centre("relay-dot"))
     }
 
     @Test
@@ -505,10 +506,11 @@ class TorUiTest {
         assertTrue("the bar ends inside the width", avatar.right <= 320.dp)
         rule.onNodeWithTag("tor-icon").assertTouchWidthIsEqualTo(48.dp).assertTouchHeightIsEqualTo(48.dp)
         // the mark's node has 4 dp of air on each side
-        assertTrue("the logo's ink stays out of the onion's target", mark.right - 4.dp <= 320.dp - 4.dp - 48.dp * 3 - 34.dp)
-        // visual gaps, edge to edge, from the centres: onion and gear draw 24 dp, the dot 10, the avatar 28
-        near(24f, centre("relay-dot") - centre("tor-icon") - 12 - 5)
-        near(24f, centre("feed-settings") - centre("relay-dot") - 5 - 12)
+        assertTrue("the logo's ink stays out of the onion's target", mark.right - 4.dp <= 320.dp - 4.dp - 48.dp * 4)
+        // visual gaps, edge to edge, from the centres: onion and gear draw 24 dp, the dot 10, the avatar 28. Four 48 dp targets
+        // side by side: the small dot has the same air on both sides
+        near(31f, centre("relay-dot") - centre("tor-icon") - 12 - 5)
+        near(31f, centre("feed-settings") - centre("relay-dot") - 5 - 12)
         near(22f, centre("feed-profile") - centre("feed-settings") - 12 - 14, 2f)
         assertTrue(gear.left > dot.right && avatar.left > gear.right && dot.left > onion.right)
     }
@@ -866,8 +868,19 @@ class TorUiRealSwitchTest {
         assertEquals(ends + 1, TorRestartSeam.recorded.get())
         rule.onNodeWithTag("settings-tor").assertIsDisplayed()
         // a start of the session that no switch asked for, as after background work: the host starts at the feed and stays there
+        // «no switch asked for»: the switch of above has to be over. Its route stays armed until then when the rebuild was too
+        // quick for the host to see it (the host stood, nothing took the route), and a host built meanwhile would rightly take it
+        // (backlog 118: released while still turning, this test found Settings instead of the feed in 9 of 12 runs)
+        rule.waitUntil(15_000) { rule.activity.torUi.turning.value == null }
+        rule.waitForIdle()
         runBlocking { entry.session().release() }
-        rule.waitUntil(30_000) { has("fab-compose") }
+        try {
+            rule.waitUntil(30_000) { has("fab-compose") }
+        } catch (e: androidx.compose.ui.test.ComposeTimeoutException) {
+            // backlog 118: this wait failed in about every second run, and nothing said what the screen showed instead
+            val tags = listOf("login-secret", "setup-skip", "settings-tor", "tor-explain-confirm").filter { has(it) }
+            throw AssertionError("no feed 30 s after the release: session ${entry.session().state.value::class.simpleName}, gate ${entry.networkGate().mode.value}, turning ${rule.activity.torUi.turning.value}, on screen $tags", e)
+        }
         rule.waitForIdle()
         assertFalse(has("settings-tor"))
     }

@@ -26,6 +26,14 @@ interface SecretStore {
     fun remove(name: String)
 }
 
+/** Secret names per account (pk16 as the settings file). */
+object SecretNames {
+    /** The key of a LOCAL account. */
+    fun nsec(pubkey: String) = "nsec.${pk16(pubkey)}"
+    /** Private Monero view key as 64 hex chars (spec 6.4). */
+    fun viewKey(pubkey: String) = "monero.view_key.${pk16(pubkey)}"
+}
+
 /** The Keystore could not be used right now (keystore2 busy or not ready after boot): the stored secret is kept, try again later. */
 class SecretUnavailableException(cause: Throwable) : java.io.IOException("secret store unavailable", cause)
 
@@ -114,9 +122,9 @@ class KeystoreSecretStore(context: Context) : SecretStore {
     }
 
     companion object {
-        const val SECRET_NSEC = "nsec"
-        /** Private Monero view key as 64 hex chars (spec 6.4). */
-        const val SECRET_VIEW_KEY = "monero.view_key"
+        /** The single-account names of older versions; only [AccountMigration] reads them, use [SecretNames]. */
+        const val LEGACY_NSEC = "nsec"
+        const val LEGACY_VIEW_KEY = "monero.view_key"
         private const val ALIAS = "monostr-secrets"
         private const val TRANSFORMATION = "AES/GCM/NoPadding"
         private const val IV_BYTES = 12

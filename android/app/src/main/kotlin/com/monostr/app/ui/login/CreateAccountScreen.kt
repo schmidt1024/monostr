@@ -1,5 +1,14 @@
 package com.monostr.app.ui.login
 
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.Icons
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.minimumInteractiveComponentSize
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.selection.toggleable
+import com.monostr.app.ui.theme.MonostrFonts
+import com.monostr.app.ui.common.ConfirmDialog
 import com.monostr.app.ui.common.GuardedAlertDialog
 import com.monostr.app.ui.common.TorLoginRow
 import androidx.activity.compose.BackHandler
@@ -46,6 +55,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.monostr.app.R
 import com.monostr.app.data.PrefsDmSettingsStore
+import com.monostr.app.data.PrefsRelayStore
 import com.monostr.app.data.RelayStore
 import com.monostr.app.session.NewKey
 import com.monostr.app.session.NostrSession
@@ -81,7 +91,7 @@ class CreateAccountViewModel @Inject constructor(
         actions = object : CreateAccountActions {
             override suspend fun create(key: NewKey, setup: PendingSetup) = session.createAccount(key, setup)
         },
-        relays = { relayStore.relays.first() },
+        relays = { createRelays(session.accounts.first().isNotEmpty()) { relayStore.relays.first() } },
         dmRelays = PrefsDmSettingsStore.DEFAULT_RELAYS,
     )
 
@@ -96,21 +106,36 @@ class CreateAccountViewModel @Inject constructor(
     }
 }
 
+/** Another account never publishes the active account's relays (that would link the two); only a first account keeps its own. */
+internal suspend fun createRelays(hasAccounts: Boolean, activeRelays: suspend () -> List<String>): List<String> =
+    if (hasAccounts) PrefsRelayStore.DEFAULT_RELAYS else activeRelays()
+
 @Composable
-fun CreateAccountScreen(onLeave: () -> Unit, vm: CreateAccountViewModel = hiltViewModel()) {
+fun CreateAccountScreen(onLeave: () -> Unit, vm: CreateAccountViewModel = hiltViewModel(), adding: Boolean = false) {
     val controller = vm.controller
     val state by controller.state.collectAsStateWithLifecycle()
     val leave = { vm.discard(); onLeave() }
     BackHandler { if (!state.busy && !controller.back()) leave() }
     if (state.confirmCancel) {
-        GuardedAlertDialog(
-            onDismissRequest = controller::dismissCancel,
-            text = { Text(stringResource(R.string.create_cancel_text)) },
-            confirmButton = { TextButton(onClick = leave, modifier = Modifier.testTag("create-cancel-yes")) { Text(stringResource(R.string.create_cancel_yes)) } },
+        ConfirmDialog(
+            title = null, text = stringResource(R.string.create_cancel_text),
+            confirm = stringResource(R.string.create_cancel_yes), confirmTag = "create-cancel-yes", destructive = true,
+            onConfirm = leave, onDismiss = controller::dismissCancel,
             dismissButton = { TextButton(onClick = controller::dismissCancel) { Text(stringResource(R.string.create_cancel_no)) } },
         )
     }
     Column(Modifier.fillMaxSize().safeDrawingPadding().padding(Spacing.xl)) {
+        // backlog 115: a visible way back and where one is; with three-button navigation the system's back was the only exit
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            IconButton(onClick = { if (!state.busy && !controller.back()) leave() }, enabled = !state.busy, modifier = Modifier.testTag("create-back")) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
+            }
+            Spacer(Modifier.weight(1f))
+            Text(
+                stringResource(R.string.create_step, state.step.ordinal + 1, CreateStep.entries.size),
+                style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("create-step"),
+            )
+        }
         when (state.step) {
             CreateStep.Welcome -> Scrolling("create-welcome") {
                 Title(R.string.create_title)
@@ -134,7 +159,8 @@ fun CreateAccountScreen(onLeave: () -> Unit, vm: CreateAccountViewModel = hiltVi
             CreateStep.Follow -> Follow(state, controller)
         }
         Spacer(Modifier.height(Spacing.l))
-        TorLoginRow()
+        // another account (spec «Adding an account»): Tor is switched in Settings while logged in, not here
+        if (!adding) TorLoginRow()
         if (state.step == CreateStep.Follow) {
             state.error?.let {
                 Text(it.asString(), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
@@ -178,7 +204,7 @@ private fun Backup(state: CreateAccountState, controller: CreateAccountControlle
     var copiedAt by remember { mutableStateOf<Long?>(null) }
     var passwordDialog by remember { mutableStateOf(false) }
     Title(R.string.create_backup_title)
-    Text(state.nsec, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("create-nsec"))
+    Text(state.nsec, fontFamily = MonostrFonts.mono, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("create-nsec"))
     OutlinedButton(
         onClick = {
             copySecret(context, controller.copyText(), NSEC_CLIP_LABEL)
@@ -198,10 +224,11 @@ private fun Backup(state: CreateAccountState, controller: CreateAccountControlle
     Text(stringResource(R.string.create_backup_warning), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
     Column {
         Text(stringResource(R.string.create_npub_label), style = MaterialTheme.typography.labelLarge)
-        Text(state.npub, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("create-npub"))
+        Text(state.npub, fontFamily = MonostrFonts.mono, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("create-npub"))
     }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Checkbox(checked = state.saved, onCheckedChange = controller::setSaved, modifier = Modifier.testTag("create-saved"))
+    // the whole row toggles and reads as one with its label (backlog 115)
+    Row(Modifier.fillMaxWidth().toggleable(state.saved, role = Role.Checkbox, onValueChange = controller::setSaved).testTag("create-saved"), verticalAlignment = Alignment.CenterVertically) {
+        Checkbox(checked = state.saved, onCheckedChange = null, modifier = Modifier.minimumInteractiveComponentSize())
         Text(stringResource(R.string.create_saved), style = MaterialTheme.typography.bodyLarge)
     }
 }
@@ -215,13 +242,13 @@ private fun ColumnScope.Follow(state: CreateAccountState, controller: CreateAcco
     Spacer(Modifier.height(Spacing.s))
     LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("create-follows")) {
         items(SuggestedFollows.all, key = { it.pubkey }) { f ->
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                Checkbox(
-                    checked = f.pubkey !in state.unticked,
-                    onCheckedChange = { controller.toggle(f.pubkey) },
-                    enabled = !state.busy,
-                    modifier = Modifier.testTag("create-follow-" + f.pubkey.take(8)),
-                )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+                    .toggleable(f.pubkey !in state.unticked, enabled = !state.busy, role = Role.Checkbox, onValueChange = { controller.toggle(f.pubkey) })
+                    .testTag("create-follow-" + f.pubkey.take(8)),
+            ) {
+                Checkbox(checked = f.pubkey !in state.unticked, onCheckedChange = null, enabled = !state.busy, modifier = Modifier.minimumInteractiveComponentSize())
                 Column(Modifier.padding(start = Spacing.xs)) {
                     Text(f.name, style = MaterialTheme.typography.bodyLarge)
                     Text(stringResource(f.who), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

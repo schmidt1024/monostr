@@ -1,6 +1,7 @@
 package com.monostr.nostr.nip55
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -33,5 +34,18 @@ class SignerBridgeTest {
 
         // a second completion after the request is already done is ignored (no exception)
         bridge.complete(pending.id, true, Nip55.Response("y", null, "pkg", false))
+    }
+
+    @Test
+    fun `cancelling ends a pending request as if the user backed out`() = runTest {
+        val bridge = SignerBridge()
+        val result = async { bridge.request(Nip55.getPublicKey()) }
+        advanceUntilIdle()
+        assertNotNull(bridge.pending.value)
+        bridge.cancelPending()
+        assertEquals(false to null, result.await())
+        assertNull(bridge.pending.value)
+        // nothing pending: a no-op
+        bridge.cancelPending()
     }
 }

@@ -69,7 +69,10 @@ import javax.inject.Inject
 
 /** Hands the screen the app's gated client. */
 @HiltViewModel
-class VideoPlayerViewModel @Inject constructor(val http: OkHttpClient) : ViewModel()
+class VideoPlayerViewModel @Inject constructor(media: com.monostr.app.media.MediaHttp) : ViewModel() {
+    /** With the address check: a video URL comes from a stranger's note. */
+    val http: OkHttpClient by lazy { media.client }
+}
 
 /**
  * Spec 3.3: fullscreen ExoPlayer with media3 controls; the player is released when the screen leaves. All its HTTP goes through

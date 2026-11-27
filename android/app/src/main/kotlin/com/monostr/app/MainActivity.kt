@@ -21,7 +21,16 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.Alignment
+import com.monostr.app.ui.accounts.SWITCH_NOTICE_BOTTOM
+import com.monostr.app.ui.accounts.SWITCH_NOTICE_END
+import com.monostr.app.ui.accounts.SWITCH_NOTICE_START
+import com.monostr.app.ui.accounts.SwitchNotice
+import com.monostr.nostr.Npub
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -45,7 +54,13 @@ import com.monostr.app.ui.theme.MonostrTheme
 import com.monostr.nostr.nip55.AmberSigner
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
+import com.monostr.app.work.OpenAction
+import com.monostr.app.work.PendingOpen
+import com.monostr.app.work.resolveOpen
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -59,6 +74,7 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var torSwitch: com.monostr.app.net.TorSwitch
     @Inject lateinit var sendGate: com.monostr.app.net.SendGate
     @Inject lateinit var torUi: com.monostr.app.net.TorUi
+    @Inject lateinit var tor: dagger.Lazy<com.monostr.app.net.TorController>
 
     companion object {
         /** True while an instance is started (between onStart and onStop); the background worker must not release a shared engine then. */
@@ -73,13 +89,48 @@ class MainActivity : ComponentActivity() {
         /** The [com.monostr.app.work.OpenToken] of a DM notification's intent: without it the two extras above are ignored. */
         const val EXTRA_OPEN_TOKEN = "open_token"
 
-        /** A chat a notification asked to open; the logged-in nav host navigates there once and resets it. */
-        val pendingDm = MutableStateFlow<String?>(null)
+        /** Intent extra of every notification: the hex pubkey of the account it was posted for. */
+        const val EXTRA_ACCOUNT = "account"
 
-        /** The Messages tab a notification asked to open; handled like [pendingDm]. */
-        val pendingMessages = MutableStateFlow(false)
+        /**
+         * The target of a tapped notification, bound to its account in one value (process-wide, so it survives the activity's
+         * recreation after a switch); the nav host of that account takes it, nothing else clears it but removal or a failed switch.
+         */
+        val pendingOpen = MutableStateFlow<PendingOpen?>(null)
+
+        /** Drops [account]'s pending target (removal, failed switch); another account's stays. */
+        fun clearPending(account: String) {
+            pendingOpen.update { if (it?.account == account) null else it }
+        }
 
         private val HEX_PUBKEY = Regex("[0-9a-f]{64}")
+
+        /** The account just switched to, until its «Now using …» notice is done (process-wide: it crosses the recreate). */
+        val switchNotice = MutableStateFlow<String?>(null)
+    }
+
+    /**
+     * Spec «Switcher UI» / «Tor wait»: the notice of the last switch, left of the compose button above the tab bar. The name comes
+     * from the registry (its short npub without one); under Tor it follows the fresh route of the new account.
+     */
+    @androidx.compose.runtime.Composable
+    private fun SwitchNoticeOverlay(modifier: Modifier) {
+        val pubkey by switchNotice.collectAsState()
+        val target = pubkey ?: return
+        val name by androidx.compose.runtime.produceState<String?>(null, target) { value = shownName(target) }
+        val shown = name ?: return
+        // the Tor controller exists only under Tor; direct, nothing waits for a route
+        val route = remember(target) { if (sendGate.viaTor) tor.get().freshRoute else null }
+        SwitchNotice(
+            shown, route, onDone = { switchNotice.compareAndSet(target, null) },
+            modifier = modifier.navigationBarsPadding().padding(start = SWITCH_NOTICE_START, end = SWITCH_NOTICE_END, bottom = SWITCH_NOTICE_BOTTOM),
+        )
+    }
+
+    /** An account's name from the registry, its short npub without one. */
+    private suspend fun shownName(pubkey: String): String {
+        val info = runCatching { session.accounts.first() }.getOrNull()?.firstOrNull { it.pubkey == pubkey }
+        return info?.name?.takeIf { it.isNotBlank() } ?: runCatching { Npub.short(pubkey) }.getOrDefault(pubkey.take(8))
     }
 
     /**
@@ -95,15 +146,63 @@ class MainActivity : ComponentActivity() {
             intent.removeExtra(EXTRA_OPEN_DM)
             return
         }
+        // a notification without its account (posted before accounts existed) opens the app only
+        val account = intent.getStringExtra(EXTRA_ACCOUNT)
+        intent.removeExtra(EXTRA_ACCOUNT)
+        if (account == null || !HEX_PUBKEY.matches(account)) {
+            intent.removeExtra(EXTRA_OPEN_MESSAGES)
+            intent.removeExtra(EXTRA_OPEN_DM)
+            return
+        }
+        var messages = false
         if (intent.hasExtra(EXTRA_OPEN_MESSAGES)) {
             // getBooleanExtra yields false for a value of any other type
-            val open = intent.getBooleanExtra(EXTRA_OPEN_MESSAGES, false)
+            messages = intent.getBooleanExtra(EXTRA_OPEN_MESSAGES, false)
             intent.removeExtra(EXTRA_OPEN_MESSAGES)
-            if (open) pendingMessages.value = true
         }
-        val peer = intent.getStringExtra(EXTRA_OPEN_DM) ?: return
-        intent.removeExtra(EXTRA_OPEN_DM)
-        if (HEX_PUBKEY.matches(peer)) pendingDm.value = peer
+        val peer = intent.getStringExtra(EXTRA_OPEN_DM)?.also { intent.removeExtra(EXTRA_OPEN_DM) }?.takeIf { HEX_PUBKEY.matches(it) }
+        pendingOpen.value = PendingOpen(account, peer, messages)
+    }
+
+    /**
+     * A notification of another account: switch to it first; the target stays pending (bound to its account) until that account's
+     * nav host takes it. Busy or failed switch, or an account removed meanwhile: the app opens, the target goes.
+     */
+    private suspend fun resolvePending(target: PendingOpen) {
+        val active = (session.state.first { it !is com.monostr.app.session.SessionState.Loading } as? com.monostr.app.session.SessionState.Active)?.ready?.pubkey
+        if (active == null) {
+            clearPending(target.account)
+            return
+        }
+        val known = session.accounts.first().map { it.pubkey }.toSet()
+        when (resolveOpen(active, known, target.account, target.peer)) {
+            is OpenAction.Open -> Unit
+            is OpenAction.Ignore -> clearPending(target.account)
+            is OpenAction.SwitchThenOpen -> when (session.switchTo(target.account)) {
+                com.monostr.app.session.SwitchResult.Done -> Unit
+                com.monostr.app.session.SwitchResult.Failed -> {
+                    clearPending(target.account)
+                    com.monostr.app.ui.accounts.AccountNotices.post(com.monostr.app.ui.accounts.AccountNotice.SwitchFailed)
+                }
+                else -> clearPending(target.account)
+            }
+        }
+    }
+
+    /**
+     * Replaces this activity by a new one in a new task, without a transition: its ViewModel store (the activity's view models
+     * and every nav back stack entry's) is cleared with it. What must cross ([pendingOpen], [switchNotice]) is process-wide.
+     */
+    private fun restartFresh() {
+        val next = Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        startActivity(next, androidx.core.app.ActivityOptionsCompat.makeCustomAnimation(this, 0, 0).toBundle())
+        finish()
+        if (android.os.Build.VERSION.SDK_INT >= 34) {
+            overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, 0, 0)
+        } else {
+            @Suppress("DEPRECATION")
+            overridePendingTransition(0, 0)
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -186,6 +285,16 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         // a recreated activity (rotation) still carries the launch intent; the chat was opened already
         if (savedInstanceState == null) takeOpenDm(intent)
+        // spec «Switch flow» step 5: after a switch nothing of the old session stays: a fresh activity (not recreate(), which keeps
+        // the ViewModels and the nav back stack's stores) opens on Home with the new look and shows «Now using …». Collected before
+        // anything here can switch (an emission without a collector is lost).
+        lifecycleScope.launch {
+            session.switched.collect { pubkey ->
+                switchNotice.value = pubkey
+                restartFresh()
+            }
+        }
+        lifecycleScope.launch { pendingOpen.collectLatest { if (it != null) resolvePending(it) } }
         enableEdgeToEdge()
         setContent {
             // Null until DataStore delivered: avoids a first frame in the wrong mode under an override (no runBlocking on main).
@@ -228,7 +337,16 @@ class MainActivity : ComponentActivity() {
                 // not yet known counts as on, read at each tap: a stored «Always open» must not slip through while the mode is being read
                 LinkPromptHost(linkAlways, { lifecycleScope.launch { uiSettings.setLinkAlwaysOpen(true) } }, torOn = { !sendGate.direct }) {
                     ProvideTorUi(torUi) {
-                        Surface { MonostrNavHost(session) }
+                        Box(Modifier.fillMaxSize()) {
+                            Surface { MonostrNavHost(session) }
+                            SwitchNoticeOverlay(Modifier.align(Alignment.BottomStart))
+                            // a failed switch, a refused removal, «Already using …»: shown over whatever screen the step ended on
+                            com.monostr.app.ui.accounts.AccountNoticeHost(
+                                nameOf = ::shownName,
+                                modifier = Modifier.align(Alignment.BottomStart).navigationBarsPadding()
+                                    .padding(start = SWITCH_NOTICE_START, end = SWITCH_NOTICE_END, bottom = SWITCH_NOTICE_BOTTOM),
+                            )
+                        }
                     }
                 }
                 }

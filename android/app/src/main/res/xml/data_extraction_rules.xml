@@ -1,7 +1,10 @@
 <data-extraction-rules>
     <cloud-backup>
         <exclude domain="sharedpref" path="secrets.xml" />
-        <exclude domain="file" path="datastore/monostr.preferences_pb" />
+        <!-- every account's settings (monostr-<pk16>) and the account registry (monostr): they never leave the device -->
+        <exclude domain="file" path="datastore/" />
+        <!-- the engine databases (nostr-<pk16>/): the rules have no wildcards, and nothing in filesDir is meant to leave the device -->
+        <exclude domain="file" path="." />
         <!-- the per-account DM databases hold decrypted messages: they never leave the device -->
         <exclude domain="database" path="." />
         <!-- Tor's guards, keys and torrc: copied to another phone they would link the two installs -->
@@ -9,7 +12,10 @@
     </cloud-backup>
     <device-transfer>
         <exclude domain="sharedpref" path="secrets.xml" />
-        <exclude domain="file" path="datastore/monostr.preferences_pb" />
+        <!-- every account's settings (monostr-<pk16>) and the account registry (monostr): they never leave the device -->
+        <exclude domain="file" path="datastore/" />
+        <!-- the engine databases (nostr-<pk16>/): the rules have no wildcards, and nothing in filesDir is meant to leave the device -->
+        <exclude domain="file" path="." />
         <!-- the per-account DM databases hold decrypted messages: they never leave the device -->
         <exclude domain="database" path="." />
         <!-- Tor's guards, keys and torrc: copied to another phone they would link the two installs -->

@@ -31,8 +31,12 @@ data class ListEditState(
     val done: Boolean = false,
     val deleted: Boolean = false,
     val message: Message? = null,
+    /** Title, description and visibility as loaded (a new list: empty and private), for [dirty]. */
+    val baseline: Triple<String, String, Boolean> = Triple("", "", true),
 ) {
     val canSave: Boolean get() = title.isNotBlank() && !saving && !loading
+    /** Something was changed and not saved: leaving asks first (backlog 111). */
+    val dirty: Boolean get() = !loading && !saving && !done && Triple(title, description, private) != baseline
 }
 
 /** Spec 2026-10-18 §2.4: a new list ([address] null) or an own existing one. */
@@ -60,7 +64,11 @@ class ListEditController(
             if (set == null) {
                 _state.update { it.copy(loading = false, done = true) } // gone meanwhile: nothing to edit
             } else {
-                _state.update { it.copy(title = set.title.take(MAX_TITLE), description = set.description.orEmpty().take(MAX_DESCRIPTION), private = set.private, loading = false) }
+                _state.update {
+                    val title = set.title.take(MAX_TITLE)
+                    val description = set.description.orEmpty().take(MAX_DESCRIPTION)
+                    it.copy(title = title, description = description, private = set.private, loading = false, baseline = Triple(title, description, set.private))
+                }
             }
         }
     }

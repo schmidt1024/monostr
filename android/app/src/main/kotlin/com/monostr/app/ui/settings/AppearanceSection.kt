@@ -184,7 +184,7 @@ fun AppLanguageRow() {
     }
 }
 
-private val PICKER_ORDER = listOf(Accent.ORANGE, Accent.CHAMPAGNE, Accent.MONO, Accent.CUSTOM)
+private val PICKER_ORDER = Accent.PICKER_ORDER
 
 private fun accentName(a: Accent): Int = when (a) {
     Accent.MONO -> R.string.settings_accent_mono

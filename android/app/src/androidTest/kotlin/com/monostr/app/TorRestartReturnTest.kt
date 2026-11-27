@@ -32,6 +32,9 @@ class TorRestartReturnTest {
             runCatching { entry.session().logout() }
             entry.session().loginLocal(LocalSigner(Keys.generate().secretKey().toHex()))
             entry.session().applyRelays(listOf("ws://127.0.0.1:9"))
+            // the tips intro is offered once per account (its flag lives in the account's file since account switching): a fresh
+            // account would cover the stored route with it
+            EntryPointAccessors.fromApplication(ctx, com.monostr.app.work.TipCheckWorker.Deps::class.java).settings().setOnboardingSeen()
         }
     }
 

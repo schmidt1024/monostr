@@ -1,5 +1,6 @@
 package com.monostr.app.net
 
+import android.os.SystemClock
 import android.util.Log
 import com.monostr.nostr.net.NetworkMode
 import kotlinx.coroutines.CancellationException
@@ -12,12 +13,15 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 private class BootstrapTimeoutException : Exception()
 private class EngineFinishedException : Exception()
@@ -31,6 +35,24 @@ sealed interface TorState {
     data object Failed : TorState
 }
 
+/** Spec «Tor wait»: where the route of a newly switched-to account stands ([TorController.freshRoute]). */
+sealed interface FreshRoute {
+    /** Acknowledged, or nothing waits for one. */
+    data object Ready : FreshRoute
+    /** tor's NEWNYM window is still closed for [secondsLeft] s. */
+    data class Waiting(val secondsLeft: Int) : FreshRoute
+    /** tor did not acknowledge within 15 s; retries continue. */
+    data object Stalled : FreshRoute
+}
+
+/**
+ * tor takes one NEWNYM per 10 s; a second within that window it acknowledges but only delays, so the new session would open on
+ * the old circuits. Half a second of margin for the time between tor's own clock and the acknowledgement.
+ */
+private const val NEWNYM_WINDOW_MS = 10_500L
+private const val NEWNYM_TIMEOUT_MS = 15_000L
+private const val NEWNYM_RETRY_MS = 10_000L
+
 /**
  * Runs one Tor. The flow reports what is true now: [TorState.Failed] when Tor dies, then, if it comes back on its own,
  * [TorState.Connecting] and [TorState.Connected] again. A flow that throws or ends means this Tor is finished. [stop] is
@@ -39,6 +61,8 @@ sealed interface TorState {
 interface TorEngine {
     suspend fun start(ports: NetworkMode.Tor): Flow<TorState>
     suspend fun stop()
+    /** `SIGNAL NEWNYM` over the control connection: new streams never reuse an older circuit. True on tor's 250 OK. */
+    suspend fun newIdentity(): Boolean
 }
 
 /**
@@ -184,5 +208,76 @@ class TorController(
 
     private fun publish(from: Job, state: TorState) {
         synchronized(lock) { if (attempt === from) current.value = state }
+    }
+
+    private val route = MutableStateFlow<FreshRoute>(FreshRoute.Ready)
+    /** Spec «Tor wait», for the switch snackbar. */
+    val freshRoute: StateFlow<FreshRoute> = route
+    /** One NEWNYM at a time, so the window holds for both of two calls. */
+    private val newnymTurn = Mutex()
+    /** When tor last acknowledged a NEWNYM, by the (monotonic) clock of the caller; only touched under [newnymTurn]. */
+    private var lastNewnym: Long? = null
+
+    private val pending = MutableStateFlow(false)
+    /**
+     * A session started that may not use tor's circuits before a NEWNYM is acknowledged ([awaitNewIdentity]): its HTTP and
+     * sends wait meanwhile ([routeReady]). Set by the session start, cleared by the acknowledgement.
+     */
+    val routePending: StateFlow<Boolean> = pending
+
+    /** Called by every Tor session start, before the session is shown: [value] true when it needs a fresh route first. */
+    fun setRoutePending(value: Boolean) { pending.value = value }
+
+    /** Tor is connected and no session waits for a fresh route: traffic of the active account may go out. */
+    val routeReady: Flow<Boolean> = combine(current, pending) { state, waits -> state == TorState.Connected && !waits }.distinctUntilChanged()
+    val routeReadyNow: Boolean get() = current.value == TorState.Connected && !pending.value
+
+    /**
+     * Spec «Tor isolation per account»: waits until at least 10 s have passed since the last acknowledged NEWNYM ([freshRoute]
+     * counts down meanwhile), then asks the engine once. False when tor did not acknowledge within 15 s or refused.
+     */
+    suspend fun newIdentity(now: () -> Long = SystemClock::elapsedRealtime): Boolean = newnymTurn.withLock {
+        lastNewnym?.let { last ->
+            while (true) {
+                val left = last + NEWNYM_WINDOW_MS - now()
+                if (left <= 0) break
+                val seconds = ((left + 999) / 1_000).toInt()
+                route.value = FreshRoute.Waiting(seconds)
+                delay(left - (seconds - 1) * 1_000L)
+            }
+        }
+        val acknowledged = try {
+            withTimeoutOrNull(NEWNYM_TIMEOUT_MS) { engine.newIdentity() } == true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log("newnym failed: ${e.javaClass.simpleName}")
+            false
+        }
+        if (acknowledged) {
+            lastNewnym = now()
+            route.value = FreshRoute.Ready
+        } else {
+            route.value = FreshRoute.Stalled
+        }
+        acknowledged
+    }
+
+    /**
+     * [newIdentity] until tor acknowledges, one try every 10 s; then [onAck] runs (the shared HTTP client drops its pool) and only
+     * after it [routePending] clears. Cancelled, nobody waits for the route
+     * any more: [freshRoute] goes back to Ready, while [routePending] stays until the next session start says otherwise (a Tor
+     * that drops and comes back must not let traffic out before this runs again).
+     */
+    suspend fun awaitNewIdentity(retryMs: Long = NEWNYM_RETRY_MS, now: () -> Long = SystemClock::elapsedRealtime, onAck: () -> Unit = {}) {
+        var done = false
+        try {
+            while (!newIdentity(now)) delay(retryMs)
+            onAck()
+            pending.value = false
+            done = true
+        } finally {
+            if (!done) route.value = FreshRoute.Ready
+        }
     }
 }

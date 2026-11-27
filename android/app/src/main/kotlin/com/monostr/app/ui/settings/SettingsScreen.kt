@@ -28,6 +28,7 @@ import com.monostr.app.data.isValidRelayUrl
 import com.monostr.tips.RelayHosts
 import com.monostr.app.session.NostrSession
 import com.monostr.app.session.RenewResult
+import com.monostr.app.session.SessionState
 import com.monostr.app.ui.common.UiText
 import com.monostr.app.ui.common.uiText
 import com.monostr.nostr.model.Profile
@@ -395,19 +396,29 @@ class SettingsViewModel @Inject constructor(
         readPublished()
         viewModelScope.launch { _relaySeen.value = runCatching { session.requireReady().relaySeen?.all() }.getOrNull().orEmpty() }
     }
+    private val _keepFailed = MutableStateFlow(false)
+    /** Backlog 121: the settings could not be kept (the signer declined), so the logout did not happen. */
+    val keepFailed: StateFlow<Boolean> = _keepFailed.asStateFlow()
+    fun keepFailedSeen() { _keepFailed.value = false }
     private val _logoutBusy = MutableStateFlow(false)
     /** True while a logout runs (up to a few seconds for the draft pictures); the button waits. */
     val logoutBusy: StateFlow<Boolean> = _logoutBusy.asStateFlow()
     /** Logs out; the session clears its state even when closing the engine fails, so navigation always happens. */
-    fun logout(onDone: () -> Unit) = viewModelScope.launch {
+    fun logout(keepSettings: Boolean, onDone: () -> Unit) = viewModelScope.launch {
         if (_logoutBusy.value) return@launch
         _logoutBusy.value = true
         try {
-            session.logout()
+            // the active account leaves the device; the next one becomes active, or the login screen shows
+            (session.state.value as? SessionState.Active)?.ready?.pubkey?.let { session.removeAccount(it, keepSettings) }
         } catch (e: CancellationException) {
             throw e
+        } catch (e: com.monostr.app.data.KeepSettingsFailedException) {
+            // nothing was removed: the account stays, the question comes again without the switch
+            _logoutBusy.value = false
+            _keepFailed.value = true
+            return@launch
         } catch (e: Exception) {
-            // session.logout() already moved to LoggedOut in its finally block
+            // the removal ran to the end of what it could: the next account runs, or the login screen shows
         }
         onDone()
     }

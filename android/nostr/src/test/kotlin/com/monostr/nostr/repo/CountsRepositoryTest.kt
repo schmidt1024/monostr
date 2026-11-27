@@ -318,6 +318,36 @@ class CountsRepositoryTest {
         assertTrue(silentTargets.count { it in first } <= CountLimiter.PER_RELAY, "silent relay asked ${silentTargets.count { it in first }} times in one round")
     }
 
+    /** Backlog 117 (Pixel 2026-11-26): silence twice took a relay's counts away until the app restarted. */
+    @Test
+    fun `a relay that is silent for two rounds rests and is asked again, an answer brings its counts back`() = runTest {
+        val e = engine()
+        var time = 1000L
+        var silent = true
+        val asked = ArrayList<String>()
+        val repo = NostrCountsRepository(
+            e, this, relays = { listOf("wss://slow", "wss://ok") },
+            counter = { url, _ -> asked += url; if (url == "wss://slow") { if (silent) { delay(5_000); throw CountTimeoutException() } else 9L } else 2L },
+            now = { time }, batchDelayMs = 0,
+        )
+        fun note(n: Int) = n.toString(16).padStart(64, '0')
+        repo.request(listOf(note(1))); advanceUntilIdle()
+        repo.request(listOf(note(2))); advanceUntilIdle()
+        val afterTwo = asked.count { it == "wss://slow" }
+        // resting: not asked, and no timeout is paid
+        repo.request(listOf(note(3))); advanceUntilIdle()
+        assertEquals(afterTwo, asked.count { it == "wss://slow" }, "asked while resting")
+        assertEquals(2L, repo.counts.value.getValue(note(3)).likes)
+        // the rest is over and the relay answers again: it counts as before, nothing of «for the session»
+        time += 61 // past the first rest (REST_SECONDS = 60)
+        silent = false
+        repo.request(listOf(note(4))); advanceUntilIdle()
+        assertTrue(asked.count { it == "wss://slow" } > afterTwo, "not asked after its rest")
+        assertEquals(9L, repo.counts.value.getValue(note(4)).likes)
+        repo.request(listOf(note(5))); advanceUntilIdle()
+        assertEquals(9L, repo.counts.value.getValue(note(5)).likes)
+    }
+
     @Test
     fun `a relay that connects after the first batch fills in the visible counts without a scroll`() = runTest {
         val e = engine()

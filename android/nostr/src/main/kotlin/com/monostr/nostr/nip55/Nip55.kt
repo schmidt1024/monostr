@@ -117,7 +117,7 @@ object Nip55 {
         response == null -> Outcome.Failed("empty result")
         response.rejected -> Outcome.Rejected
         response.result.isNullOrBlank() || response.packageName.isNullOrBlank() -> Outcome.Failed("no pubkey in result")
-        else -> Outcome.Pubkey(normalizePubkey(response.result), response.packageName)
+        else -> normalizePubkey(response.result)?.let { Outcome.Pubkey(it, response.packageName) } ?: Outcome.Failed("no pubkey in result")
     }
 
     /**
@@ -135,8 +135,12 @@ object Nip55 {
         else -> Outcome.Result(response.result)
     }
 
-    /** Signers may answer with npub; the app works with hex. */
-    fun normalizePubkey(value: String): String = if (value.startsWith("npub1")) {
-        rust.nostr.sdk.PublicKey.parse(value).toHex()
-    } else value.lowercase()
+    /**
+     * Signers may answer with npub; the app works with hex. Null for anything that is no pubkey: the answer of another
+     * app becomes the account's file and directory names, and a path in it reached a recursive delete (bug bounty 2026-11-26).
+     */
+    fun normalizePubkey(value: String): String? {
+        val hex = if (value.startsWith("npub1")) runCatching { rust.nostr.sdk.PublicKey.parse(value).toHex() }.getOrNull() else value.lowercase()
+        return hex?.takeIf(com.monostr.nostr.model.Hex64::isValid)
+    }
 }

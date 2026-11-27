@@ -1,0 +1,5 @@
+- Birden fazla hesap: avatarından veya Ayarlar'dan ekle, değiştir ve kaldır; her biri kendi relay'lerini ve ayarlarını korur
+- Çıkış yapmak hesabı bu telefondan kaldırır ve ayarlarını anahtarınla şifrelenmiş olarak saklayabilir
+- Özel anahtarın gösterilmeden önce isteğe bağlı ekran kilidi
+- Yeni Tor Browser sürümlerinde: bağlantıyı kopyala ve Tor Browser'ı aç
+- Güvenlik sıkılaştırması ve düzeltmeler

@@ -371,6 +371,7 @@ class TorSwitchTest {
         val controller = TorController(object : TorEngine {
             override suspend fun start(ports: NetworkMode.Tor) = state
             override suspend fun stop() {}
+            override suspend fun newIdentity() = false
         }, backgroundScope, log = {}) { NetworkMode.Tor(1, 2) }
         val flow = torConnected { built++; controller }
         assertEquals(0, built)

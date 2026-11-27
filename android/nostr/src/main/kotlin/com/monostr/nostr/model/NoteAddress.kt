@@ -17,6 +17,9 @@ data class AddressRef(val kind: Int, val pubkey: String, val identifier: String,
 
     fun toBech32(): String =
         Nip19Coordinate(Coordinate(Kind(kind.toUShort()), PublicKey.parse(pubkey), identifier), relays.map { RelayUrl.parse(it) }).toBech32()
+
+    /** Null for what bech32 cannot hold: a stranger's `d` tag past its length limit, or an author that is no pubkey. */
+    fun toBech32OrNull(): String? = runCatching { toBech32() }.getOrNull()
 }
 
 /** `nostr:naddr1…` or a bare `naddr1…` in note text (spec 2026-10-29 naddr); mirrors [NoteQuote] for find and strip. */

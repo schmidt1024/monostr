@@ -24,43 +24,49 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {
-    @Provides @Singleton fun sessionStore(@ApplicationContext ctx: Context): SessionStore = PrefsSessionStore(ctx.monostrPrefs)
-    @Provides @Singleton fun relayStore(@ApplicationContext ctx: Context): RelayStore = PrefsRelayStore(ctx.monostrPrefs)
-    @Provides @Singleton fun relayModeStore(@ApplicationContext ctx: Context): RelayModeStore = PrefsRelayStore(ctx.monostrPrefs)
-    @Provides @Singleton fun searchRelayStore(@ApplicationContext ctx: Context): SearchRelayStore = PrefsSearchRelayStore(ctx.monostrPrefs)
-    @Provides @Singleton fun recentSearchesStore(@ApplicationContext ctx: Context): RecentSearchesStore = PrefsRecentSearchesStore(ctx.monostrPrefs)
+    @Provides @Singleton fun prefsAccountsStore(@ApplicationContext ctx: Context): PrefsAccountsStore = PrefsAccountsStore(ctx.monostrPrefs)
+    @Provides @Singleton fun accountsStore(accounts: PrefsAccountsStore): AccountsStore = accounts
+    @Provides @Singleton fun sessionStore(accounts: AccountsStore): SessionStore = accounts
+    /** Every settings store reads through this; only [accountsStore] stays on the global file. Inactive (= global file) until an account is activated. */
+    @Provides @Singleton fun accountPrefs(@ApplicationContext ctx: Context): AccountPrefs = AccountPrefs.create(ctx, ctx.monostrPrefs)
+    @Provides @Singleton fun accountMigration(@ApplicationContext ctx: Context, accounts: PrefsAccountsStore, prefs: AccountPrefs, secrets: SecretStore): AccountMigration =
+        AccountMigration(accounts, ctx.monostrPrefs, prefs, secrets)
+    @Provides @Singleton fun relayStore(prefs: AccountPrefs): RelayStore = PrefsRelayStore(prefs)
+    @Provides @Singleton fun relayModeStore(prefs: AccountPrefs): RelayModeStore = PrefsRelayStore(prefs)
+    @Provides @Singleton fun searchRelayStore(prefs: AccountPrefs): SearchRelayStore = PrefsSearchRelayStore(prefs)
+    @Provides @Singleton fun recentSearchesStore(prefs: AccountPrefs): RecentSearchesStore = PrefsRecentSearchesStore(prefs)
     @Provides @Singleton fun secretStore(@ApplicationContext ctx: Context): SecretStore = KeystoreSecretStore(ctx)
     @Provides @Singleton fun signerBridge(): SignerBridge = SignerBridge()
-    @Provides @Singleton fun tipSettings(@ApplicationContext ctx: Context): TipSettingsStore = PrefsTipSettingsStore(ctx.monostrPrefs)
-    @Provides @Singleton fun pendingTips(@ApplicationContext ctx: Context): PendingTipStore = PrefsPendingTipStore(ctx.monostrPrefs)
+    @Provides @Singleton fun tipSettings(prefs: AccountPrefs): TipSettingsStore = PrefsTipSettingsStore(prefs)
+    @Provides @Singleton fun pendingTips(prefs: AccountPrefs): PendingTipStore = PrefsPendingTipStore(prefs)
     @Provides @Singleton fun networkGate(): com.monostr.nostr.net.NetworkGate = com.monostr.nostr.net.NetworkGate()
     @Provides @Singleton fun torSwitch(@ApplicationContext ctx: Context): com.monostr.app.net.TorSwitchStore =
         com.monostr.app.net.TorSwitchStore(java.io.File(ctx.noBackupFilesDir, "tor-enabled"))
     /** Ask for it through a dagger.Lazy or Provider, and only with the switch on: with Tor off nothing of it may be built. */
     @Provides @Singleton fun torController(@ApplicationContext ctx: Context, gate: com.monostr.nostr.net.NetworkGate): com.monostr.app.net.TorController =
         com.monostr.app.net.TorController(com.monostr.app.net.AndroidTorEngine(ctx), CoroutineScope(SupervisorJob() + Dispatchers.Default)) { gate.torMode() }
-    @Provides @Singleton fun uiSettings(@ApplicationContext ctx: Context): UiSettingsStore = PrefsUiSettingsStore(ctx.monostrPrefs)
+    @Provides @Singleton fun uiSettings(prefs: AccountPrefs): UiSettingsStore = PrefsUiSettingsStore(prefs)
     /** The installed check behind the default mode (backlog 89): the translator is built lazily, on the check's IO thread. */
     @Provides @Singleton fun translationSettings(
-        @ApplicationContext ctx: Context,
+        prefs: AccountPrefs,
         device: dagger.Lazy<com.monostr.app.translate.DeviceTranslator>,
     ): com.monostr.app.translate.TranslationSettingsStore =
-        com.monostr.app.translate.PrefsTranslationSettingsStore(ctx.monostrPrefs, { device.get().isInstalled() })
-    @Provides @Singleton fun readerTheme(@ApplicationContext ctx: Context): com.monostr.app.ui.article.ReaderThemeStore =
-        com.monostr.app.ui.article.PrefsReaderThemeStore(ctx.monostrPrefs)
+        com.monostr.app.translate.PrefsTranslationSettingsStore(prefs, { device.get().isInstalled() })
+    @Provides @Singleton fun readerTheme(prefs: AccountPrefs): com.monostr.app.ui.article.ReaderThemeStore =
+        com.monostr.app.ui.article.PrefsReaderThemeStore(prefs)
     @Provides @Singleton fun translateClient(http: OkHttpClient): com.monostr.app.translate.TranslateClient = com.monostr.app.translate.TranslateClient(http)
     @Provides @Singleton fun languageDetector(): com.monostr.app.translate.LanguageDetector = com.monostr.app.translate.LanguageDetector()
-    @Provides @Singleton fun dmSettings(@ApplicationContext ctx: Context): DmSettingsStore = PrefsDmSettingsStore(ctx.monostrPrefs)
-    @Provides @Singleton fun hints(@ApplicationContext ctx: Context): HintStore = PrefsHintStore(ctx.monostrPrefs)
-    @Provides @Singleton fun drafts(@ApplicationContext ctx: Context): DraftStore = PrefsDraftStore(ctx.monostrPrefs)
-    @Provides @Singleton fun pendingSetup(@ApplicationContext ctx: Context): PendingSetupStore = PrefsPendingSetupStore(ctx.monostrPrefs)
-    @Provides @Singleton fun feedTabs(@ApplicationContext ctx: Context): FeedTabsCache = PrefsFeedTabsStore(ctx.monostrPrefs)
+    @Provides @Singleton fun dmSettings(prefs: AccountPrefs): DmSettingsStore = PrefsDmSettingsStore(prefs)
+    @Provides @Singleton fun hints(prefs: AccountPrefs): HintStore = PrefsHintStore(prefs)
+    @Provides @Singleton fun drafts(prefs: AccountPrefs): DraftStore = PrefsDraftStore(prefs)
+    @Provides @Singleton fun pendingSetup(prefs: AccountPrefs): PendingSetupStore = PrefsPendingSetupStore(prefs)
+    @Provides @Singleton fun feedTabs(prefs: AccountPrefs): FeedTabsCache = PrefsFeedTabsStore(prefs)
     /** One client for all HTTP, routed by the gate; no logging interceptor (the watcher register body carries the view key). */
     @Provides @Singleton fun okHttp(gate: com.monostr.nostr.net.NetworkGate, tor: dagger.Lazy<com.monostr.app.net.TorController>): OkHttpClient =
         // asked in Tor mode only, so with the switch off nothing of Tor is built
-        com.monostr.app.net.gatedOkHttp(gate, torReady = { tor.get().state.value == com.monostr.app.net.TorState.Connected })
+        com.monostr.app.net.gatedOkHttp(gate, torReady = { tor.get().routeReadyNow })
     @Provides @Singleton fun sendGate(gate: com.monostr.nostr.net.NetworkGate, tor: dagger.Lazy<com.monostr.app.net.TorController>): com.monostr.app.net.SendGate =
-        com.monostr.app.net.SendGate(gate, { tor.get().state.value == com.monostr.app.net.TorState.Connected }, com.monostr.app.net.torConnected(tor))
+        com.monostr.app.net.SendGate(gate, { tor.get().routeReadyNow }, com.monostr.app.net.torConnected(tor))
     @Provides @Singleton fun torRestartReturn(@ApplicationContext ctx: Context): com.monostr.app.net.TorRestartReturn =
         com.monostr.app.net.TorRestartReturn(java.io.File(ctx.noBackupFilesDir, "tor-return"))
     @Provides @Singleton fun torSwitchControl(

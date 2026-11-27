@@ -1,5 +1,10 @@
 package com.monostr.app.ui.settings
 
+import com.monostr.app.ui.settings.pages.LocalSettingsSnackbar
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.SnackbarDuration
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -33,6 +38,19 @@ import com.monostr.app.ui.theme.Spacing
 /** Settings → Reactions: the quick emojis of the long press on the heart, in the user's order. [showTitle] is false under a top bar naming it. */
 @Composable
 fun QuickReactionsSection(list: List<String>, onChange: (List<String>) -> Unit, showTitle: Boolean = true) {
+    // a removed emoji comes back with «Undo», as a removed relay does (backlog 114); null outside the settings pages
+    val snackbar = LocalSettingsSnackbar.current
+    val scope = rememberCoroutineScope()
+    val removedText = stringResource(R.string.settings_reaction_removed)
+    val undoText = stringResource(R.string.mute_undo)
+    val remove: (Int) -> Unit = { i ->
+        val before = list
+        onChange(Reactions.remove(list, i))
+        if (snackbar != null) scope.launch {
+            snackbar.currentSnackbarData?.dismiss()
+            if (snackbar.showSnackbar(removedText, undoText, duration = SnackbarDuration.Short) == SnackbarResult.ActionPerformed) onChange(before)
+        }
+    }
     Column(Modifier.fillMaxWidth()) {
         if (showTitle) Text(stringResource(R.string.settings_reactions), style = MaterialTheme.typography.titleMedium)
         Text(stringResource(R.string.settings_reactions_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -46,7 +64,7 @@ fun QuickReactionsSection(list: List<String>, onChange: (List<String>) -> Unit, 
                     Icon(Icons.Filled.KeyboardArrowDown, contentDescription = stringResource(R.string.settings_reactions_down, e))
                 }
                 // the last one stays: an empty list would mean "the default" again
-                IconButton(onClick = { onChange(Reactions.remove(list, i)) }, enabled = list.size > 1, modifier = Modifier.testTag("settings-reaction-remove-$i")) {
+                IconButton(onClick = { remove(i) }, enabled = list.size > 1, modifier = Modifier.testTag("settings-reaction-remove-$i")) {
                     Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.settings_reactions_remove, e))
                 }
             }

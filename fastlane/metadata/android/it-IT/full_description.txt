@@ -10,6 +10,7 @@ Monostr è un client Nostr per Android con mance in Monero.
 • Ricerca di persone e note (NIP-50), notifiche per mi piace, ripubblicazioni, risposte e mance
 • La tua lista di relay (NIP-65); i relay di scrittura di un autore si aggiungono finché il suo profilo è aperto
 • Accesso con Amber (NIP-55), con una chiave o con un backup della chiave protetto da password (ncryptsec, NIP-49); puoi anche salvare la chiave con una password; tema chiaro e scuro, 8 lingue
+• Più account su un telefono: cambia dal tuo avatar; ognuno mantiene i propri relay e le proprie impostazioni e riceve nuovi circuiti Tor
 
 <b>Mance in Monero</b>
 • Lascia una mancia a una nota o a un profilo dalla tua app wallet (Unstoppable, monfluo, Cake …) tramite un link monero:

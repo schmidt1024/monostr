@@ -219,6 +219,7 @@ class BackgroundIntervalTest {
         val engine = object : TorEngine {
             override suspend fun start(ports: NetworkMode.Tor): Flow<TorState> = flow { emit(TorState.Connected); awaitCancellation() }
             override suspend fun stop() {}
+            override suspend fun newIdentity() = false
         }
         val controller = TorController(engine, backgroundScope, graceMs = 1_000, bootstrapTimeoutMs = 5_000, log = {}, ports = { tor })
         val mode = MutableStateFlow<NetworkMode>(tor)
@@ -371,5 +372,23 @@ class BackgroundIntervalTest {
         val s = Sessions(buildsOnRestore = true, routeOpen = MutableStateFlow(false))
         assertTrue(s.go())
         assertEquals(listOf("release"), s.log)
+    }
+
+    @Test
+    fun `a restore that failed with a fresh route pending is tried again by the next run`() = runTest {
+        val engine = object : TorEngine {
+            override suspend fun start(ports: NetworkMode.Tor): Flow<TorState> = flow { emit(TorState.Connected); awaitCancellation() }
+            override suspend fun stop() {}
+            override suspend fun newIdentity() = false
+        }
+        val controller = TorController(engine, backgroundScope, graceMs = 1_000, bootstrapTimeoutMs = 5_000, log = {}, ports = { tor })
+        // the switch's start set it, then threw: no session, no follower that would clear it
+        controller.setRoutePending(true)
+        val mode = MutableStateFlow<NetworkMode>(tor)
+        val runTor = RunTor(controller::acquire, controller::releaseRun) { com.monostr.app.net.torRunning(dagger.Lazy { controller }) }
+        var restored = false
+        checkThroughGate(mode, hasAccount = { true }, visible = { false }, tor = runTor, budgetMs = 5_000) { restored = true; true }
+        assertTrue(restored, "the run must reach the restore, whose start sets or clears the pending route")
+        assertEquals(0L, testScheduler.currentTime)
     }
 }

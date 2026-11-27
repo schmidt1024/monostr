@@ -27,7 +27,7 @@ object NoteMapper {
                     id = event.id, author = event.pubkey, content = event.content,
                     createdAt = event.createdAt, kind = event.kind, powBits = Nip13.effectiveBits(event.id, tags),
                     rootId = refs.rootId, replyToId = refs.replyToId, repostOf = null,
-                    mentionedPubkeys = tags.filter { it.size >= 2 && it[0] == "p" }.map { it[1] },
+                    mentionedPubkeys = tags.filter { it.size >= 2 && it[0] == "p" && Hex64.isValid(it[1]) }.map { it[1] },
                     media = parsed.media,
                     noPreview = NoPreview.of(tags),
                     contentWarning = tags.firstOrNull { it.isNotEmpty() && it[0] == "content-warning" }?.let { it.getOrNull(1) ?: "" },
@@ -47,7 +47,8 @@ object NoteMapper {
                 )
             }
             6 -> {
-                val referencedId = tags.firstOrNull { it.size >= 2 && it[0] == "e" }?.get(1)
+                // a stranger's tag: anything but an id would end in a route or a lookup that cannot take it
+                val referencedId = tags.firstOrNull { it.size >= 2 && it[0] == "e" }?.get(1)?.takeIf(Hex64::isValid)
                 val original = verifiedEmbedded(event.content, referencedId) ?: referencedId?.let(resolveRepost)
                 Note(
                     id = event.id, author = event.pubkey, content = "", powBits = Nip13.effectiveBits(event.id, tags),
@@ -110,6 +111,6 @@ object NoteMapper {
 
     fun profile(pubkey: String, metadata: Metadata?): Profile {
         val r = metadata?.asRecord() ?: return Profile.empty(pubkey)
-        return Profile(pubkey, r.name, r.displayName, r.picture, r.about, r.nip05, banner = r.banner, website = r.website)
+        return Profile(pubkey, r.name, r.displayName, r.picture, r.about, r.nip05?.let(ProfileJson::plainNip05), banner = r.banner, website = r.website)
     }
 }

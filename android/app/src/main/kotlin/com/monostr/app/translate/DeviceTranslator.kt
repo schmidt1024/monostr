@@ -7,6 +7,7 @@ import android.content.ServiceConnection
 import android.os.IBinder
 import android.os.RemoteException
 import android.os.SystemClock
+import com.monostr.app.security.TrustedApps
 import com.monostr.nostr.PerfTrace
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.davidv.translator.ErrorType
@@ -100,15 +101,18 @@ class DeviceTranslator internal constructor(
     }
 
     companion object {
-        const val PKG = "dev.davidv.translator"
+        const val PKG = TrustedApps.OFFLINE_TRANSLATOR
         const val ACTION = "dev.davidv.translator.ITranslationService"
         const val IDLE_UNBIND_MS = 60_000L
 
         internal fun serviceIntent(): Intent = Intent(ACTION).setPackage(PKG)
 
+        /** Another app under Offline Translator's name counts as missing: it gets no text and the mode does not move to the device. */
         private fun appState(context: Context): DeviceAppState = runCatching {
             val pm = context.packageManager
-            if (pm.resolveService(serviceIntent(), 0) != null) {
+            if (!TrustedApps.isTrusted(context, PKG)) {
+                DeviceAppState.MISSING
+            } else if (pm.resolveService(serviceIntent(), 0) != null) {
                 DeviceAppState.READY
             } else {
                 pm.getPackageInfo(PKG, 0) // throws NameNotFoundException when absent
@@ -242,7 +246,8 @@ private class BinderChannel(private val context: Context, private val scope: Cor
             }
             synchronized(this) { connection = conn }
             val bound = try {
-                context.bindService(DeviceTranslator.serviceIntent(), conn, Context.BIND_AUTO_CREATE)
+                // checked again at the bind: the app may have been replaced since the settings looked
+                TrustedApps.isTrusted(context, DeviceTranslator.PKG) && context.bindService(DeviceTranslator.serviceIntent(), conn, Context.BIND_AUTO_CREATE)
             } catch (e: SecurityException) {
                 false
             }

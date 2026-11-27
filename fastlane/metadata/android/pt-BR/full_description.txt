@@ -10,6 +10,7 @@ Monostr é um cliente Nostr para Android com gorjetas em Monero.
 • Busca de pessoas e notas (NIP-50), notificações de curtidas, reposts, respostas e gorjetas
 • Sua lista de relays (NIP-65); os relays de escrita de um autor entram enquanto o perfil dele está aberto
 • Login com Amber (NIP-55), com uma chave ou com um backup da chave protegido por senha (ncryptsec, NIP-49); você também pode guardar sua chave com uma senha; tema claro e escuro, 8 idiomas
+• Várias contas em um telefone: alterne pelo seu avatar; cada uma mantém seus relays e configurações e recebe novos circuitos do Tor
 
 <b>Gorjetas em Monero</b>
 • Dê gorjeta a uma nota ou a um perfil pelo seu próprio app de carteira (Unstoppable, monfluo, Cake …) via link monero:

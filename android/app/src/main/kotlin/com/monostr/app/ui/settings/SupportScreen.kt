@@ -1,5 +1,6 @@
 package com.monostr.app.ui.settings
 
+import com.monostr.app.ui.common.copyToClipboard
 import com.monostr.app.ui.common.GuardedAlertDialog
 import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
@@ -30,7 +31,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
@@ -129,7 +129,8 @@ fun SupportContent(address: String, repoUrl: String, contributors: List<String>,
 /** No wallet app answered the `monero:` URI: the address to copy and its QR code. */
 @Composable
 fun SupportFallbackDialog(address: String, onDismiss: () -> Unit) {
-    val clipboard = LocalClipboardManager.current
+    val copiedLabel = stringResource(R.string.note_copied)
+    val context = LocalContext.current
     GuardedAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.tip_no_wallet_title)) },
@@ -140,7 +141,7 @@ fun SupportFallbackDialog(address: String, onDismiss: () -> Unit) {
                 Text(address, style = MaterialTheme.typography.bodySmall, fontFamily = MonostrFonts.mono, modifier = Modifier.testTag("support-fallback-address"))
             }
         },
-        confirmButton = { TextButton(onClick = { clipboard.setText(AnnotatedString(address)) }) { Text(stringResource(R.string.action_copy_address)) } },
+        confirmButton = { TextButton(onClick = { copyToClipboard(context, address, copiedLabel) }) { Text(stringResource(R.string.action_copy_address)) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) } },
     )
 }

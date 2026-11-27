@@ -277,8 +277,8 @@ object Reactions {
     /** The default quick choices, five (user 2026-10-11); the user adds, removes and reorders them in Settings. */
     val QUICK = listOf("❤️", "🔥", "😂", "💯", "🙏")
 
-    /** At most this many quick choices: two rows of the sheet. */
-    const val MAX_QUICK = 12
+    /** At most this many quick choices: one row, and no option set of the app has more than five (owner 2026-11-26; 12 before, a longer stored list keeps its first five). */
+    const val MAX_QUICK = 5
 
     fun encode(list: List<String>): String = Json.encodeToString(ListSerializer(String.serializer()), list)
 

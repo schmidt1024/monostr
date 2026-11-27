@@ -114,6 +114,9 @@ private val HEX64 = Regex("[0-9a-f]{64}")
 /** The home feed's kinds: notes, reposts and polls (kind 1068, polls task 4). */
 private val FEED_KINDS = listOf(1, 6, Kinds.POLL)
 
+/** How far past now a note may be dated and still show in a feed (relays commonly refuse more). */
+private const val FUTURE_SKEW_SECONDS = 900L
+
 /** A root note: neither a reply nor a repost of one (the profile's "Posts" section). */
 internal fun isRoot(note: Note): Boolean = !(note.isReply || note.repostOf?.isReply == true)
 
@@ -370,7 +373,9 @@ class NostrFeedRepository(
         if (authors.isEmpty()) return emptyList()
         return withContext(Dispatchers.IO) {
             val kept = ArrayList<Note>()
-            var before = until
+            // the newest page ends a little past now, as the notifications do: a note dated ahead would sit on top of
+            // the feed until its date passes (bug bounty 2026-11-26); a clock that runs a few minutes ahead still shows
+            var before = until ?: (System.currentTimeMillis() / 1000 + FUTURE_SKEW_SECONDS)
             repeat(LOCAL_ROUNDS) {
                 val raw = engine.query(pageFilter(authors, limit, before, kinds))
                 kept += NoteLoader.notes(engine, raw).filter(keep)
@@ -620,7 +625,9 @@ internal object NoteLoader {
         val withdrawn = HashSet<String>()
         for ((_, ev) in events) {
             if (ev.kind != 6) continue
-            val embedded = NoteMapper.verifiedEmbedded(ev)
+            // a note or a poll only: a repost must not be a way to put a third party's old profile or relay list into the
+            // database, where the lookups that read the database first would use it (bug bounty 2026-11-26)
+            val embedded = NoteMapper.verifiedEmbedded(ev)?.takeIf { it.kind().asU16().toInt().let { k -> k == 1 || k == Kinds.POLL } }
             if (embedded != null) {
                 // a write costs about 100 ms on a phone: the copy is saved only the first time, a stored original is just read
                 val id = embedded.id().toHex()

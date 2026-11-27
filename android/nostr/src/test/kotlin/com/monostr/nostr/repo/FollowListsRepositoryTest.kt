@@ -15,6 +15,13 @@ class FollowListsRepositoryTest {
     }
 
     @Test
+    fun `the list's own author is never one of its follows`() {
+        // backlog 108: some clients (Amethyst) put the account itself into its contact list
+        val tags = listOf(listOf("p", a), listOf("p", b))
+        assertEquals(listOf(b), NostrFollowListsRepository.newestFirst(tags, owner = a))
+    }
+
+    @Test
     fun `a followers page is newest first without seen accounts and goes on from its oldest time`() {
         val page = NostrFollowListsRepository.page(listOf(a to 100L, b to 300L, a to 50L, c to 200L), seen = setOf(c))
         assertEquals(listOf(b, a), page.pubkeys)

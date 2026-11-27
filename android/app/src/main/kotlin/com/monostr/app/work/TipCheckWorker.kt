@@ -16,6 +16,7 @@ import androidx.core.content.ContextCompat
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.monostr.app.MainActivity
+import com.monostr.app.data.pk16
 import com.monostr.app.R
 import com.monostr.app.data.Presets
 import com.monostr.app.data.TipSettingsStore
@@ -55,10 +56,15 @@ object TipChecker {
 
 /** Local notifications for received tips (spec 5.7: no push server). */
 class TipNotifier(private val context: Context) {
-    fun show(fromName: String, item: NotificationItem, unit: AmountUnit = AmountUnit.XMR) {
+    fun show(account: String, fromName: String, item: NotificationItem, unit: AmountUnit = AmountUnit.XMR) {
         if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
         ensureChannel()
-        val open = PendingIntent.getActivity(context, 0, Intent(context, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        // opens the app on the account that received the tip (a tap while another one is active switches first); the data keeps A's and B's PendingIntents apart
+        val intent = Intent(context, MainActivity::class.java)
+            .putExtra(MainActivity.EXTRA_OPEN_TOKEN, OpenToken.get(context))
+            .putExtra(MainActivity.EXTRA_ACCOUNT, account)
+        intent.data = android.net.Uri.parse("monostr-tip:" + pk16(account))
+        val open = PendingIntent.getActivity(context, AccountNotifications.requestCode(account, "tip"), intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val notification = NotificationCompat.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(context.getString(R.string.notif_tip_title))
@@ -66,7 +72,7 @@ class TipNotifier(private val context: Context) {
             .setContentIntent(open)
             .setAutoCancel(true)
             .build()
-        NotificationManagerCompat.from(context).notify(item.id.hashCode(), notification)
+        NotificationManagerCompat.from(context).notify(AccountNotifications.tipTag(account), item.id.hashCode(), notification)
     }
 
     private fun ensureChannel() {
@@ -130,7 +136,7 @@ internal suspend fun checkTips(context: Context, session: NostrSession, ready: R
             }
             val unit = settings.amountUnit.first()
             if (gone()) return true
-            notifier.show(name, item, unit)
+            notifier.show(ready.pubkey, name, item, unit)
         }
     }
     // receipts the check stored show in the badge and an open screen without waiting for their next reload (spec perf 3.6)

@@ -68,4 +68,13 @@ class NoteAddressTest {
         assertNull(NoteAddress.find("x$n"))
         assertNull(NoteAddress.find("${n}_x"))
     }
+
+    /** Bug bounty 2026-11-26: a stranger's `d` tag past what bech32 holds threw in the click that opens the article. */
+    @Test
+    fun `an address that cannot be encoded gives null instead of throwing`() {
+        val pk = "a".repeat(64)
+        assertEquals(AddressRef(30023, pk, "short").toBech32(), AddressRef(30023, pk, "short").toBech32OrNull())
+        assertNull(AddressRef(30023, pk, "x".repeat(5000)).toBech32OrNull())
+        assertNull(AddressRef(30023, "not a pubkey", "short").toBech32OrNull())
+    }
 }

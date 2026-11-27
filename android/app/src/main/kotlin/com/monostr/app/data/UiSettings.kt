@@ -33,6 +33,19 @@ enum class Accent(val seedArgb: Long, val lightSeedArgb: Long? = null) {
         val DEFAULT = ORANGE
         /** Accents that left the picker (red, green in v0.12.7; purple 2026-10-30; blue 2026-11-10, now the custom default) and live on as [CUSTOM] with their hue. */
         val LEGACY_HUES = mapOf("RED" to 0f, "GREEN" to 135f, "PURPLE" to 259f, "BLUE" to 220f)
+        /** The order of the accent picker in Settings › Appearance. */
+        val PICKER_ORDER = listOf(ORANGE, CHAMPAGNE, MONO, CUSTOM)
+
+        /**
+         * A new account's accent (spec «Adding an account»): the preset after [stored] in the picker's order, wrapping; custom
+         * (also a retired accent, which lives on as custom) gives the first preset, none stored counts as [DEFAULT].
+         */
+        fun nextPreset(stored: String?): String {
+            val current = stored?.let { v -> entries.firstOrNull { it.name == v } ?: if (v in LEGACY_HUES) CUSTOM else null } ?: DEFAULT
+            val presets = PICKER_ORDER - CUSTOM
+            val at = presets.indexOf(current)
+            return (if (at < 0) presets.first() else presets[(at + 1) % presets.size]).name
+        }
     }
 }
 

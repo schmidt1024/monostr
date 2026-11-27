@@ -64,7 +64,10 @@ class ListTabOfflineTest {
                 val db = NostrEngine.create(accountDir(ctx.filesDir, pk).apply { mkdirs() }.absolutePath, LocalSigner(secret), emptyList())
                 db.save(list)
                 db.close()
-                entry.feedTabs().save(pk, CachedTabs(listOf("30000:$pk:offline"), 1))
+                // logged out, the pins go to the file the first login adopts (the store keyed by a pubkey writes only to a known
+                // account's own file, so it is given that file as a plain store)
+                val loggedOutFile = entry.accountPrefs().let { prefs -> object : androidx.datastore.core.DataStore<androidx.datastore.preferences.core.Preferences> by prefs {} }
+                com.monostr.app.data.PrefsFeedTabsStore(loggedOutFile).save(pk, CachedTabs(listOf("30000:$pk:offline"), 1))
             }
             rule.onNodeWithTag("login-secret").performTextInput(secret)
             rule.onNodeWithTag("login-secret-button").performSemanticsAction(SemanticsActions.OnClick)

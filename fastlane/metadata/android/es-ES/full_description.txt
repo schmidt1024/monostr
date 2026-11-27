@@ -10,6 +10,7 @@ Monostr es un cliente Nostr para Android con propinas en Monero.
 • Búsqueda de personas y notas (NIP-50), notificaciones de me gusta, republicaciones, respuestas y propinas
 • Tu lista de relays (NIP-65); los relays de escritura de un autor se añaden mientras su perfil está abierto
 • Inicio de sesión con Amber (NIP-55), con una clave o con una copia de seguridad de la clave protegida con contraseña (ncryptsec, NIP-49); también puedes guardar tu clave con una contraseña; tema claro y oscuro, 8 idiomas
+• Varias cuentas en un teléfono: cambia desde tu avatar; cada una conserva sus relays y ajustes y recibe circuitos de Tor nuevos
 
 <b>Propinas en Monero</b>
 • Da propina a una nota o a un perfil desde tu propia app de cartera (Unstoppable, monfluo, Cake …) mediante un enlace monero:

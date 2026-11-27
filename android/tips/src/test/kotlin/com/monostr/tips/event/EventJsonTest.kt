@@ -31,6 +31,34 @@ class EventJsonTest {
     }
 
     @Test
+    fun `a timestamp past the signed range reads as the largest one instead of failing`() {
+        val json = EventJson.encode(event).replace("\"created_at\":1700000000", "\"created_at\":9223372036854775808")
+        assertEquals(event.copy(createdAt = Long.MAX_VALUE), EventJson.decode(json))
+        val max = EventJson.encode(event).replace("\"created_at\":1700000000", "\"created_at\":18446744073709551615")
+        assertEquals(Long.MAX_VALUE, EventJson.decode(max).createdAt)
+    }
+
+    @Test
+    fun `any other broken event still fails to decode`() {
+        for (bad in listOf("\"created_at\":\"99999999999999999999\"", "\"created_at\":-99999999999999999999", "\"created_at\":1.5e30", "\"created_at\":null")) {
+            val json = EventJson.encode(event).replace("\"created_at\":1700000000", bad)
+            assertTrue(runCatching { EventJson.decode(json) }.isFailure, bad)
+        }
+        assertTrue(runCatching { EventJson.decode("{\"kind\":99999999999999999999}") }.isFailure)
+        assertTrue(runCatching { EventJson.decode("not json") }.isFailure)
+    }
+
+    @Test
+    fun `far future is a day past now and does not overflow`() {
+        val now = 1_700_000_000L
+        assertTrue(EventJson.isFarFuture(Long.MAX_VALUE, now))
+        assertTrue(EventJson.isFarFuture(now + EventJson.FAR_FUTURE_SECONDS + 1, now))
+        assertTrue(!EventJson.isFarFuture(now + EventJson.FAR_FUTURE_SECONDS, now))
+        assertTrue(!EventJson.isFarFuture(now + 900, now), "a clock that runs ahead is not bogus")
+        assertTrue(!EventJson.isFarFuture(0, now))
+    }
+
+    @Test
     fun `tag helpers`() {
         assertEquals(listOf("b".repeat(64)), event.tagValues("e"))
         assertEquals(listOf("watcher", "https://w.example", "c".repeat(64)), event.firstTag("watcher"))

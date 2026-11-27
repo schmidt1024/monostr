@@ -1,5 +1,6 @@
 package com.monostr.app.ui.bookmarks
 
+import com.monostr.app.ui.common.TabBarActions
 import com.monostr.app.ui.common.TorBannerSlot
 import com.monostr.app.ui.common.MonostrSnackbarHost
 import com.monostr.app.ui.common.LocalCanSend
@@ -326,7 +327,7 @@ fun BookmarksScreen(
     ShowBarsWhenStuck(hide, listState, hasList = !state.loading && state.entries.isNotEmpty())
     Scaffold(
         modifier = Modifier.nestedScroll(hide.connection),
-        topBar = { Column { TopAppBar(title = { Text(stringResource(R.string.bookmarks_title)) }); TorBannerSlot() } },
+        topBar = { Column { TopAppBar(title = { Text(stringResource(R.string.bookmarks_title)) }, actions = { TabBarActions() }); TorBannerSlot() } },
         // spec 11.1: a tab like search and notifications, not a sub-screen with a back arrow
         bottomBar = { HideOnScrollFooter(hide) { MonostrBottomBar(BottomTab.BOOKMARKS, unread = 0, dmUnread = dmUnread, onFeed = onFeed, onSearch = onSearch, onBookmarks = hide::show, onMessages = onMessages, onNotifications = onNotifications, windowInsets = WindowInsets(0)) } },
         snackbarHost = { MonostrSnackbarHost(snackbar, Modifier.muteUndoTag(state.message)) },

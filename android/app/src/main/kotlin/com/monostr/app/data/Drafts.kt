@@ -7,7 +7,6 @@ import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.monostr.app.media.MediaUploader
 import com.monostr.app.media.UploadedMedia
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.Serializable
@@ -59,22 +58,27 @@ interface DraftStore {
     }
 }
 
+/**
+ * Reads and writes [pubkey]'s drafts in that account's own file ([ownedBy]), never in the one active at call time: a composer's save
+ * that runs during or after a switch stays with its account, and one of a removed account writes nothing.
+ */
 class PrefsDraftStore(private val store: DataStore<Preferences>) : DraftStore {
     /** A failed read yields no drafts instead of crashing the composer (the official DataStore pattern). */
-    private val data: Flow<Preferences> = store.data.catch { if (it is IOException) emit(emptyPreferences()) else throw it }
+    private suspend fun data(pubkey: String): Preferences =
+        store.ownedBy(pubkey)?.data?.catch { if (it is IOException) emit(emptyPreferences()) else throw it }?.first() ?: emptyPreferences()
 
     private fun key(pubkey: String, target: String) = stringPreferencesKey("$PREFIX$pubkey.$target")
     private fun prefix(pubkey: String) = "$PREFIX$pubkey."
 
-    override suspend fun load(pubkey: String, target: String): Draft? = data.first()[key(pubkey, target)]?.let(::decode)
+    override suspend fun load(pubkey: String, target: String): Draft? = data(pubkey)[key(pubkey, target)]?.let(::decode)
 
     override suspend fun save(pubkey: String, target: String, draft: Draft) {
         if (draft.isEmpty) return remove(pubkey, target)
-        store.edit { it[key(pubkey, target)] = json.encodeToString(Draft.serializer(), draft) }
+        store.ownedBy(pubkey)?.edit { it[key(pubkey, target)] = json.encodeToString(Draft.serializer(), draft) }
     }
 
     override suspend fun remove(pubkey: String, target: String) {
-        store.edit { it.remove(key(pubkey, target)) }
+        store.ownedBy(pubkey)?.edit { it.remove(key(pubkey, target)) }
     }
 
     override suspend fun expire(pubkey: String, now: Long, maxAgeSeconds: Long): List<Draft> =
@@ -84,7 +88,7 @@ class PrefsDraftStore(private val store: DataStore<Preferences>) : DraftStore {
 
     private suspend fun removeWhere(pubkey: String, gone: (Draft) -> Boolean): List<Draft> {
         val removed = ArrayList<Draft>()
-        store.edit { p ->
+        store.ownedBy(pubkey)?.edit { p ->
             for ((k, v) in p.asMap().entries.toList()) {
                 if (!k.name.startsWith(prefix(pubkey))) continue
                 val d = (v as? String)?.let(::decode)
@@ -99,7 +103,7 @@ class PrefsDraftStore(private val store: DataStore<Preferences>) : DraftStore {
     }
 
     override suspend fun all(pubkey: String): List<Draft> =
-        data.first().asMap().filterKeys { it.name.startsWith(prefix(pubkey)) }.values.mapNotNull { (it as? String)?.let(::decode) }
+        data(pubkey).asMap().filterKeys { it.name.startsWith(prefix(pubkey)) }.values.mapNotNull { (it as? String)?.let(::decode) }
 
     private fun decode(raw: String): Draft? = runCatching { json.decodeFromString(Draft.serializer(), raw) }.getOrNull()
 

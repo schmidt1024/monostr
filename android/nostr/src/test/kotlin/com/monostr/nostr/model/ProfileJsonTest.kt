@@ -44,4 +44,26 @@ class ProfileJsonTest {
         assertEquals(null, ProfileJson.profile(pk, "not json"))
         assertEquals(null, ProfileJson.profile(pk, "[1,2]"))
     }
+
+    /** Bug bounty 2026-11-26: the address is a claim; it is kept to one line of visible characters. */
+    @Test
+    fun `a nip05 claim loses invisible characters and is capped`() {
+        val pk = "a".repeat(64)
+        assertEquals("monostr@monostr.com", ProfileJson.profile(pk, """{"nip05":"mono\u202Estr@\u200Bmonostr.com\n "}""")!!.nip05)
+        assertEquals(ProfileJson.MAX_NIP05, ProfileJson.profile(pk, """{"nip05":"${"x".repeat(5000)}"}""")!!.nip05!!.length)
+        assertEquals(null, ProfileJson.profile(pk, """{"nip05":" \u200E"}""")!!.nip05)
+    }
+
+    @Test
+    fun `a name is one line without direction marks or fillers, joiners stay`() {
+        val pk = "a".repeat(64)
+        fun name(json: String) = ProfileJson.profile(pk, """{"name":"$json"}""")!!.name
+        assertEquals("Monostr", name("\u202EMono\u200Bstr\u200E\u061C\uFEFF\u2060"))
+        assertEquals("two lines", name("two\nlines"))
+        assertEquals("\uD83D\uDC68\u200D\uD83D\uDC69", name("\uD83D\uDC68\u200D\uD83D\uDC69"), "an emoji joined with U+200D")
+        assertEquals("\u0645\u06CC\u200C\u062E", name("\u0645\u06CC\u200C\u062E"), "Persian needs U+200C")
+        assertEquals(ProfileJson.MAX_NAME, name("x".repeat(500))!!.length)
+        // the cut does not leave half an emoji
+        assertEquals(ProfileJson.MAX_NAME - 1, name("x".repeat(ProfileJson.MAX_NAME - 1) + "\uD83D\uDE00")!!.length)
+    }
 }

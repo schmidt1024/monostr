@@ -10,6 +10,7 @@ Monostr is a Nostr client for Android with tips in Monero.
 • Search for people and notes (NIP-50), notifications for likes, reposts, replies and tips
 • Your relay list (NIP-65); write relays of an author are added while their profile is open
 • Sign in with Amber (NIP-55), a key, or a password-protected key backup (ncryptsec, NIP-49); you can also back up your key with a password; light and dark theme, 8 languages
+• Several accounts on one phone: switch from your avatar; each keeps its own relays and settings and gets fresh Tor circuits
 
 <b>Tips in Monero</b>
 • Tip a note or a profile from your own wallet app (Unstoppable, monfluo, Cake …) through a monero: link

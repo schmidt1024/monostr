@@ -49,6 +49,10 @@ class Nip55Test {
             Nip55.parsePubkeyResponse(true, Nip55.Response("A".repeat(64), null, "com.x", false)),
         )
         assertEquals(Nip55.Outcome.Failed("no pubkey in result"), Nip55.parsePubkeyResponse(true, Nip55.Response("x", null, null, false)))
+        // bug bounty 2026-11-26: the answer names the account's files, so a path or anything else that is no pubkey is no login
+        for (bad in listOf("/a", "/../datastore", "/../../databases", "a".repeat(63), "a".repeat(65), "g".repeat(64), "npub1notakey", "../" + "a".repeat(61))) {
+            assertEquals(Nip55.Outcome.Failed("no pubkey in result"), Nip55.parsePubkeyResponse(true, Nip55.Response(bad, null, "com.x", false)), bad)
+        }
     }
 
     @Test

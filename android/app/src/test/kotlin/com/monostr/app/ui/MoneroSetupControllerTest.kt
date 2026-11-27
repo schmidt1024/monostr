@@ -2,7 +2,7 @@ package com.monostr.app.ui
 import com.monostr.app.ui.common.uiText
 import com.monostr.app.R
 
-import com.monostr.app.data.KeystoreSecretStore
+import com.monostr.app.data.SecretNames
 import com.monostr.app.data.MoneroSetup
 import com.monostr.app.ui.monero.MoneroSetupController
 import com.monostr.app.ui.monero.SetupStep
@@ -113,7 +113,7 @@ class MoneroSetupControllerTest {
         assertEquals(SetupStep.Done(expectedAddress.encode(), 3_000_000L), c.state.value.step)
         assertEquals(listOf(Triple(url, expectedAddress, expectedViewKey)), rig.gateway.registered)
         assertEquals(listOf(Triple(expectedAddress, Watcher.Http(url, watcherPk), false)), rig.tips.publishedInfos)
-        assertEquals(expectedViewKey, rig.secrets.get(KeystoreSecretStore.SECRET_VIEW_KEY))
+        assertEquals(expectedViewKey, rig.secrets.get(SecretNames.viewKey(self)))
         assertEquals(MoneroSetup(expectedAddress.encode(), url, watcherPk, "mainnet", 5_000), rig.settings.setupState.value)
         assertTrue(rig.settings.seenState.value)
         assertEquals(listOf(listOf("wss://watcher-relay.example")), rig.relays)
@@ -195,7 +195,7 @@ class MoneroSetupControllerTest {
         advanceUntilIdle()
         assertEquals(SetupStep.Done(address.encode(), null), c.state.value.step)
         assertEquals(listOf(Triple(url, address, viewKey)), rig.gateway.registered)
-        assertEquals(viewKey, rig.secrets.get(KeystoreSecretStore.SECRET_VIEW_KEY))
+        assertEquals(viewKey, rig.secrets.get(SecretNames.viewKey(self)))
     }
 
     @Test
@@ -240,7 +240,7 @@ class MoneroSetupControllerTest {
         assertEquals(uiText(R.string.error_watcher_rejected), c.state.value.error)
         assertTrue(c.state.value.step is SetupStep.Confirm, "step ${c.state.value.step}")
         assertNull(rig.settings.setupState.value)
-        assertNull(rig.secrets.get(KeystoreSecretStore.SECRET_VIEW_KEY))
+        assertNull(rig.secrets.get(SecretNames.viewKey(self)))
         assertTrue(rig.tips.publishedInfos.isEmpty())
         assertFalse(rig.settings.seenState.value)
         // retry from the confirm step succeeds once the watcher answers, but a pubkey that differs from /v1/info is refused
@@ -262,7 +262,7 @@ class MoneroSetupControllerTest {
         val wallet = MoneroKeys.generate()
         val address = wallet.address(Network.MAINNET)
         val rig = Rig(settings = FakeTipSettings(setup = MoneroSetup(address.encode(), "https://old.example", "e".repeat(64), "mainnet", 1)))
-        rig.secrets.put(KeystoreSecretStore.SECRET_VIEW_KEY, wallet.viewSecret.toHex())
+        rig.secrets.put(SecretNames.viewKey(self), wallet.viewSecret.toHex())
         val c = controller(rig)
         assertEquals(SetupStep.Watcher("https://old.example"), c.state.value.step)
         c.loadDefaultWatcher()
@@ -303,7 +303,7 @@ class MoneroSetupControllerTest {
         assertEquals(SetupStep.Confirm(address.encode(), null), c.state.value.step)
         assertEquals(MoneroSetupController.ERR_NOT_PUBLISHED, c.state.value.error)
         assertNull(rig.settings.setupState.value)
-        assertNull(rig.secrets.get(KeystoreSecretStore.SECRET_VIEW_KEY))
+        assertNull(rig.secrets.get(SecretNames.viewKey(self)))
         assertFalse(rig.settings.seenState.value)
         assertEquals(1, rig.gateway.registered.size)
         assertEquals(1, rig.tips.publishedInfos.size)
@@ -333,7 +333,7 @@ class MoneroSetupControllerTest {
         val wallet = MoneroKeys.generate()
         val address = wallet.address(Network.MAINNET)
         val rig = Rig(tips = FakeTips(relaysOk = false), settings = FakeTipSettings(setup = MoneroSetup(address.encode(), "https://old.example", "e".repeat(64), "mainnet", 1)))
-        rig.secrets.put(KeystoreSecretStore.SECRET_VIEW_KEY, wallet.viewSecret.toHex())
+        rig.secrets.put(SecretNames.viewKey(self), wallet.viewSecret.toHex())
         val c = controller(rig)
         c.loadDefaultWatcher()
         advanceUntilIdle()
@@ -366,7 +366,7 @@ class MoneroSetupControllerTest {
         val old = MoneroKeys.generate()
         val oldAddress = old.address(Network.MAINNET)
         val rig = Rig(tips = FakeTips(relaysOk = false), settings = FakeTipSettings(setup = MoneroSetup(oldAddress.encode(), url, watcherPk, "mainnet", 1)))
-        rig.secrets.put(KeystoreSecretStore.SECRET_VIEW_KEY, old.viewSecret.toHex())
+        rig.secrets.put(SecretNames.viewKey(self), old.viewSecret.toHex())
         val c = controller(rig)
         c.loadDefaultWatcher()
         advanceUntilIdle()
@@ -381,7 +381,7 @@ class MoneroSetupControllerTest {
         assertEquals(old.viewSecret.toHex(), rig.gateway.registered.last().third)
         assertTrue(rig.gateway.unregistered.isEmpty(), "the working setup is not thrown away")
         assertEquals(oldAddress.encode(), rig.settings.setupState.value?.address)
-        assertEquals(old.viewSecret.toHex(), rig.secrets.get(KeystoreSecretStore.SECRET_VIEW_KEY))
+        assertEquals(old.viewSecret.toHex(), rig.secrets.get(SecretNames.viewKey(self)))
     }
 
     @Test
@@ -503,7 +503,7 @@ class MoneroSetupControllerTest {
         val wallet = MoneroKeys.generate()
         val oldUrl = "https://old.example"
         val rig = Rig(settings = FakeTipSettings(setup = MoneroSetup(wallet.address(Network.MAINNET).encode(), oldUrl, "e".repeat(64), "mainnet", 1)))
-        rig.secrets.put(KeystoreSecretStore.SECRET_VIEW_KEY, wallet.viewSecret.toHex())
+        rig.secrets.put(SecretNames.viewKey(self), wallet.viewSecret.toHex())
         val order = ArrayList<String>()
         val gateway = object : com.monostr.app.data.WatcherGateway by rig.gateway {
             override suspend fun unregister(url: String) { order += "unregister"; rig.gateway.unregister(url) }
@@ -522,7 +522,7 @@ class MoneroSetupControllerTest {
         advanceUntilIdle()
         assertEquals(listOf("publish", "unregister"), order)
         assertEquals(listOf(oldUrl), rig.gateway.unregistered)
-        assertEquals(wallet.viewSecret.toHex(), rig.secrets.get(KeystoreSecretStore.SECRET_VIEW_KEY), "view key untouched")
+        assertEquals(wallet.viewSecret.toHex(), rig.secrets.get(SecretNames.viewKey(self)), "view key untouched")
         assertTrue(rig.settings.setupState.value!!.isPersonal)
     }
 
@@ -546,7 +546,7 @@ class MoneroSetupControllerTest {
     @Test
     fun `switch from personal to http starts with the default url and cannot reuse`() = runTest {
         val rig = Rig(settings = FakeTipSettings(setup = MoneroSetup(personalAddress.encode(), "", watcherHex, "mainnet", 1, listOf("wss://w.example"))))
-        rig.secrets.put(KeystoreSecretStore.SECRET_VIEW_KEY, MoneroKeys.generate().viewSecret.toHex())
+        rig.secrets.put(SecretNames.viewKey(self), MoneroKeys.generate().viewSecret.toHex())
         val c = controller(rig)
         assertEquals(SetupStep.Watcher(Presets.DEFAULT_WATCHER), c.state.value.step)
         c.loadWatcher()
@@ -634,7 +634,7 @@ class MoneroSetupControllerTest {
             FakeWatcherGateway(info = WatcherInfo(watcherPk, listOf("wss://watcher-relay.example"), "mainnet", 3_000_000, "test", protocol = "0.5")),
             settings = FakeTipSettings(setup = MoneroSetup(address.encode(), "https://old.example", "e".repeat(64), "mainnet", 1, amountsHidden = false)),
         )
-        rig.secrets.put(KeystoreSecretStore.SECRET_VIEW_KEY, wallet.viewSecret.toHex())
+        rig.secrets.put(SecretNames.viewKey(self), wallet.viewSecret.toHex())
         val c = controller(rig)
         c.loadDefaultWatcher(); advanceUntilIdle()
         c.reuseStored()
@@ -859,6 +859,46 @@ class MoneroSetupControllerTest {
     }
 
     /** Started, but time is not advanced: for the start phase in virtual time. */
+    /** Backlog 110: the arrow and the system's back take one step back; the seed step asks before its wallet is lost. */
+    @Test
+    fun `back goes one step, keeps the seed from Verify and asks before a seed is discarded`() = runTest {
+        val rig = Rig()
+        val c = controller(rig, intro = true)
+        assertEquals(MoneroSetupController.Back.LEAVE, c.back(), "the first step leaves")
+        c.createWallet()
+        c.loadDefaultWatcher()
+        advanceUntilIdle()
+        val choose = c.state.value.step as SetupStep.Choose
+        c.startNew()
+        val seed = c.state.value.step as SetupStep.Seed
+        c.seedWritten()
+        assertEquals(MoneroSetupController.Back.STEPPED, c.back())
+        assertEquals(seed, c.state.value.step, "Verify goes back to the same words")
+        assertEquals(MoneroSetupController.Back.ASK_DISCARD, c.back())
+        assertEquals(seed, c.state.value.step, "nothing is lost before the answer")
+        c.discardSeed()
+        assertEquals(choose, c.state.value.step)
+        c.startExisting()
+        advanceUntilIdle()
+        assertTrue(c.state.value.step is SetupStep.Existing)
+        assertEquals(MoneroSetupController.Back.STEPPED, c.back())
+        assertEquals(choose, c.state.value.step)
+        assertEquals(MoneroSetupController.Back.STEPPED, c.back())
+        assertTrue(c.state.value.step is SetupStep.Watcher)
+        assertEquals(MoneroSetupController.Back.STEPPED, c.back())
+        assertTrue(c.state.value.step is SetupStep.Address, "the watcher step goes back to where it was opened from")
+        assertFalse(c.state.value.finished)
+        assertTrue(rig.gateway.registered.isEmpty())
+    }
+
+    @Test
+    fun `back from the watcher step of an upgrade leaves`() = runTest {
+        val c = controller(Rig(), upgrade = true)
+        advanceUntilIdle()
+        assertTrue(c.state.value.step is SetupStep.Watcher)
+        assertEquals(MoneroSetupController.Back.LEAVE, c.back())
+    }
+
     private fun TestScope.started(rig: Rig, intro: Boolean = false, upgrade: Boolean = false) = MoneroSetupController(
         intro = intro, upgrade = upgrade, gateway = rig.gateway, tips = rig.tips, settings = rig.settings, secrets = rig.secrets,
         relays = { rig.relays += it }, scope = eager(), selfPubkey = self, keyGen = { rig.keys }, random = Random(7), now = { NOW },
@@ -953,6 +993,38 @@ class MoneroSetupControllerTest {
         c.loadWatcher()
         assertTrue(c.state.value.step is SetupStep.Choose, "step ${c.state.value.step}")
         assertEquals(2, rig.gateway.infoCalls)
+    }
+
+    @Test
+    fun `the address step says it is looking until both relay answers are in`() = runTest {
+        val infoGate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val paytoGate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val rig = Rig(tips = FakeTips().apply { liveInfos = emptyMap(); liveGate = infoGate; own = OwnPayto.Known(null); ownGate = paytoGate })
+        val c = started(rig, intro = true)
+        assertEquals(SetupStep.Address(""), c.state.value.step, "usable at once")
+        assertTrue(c.state.value.looking)
+        infoGate.complete(Unit); runCurrent()
+        assertTrue(c.state.value.looking, "the own payto is still asked")
+        paytoGate.complete(Unit); runCurrent()
+        assertFalse(c.state.value.looking)
+        assertFalse(c.state.value.finished)
+    }
+
+    @Test
+    fun `a lookup given up after 5 s ends the looking too`() = runTest {
+        val rig = Rig(tips = FakeTips().apply { liveInfos = emptyMap(); liveDelayMs = 8_000; own = OwnPayto.Known(null) })
+        val c = started(rig, intro = true)
+        assertTrue(c.state.value.looking)
+        advanceTimeBy(5_001); runCurrent()
+        assertFalse(c.state.value.looking)
+    }
+
+    @Test
+    fun `with a setup on this device nothing is looked for`() = runTest {
+        val own = MoneroKeys.generate().address(Network.MAINNET)
+        val rig = Rig()
+        rig.settings.setupState.value = MoneroSetup(own.encode(), url, watcherPk, "mainnet", 1)
+        assertFalse(started(rig).state.value.looking)
     }
 
     @Test

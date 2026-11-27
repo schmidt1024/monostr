@@ -91,6 +91,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.SavedStateHandle
@@ -857,15 +858,17 @@ fun ProfileScreen(
                     }
                     Column(Modifier.padding(start = Spacing.l, end = Spacing.l, top = Spacing.s, bottom = Spacing.l)) {
                         Text(state.profile.shownName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                        // three sizes: name, then the NIP-05 address, then the npub (smaller and grey)
-                        state.profile.nip05?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                        // three sizes: name, then the NIP-05 address, then the npub (smaller and grey). The address is the
+                        // profile's own claim, unchecked: shown here only, one line, and no list uses it as the handle
+                        state.profile.nip05?.let { Text(it, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                         NpubLine(state.profile.pubkey, followsYou = !state.isSelf && state.followCounts?.followsYou == true)
                         // the bio links like a note: URLs, nostr: mentions and hashtags open
                         state.profile.about?.takeIf { it.isNotBlank() }?.let {
                             Spacer(Modifier.height(Spacing.s))
                             // a long bio folds like a long note, earlier: the header must not push the notes off the screen
                             NoteText(
-                                it, onOpen = {}, onHashtag = onHashtag, onOpenProfile = onOpenProfile, onOpenNote = onOpenThread, names = names,
+                                // long press selects, so a bio can be copied (backlog 112)
+                                it, onOpen = null, selectable = true, onHashtag = onHashtag, onOpenProfile = onOpenProfile, onOpenNote = onOpenThread, names = names,
                                 collapsible = true, collapseAbove = BIO_COLLAPSE_ABOVE, collapsedLines = BIO_COLLAPSED_LINES, stateKey = "bio-${state.profile.pubkey}",
                                 modifier = Modifier.testTag("profile-about"),
                             )
@@ -873,7 +876,7 @@ fun ProfileScreen(
                         // kind 0 website: a link that reads without the scheme, like links in notes
                         state.profile.website?.trim()?.takeIf { ProfileEditController.websiteOk(it) && it.isNotEmpty() }?.let { site ->
                             Spacer(Modifier.height(Spacing.xs))
-                            NoteText(ProfileEditController.website(site), onOpen = {}, onHashtag = {}, onOpenProfile = {}, onOpenNote = {}, modifier = Modifier.testTag("profile-website"))
+                            NoteText(ProfileEditController.website(site), onOpen = null, onHashtag = {}, onOpenProfile = {}, onOpenNote = {}, modifier = Modifier.testTag("profile-website"))
                         }
                         state.followCounts?.let {
                             Spacer(Modifier.height(Spacing.s))

@@ -1,5 +1,6 @@
 package com.monostr.app.ui.settings.pages
 
+import com.monostr.app.ui.common.ConfirmDialog
 import com.monostr.app.ui.settings.settingAnchor
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -30,7 +31,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import com.monostr.app.ui.settings.SettingsConfirmDialog
+import com.monostr.app.ui.common.ConfirmDialog
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -75,7 +76,7 @@ fun MoneroPage(vm: SettingsViewModel, focus: String?, onBack: () -> Unit, onMone
         // wave A review: the danger zone and the payto removal ask first, like the relay list actions
         var asking by rememberSaveable { mutableStateOf<MoneroConfirm?>(null) }
         asking?.let { a ->
-            SettingsConfirmDialog(
+            ConfirmDialog(
                 title = stringResource(a.title), text = stringResource(a.text), confirm = stringResource(a.confirm), confirmTag = a.tag,
                 destructive = true,
                 onConfirm = {
@@ -213,7 +214,7 @@ fun MoneroPage(vm: SettingsViewModel, focus: String?, onBack: () -> Unit, onMone
             SettingsGroup(stringResource(R.string.settings_label_payto), modifier = Modifier.settingAnchor("settings-monero-payto")) {
                 SettingsLinkRow(stringResource(R.string.settings_monero_payto_change), null, "settings-monero-payto-change", onClick = onMoneroSetup)
                 SettingsCardDivider()
-                SettingsLinkRow(stringResource(R.string.settings_monero_payto_remove), null, "settings-monero-payto-remove", enabled = !monero.busy, chevron = false, onClick = { asking = MoneroConfirm.REMOVE_PAYTO })
+                SettingsLinkRow(stringResource(R.string.settings_monero_payto_remove), null, "settings-monero-payto-remove", enabled = !monero.busy, chevron = false, titleColor = MaterialTheme.colorScheme.error, onClick = { asking = MoneroConfirm.REMOVE_PAYTO })
             }
         }
         if (setup != null || monero.hasViewKey) {

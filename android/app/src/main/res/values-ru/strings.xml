@@ -12,6 +12,7 @@
     <string name="action_remove">Удалить</string>
     <string name="action_send">Отправить</string>
     <string name="action_send_again">Отправить снова</string>
+    <string name="action_copy">Копировать</string>
     <string name="action_copy_address">Копировать адрес</string>
     <string name="action_copy_uri">Копировать URI</string>
     <string name="state_sending">Отправка…</string>
@@ -289,6 +290,8 @@
     <string name="setup_verify_word">Слово № %1$d</string>
     <string name="setup_verify_wrong">Как минимум одно слово неверно.</string>
     <string name="setup_back_to_seed">Назад к сид-фразе</string>
+    <string name="setup_discard_title">Удалить этот кошелёк?</string>
+    <string name="setup_discard_text">Эти 25 слов после этого не будут работать. При новой попытке создаётся новый кошелёк.</string>
     <string name="setup_existing_title">Существующий кошелёк</string>
     <string name="setup_address_label">Основной адрес (4… / 5…)</string>
     <string name="setup_view_key_label">Приватный ключ просмотра (64 hex)</string>
@@ -311,6 +314,7 @@
     <string name="setup_address_title">Получать Monero</string>
     <string name="setup_address_field">Адрес Monero (4… / 8…)</string>
     <string name="setup_address_hint">Этот адрес публичный. Лучше использовать субадрес только для Nostr.</string>
+    <string name="setup_address_looking">Ищем на ваших релеях уже используемый адрес…</string>
     <string name="setup_address_publish">Опубликовать</string>
     <string name="setup_no_wallet_link">Ещё нет кошелька Monero? Создайте его здесь</string>
     <string name="setup_address_done">Теперь вам могут отправлять Monero, в том числе из Amethyst и Ditto.</string>
@@ -360,7 +364,7 @@
     <string name="settings_dm_preview_text">Показывать текст в уведомлениях</string>
     <string name="settings_search_relays">Релеи поиска</string>
     <string name="settings_search_relays_hint">Только для поиска имён и полного текста (NIP-50), никогда для ленты. Ваши поисковые запросы уходят на эти релеи.</string>
-    <string name="settings_search_relays_reset">Сбросить к стандартным</string>
+    <string name="settings_search_relays_reset">Восстановить по умолчанию</string>
     <string name="settings_suggested_relays">Рекомендуемые релеи</string>
     <string name="settings_suggested_relays_hint">Платные Monero-релеи: чтение бесплатно, публикация после разового платежа в XMR на сайте релея. Источник: pmnr.xmr.rocks</string>
     <string name="settings_suggested_relay_fee">Платный Monero-релей · %1$s XMR за публикацию</string>
@@ -425,7 +429,7 @@
     <string name="settings_preset_add">Добавить пресет</string>
     <string name="settings_preset_remove">Удалить пресет</string>
     <string name="settings_adopt_relays">Заменить эти релеи моим опубликованным списком (NIP-65)</string>
-    <string name="settings_logout">Выйти</string>
+    <string name="settings_logout">Удалить аккаунт с этого телефона</string>
     <string name="settings_msg_presets_saved">Шаблоны сохранены</string>
     <string name="settings_msg_disabled">Чаевые в Monero отключены</string>
     <string name="settings_msg_view_key_deleted">Ключ просмотра удалён локально</string>
@@ -464,7 +468,10 @@
     <string name="notifications_checking">Опрашиваем ваши релеи…</string>
     <string name="notifications_error_load">Не удалось загрузить уведомления</string>
     <string name="messages_title">Сообщения</string>
-    <string name="messages_empty">Сообщений пока нет. Откройте профиль и нажмите «Сообщение».</string>
+    <string name="messages_empty">Сообщений пока нет. Нажмите +, чтобы написать первое.</string>
+    <string name="messages_new">Новое сообщение</string>
+    <string name="messages_new_hint">Поиск людей на этом телефоне</string>
+    <string name="messages_new_none">Никого не найдено. Можно также открыть профиль и нажать «Сообщение».</string>
     <plurals name="messages_requests">
         <item quantity="one">Запрос (%1$d)</item>
         <item quantity="few">Запросы (%1$d)</item>
@@ -602,6 +609,7 @@
     <string name="compose_quote_hint">Цитата</string>
     <string name="profile_edit">Редактировать профиль</string>
     <string name="feed_profile">Мой профиль</string>
+    <string name="feed_profile_more_accounts">%1$s, есть другие аккаунты</string>
     <string name="profile_edit_title">Редактировать профиль</string>
     <string name="profile_edit_banner">URL баннера</string>
     <string name="profile_edit_picture">URL изображения</string>
@@ -638,11 +646,11 @@
     <string name="about_feedback">Отзывы в Nostr</string>
     <string name="about_issues">Сообщить о проблеме</string>
     <string name="about_license">Лицензия: %1$s</string>
-    <string name="dm_relay_hint_missing">relay.monostr.com нет в вашем списке входящих, поэтому пользователи Monostr могут до вас не достучаться.</string>
+    <string name="dm_relay_hint_missing">relay.monostr.com нет среди ваших релеев сообщений, поэтому пользователи Monostr могут до вас не достучаться.</string>
     <string name="dm_relay_hint_add">Добавить</string>
-    <string name="dm_relay_hint_second">Второй релей для входящих делает доставку сообщений надёжнее.</string>
+    <string name="dm_relay_hint_second">Второй релей сообщений делает доставку сообщений надёжнее.</string>
     <string name="dm_relay_hint_dismiss">Скрыть</string>
-    <string name="dm_relay_hint_replace">Список входящих заполнен. Какой релей заменить на relay.monostr.com?</string>
+    <string name="dm_relay_hint_replace">Список релеев сообщений заполнен. Какой релей заменить на relay.monostr.com?</string>
     <string name="upload_error_nsfw">Этот сервер не принимает контент для взрослых. В настройках можно выбрать другой медиасервер.</string>
     <string name="upload_error_too_large">Изображение слишком большое для этого сервера</string>
     <string name="upload_error_quota">Ваше место на этом сервере заполнено</string>
@@ -717,6 +725,9 @@
     <string name="create_finish">Поехали</string>
     <string name="create_cancel_text">Отменить? Ключ будет удалён.</string>
     <string name="create_cancel_yes">Удалить</string>
+    <string name="create_step">Шаг %1$d из %2$d</string>
+    <string name="unsaved_title">Отменить изменения?</string>
+    <string name="unsaved_keep">Продолжить редактирование</string>
     <string name="create_cancel_no">Продолжить</string>
     <string name="settings_show_key">Показать закрытый ключ (nsec)</string>
     <string name="settings_show_key_title">Ваш ключ</string>
@@ -893,6 +904,7 @@
     <string name="link_prompt_tor">Ваш браузер не использует Tor из Monostr.</string>
     <string name="link_prompt_copy">Скопировать ссылку</string>
     <string name="link_prompt_torbrowser">Открыть в Tor Browser</string>
+    <string name="link_prompt_torbrowser_copy">Скопировать и открыть Tor Browser</string>
     <string name="link_prompt_copied">Ссылка скопирована</string>
     <string name="link_prompt_torbrowser_failed">Не удалось открыть Tor Browser.</string>
     <string name="tor_desc_connecting">Tor: подключается</string>
@@ -910,7 +922,6 @@
         <item quantity="other">Ожидающих чаевых: %d. Они будут удалены.</item>
     </plurals>
     <!-- settings overview -->
-    <string name="settings_page_account">Аккаунт и ключ</string>
     <string name="settings_page_privacy">Tor и приватность</string>
     <string name="settings_page_monero">Monero и чаевые</string>
     <string name="settings_page_notifications">Уведомления</string>
@@ -966,7 +977,7 @@
     <string name="settings_monero_delete_view_key_action">Удалить</string>
     <string name="settings_monero_payto_remove_q">Удалить ваш адрес Monero?</string>
     <string name="settings_monero_payto_remove_text">Адрес исчезнет из публичного профиля, и туда вам больше не смогут отправлять чаевые.</string>
-    <string name="settings_logout_q">Выйти?</string>
+    <string name="settings_logout_q">Удалить аккаунт с этого телефона?</string>
     <string name="settings_logout_key_warning">Ваш ключ есть только на этом телефоне. Без копии вы не сможете снова войти.</string>
     <string name="settings_logout_show_key">Показать ключ</string>
     <string name="settings_monero_active">Активно</string>
@@ -977,12 +988,17 @@
     <string name="settings_monero_receipts_replaces">Настройка здесь заменит настройку на другом устройстве.</string>
     <string name="settings_media_server_save">Сохранить медиасервер</string>
     <string name="settings_show_key_sub">Кто им владеет, управляет вашим аккаунтом.</string>
+    <string name="settings_key_lock">Запрашивать блокировку экрана</string>
+    <string name="settings_key_lock_hint">Перед показом приватного ключа.</string>
+    <string name="settings_key_lock_none">Сначала настройте блокировку экрана на этом телефоне.</string>
     <string name="settings_no_name">Имени пока нет</string>
     <string name="settings_copy_npub">Скопировать npub</string>
     <string name="settings_dm_relays_sub">Входящие для личных сообщений · NIP-17</string>
     <string name="settings_publish_list">Опубликовать список</string>
     <string name="settings_use_published_list">Взять опубликованный список</string>
     <string name="relay_removed">Релей удалён</string>
+    <string name="list_member_removed">Удалено из списка</string>
+    <string name="settings_reaction_removed">Реакция удалена</string>
     <string name="relay_remove_named">Удалить %1$s</string>
     <string name="settings_chip_relays_spoken">подключено %1$d из %2$d</string>
     <string name="settings_tip_amounts">Суммы чаевых</string>
@@ -1013,4 +1029,31 @@
     <string name="poll_hours">Часы</string>
     <string name="poll_minutes">Минуты</string>
     <string name="poll_remove">Удалить опрос</string>
+    <string name="accounts_title">Аккаунты</string>
+    <string name="accounts_page_hint">У каждого аккаунта свои релеи, настройки и оформление.</string>
+    <string name="accounts_other">Другие аккаунты</string>
+    <string name="accounts_switch_label">Сменить аккаунт</string>
+    <string name="accounts_switch_hint">Удерживайте, чтобы сменить аккаунт</string>
+    <string name="accounts_add">Добавить аккаунт</string>
+    <string name="accounts_active">Активен</string>
+    <string name="accounts_busy">Дождитесь окончания загрузки/отправки</string>
+    <string name="accounts_sign_in_again">Войдите снова</string>
+    <string name="accounts_switch_failed">Не удалось сменить аккаунт</string>
+    <string name="accounts_now_using">Сейчас: %1$s</string>
+    <string name="accounts_now_using_tor">Сейчас: %1$s · новый маршрут Tor через %2$d с</string>
+    <string name="accounts_tor_stalled">Ожидание нового маршрута Tor…</string>
+    <string name="accounts_remove_text">Сообщения, черновики и настройки %1$s на этом телефоне будут удалены.</string>
+    <string name="accounts_remove_failed">Не удалось удалить аккаунт</string>
+    <string name="accounts_already_using">Уже используется: %1$s</string>
+    <string name="add_account_amber">Войти через Amber</string>
+    <string name="add_account_recommended">Рекомендуется</string>
+    <string name="add_account_get_amber">Установить Amber</string>
+    <string name="add_account_get_amber_hint">Хранит ваши ключи вне Monostr</string>
+    <string name="add_account_key">Войти с ключом</string>
+    <string name="add_account_create">Создать ещё один аккаунт</string>
+    <string name="logout_keep_settings">Сохранить мои настройки на этом устройстве</string>
+    <string name="logout_keep_settings_hint">Зашифрованы вашим ключом. Вернутся при следующем входе.</string>
+    <string name="logout_keep_failed_title">Настройки не сохранены</string>
+    <string name="logout_keep_failed_text">Подписант не зашифровал настройки, поэтому ничего не удалено. Выйти без сохранения настроек?</string>
+    <string name="accounts_keep_failed">Настройки не сохранены: подписант не ответил. Аккаунт не удалён.</string>
 </resources>

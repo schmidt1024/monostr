@@ -53,7 +53,7 @@ class NostrFollowListsRepository(
             }
             list = engine.query(filter).firstOrNull() ?: list
         }
-        return list?.let { newestFirst(NoteMapper.decoded(it).tags) }.orEmpty()
+        return list?.let { newestFirst(NoteMapper.decoded(it).tags, owner = pubkey) }.orEmpty()
     }
 
     override suspend fun followers(pubkey: String, until: Long?, seen: Set<String>): FollowersPage {
@@ -82,9 +82,12 @@ class NostrFollowListsRepository(
         const val PAGE_SIZE = 30
         private val HEX64 = Regex("[0-9a-f]{64}")
 
-        /** The followed accounts of a contact list's tags: a follow is appended, so the end comes first; each account once. */
-        fun newestFirst(tags: List<List<String>>): List<String> =
-            tags.filter { it.size >= 2 && it[0] == "p" && HEX64.matches(it[1]) }.map { it[1] }.asReversed().distinct()
+        /**
+         * The followed accounts of a contact list's tags: a follow is appended, so the end comes first; each account once.
+         * The list's [owner] is left out: some clients (Amethyst) put the account itself in (backlog 108).
+         */
+        fun newestFirst(tags: List<List<String>>, owner: String? = null): List<String> =
+            tags.filter { it.size >= 2 && it[0] == "p" && HEX64.matches(it[1]) && it[1] != owner }.map { it[1] }.asReversed().distinct()
 
         /**
          * The page from (author, created_at) pairs: newest first, without [seen] and duplicates. The next page starts at

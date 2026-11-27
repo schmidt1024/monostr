@@ -9,7 +9,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.monostr.app.MainActivity
-import com.monostr.app.net.torConnected
+import com.monostr.app.net.torRunning
 import com.monostr.app.session.NostrSessionEntryPoint
 import com.monostr.app.session.SessionState
 import com.monostr.nostr.PerfTrace
@@ -219,7 +219,8 @@ class BackgroundCheckWorker(context: Context, params: WorkerParameters) : Corout
             tor = RunTor(
                 acquire = { controller.get().acquire(it) },
                 release = { controller.get().releaseRun(it) },
-                connected = { torConnected(controller) },
+                // not torConnected: a restore that failed with a fresh route pending must be tried again; its traffic waits for the route
+                connected = { torRunning(controller) },
             ),
         ) { check() }
         return if (done) Result.success() else Result.retry()

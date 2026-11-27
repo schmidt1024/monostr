@@ -5,6 +5,7 @@ import com.monostr.app.data.dm.DmMessage
 import com.monostr.app.data.dm.DmStatus
 import com.monostr.app.data.dm.DmStore
 import com.monostr.app.data.dm.InMemoryDmStore
+import com.monostr.app.session.AccountBusy
 import com.monostr.app.ui.FakeProfiles
 import com.monostr.app.ui.common.uiText
 import com.monostr.nostr.model.Profile
@@ -43,7 +44,8 @@ class ChatControllerTest {
         send: suspend (String, String) -> DmStatus = { _, _ -> DmStatus.SENT },
         retry: suspend (String) -> DmStatus = { DmStatus.SENT },
         now: () -> Long = { 1_000 },
-    ) = ChatController(bob, me, store, profiles, send, retry, eager(), now, work = UnconfinedTestDispatcher(testScheduler))
+        busy: AccountBusy = AccountBusy(),
+    ) = ChatController(bob, me, store, profiles, send, retry, eager(), now, work = UnconfinedTestDispatcher(testScheduler), busy = busy)
 
     @Test
     fun `messages are listed chronologically with media parsed`() = runTest {
@@ -96,6 +98,19 @@ class ChatControllerTest {
         assertEquals(uiText(R.string.chat_error_send), s.message)
         c.clearMessage()
         assertNull(c.state.value.message)
+    }
+
+    @Test
+    fun `the account is busy while a message is on its way`() = runTest {
+        val busy = AccountBusy()
+        val release = CompletableDeferred<DmStatus>()
+        val c = controller(InMemoryDmStore(), send = { _, _ -> release.await() }, busy = busy)
+        c.start()
+        c.send("hello")
+        assertTrue(busy.busy.value)
+        release.complete(DmStatus.SENT)
+        advanceUntilIdle()
+        assertFalse(busy.busy.value)
     }
 
     @Test

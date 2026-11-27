@@ -184,6 +184,35 @@ class AndroidTorEngine internal constructor(context: Context, private val torrc:
         }
     }
 
+    /**
+     * A control connection of its own, beside [watchTor]'s, authenticated the same way. Waits for the control socket while tor
+     * has none; the caller bounds that ([TorController.newIdentity]). tor's refusal (a reply other than 250) is a [IOException].
+     */
+    override suspend fun newIdentity(): Boolean = withContext(Dispatchers.IO) {
+        val socket = connectControl()
+        try {
+            coroutineScope {
+                // blocking reads do not end on cancellation, a shut socket ends them
+                val closer = launch {
+                    try { awaitCancellation() } finally { runCatching { socket.shutdownInput() } }
+                }
+                val control = TorControlConnection(socket.inputStream, socket.outputStream)
+                control.launchThread(true)
+                runInterruptible(Dispatchers.IO) {
+                    control.authenticate(ByteArray(0))
+                    control.signal("NEWNYM")
+                }
+                closer.cancel()
+            }
+            true
+        } catch (e: IOException) {
+            Log.i(TAG, "NEWNYM failed (${e.javaClass.simpleName})")
+            false
+        } finally {
+            runCatching { socket.close() }
+        }
+    }
+
     /** It refuses until tor has created the socket, 0.2 to 1.3 s after the bind in the spike. */
     private suspend fun connectControl(): LocalSocket {
         val path = File(torDir, "data/ControlSocket").absolutePath

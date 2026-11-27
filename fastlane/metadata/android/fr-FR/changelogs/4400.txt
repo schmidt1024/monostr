@@ -1,0 +1,5 @@
+- Plusieurs comptes : ajoutez-les, changez-en et retirez-les depuis votre avatar ou dans les Réglages ; chacun garde ses relais et ses réglages
+- Se déconnecter retire le compte de ce téléphone et peut garder ses réglages, chiffrés avec votre clé
+- Verrouillage de l'écran facultatif avant l'affichage de votre clé privée
+- Avec les versions récentes de Tor Browser : copiez le lien et ouvrez Tor Browser
+- Renforcement de la sécurité et corrections

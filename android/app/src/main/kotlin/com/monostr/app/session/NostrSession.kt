@@ -25,19 +25,23 @@ import com.monostr.app.data.PendingSetupStore
 import com.monostr.app.data.expireDrafts
 import com.monostr.app.data.removeDrafts
 import com.monostr.app.data.HintStore
-import com.monostr.app.data.PrefsDmSettingsStore
 import com.monostr.app.data.dm.DmDatabase
 import com.monostr.app.data.dm.DmStore
 import com.monostr.app.dm.DmSync
-import com.monostr.app.data.KeystoreSecretStore
+import com.monostr.app.data.AccountMigration
+import com.monostr.app.data.AccountPrefs
+import com.monostr.app.data.SecretNames
 import com.monostr.app.data.MediaServer
-import com.monostr.app.data.PendingTipStore
 import com.monostr.app.data.RelayModeStore
 import com.monostr.app.data.RelayStore
 import com.monostr.app.data.SearchRelayStore
 import com.monostr.app.data.SecretStore
 import com.monostr.app.data.SessionInfo
 import com.monostr.app.data.SessionStore
+import com.monostr.app.data.AccountsStore
+import com.monostr.app.net.dropAllConnections
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharedFlow
 import com.monostr.app.data.SignerType
 import com.monostr.app.data.TipSettingsStore
 import com.monostr.app.data.UiSettingsStore
@@ -62,7 +66,6 @@ import com.monostr.app.ui.common.uiText
 import com.monostr.app.ui.media.MediaReveals
 import com.monostr.app.ui.tips.WatcherReceipts
 import com.monostr.app.work.BackgroundCheckWorker
-import com.monostr.app.work.DmNotifier
 import com.monostr.nostr.DetachedSender
 import com.monostr.nostr.LocalSigner
 import com.monostr.nostr.NostrEngine
@@ -148,6 +151,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
+import com.monostr.nostr.model.Profile
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
@@ -277,6 +282,7 @@ interface NostrSessionEntryPoint {
     fun pendingSetup(): PendingSetupStore
     fun feedTabs(): FeedTabsCache
     fun sessions(): SessionStore
+    fun accountPrefs(): AccountPrefs
     fun translationSettings(): com.monostr.app.translate.TranslationSettingsStore
     fun readerTheme(): com.monostr.app.ui.article.ReaderThemeStore
     fun torSwitchControl(): com.monostr.app.net.TorSwitch
@@ -284,6 +290,13 @@ interface NostrSessionEntryPoint {
     fun torController(): dagger.Lazy<TorController>
     fun networkGate(): NetworkGate
     fun http(): OkHttpClient
+}
+
+/** The switcher's name and picture of [profile] (display name before name, blanks dropped); null while nothing of it is known. */
+internal fun switcherDisplay(profile: Profile): Pair<String?, String?>? {
+    val name = profile.displayName?.takeIf { it.isNotBlank() } ?: profile.name?.takeIf { it.isNotBlank() }
+    val picture = profile.picture?.takeIf { it.isNotBlank() }
+    return if (name == null && picture == null) null else name to picture
 }
 
 /** Spec 6: outcome of re-requesting Amber's permissions. */
@@ -308,14 +321,13 @@ sealed class SessionState {
 @Singleton
 class NostrSession @Inject constructor(
     @param:ApplicationContext private val context: Context,
-    private val sessions: SessionStore,
+    private val sessions: AccountsStore,
     private val relayStore: RelayStore,
     relayModeStore: RelayModeStore,
     private val secrets: SecretStore,
     val bridge: SignerBridge,
     private val http: OkHttpClient,
     private val tipSettings: TipSettingsStore,
-    private val pendingTips: PendingTipStore,
     private val dmSettings: DmSettingsStore,
     private val searchRelayStore: SearchRelayStore,
     private val hints: HintStore,
@@ -327,10 +339,27 @@ class NostrSession @Inject constructor(
     private val networkGate: NetworkGate,
     private val tor: dagger.Lazy<TorController>,
     private val sendGate: SendGate,
+    /** Every settings store reads through it: the active account's file, or the global one while logged out. */
+    private val accountPrefs: AccountPrefs,
+    private val migration: AccountMigration,
+    /** A switch waits for no send: it is refused while one of the active account runs. */
+    busy: AccountBusy,
 ) : SwitchedSession {
     private val _state = MutableStateFlow<SessionState>(SessionState.Loading)
     val state: StateFlow<SessionState> = _state.asStateFlow()
     private val mutex = Mutex()
+    private val torRoutes = TorRouteHistory()
+    private val lifecycle = AccountLifecycle(sessions, accountPrefs, migration, secrets, busy, LifecycleHost())
+
+    /** Every account on this device, in the order added; the active one is [SessionStore.session]. */
+    val accounts: Flow<List<SessionInfo>> = sessions.accounts
+
+    suspend fun switchHintSeen(): Boolean = sessions.switchHintSeen()
+
+    suspend fun markSwitchHintSeen() = sessions.markSwitchHintSeen()
+
+    /** The new active pubkey after a switch away from a running account (switch, add, removal of the active one); MainActivity recreates. */
+    val switched: SharedFlow<String> = lifecycle.switched
     private val sessionRelays = SessionRelays(relayStore, relayModeStore, mutex) {
         (_state.value as? SessionState.Active)?.ready?.let { ReadyRelays(it) }
     }
@@ -370,7 +399,12 @@ class NostrSession @Inject constructor(
     private suspend fun restoreLocked(onStarted: (Ready) -> Unit = {}) {
         if (_state.value is SessionState.Active) return
         try {
+            // the layout of older versions moves first; the account's settings go live before anything reads relays or settings,
+            // also when the migration failed (a passing Keystore error): its settings may already sit in the account's file
+            val migrationFailure = try { migration.run(); null } catch (e: CancellationException) { throw e } catch (e: Exception) { e }
             val info = sessions.session.first()
+            accountPrefs.activate(info?.pubkey)
+            if (migrationFailure != null) throw migrationFailure
             if (info == null) {
                 _state.value = SessionState.LoggedOut()
                 return
@@ -379,7 +413,9 @@ class NostrSession @Inject constructor(
             val signer = signerFor(info)
             PerfTrace.mark("restore: signer ${info.signerType}")
             if (signer == null) {
-                clearStaleSession(info.pubkey)
+                // its key is gone for good: only that secret goes, the account and its data stay until signed in again or
+                // removed by the user; nothing else starts (also not from a background check)
+                lifecycle.keyUnusable(info)
                 return
             }
             val ready = start(signer)
@@ -388,6 +424,8 @@ class NostrSession @Inject constructor(
             PerfTrace.mark("session ready")
             markFirstLogin(signer.pubkey)
             resumeSetupLater(ready)
+            // the switcher's name and picture of this account, also on a normal start (final review M3: the first after the update)
+            keepDisplayFresh(ready)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -404,6 +442,11 @@ class NostrSession @Inject constructor(
         runCatching { ready.dms.stop() }
         runCatching { ready.foreign?.close() }
         runCatching { ready.engine.close() }
+        // the engine's close ends it; also when that threw: no late write of this session reaches the next account's settings
+        runCatching { ready.engine.backgroundScope.cancel() }
+        // a collector of this session's own lists on a screen's scope must not load or persist them any more (decrypted private
+        // members of an account that may be removed next); a rebuilt session opens its own view
+        runCatching { ready.ownLists?.close() }
         runCatching { (ready.dmStore as? DmDatabase)?.close() }
         _state.value = SessionState.Loading
         return true
@@ -440,10 +483,7 @@ class NostrSession @Inject constructor(
      * record of this key is an orphan of an interrupted "Let's go" and is dropped (spec 2026-10-17 §7):
      * a pasted key is an existing account, whose profile and follows must never be overwritten.
      */
-    suspend fun loginLocal(signer: LocalSigner) = mutex.withLock {
-        bestEffort { pendingSetup.remove(signer.pubkey) }
-        loginLocalLocked(signer, setup = null)
-    }
+    suspend fun loginLocal(signer: LocalSigner) = mutex.withLock { loginLocalLocked(signer, setup = null) }
 
     /**
      * Spec 2026-10-17 §4: "Let's go". The session starts like the key login; the pending setup record is
@@ -451,36 +491,116 @@ class NostrSession @Inject constructor(
      * failed login leaves no record.
      */
     suspend fun createAccount(key: NewKey, setup: PendingSetup) = mutex.withLock {
-        try {
-            loginLocalLocked(LocalSigner(key.secretHex), setup)
-        } catch (e: Exception) {
-            // also on cancellation (rethrown below): no record without a session
-            withContext(NonCancellable) { bestEffort { pendingSetup.remove(key.pubkey) } }
-            throw e
-        }
+        loginLocalLocked(LocalSigner(key.secretHex), setup)
+        createdHere += LocalSigner(key.secretHex).pubkey
     }
+
+    /** Accounts created in this process: nothing of theirs can be on a relay yet (the Monero intro asks nobody). */
+    private val createdHere: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
+    fun wasCreatedHere(pubkey: String): Boolean = pubkey in createdHere
 
     /** [setup] non-null: a new account, its record is persisted right before the secret (spec 2026-10-17 §7). */
     private suspend fun loginLocalLocked(signer: LocalSigner, setup: PendingSetup?) {
-        clearOtherAccount(signer.pubkey)
-        restoreReadMarks(signer.pubkey)
-        val ready = start(signer)
-        persistOrClose(ready) {
-            if (setup != null) pendingSetup.save(signer.pubkey, setup)
-            secrets.put(KeystoreSecretStore.SECRET_NSEC, signer.secretHex)
-            sessions.save(SessionInfo(signer.pubkey, SignerType.LOCAL, null))
+        val restored = setup == null && takeKeptSettings(signer)
+        val result = try { lifecycle.login(
+            SessionInfo(signer.pubkey, SignerType.LOCAL, null),
+            start = {
+                if (setup == null) bestEffort { pendingSetup.remove(signer.pubkey) }
+                restoreReadMarks(signer.pubkey)
+                start(signer)
+            },
+            persist = {
+                if (setup != null) pendingSetup.save(signer.pubkey, setup)
+                secrets.put(SecretNames.nsec(signer.pubkey), signer.secretHex)
+            },
+            // also on cancellation: no record without a session
+            onFailure = { if (setup != null) bestEffort { pendingSetup.remove(signer.pubkey) } },
+        ) } catch (e: Throwable) {
+            settleKeptSettings(signer.pubkey, restored, done = false)
+            throw e
         }
-        activate(ready)
+        settleKeptSettings(signer.pubkey, restored, done = result == SwitchResult.Done)
+        if (result != SwitchResult.Done) throw SwitchRefusedException(result)
     }
 
     /** Like [loginLocal], an orphan pending setup record of [pubkey] is dropped first. */
     suspend fun loginAmber(pubkey: String, packageName: String) = mutex.withLock {
-        bestEffort { pendingSetup.remove(pubkey) }
-        clearOtherAccount(pubkey)
-        restoreReadMarks(pubkey)
-        val ready = start(AmberSigner(context, packageName, pubkey, bridge))
-        persistOrClose(ready) { sessions.save(SessionInfo(pubkey, SignerType.AMBER, packageName)) }
-        activate(ready)
+        // the app that just answered the login is the one asked to open the kept settings (one more request to it)
+        val restored = keptSettingsFor(pubkey) && run {
+            withContext(Dispatchers.IO) { com.monostr.nostr.nip55.SignerTrust.pin(context, packageName) }
+            takeKeptSettings(AmberSigner(context, packageName, pubkey, bridge))
+        }
+        val result = try { lifecycle.login(
+            SessionInfo(pubkey, SignerType.AMBER, packageName),
+            start = {
+                bestEffort { pendingSetup.remove(pubkey) }
+                restoreReadMarks(pubkey)
+                // the app that just answered the login is the account's signer from here on
+                withContext(Dispatchers.IO) { com.monostr.nostr.nip55.SignerTrust.pin(context, packageName) }
+                start(AmberSigner(context, packageName, pubkey, bridge))
+            },
+            persist = {},
+        ) } catch (e: Throwable) {
+            settleKeptSettings(pubkey, restored, done = false)
+            throw e
+        }
+        settleKeptSettings(pubkey, restored, done = result == SwitchResult.Done)
+        if (result != SwitchResult.Done) throw SwitchRefusedException(result)
+    }
+
+    /**
+     * Spec «Switch flow»: closes the running account's session, then [pubkey]'s settings go live and its session starts; the
+     * previous account comes back when that fails. Runs to the end once begun. Refused while a send of the active account runs.
+     */
+    suspend fun switchTo(pubkey: String): SwitchResult = mutex.withLock { withContext(NonCancellable) { lifecycle.switchTo(pubkey) } }
+
+    /**
+     * Spec «Removing an account» (replaces logout): nothing of [pubkey] stays on the device; the active account is replaced by the
+     * next one, the last one leads to the login screen. Runs to the end even when the caller is cancelled (e.g. the settings screen
+     * is left during the draft cleanup).
+     */
+    suspend fun removeAccount(pubkey: String, keepSettings: Boolean = false) = mutex.withLock {
+        withContext(NonCancellable) {
+            if (keepSettings) {
+                // backlog 121: sealed while the key (or Amber) is still there; when that fails nothing is removed
+                val signer = try {
+                    sessions.accounts.first().firstOrNull { it.pubkey == pubkey }?.let { signerFor(it) }
+                } catch (e: Exception) {
+                    throw com.monostr.app.data.KeepSettingsFailedException(e)
+                } ?: throw com.monostr.app.data.KeepSettingsFailedException(IllegalStateException("no signer"))
+                keptSettings.keep(signer)
+            } else {
+                keptSettings.drop(pubkey)
+            }
+            lifecycle.remove(pubkey)
+        }
+    }
+
+    private val keptSettings = com.monostr.app.data.KeptSettings(File(context.noBackupFilesDir, com.monostr.app.data.KeptSettings.DIR), secrets, accountPrefs::storeFor)
+
+    /**
+     * Backlog 121: an account new on this device whose settings were kept at its removal gets them back before its session
+     * starts (relays, look, Monero setup and view key). False without a package or when the signer does not open it.
+     */
+    private suspend fun takeKeptSettings(signer: Signer): Boolean {
+        val pubkey = signer.pubkey
+        if (!keptSettings.exists(pubkey)) return false
+        if (sessions.accounts.first().any { it.pubkey == pubkey } || !migration.isEmpty(pubkey)) return false
+        return keptSettings.restore(signer)
+    }
+
+    private fun keptSettingsFor(pubkey: String) = keptSettings.exists(pubkey)
+
+    /** After the login: the package was taken and goes; a login that did not go through takes back what [takeKeptSettings] wrote. */
+    private suspend fun settleKeptSettings(pubkey: String, restored: Boolean, done: Boolean) {
+        if (!restored) return
+        if (done) { keptSettings.drop(pubkey); return }
+        withContext(NonCancellable) {
+            bestEffort { secrets.remove(SecretNames.viewKey(pubkey)) }
+            // a refused login (a send was running) left the file; a failed one removed it already
+            if (sessions.accounts.first().none { it.pubkey == pubkey }) bestEffort { accountPrefs.delete(pubkey) }
+        }
     }
 
     /** The read marks [pubkey] had at its last logout on this device, or "now" for an account new here. */
@@ -491,21 +611,27 @@ class NostrSession @Inject constructor(
         _state.value = SessionState.Active(ready)
         PerfTrace.mark("session ready")
         markFirstLogin(ready.pubkey)
-        // logout cancelled it; a session runs, so the gate is known
+        // a switch or removal cancelled it; a session runs, so the gate is known
         bestEffort { BackgroundCheckWorker.schedule(context, torOn = networkGate.mode.value is NetworkMode.Tor) }
         resumeSetupLater(ready)
+        keepDisplayFresh(ready)
     }
 
     /**
-     * A session kept after a failed restore belongs to another account than the one logging in now: its
-     * secret, session and per-account state (Monero, DM settings, drafts, pending setup, DM database) go
-     * first, as at logout, so the new account inherits nothing.
+     * Spec «Switcher UI»: the switcher shows every account's name and picture from the registry, never from an inactive account's
+     * store; the active one's are refreshed there from its own profile while it runs, off the start path. Ends with the session.
      */
-    private suspend fun clearOtherAccount(pubkey: String) {
-        val old = sessions.session.first() ?: return
-        if (old.pubkey == pubkey) return
-        bestEffort { DmDatabase.delete(context, old.pubkey) }
-        clearStaleSession(old.pubkey)
+    private fun keepDisplayFresh(ready: Ready) {
+        ready.engine.backgroundScope.launch {
+            ready.startupGate.await()
+            bestEffort { ready.profiles.get(ready.pubkey) }
+            ready.profiles.observe(ready.pubkey).map(::switcherDisplay).filterNotNull().distinctUntilChanged().collect { (name, picture) ->
+                bestEffort {
+                    val stored = sessions.accounts.first().firstOrNull { it.pubkey == ready.pubkey }
+                    if (stored != null && (stored.name != name || stored.picture != picture)) sessions.updateDisplay(ready.pubkey, name, picture)
+                }
+            }
+        }
     }
 
     /**
@@ -516,58 +642,80 @@ class NostrSession @Inject constructor(
         ready.engine.backgroundScope.launch { ready.startupGate.await(); bestEffort { resumeSetup(ready.engine, ready.pubkey, ready.publish, ready.follows) } }
     }
 
-    /** Runs [persist]; if it fails, DM sync, engine and DM database of the fresh session are closed before rethrowing. */
-    private suspend fun persistOrClose(ready: Ready, persist: suspend () -> Unit) {
-        try {
-            persist()
-        } catch (e: Exception) {
-            SessionCleanup.closeAll({ ready.dms.stop() }, { ready.foreign?.close() }, { ready.engine.close() }, { (ready.dmStore as? DmDatabase)?.close() })
-            throw e
+    /** The account steps' view of this session ([AccountLifecycle]); every call runs under [mutex]. */
+    private inner class LifecycleHost : AccountLifecycle.Host<Ready> {
+        override val running: Ready? get() = (_state.value as? SessionState.Active)?.ready
+        override fun pubkeyOf(session: Ready) = session.pubkey
+
+        override suspend fun stopPendingWork() {
+            // spec «Work in flight»: a pending Amber request ends as if the user backed out
+            bridge.cancelPending()
+            // a run in flight is cancelled too; the next session's activate schedules the check again
+            bestEffort { BackgroundCheckWorker.cancel(context) }
         }
-    }
 
-    /**
-     * Runs to the end even when the caller is cancelled (e.g. the settings screen is left during the
-     * draft cleanup): a cancelled logout would leave the secret gone but the session still Active.
-     */
-    suspend fun logout() = mutex.withLock { withContext(NonCancellable) { logoutLocked() } }
+        override suspend fun close() { closeLocked() }
 
-    private suspend fun logoutLocked() {
-        val ready = (_state.value as? SessionState.Active)?.ready
-        try {
-            // spec 2026-10-16 §8: the drafts leave the device with the account; their pictures go while signer and engine still work
-            if (ready != null) bestEffort { withTimeoutOrNull(DRAFT_CLEANUP_MS) { removeDrafts(drafts, ready.pubkey, ready.media) } }
-            ready?.dms?.stop()
-            // spec 2026-10-23 §3: the borrowed foreign relays go before the engine
-            ready?.foreign?.let { bestEffort { it.close() } }
-            ready?.engine?.close()
-        } finally {
+        // closing a pooled TLS connection writes its close_notify: network I/O, never on the main thread the screens call from
+        // (Pixel 2026-11-25: NetworkOnMainThreadException, every add and switch rolled back)
+        override suspend fun evictConnections() = withContext(Dispatchers.IO) { http.dropAllConnections() }
+
+        // only ever raises it: the start of the next session sets the value it needs. Direct builds nothing of Tor
+        override fun accountChanging(next: String?) {
+            if (networkGate.mode.value != NetworkMode.Direct && torRoutes.needsFreshRoute(next, viaTor = true)) tor.get().setRoutePending(true)
+        }
+
+        override suspend fun start(info: SessionInfo): Ready? = signerFor(info)?.let { start(it) }
+
+        override suspend fun discard(session: Ready) = SessionCleanup.closeAll(
+            { session.dms.stop() }, { session.foreign?.close() }, { session.engine.close() }, { (session.dmStore as? DmDatabase)?.close() },
+        )
+
+        override suspend fun activate(session: Ready) = this@NostrSession.activate(session)
+
+        override suspend fun restore() = restoreLocked()
+
+        override fun scheduleBackgroundCheck() {
+            runCatching { BackgroundCheckWorker.schedule(context, torOn = networkGate.mode.value is NetworkMode.Tor) }
+        }
+
+        override suspend fun failed() { _state.value = SessionState.LoggedOut(RESTORE_FAILED) }
+
+        // spec 2026-10-16 §8: the drafts' pictures go while signer and engine still work; the drafts themselves go with the settings file
+        override suspend fun beforeRemoveRunning(session: Ready) {
+            withTimeoutOrNull(DRAFT_CLEANUP_MS) { removeDrafts(drafts, session.pubkey, session.media) }
+        }
+
+        override suspend fun wipe(pubkey: String) {
+            // the account's DMs (spec §4), closed with its session
+            bestEffort { DmDatabase.delete(context, pubkey) }
+            // spec perf 3.7: the own lists' summary (decrypted private members); a write still pending from a screen is dropped
+            bestEffort { ownListsCache.remove(pubkey) }
+            // the engine's database, sync marks, relay-seen, feed snapshot; the private folder with the list snapshots
+            bestEffort { withContext(Dispatchers.IO) { accountDir(context.filesDir, pubkey).deleteRecursively() } }
+            bestEffort { withContext(Dispatchers.IO) { accountDir(context.noBackupFilesDir, pubkey).deleteRecursively() } }            // the caches all accounts share say what this one looked at: link previews, pictures, video poster frames. They
+            // went only with the last account (bug bounty 2026-11-26); the accounts that stay load theirs again
+            bestEffort { linkPreviews.clear() }
+            bestEffort {
+                withContext(Dispatchers.IO) {
+                    coil3.SingletonImageLoader.get(context).let { it.memoryCache?.clear(); it.diskCache?.clear() }
+                    java.io.File(context.cacheDir, "video_frames").deleteRecursively()
+                }
+            }
+        }
+
+        override fun dropNotifications(pubkey: String) {
+            // only this account's notifications; the others stay and open their own account
+            runCatching { com.monostr.app.work.AccountNotifications.cancelAccount(context, pubkey) }
+            // a tap on one of them still pending must not open a chat for another account
+            MainActivity.clearPending(pubkey)
+        }
+
+        override suspend fun loggedOut() {
             MediaReveals.clear()
             // the next account must not see which links this one opened (spec link previews 3.4)
             bestEffort { linkPreviews.clear() }
-            // a run in flight is cancelled too; the next login schedules the check again
-            bestEffort { BackgroundCheckWorker.cancel(context) }
-            bestEffort { DmNotifier(context).cancelAll() }
-            // a notification tapped while logged out must not open a chat for the next account
-            MainActivity.pendingDm.value = null
-            MainActivity.pendingMessages.value = false
-            if (ready != null) {
-                // The account's DMs leave the device with it (spec §4), best effort.
-                bestEffort { (ready.dmStore as? DmDatabase)?.close() }
-                bestEffort { DmDatabase.delete(context, ready.pubkey) }
-                // the feed's last page leaves the device with the account too
-                bestEffort { ready.feedSnapshot?.delete() }
-                // spec perf2 D7: nothing about this session stays behind; a re-login does one full fetch
-                bestEffort { ready.syncMarks?.delete() }
-                bestEffort { ready.relaySeen?.delete() }
-                // the engine's scope (reconcile, list jobs) ended above; a collector of the old session on a screen's
-                // scope may still load or persist the own lists: closed before the summary goes, it cannot bring it back
-                bestEffort { ready.engine.backgroundScope.cancel() } // a no-op unless a step above threw before close
-                bestEffort { ready.ownLists?.close() }
-                // the pinned lists' pages leave the device with the account too (spec perf 3.7)
-                bestEffort { ready.listSnapshots?.deleteAll() }
-            }
-            clearStaleSession(ready?.pubkey)
+            _state.value = SessionState.LoggedOut()
         }
     }
 
@@ -611,41 +759,6 @@ class NostrSession @Inject constructor(
     /** Back to [relays] with every relay reading and writing, as one step. See [SessionRelays.resetTo]. */
     suspend fun resetRelays(relays: List<String>): Boolean = sessionRelays.resetTo(relays)
 
-    /**
-     * Drops the persisted session and secret and moves to [SessionState.LoggedOut]. The Monero
-     * state (view key, setup, pending tips, notification watermarks) belongs to the account and
-     * is cleared too, best effort: one failing step does not stop the others. So are the drafts of
-     * [pubkey] (spec 2026-10-16 §8; without a signer their pictures stay on the server) and its
-     * pending setup record (spec 2026-10-17 §7) and its pinned tabs (spec 2026-10-18 §3.3), the own lists' summary
-     * and the list snapshots (spec perf 3.7).
-     */
-    private suspend fun clearStaleSession(pubkey: String?) {
-        secrets.remove(KeystoreSecretStore.SECRET_NSEC)
-        sessions.clear()
-        if (pubkey != null) bestEffort { drafts.removeAll(pubkey) }
-        if (pubkey != null) bestEffort { pendingSetup.remove(pubkey) }
-        if (pubkey != null) bestEffort { feedTabsCache.remove(pubkey) }
-        // spec perf 3.7: the own lists' summary (decrypted private members) and the list snapshots, also without a running session
-        if (pubkey != null) bestEffort { ownListsCache.remove(pubkey) }
-        if (pubkey != null) bestEffort { ListSnapshots(listSnapshotsDir(pubkey)).deleteAll() }
-        if (pubkey != null) bestEffort { withContext(Dispatchers.IO) { File(accountDir(context.filesDir, pubkey), SyncMarks.FILE_NAME).delete() } }
-        if (pubkey != null) bestEffort { withContext(Dispatchers.IO) { File(accountDir(context.filesDir, pubkey), RELAY_SEEN_FILE).delete() } }
-        if (pubkey != null) bestEffort { withContext(Dispatchers.IO) { accountDir(context.noBackupFilesDir, pubkey).delete() } } // only when empty
-        bestEffort { secrets.remove(KeystoreSecretStore.SECRET_VIEW_KEY) }
-        bestEffort { tipSettings.setSetup(null) }
-        bestEffort { pendingTips.clear() }
-        bestEffort { tipSettings.setAnonymous(true) }
-        // the read marks stay with the account: logging in again must not make every notification unread
-        if (pubkey != null) bestEffort { tipSettings.keepReadMarks(pubkey) }
-        bestEffort { tipSettings.setNotificationsReadAt(0) }
-        bestEffort { tipSettings.setLastTipNotifiedAt(0) }
-        // The next account must not publish this one's inbox relays as its own kind 10050, and
-        // looks its own list up again.
-        bestEffort { dmSettings.setRelays(PrefsDmSettingsStore.DEFAULT_RELAYS) }
-        bestEffort { dmSettings.setListAdopted(false) }
-        _state.value = SessionState.LoggedOut()
-    }
-
     /** The pinned lists' snapshots of [pubkey]: below `noBackupFilesDir` (spec perf 3.7, ruling Task 4). */
     private fun listSnapshotsDir(pubkey: String) = File(accountDir(context.noBackupFilesDir, pubkey), ListSnapshots.DIR)
 
@@ -667,14 +780,30 @@ class NostrSession @Inject constructor(
      * key is missing or unreadable. A parse error is dropped unseen: its message may echo the key.
      */
     suspend fun ownKey(): NewKey? = withContext(Dispatchers.IO) {
-        NewKeys.ofSession(sessions.session.first()) { secrets.get(KeystoreSecretStore.SECRET_NSEC) }
+        val info = sessions.session.first()
+        NewKeys.ofSession(info) { info?.let { secrets.get(SecretNames.nsec(it.pubkey)) } }
     }
+
+    /** The account whose session runs, if any. */
+    fun activePubkey(): String? = (_state.value as? SessionState.Active)?.ready?.pubkey
 
     fun requireReady(): Ready = (_state.value as? SessionState.Active)?.ready ?: error("not logged in")
 
+    /**
+     * True when [info] cannot start until signed in again (its key unusable for good, see [AccountLifecycle.keyUnusable]): a key
+     * account without a readable key, an Amber account without its package. A passing Keystore error does not count.
+     */
+    suspend fun needsSignIn(info: SessionInfo): Boolean = withContext(Dispatchers.IO) {
+        when (info.signerType) {
+            SignerType.LOCAL -> runCatching { secrets.getOrThrow(SecretNames.nsec(info.pubkey)) }
+                .fold(onSuccess = { it?.let { k -> LocalSigner.parseOrNull(k) } == null }, onFailure = { false })
+            SignerType.AMBER -> info.amberPackage == null
+        }
+    }
+
     private fun signerFor(info: SessionInfo): Signer? = when (info.signerType) {
-        // getOrThrow: a passing Keystore error ends in RESTORE_FAILED (session and key kept), not in clearStaleSession
-        SignerType.LOCAL -> secrets.getOrThrow(KeystoreSecretStore.SECRET_NSEC)?.let { LocalSigner.parseOrNull(it) }
+        // getOrThrow: a passing Keystore error ends in RESTORE_FAILED (session and key kept), not in the removal of the account
+        SignerType.LOCAL -> secrets.getOrThrow(SecretNames.nsec(info.pubkey))?.let { LocalSigner.parseOrNull(it) }
         SignerType.AMBER -> info.amberPackage?.let { AmberSigner(context, it, info.pubkey, bridge) }
     }
 
@@ -684,7 +813,14 @@ class NostrSession @Inject constructor(
         // spec Tor 7.2: no engine before the route is known. Normally one file stat; a setting that cannot be read fails this start, it never goes direct
         val port = networkGate.sessionSocksPort(UNKNOWN_WAIT_MS)
         // with Tor the session runs on what is stored, and the engine waits: the port is ours only while Tor is connected (followTor below)
-        val engine = NostrEngine.create(dir.absolutePath, signer, relayStore.relays.first(), socksPort = port, held = port != null)
+        val engine = NostrEngine.create(withContext(Dispatchers.IO) { com.monostr.app.data.EngineDir.of(dir) }.absolutePath, signer, relayStore.relays.first(), socksPort = port, held = port != null)
+        // spec «Tor isolation per account»: after another account's session went through tor, this one connects only once tor
+        // acknowledged a NEWNYM (switch, add, re-login, a removal's successor); restore, a first login and a Tor switch go at once
+        val needsFresh = torRoutes.needsFreshRoute(signer.pubkey, viaTor = port != null)
+        // before the session shows: its pictures and sends wait for the acknowledgement too (gated HTTP, SendGate, DetachedSender)
+        if (port != null) tor.get().setRoutePending(needsFresh)
+        // a connection pooled before the switch rides a circuit of the account before: it goes before the gate opens
+        val freshRoute: (suspend () -> Unit)? = if (needsFresh) ({ tor.get().awaitNewIdentity(onAck = http::dropAllConnections) }) else null
         engine.setRelayModes(modes)
         PerfTrace.mark("restore: engine created")
         try {
@@ -805,7 +941,8 @@ class NostrSession @Inject constructor(
             }
             // on the engine's scope: a logout during the wait ends it, and nothing starts afterwards
             if (port != null) engine.backgroundScope.launch {
-                followTor(tor.get().state, hold = engine::holdConnections) {
+                followTor(tor.get().state, hold = engine::holdConnections, freshRoute = freshRoute) {
+                    torRoutes.opened(signer.pubkey)
                     if (engine.openConnections()) {
                         // what the DM run and the marks tried meanwhile found nobody there
                         dms.restart()

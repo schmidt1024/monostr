@@ -1,5 +1,6 @@
 package com.monostr.app.ui.notifications
 
+import com.monostr.app.ui.common.TabBarActions
 import com.monostr.app.ui.common.TorBannerSlot
 import com.monostr.app.ui.common.MonostrSnackbarHost
 import com.monostr.app.data.dm.unreadTotalExcept
@@ -94,7 +95,7 @@ fun NotificationsScreen(onFeed: () -> Unit, onSearch: () -> Unit, onBookmarks: (
     ShowBarsWhenStuck(hide, listState, hasList = !state.loading && state.rows.isNotEmpty())
     Scaffold(
         modifier = Modifier.nestedScroll(hide.connection),
-        topBar = { Column { TopAppBar(title = { Text(stringResource(R.string.notifications_title)) }); TorBannerSlot() } },
+        topBar = { Column { TopAppBar(title = { Text(stringResource(R.string.notifications_title)) }, actions = { TabBarActions() }); TorBannerSlot() } },
         bottomBar = { HideOnScrollFooter(hide) { MonostrBottomBar(BottomTab.NOTIFICATIONS, unread = 0, dmUnread = dmUnread, onFeed = onFeed, onSearch = onSearch, onBookmarks = onBookmarks, onMessages = onMessages, onNotifications = hide::show, windowInsets = WindowInsets(0)) } },
         snackbarHost = { MonostrSnackbarHost(snackbar) },
     ) { padding ->

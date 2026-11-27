@@ -34,6 +34,11 @@ class SignerBridge {
         }
     }
 
+    /** Ends a pending request as cancelled, as when the user backs out of the signer (an account switch); a no-op without one. */
+    fun cancelPending() {
+        waiting?.complete(false to null)
+    }
+
     /**
      * Called by the Activity with the activity result. [id] must match the currently
      * pending request's id; a stale or unrelated completion (e.g. a delayed callback

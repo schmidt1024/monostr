@@ -1,5 +1,6 @@
 package com.monostr.app.ui.settings
 
+import com.monostr.app.ui.common.ConfirmDialog
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.MaterialTheme
@@ -82,7 +83,7 @@ fun RelayListActions(isDefault: Boolean, busy: Boolean, onPublish: () -> Unit, o
 
 @Composable
 private fun ConfirmRelayListAction(title: Int, text: Int, confirm: Int, confirmTag: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
-    SettingsConfirmDialog(stringResource(title), stringResource(text), stringResource(confirm), confirmTag, onConfirm, onDismiss)
+    ConfirmDialog(stringResource(title), stringResource(text), stringResource(confirm), confirmTag, onConfirm, onDismiss)
 }
 
 /**

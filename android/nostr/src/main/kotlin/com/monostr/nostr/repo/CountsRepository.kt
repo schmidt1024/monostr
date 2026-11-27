@@ -1,6 +1,7 @@
 package com.monostr.nostr.repo
 
 import com.monostr.nostr.NostrEngine
+import com.monostr.nostr.PerfTrace
 import com.monostr.nostr.model.NoteCounts
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -110,9 +111,23 @@ class NostrCountsRepository(
     private val normal = Lane(priority = false)
     private val urgent = Lane(priority = true)
 
-    /** Relays that failed [MAX_FAILURES] rounds in a row: not asked again this session. */
+    /** Relays that refused COUNT (an error, not silence) [MAX_FAILURES] rounds in a row: not asked again this session. */
     private val unsupported = ConcurrentHashMap.newKeySet<String>()
     private val failures = ConcurrentHashMap<String, AtomicInteger>()
+
+    /**
+     * Relays that gave no answer in time [MAX_FAILURES] rounds in a row, with the second ([now]) from which they are asked
+     * again. Silence is not a refusal: a network hiccup, Tor or the first round after the app came back timed five relays
+     * out at once, and counting that as «unsupported for the session» took their counts away until the app restarted
+     * (backlog 117, Pixel 2026-11-26; the counts that «vanished» since 2026-11-19). A rest ends by itself, each further
+     * silent round doubles it up to [REST_MAX_SECONDS], any answer ends it: a relay that never answers COUNT costs one
+     * timeout per rest, not one per round.
+     */
+    private val resting = ConcurrentHashMap<String, Long>()
+    private val silences = ConcurrentHashMap<String, AtomicInteger>()
+
+    /** Not asked now: refused for the session, or resting after silence. */
+    private fun out(url: String): Boolean = url in unsupported || resting[url]?.let { now() < it } == true
 
     // Late relays (final review I2), all guarded by [mutex]:
     /** The ids of the latest normal and priority request: what is on screen now. */
@@ -151,6 +166,7 @@ class NostrCountsRepository(
                     lane.queue += id
                 }
                 if (lane.worker == null && lane.queue.isNotEmpty()) lane.worker = scope.launch { drain(lane) }
+                if (PerfTrace.enabled) PerfTrace.mark("counts request ${noteIds.size} prio=$priority screen=$onScreen queued=${lane.queue.size} inFlight=${inFlight.size} shown=${noteIds.count { _counts.value[it] != null }}")
             }
         }
     }
@@ -214,11 +230,12 @@ class NostrCountsRepository(
     /** Null when no relay could be asked (none connected within [relayWaitMs]). */
     private suspend fun countBatch(ids: List<String>, priority: Boolean): Asked? {
         val connected = connectedRelays()
+        if (PerfTrace.enabled) PerfTrace.mark("counts batch ${ids.size} connected=${connected.map(::host)} unsupported=${unsupported.map(::host)} resting=${resting.keys.filter(::out).map(::host)} gaveUp=${gaveUp.map(::host)}")
         if (connected.isEmpty()) return null
         val session = sessionRelays()
-        val missing = mutex.withLock { gaveUp.removeAll(connected.toSet()); session.any { it !in connected && it !in unsupported && it !in gaveUp } }
-        val targets = connected.filter { it !in unsupported }
-        // every connected relay refused COUNT this session: nothing can count these notes, they count as asked
+        val missing = mutex.withLock { gaveUp.removeAll(connected.toSet()); session.any { it !in connected && !out(it) && it !in gaveUp } }
+        val targets = connected.filter { !out(it) }
+        // every connected relay refused COUNT this session or rests: nothing can count these notes now, they count as asked
         val missed = if (targets.isNotEmpty()) countRound(ids, targets, priority, raiseOnly = false) else emptySet()
         return Asked(targets.toSet(), missing, missed)
     }
@@ -251,6 +268,7 @@ class NostrCountsRepository(
         val finished = synchronized(round.best) { HashMap(round.best) }
         if (finished.isNotEmpty()) _counts.update { m -> m + finished.mapValues { (id, c) -> if (raiseOnly || id in round.missed) raise(m[id], c) else c } }
         for (url in targets) settle(url, round)
+        if (PerfTrace.enabled) PerfTrace.mark("counts round ${ids.size} raiseOnly=$raiseOnly answered=${round.answered.map(::host)} failed=${round.failed.map(::host)} timedOut=${round.timedOut.map(::host)} missed=${round.missed.size} counted=${finished.size}")
         return round.missed
     }
 
@@ -277,13 +295,14 @@ class NostrCountsRepository(
                 if (up.isNotEmpty()) { requeue = parked.filter { it in visible }; parked.clear() }
                 val open = partial.filterKeys { it in visible && it !in inFlight }
                 // partial[id] holds the relays asked for it: each late relay is asked at most once per note
-                followRelays = up.filter { url -> url !in unsupported && open.values.any { url !in it } }
+                followRelays = up.filter { url -> !out(url) && open.values.any { url !in it } }
                 if (followRelays.isNotEmpty()) {
                     followIds = open.filterValues { asked -> followRelays.any { it !in asked } }.keys.toList()
                     inFlight += followIds
                 }
                 val over = --watchPollsLeft <= 0 || (parked.isEmpty() && partial.isEmpty())
                 if (over) {
+                    if (PerfTrace.enabled) PerfTrace.mark("counts watch over up=${up.map(::host)} parked=${parked.size} partial=${partial.size} gaveUp+=${session.filter { it !in up }.map(::host)}")
                     watcher = null
                     gaveUp += session.filter { it !in up }
                     // short stamps stay: the next request after them asks every relay again
@@ -309,7 +328,7 @@ class NostrCountsRepository(
                     inFlight.remove(id)
                     val asked = partial[id] ?: continue
                     asked += urls
-                    if (session.all { it in asked || it in unsupported }) { partial.remove(id); if (fetchedAt.containsKey(id)) fetchedAt[id] = t }
+                    if (session.all { it in asked || out(it) }) { partial.remove(id); if (fetchedAt.containsKey(id)) fetchedAt[id] = t }
                 }
             }
         }
@@ -329,9 +348,22 @@ class NostrCountsRepository(
     /** All failed calls of a relay in one round are one failure; [MAX_FAILURES] rounds in a row make it unsupported, any answer resets. */
     private fun settle(url: String, round: Round) {
         val streak = failures.computeIfAbsent(url) { AtomicInteger() }
+        val silent = silences.computeIfAbsent(url) { AtomicInteger() }
         when {
-            url in round.answered -> streak.set(0)
-            url in round.failed -> if (streak.incrementAndGet() >= MAX_FAILURES) unsupported += url
+            url in round.answered -> { streak.set(0); silent.set(0); resting.remove(url) }
+            // silence first: a timed-out relay is in [Round.failed] too, and must rest, not go for the session
+            url in round.timedOut -> {
+                val n = silent.incrementAndGet()
+                if (n >= MAX_FAILURES) {
+                    val rest = minOf(REST_SECONDS shl minOf(n - MAX_FAILURES, 10), REST_MAX_SECONDS)
+                    resting[url] = now() + rest
+                    if (PerfTrace.enabled) PerfTrace.mark("counts rest ${host(url)} ${rest}s after $n silent rounds")
+                }
+            }
+            url in round.failed -> if (streak.incrementAndGet() >= MAX_FAILURES) {
+                unsupported += url
+                if (PerfTrace.enabled) PerfTrace.mark("counts unsupported ${host(url)} for the session")
+            }
         }
     }
 
@@ -367,16 +399,18 @@ class NostrCountsRepository(
     }
 
     private suspend fun ask(url: String, filter: Filter, round: Round): Long? {
-        if (url in unsupported || url in round.timedOut) return null
+        if (out(url) || url in round.timedOut) return null
         return try {
             counter(url, filter).also { round.answered += url }
         } catch (e: CancellationException) {
             throw e
         } catch (e: CountTimeoutException) {
+            if (PerfTrace.enabled) PerfTrace.mark("counts timeout ${host(url)}: ${e.cause?.message}")
             round.timedOut += url
             round.failed += url
             null
         } catch (e: Exception) {
+            if (PerfTrace.enabled && url !in round.failed) PerfTrace.mark("counts error ${host(url)}: ${e.javaClass.simpleName} ${e.message}")
             round.failed += url
             null
         }
@@ -392,6 +426,9 @@ class NostrCountsRepository(
         listOf(coordinateFilter(listOf(Kinds.COMMENT), coordinate, "A"), coordinateFilter(listOf(1), coordinate)),
     )
 
+    /** Short relay name for the perf lines. */
+    private fun host(url: String): String = url.removePrefix("wss://").removePrefix("ws://").trimEnd('/')
+
     private fun maxOf(a: Long?, b: Long?): Long? = when {
         a == null -> b
         b == null -> a
@@ -402,6 +439,9 @@ class NostrCountsRepository(
         /** Likes, reposts, replies (kind 1 and NIP-22 comments, backlog 31): the order of [NoteCounts], one COUNT each. */
         val KINDS = listOf(listOf<UShort>(7u), listOf<UShort>(6u), listOf<UShort>(1u, Kinds.COMMENT.toUShort()))
         const val MAX_FAILURES = 2
+        /** The first rest of a silent relay; doubled per further silent round. */
+        const val REST_SECONDS = 60L
+        const val REST_MAX_SECONDS = 900L
         const val RELAY_POLL_MS = 250L
         val COUNT_TIMEOUT: Duration = Duration.ofSeconds(5)
         /** How long late relays are watched after a batch that missed one (or found none). */

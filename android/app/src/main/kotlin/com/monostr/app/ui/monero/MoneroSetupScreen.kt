@@ -1,5 +1,9 @@
 package com.monostr.app.ui.monero
 
+import androidx.compose.material3.minimumInteractiveComponentSize
+import androidx.compose.foundation.selection.toggleable
+import com.monostr.app.ui.common.copyToClipboard
+import com.monostr.app.ui.common.ConfirmDialog
 import com.monostr.app.ui.common.TorBannerSlot
 import android.Manifest
 import android.content.pm.PackageManager
@@ -50,7 +54,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.selection.selectable
@@ -106,23 +109,41 @@ fun MoneroSetupScreen(onDone: () -> Unit, vm: MoneroSetupViewModel = hiltViewMod
     val state by vm.controller.state.collectAsStateWithLifecycle()
     val c = vm.controller
     LaunchedEffect(state.finished) { if (state.finished) onDone() }
+    // backlog 110: the arrow and the system's back take one step back; only the first step leaves (in the intro that
+    // counts as «later», spec 6.1), and the seed step asks before its wallet is lost
+    var askDiscard by rememberSaveable { mutableStateOf(false) }
+    val goBack = {
+        when (c.back()) {
+            MoneroSetupController.Back.LEAVE -> if (state.intro) c.skip() else onDone()
+            MoneroSetupController.Back.ASK_DISCARD -> askDiscard = true
+            MoneroSetupController.Back.STEPPED, MoneroSetupController.Back.STAY -> {}
+        }
+    }
+    BackHandler(onBack = goBack)
+    if (askDiscard) {
+        ConfirmDialog(
+            title = stringResource(R.string.setup_discard_title), text = stringResource(R.string.setup_discard_text),
+            confirm = stringResource(R.string.create_cancel_yes), confirmTag = "setup-discard-confirm", destructive = true,
+            onConfirm = { askDiscard = false; c.discardSeed() }, onDismiss = { askDiscard = false },
+        )
+    }
+    // the intro's first step has «Later» instead of an arrow
+    val firstStep = state.step is SetupStep.Address || state.step is SetupStep.AddressDone || state.step is SetupStep.Done
     Scaffold(topBar = {
         Column {
             TopAppBar(
                 title = { Text(stringResource(if (state.intro) R.string.setup_title_intro else R.string.setup_title)) },
-                navigationIcon = { if (!state.intro) IconButton(onClick = onDone) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back)) } },
+                navigationIcon = { if (!state.intro || !firstStep) IconButton(onClick = goBack, modifier = Modifier.testTag("setup-back")) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back)) } },
             )
             // the intro is the first screen after a login (spec 5.2)
             if (state.intro) TorBannerSlot()
         }
     }) { padding ->
         Column(Modifier.padding(padding).padding(Spacing.l).fillMaxSize().verticalScroll(rememberScrollState())) {
-            // spec 6.1: leaving the intro with the system back gesture counts as "later"
-            if (state.intro) BackHandler { c.skip() }
             val announced = state.announced
             if (announced != null && (state.step is SetupStep.Watcher || state.step is SetupStep.Personal)) AnnouncedNotice(announced, c::skip)
             when (val step = state.step) {
-                is SetupStep.Address -> AddressStep(step, state.intro, state.error?.asString(), c::setAddress, c::publishAddress, c::createWallet, c::skip)
+                is SetupStep.Address -> AddressStep(step, state.intro, state.looking, state.error?.asString(), c::setAddress, c::publishAddress, c::createWallet, c::skip)
                 is SetupStep.AddressDone -> AddressDoneStep(step, c::upgrade, c::finish)
                 is SetupStep.Watcher -> WatcherStep(step, state.intro, state.error?.asString(), c::setWatcherUrl, c::loadWatcher, c::cancelCheck, c::startPersonal, c::skip)
                 is SetupStep.Choose -> ChooseStep(step, state.announced, c)
@@ -177,7 +198,7 @@ internal fun AnnouncedNotice(address: String, onKeep: () -> Unit) {
 /** Spec payto §4: one address, published as payto; "No wallet yet?" leads to the watcher path. */
 @Composable
 internal fun ColumnScope.AddressStep(
-    step: SetupStep.Address, intro: Boolean, error: String?,
+    step: SetupStep.Address, intro: Boolean, looking: Boolean, error: String?,
     onInput: (String) -> Unit, onPublish: () -> Unit, onCreateWallet: () -> Unit, onSkip: () -> Unit,
 ) {
     if (intro) {
@@ -187,7 +208,9 @@ internal fun ColumnScope.AddressStep(
     Text(stringResource(R.string.setup_address_title), style = MaterialTheme.typography.titleMedium)
     OutlinedTextField(
         value = step.input, onValueChange = onInput, label = { Text(stringResource(R.string.setup_address_field)) },
-        isError = error != null, supportingText = { Text(error ?: stringResource(R.string.setup_address_hint)) }, enabled = !step.loading,
+        // backlog 121: while the relays are asked, the line under the field says so (same place, nothing moves when it ends)
+        isError = error != null, supportingText = { Text(error ?: stringResource(if (looking) R.string.setup_address_looking else R.string.setup_address_hint)) }, enabled = !step.loading,
+        trailingIcon = if (looking) ({ CircularProgressIndicator(Modifier.size(16.dp).testTag("setup-address-looking"), strokeWidth = 2.dp) }) else null,
         modifier = Modifier.fillMaxWidth().testTag("setup-payto-address"),
         shape = MaterialTheme.shapes.medium,
     )
@@ -381,8 +404,8 @@ private fun ConfirmStep(step: SetupStep.Confirm, error: String?, c: MoneroSetupC
     if (step.amountsHidden) AmountsPrivateText()
     Spacer(Modifier.height(Spacing.s))
     Text(step.address, fontFamily = MonostrFonts.mono, style = MaterialTheme.typography.bodySmall)
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Checkbox(checked = understood, onCheckedChange = { understood = it }, modifier = Modifier.testTag("setup-understood"))
+    Row(Modifier.fillMaxWidth().toggleable(understood, role = Role.Checkbox, onValueChange = { understood = it }).testTag("setup-understood"), verticalAlignment = Alignment.CenterVertically) {
+        Checkbox(checked = understood, onCheckedChange = null, modifier = Modifier.minimumInteractiveComponentSize())
         Text(stringResource(R.string.setup_understood))
     }
     PaytoQuestion(step.paytoConflict, step.paytoPending, step.replacePayto, c::setReplacePayto)
@@ -424,7 +447,7 @@ private fun AmountsPrivateText() {
 
 @Composable
 private fun ColumnScope.DoneStep(step: SetupStep.Done, c: MoneroSetupController) {
-    val clipboard = LocalClipboardManager.current
+    val copiedLabel = stringResource(R.string.note_copied)
     val context = LocalContext.current
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
     LaunchedEffect(Unit) {
@@ -454,7 +477,7 @@ private fun ColumnScope.DoneStep(step: SetupStep.Done, c: MoneroSetupController)
     QrCode(step.address, Modifier.size(220.dp).align(Alignment.CenterHorizontally))
     Spacer(Modifier.height(Spacing.s))
     Text(step.address, fontFamily = MonostrFonts.mono, style = MaterialTheme.typography.bodySmall)
-    OutlinedButton(onClick = { clipboard.setText(AnnotatedString(step.address)) }, shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.action_copy_address)) }
+    OutlinedButton(onClick = { copyToClipboard(context, step.address, copiedLabel) }, shape = MaterialTheme.shapes.medium) { Text(stringResource(R.string.action_copy_address)) }
     Text(stringResource(R.string.settings_monero_wallet_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     step.restoreHeight?.let {
         Spacer(Modifier.height(Spacing.m))

@@ -60,21 +60,6 @@ class TorSessionDeviceTest {
     private fun libtorMapped() = File("/proc/self/maps").readText().let { "libtor" in it }
 
     /** Records every connection to a port someone else could hold. */
-    private class Squatter(port: Int) : AutoCloseable {
-        private val listener = ServerSocket(port, 50, InetAddress.getByAddress(byteArrayOf(127, 0, 0, 1)))
-        val accepted = AtomicInteger(0)
-        init {
-            thread(isDaemon = true) {
-                while (!listener.isClosed) {
-                    val s = runCatching { listener.accept() }.getOrNull() ?: break
-                    accepted.incrementAndGet()
-                    runCatching { s.close() }
-                }
-            }
-        }
-        override fun close() = listener.close()
-    }
-
     /** As the activity would: a login schedules the background check, which otherwise finds no visible app, runs now and releases the session. */
     @Before
     fun visible() = MainActivity.inForeground.set(true)
@@ -108,9 +93,9 @@ class TorSessionDeviceTest {
         val ports = gate.torMode()
         switch.onForeground()
         var first: Ready
-        val heard: Int
-        Squatter(ports.sessionPort).use { shared ->
-            Squatter(ports.isolatedPort).use { isolated ->
+        val heard: List<String>
+        TorSquatter(ports.sessionPort).use { shared ->
+            TorSquatter(ports.isolatedPort).use { isolated ->
                 // both ports taken: bootstrap cannot bind, the state goes Failed while the gate names these ports
                 switch.turnOn()
                 assertEquals(ports, gate.mode.value)
@@ -140,7 +125,7 @@ class TorSessionDeviceTest {
                 first = active()
                 assertFalse("restored with Tor Failed: must be held", first.engine.routeOpen.value)
                 Thread.sleep(1_000)
-                assertEquals("heard during restore", 0, shared.accepted.get() + isolated.accepted.get())
+                assertEquals("heard during restore", emptyList<String>(), shared.heard + isolated.heard)
 
                 // logout during the wait: quick, keeps the switch and the mode
                 val logout = withTimeoutOrNull(5_000) { session.logout() }
@@ -153,10 +138,10 @@ class TorSessionDeviceTest {
                 session.loginLocal(key())
                 assertFalse(active().engine.routeOpen.value)
                 Thread.sleep(12_000) // past rust-nostr's first retry
-                heard = shared.accepted.get() + isolated.accepted.get()
+                heard = shared.heard + isolated.heard
             }
         }
-        assertEquals("the squatter heard from us", 0, heard)
+        assertEquals("the squatter heard from us", emptyList<String>(), heard)
 
         // Tor gets its ports: the way out of Failed
         val second = active()

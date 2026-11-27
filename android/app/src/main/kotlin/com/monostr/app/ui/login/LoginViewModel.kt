@@ -3,6 +3,8 @@ package com.monostr.app.ui.login
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.monostr.app.R
+import com.monostr.app.session.SwitchRefusedException
+import com.monostr.app.session.SwitchResult
 import com.monostr.app.ui.common.UiText
 import com.monostr.app.ui.common.uiText
 import com.monostr.nostr.LocalSigner
@@ -16,7 +18,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-data class LoginUiState(val amberAvailable: Boolean = false, val busy: Boolean = false, val error: UiText? = null, val passwordError: UiText? = null, val notice: UiText? = null)
+/** [alreadyActive]: the key or Amber of the account that runs was entered (final review M8); the add screen closes, see [LoginController.alreadyActiveShown]. */
+data class LoginUiState(
+    val amberAvailable: Boolean = false, val busy: Boolean = false, val error: UiText? = null, val passwordError: UiText? = null, val notice: UiText? = null,
+    val alreadyActive: Boolean = false,
+)
 
 /** What the ViewModel needs from the session; kept small so tests can fake it. */
 interface LoginActions {
@@ -32,6 +38,8 @@ class LoginController(
     restoreMessage: UiText? = null,
     /** Memory scrypt may use for an ncryptsec now (half of what the system has free); unlimited in tests. */
     private val scryptMemory: () -> Long = { Long.MAX_VALUE },
+    /** The account that runs was entered again: tells the user which one is in use. */
+    private val onAlreadyActive: () -> Unit = {},
 ) {
     private val _state = MutableStateFlow(LoginUiState(amberAvailable = amberAvailable, notice = restoreMessage))
     val state: StateFlow<LoginUiState> = _state.asStateFlow()
@@ -69,14 +77,24 @@ class LoginController(
         }
     }
 
+    /** The add screen or sheet closed after [LoginUiState.alreadyActive]. */
+    fun alreadyActiveShown() = _state.update { it.copy(alreadyActive = false) }
+
     private suspend fun run(state: MutableStateFlow<LoginUiState>, block: suspend () -> Unit) {
-        state.update { it.copy(busy = true, error = null, passwordError = null, notice = null) }
+        state.update { it.copy(busy = true, error = null, passwordError = null, notice = null, alreadyActive = false) }
         try {
             block()
             state.update { it.copy(busy = false) }
         } catch (e: CancellationException) {
             state.update { it.copy(busy = false) }
             throw e
+        } catch (e: SwitchRefusedException) {
+            if (e.result == SwitchResult.AlreadyActive) {
+                state.update { it.copy(busy = false, alreadyActive = true) }
+                onAlreadyActive()
+            } else {
+                state.update { it.copy(busy = false, error = uiText(R.string.login_error_failed)) }
+            }
         } catch (e: LoginFailure) {
             state.update { it.copy(busy = false, error = e.userText, passwordError = e.passwordText) }
         } catch (e: Exception) {

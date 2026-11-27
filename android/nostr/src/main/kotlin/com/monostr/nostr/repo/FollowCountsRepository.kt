@@ -147,9 +147,10 @@ class NostrFollowCountsRepository(
         list?.let(::followed)?.takeIf { it != stored }?.let { found(it.first, it.second) }
     }
 
-    /** Distinct well-formed `p` tags, read in Kotlin (0.3–2 s through rust for 300–1500 tags). */
+    /** Distinct well-formed `p` tags without the list's own author (backlog 108), read in Kotlin (0.3–2 s through rust for 300–1500 tags). */
     private fun followed(list: Event): Pair<Int, Boolean?> {
-        val keys = NoteMapper.decoded(list).tags.filter { it.size >= 2 && it[0] == "p" && HEX64.matches(it[1]) }.map { it[1] }.toSet()
+        val decoded = NoteMapper.decoded(list)
+        val keys = decoded.tags.filter { it.size >= 2 && it[0] == "p" && HEX64.matches(it[1]) && it[1] != decoded.pubkey }.map { it[1] }.toSet()
         return keys.size to viewer?.let { it in keys }
     }
 

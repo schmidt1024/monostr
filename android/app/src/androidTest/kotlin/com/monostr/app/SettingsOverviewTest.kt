@@ -56,6 +56,9 @@ class SettingsOverviewTest {
             runCatching { entry.session().logout() }
             entry.session().loginLocal(LocalSigner(Keys.generate().secretKey().toHex()))
             entry.session().applyRelays(listOf("ws://127.0.0.1:9"))
+            // the tips intro is offered once per account (its flag lives in the account's file since account switching): a fresh
+            // account would cover the stored route with it
+            EntryPointAccessors.fromApplication(ctx, com.monostr.app.work.TipCheckWorker.Deps::class.java).settings().setOnboardingSeen()
         }
     }
 
@@ -80,7 +83,7 @@ class SettingsOverviewTest {
         rule.onNodeWithTag("settings-result-settings-tor").performClick()
         rule.waitUntil(10_000) { has("settings-tor") }
         rule.onNodeWithTag("settings-tor").assertIsDisplayed()
-        androidx.test.espresso.Espresso.pressBack()
+        pressBackSayingFocus()
         rule.waitUntil(10_000) { has("settings-search") }
         rule.onNodeWithTag("settings-search").assertIsDisplayed()
     }
@@ -137,7 +140,7 @@ class SettingsOverviewTest {
             rule.waitUntil(30_000) { has("settings-page-translation") }
             scenario.recreate()
             rule.waitUntil(15_000) { has("settings-page-translation") }
-            androidx.test.espresso.Espresso.pressBack()
+            pressBackSayingFocus()
             rule.waitUntil(15_000) { has("settings-cat-privacy") }
             rule.waitForIdle()
             assertTrue("no re-redirect", has("settings-cat-privacy") && !has("settings-page-translation"))
@@ -156,15 +159,20 @@ class SettingsOverviewTest {
     @Test
     fun signOutAsksFirstAndOffersTheKey() = app {
         openOverview()
-        rule.onNodeWithTag("settings-logout").performScrollTo().performClick()
+        // owner 2026-11-26: sign-out sits on the Accounts page under the active account
+        rule.onNodeWithTag("settings-account").performClick()
+        rule.waitUntil(10_000) { has("account-remove") }
+        rule.onNodeWithTag("account-remove").performScrollTo().performClick()
         // UX P1-5: a key login is warned and offered «Show key» instead of Cancel
         rule.waitUntil(10_000) { has("settings-logout-confirm") }
         assertTrue("show key offered for a key login", has("settings-logout-show-key"))
-        androidx.test.espresso.Espresso.pressBack()
+        // backlog 121: the question offers to keep the settings, on unless turned off
+        rule.onNodeWithTag("logout-keep-settings").assertIsDisplayed().assert(androidx.compose.ui.test.isOn())
+        pressBackSayingFocus()
         rule.waitUntil(10_000) { !has("settings-logout-confirm") }
         assertTrue("still logged in after cancel", entry.session().state.value is com.monostr.app.session.SessionState.Active)
-        rule.onNodeWithTag("settings-cat-privacy").assertIsDisplayed()
-        rule.onNodeWithTag("settings-logout").performScrollTo().performClick()
+        rule.onNodeWithTag("account-remove").assertIsDisplayed()
+        rule.onNodeWithTag("account-remove").performScrollTo().performClick()
         rule.waitUntil(10_000) { has("settings-logout-confirm") }
         rule.onNodeWithTag("settings-logout-confirm").performClick()
         rule.waitUntil(20_000) { entry.session().state.value !is com.monostr.app.session.SessionState.Active }
@@ -173,7 +181,8 @@ class SettingsOverviewTest {
     @Test
     fun deleteViewKeyAsksFirst() {
         val secrets = com.monostr.app.data.KeystoreSecretStore(ctx)
-        secrets.put(com.monostr.app.data.KeystoreSecretStore.SECRET_VIEW_KEY, "00".repeat(32))
+        val viewKey = com.monostr.app.data.SecretNames.viewKey(entry.session().requireReady().pubkey)
+        secrets.put(viewKey, "00".repeat(32))
         try {
             app {
                 rule.waitUntil(60_000) { has("fab-compose") || has("setup-skip") }
@@ -187,16 +196,16 @@ class SettingsOverviewTest {
                 rule.waitUntil(10_000) { has("settings-monero-delete-view-key-confirm") }
                 rule.onNodeWithTag("settings-confirm-cancel").performClick()
                 rule.waitUntil(10_000) { !has("settings-monero-delete-view-key-confirm") }
-                assertTrue("cancel keeps the key", secrets.get(com.monostr.app.data.KeystoreSecretStore.SECRET_VIEW_KEY) != null)
+                assertTrue("cancel keeps the key", secrets.get(viewKey) != null)
                 assertTrue("row still there", has("settings-monero-delete-view-key"))
                 rule.onNodeWithTag("settings-monero-delete-view-key").performScrollTo().performClick()
                 rule.waitUntil(10_000) { has("settings-monero-delete-view-key-confirm") }
                 rule.onNodeWithTag("settings-monero-delete-view-key-confirm").performClick()
                 rule.waitUntil(10_000) { !has("settings-monero-delete-view-key") }
-                assertTrue("confirm deletes the key", secrets.get(com.monostr.app.data.KeystoreSecretStore.SECRET_VIEW_KEY) == null)
+                assertTrue("confirm deletes the key", secrets.get(viewKey) == null)
             }
         } finally {
-            secrets.remove(com.monostr.app.data.KeystoreSecretStore.SECRET_VIEW_KEY)
+            secrets.remove(viewKey)
         }
     }
 }

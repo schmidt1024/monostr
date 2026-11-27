@@ -5,6 +5,7 @@ import com.monostr.app.data.HintStore
 import com.monostr.app.data.PendingTipStore
 import com.monostr.app.data.TipSettingsStore
 import com.monostr.app.data.UiSettingsStore
+import com.monostr.app.session.AccountBusy
 import com.monostr.app.session.NostrSession
 import com.monostr.app.session.SessionState
 import com.monostr.nostr.model.Profile
@@ -22,6 +23,7 @@ class TipSheetFactory @Inject constructor(
     private val uiSettings: UiSettingsStore,
     private val sendGate: SendGate,
     private val hints: HintStore,
+    private val busy: AccountBusy,
 ) {
     fun decorations(scope: CoroutineScope): TipDecorations {
         val r = session.requireReady()
@@ -31,7 +33,7 @@ class TipSheetFactory @Inject constructor(
 
     fun tipSheet(scope: CoroutineScope): TipSheetController {
         val r = session.requireReady()
-        return TipSheetController(r.tips, r.watchers, settings, pending, scope, r.authorRelays, { uiSettings.authorRelays.first() }, sendGate = r.sendGate, takeWalletNote = walletNoteOnce({ r.sendGate.viaTor }, hints, r.pubkey), recipientName = { pk -> storedName(r.profiles.local(listOf(pk)).firstOrNull()) })
+        return TipSheetController(r.tips, r.watchers, settings, pending, scope, r.authorRelays, { uiSettings.authorRelays.first() }, sendGate = r.sendGate, takeWalletNote = walletNoteOnce({ r.sendGate.viaTor }, hints, r.pubkey), recipientName = { pk -> storedName(r.profiles.local(listOf(pk)).firstOrNull()) }, busy = busy)
     }
 
     fun profileTipWatch(pubkey: String, scope: CoroutineScope): ProfileTipWatch =

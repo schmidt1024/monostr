@@ -12,6 +12,7 @@
     <string name="action_remove">Rimuovi</string>
     <string name="action_send">Invia</string>
     <string name="action_send_again">Invia di nuovo</string>
+    <string name="action_copy">Copia</string>
     <string name="action_copy_address">Copia indirizzo</string>
     <string name="action_copy_uri">Copia URI</string>
     <string name="state_sending">Invio…</string>
@@ -281,6 +282,8 @@
     <string name="setup_verify_word">Parola n. %1$d</string>
     <string name="setup_verify_wrong">Almeno una parola è sbagliata.</string>
     <string name="setup_back_to_seed">Torna al seed</string>
+    <string name="setup_discard_title">Scartare questo portafoglio?</string>
+    <string name="setup_discard_text">Queste 25 parole non funzioneranno più. Ricominciando si crea un nuovo portafoglio.</string>
     <string name="setup_existing_title">Portafoglio esistente</string>
     <string name="setup_address_label">Indirizzo principale (4… / 5…)</string>
     <string name="setup_view_key_label">Chiave di visualizzazione privata (64 hex)</string>
@@ -303,6 +306,7 @@
     <string name="setup_address_title">Ricevi Monero</string>
     <string name="setup_address_field">Indirizzo Monero (4… / 8…)</string>
     <string name="setup_address_hint">Questo indirizzo è pubblico. Meglio usare un sottoindirizzo solo per Nostr.</string>
+    <string name="setup_address_looking">Ricerca sui tuoi relay di un indirizzo già in uso…</string>
     <string name="setup_address_publish">Pubblica</string>
     <string name="setup_no_wallet_link">Non hai ancora un portafoglio Monero? Creane uno qui</string>
     <string name="setup_address_done">Ora gli altri possono inviarti Monero, anche da Amethyst e Ditto.</string>
@@ -417,7 +421,7 @@
     <string name="settings_preset_add">Aggiungi preset</string>
     <string name="settings_preset_remove">Rimuovi preset</string>
     <string name="settings_adopt_relays">Sostituisci questi relay con la mia lista pubblicata (NIP-65)</string>
-    <string name="settings_logout">Esci</string>
+    <string name="settings_logout">Rimuovi l\'account da questo telefono</string>
     <string name="settings_msg_presets_saved">Importi salvati</string>
     <string name="settings_msg_disabled">Mance in Monero disattivate</string>
     <string name="settings_msg_view_key_deleted">Chiave di visualizzazione eliminata in locale</string>
@@ -456,7 +460,10 @@
     <string name="notifications_checking">Interrogo i tuoi relay…</string>
     <string name="notifications_error_load">Impossibile caricare le notifiche</string>
     <string name="messages_title">Messaggi</string>
-    <string name="messages_empty">Ancora nessun messaggio. Apri un profilo e tocca «Messaggio».</string>
+    <string name="messages_empty">Ancora nessun messaggio. Tocca + per scrivere il primo.</string>
+    <string name="messages_new">Nuovo messaggio</string>
+    <string name="messages_new_hint">Cerca persone su questo telefono</string>
+    <string name="messages_new_none">Nessuno trovato. Puoi anche aprire un profilo e toccare «Messaggio».</string>
     <plurals name="messages_requests">
         <item quantity="one">Richiesta (%1$d)</item>
         <item quantity="many">Richieste (%1$d)</item>
@@ -582,6 +589,7 @@
     <string name="compose_quote_hint">Citazione</string>
     <string name="profile_edit">Modifica profilo</string>
     <string name="feed_profile">Il mio profilo</string>
+    <string name="feed_profile_more_accounts">%1$s, altri account</string>
     <string name="profile_edit_title">Modifica profilo</string>
     <string name="profile_edit_banner">URL del banner</string>
     <string name="profile_edit_picture">URL dell\'immagine</string>
@@ -618,11 +626,11 @@
     <string name="about_feedback">Feedback su Nostr</string>
     <string name="about_issues">Segnala un problema</string>
     <string name="about_license">Licenza: %1$s</string>
-    <string name="dm_relay_hint_missing">relay.monostr.com manca dalla tua lista di inbox, quindi gli utenti di Monostr potrebbero non raggiungerti.</string>
+    <string name="dm_relay_hint_missing">relay.monostr.com manca dai tuoi relay dei messaggi, quindi gli utenti di Monostr potrebbero non raggiungerti.</string>
     <string name="dm_relay_hint_add">Aggiungi</string>
-    <string name="dm_relay_hint_second">Un secondo relay di inbox rende i messaggi più affidabili.</string>
+    <string name="dm_relay_hint_second">Un secondo relay dei messaggi rende i messaggi più affidabili.</string>
     <string name="dm_relay_hint_dismiss">Nascondi</string>
-    <string name="dm_relay_hint_replace">La tua lista di inbox è piena. Quale relay deve sostituire relay.monostr.com?</string>
+    <string name="dm_relay_hint_replace">I tuoi relay dei messaggi sono al completo. Quale relay deve sostituire relay.monostr.com?</string>
     <string name="upload_error_nsfw">Questo server non accetta contenuti per adulti. Puoi scegliere un altro server multimediale nelle impostazioni.</string>
     <string name="upload_error_too_large">Immagine troppo grande per questo server</string>
     <string name="upload_error_quota">Il tuo spazio su questo server è pieno</string>
@@ -696,6 +704,9 @@
     <string name="create_finish">Andiamo</string>
     <string name="create_cancel_text">Annullare? La chiave verrà scartata.</string>
     <string name="create_cancel_yes">Scarta</string>
+    <string name="create_step">Passo %1$d di %2$d</string>
+    <string name="unsaved_title">Scartare le modifiche?</string>
+    <string name="unsaved_keep">Continua a modificare</string>
     <string name="create_cancel_no">Continua</string>
     <string name="settings_show_key">Mostra chiave privata (nsec)</string>
     <string name="settings_show_key_title">La tua chiave</string>
@@ -866,6 +877,7 @@
     <string name="link_prompt_tor">Il tuo browser non usa il Tor di Monostr.</string>
     <string name="link_prompt_copy">Copia link</string>
     <string name="link_prompt_torbrowser">Apri in Tor Browser</string>
+    <string name="link_prompt_torbrowser_copy">Copia e apri Tor Browser</string>
     <string name="link_prompt_copied">Link copiato</string>
     <string name="link_prompt_torbrowser_failed">Impossibile aprire Tor Browser.</string>
     <string name="tor_desc_connecting">Tor: in connessione</string>
@@ -882,7 +894,6 @@
         <item quantity="other">%d mance in sospeso verranno scartate.</item>
     </plurals>
     <!-- settings overview -->
-    <string name="settings_page_account">Account e chiave</string>
     <string name="settings_page_privacy">Tor e privacy</string>
     <string name="settings_page_monero">Monero e mance</string>
     <string name="settings_page_notifications">Notifiche</string>
@@ -938,7 +949,7 @@
     <string name="settings_monero_delete_view_key_action">Elimina</string>
     <string name="settings_monero_payto_remove_q">Rimuovere il tuo indirizzo Monero?</string>
     <string name="settings_monero_payto_remove_text">Viene tolto dal tuo profilo pubblico e nessuno potrà più inviarti mance lì.</string>
-    <string name="settings_logout_q">Uscire?</string>
+    <string name="settings_logout_q">Rimuovere l\'account da questo telefono?</string>
     <string name="settings_logout_key_warning">La tua chiave è solo su questo telefono. Senza una copia non potrai più accedere.</string>
     <string name="settings_logout_show_key">Mostra chiave</string>
     <string name="settings_monero_active">Attivo</string>
@@ -949,12 +960,17 @@
     <string name="settings_monero_receipts_replaces">Una configurazione qui sostituisce quella dell\'altro dispositivo.</string>
     <string name="settings_media_server_save">Salva server multimediale</string>
     <string name="settings_show_key_sub">Chi la possiede controlla il tuo account.</string>
+    <string name="settings_key_lock">Chiedi il blocco schermo</string>
+    <string name="settings_key_lock_hint">Prima di mostrare la chiave privata.</string>
+    <string name="settings_key_lock_none">Imposta prima un blocco schermo su questo telefono.</string>
     <string name="settings_no_name">Ancora nessun nome</string>
     <string name="settings_copy_npub">Copia npub</string>
     <string name="settings_dm_relays_sub">Posta in arrivo dei tuoi DM · NIP-17</string>
     <string name="settings_publish_list">Pubblica la lista</string>
     <string name="settings_use_published_list">Usa la lista pubblicata</string>
     <string name="relay_removed">Relay rimosso</string>
+    <string name="list_member_removed">Rimosso dalla lista</string>
+    <string name="settings_reaction_removed">Reazione rimossa</string>
     <string name="relay_remove_named">Rimuovi %1$s</string>
     <string name="settings_chip_relays_spoken">%1$d di %2$d connessi</string>
     <string name="settings_tip_amounts">Importi delle mance</string>
@@ -983,4 +999,31 @@
     <string name="poll_hours">Ore</string>
     <string name="poll_minutes">Minuti</string>
     <string name="poll_remove">Rimuovi sondaggio</string>
+    <string name="accounts_title">Account</string>
+    <string name="accounts_page_hint">Ogni account ha i propri relay, impostazioni e aspetto.</string>
+    <string name="accounts_other">Altri account</string>
+    <string name="accounts_switch_label">Cambia account</string>
+    <string name="accounts_switch_hint">Tieni premuto per cambiare account</string>
+    <string name="accounts_add">Aggiungi account</string>
+    <string name="accounts_active">Attivo</string>
+    <string name="accounts_busy">Attendi la fine del caricamento/dell\'invio</string>
+    <string name="accounts_sign_in_again">Accedi di nuovo</string>
+    <string name="accounts_switch_failed">Impossibile cambiare account</string>
+    <string name="accounts_now_using">Ora usi %1$s</string>
+    <string name="accounts_now_using_tor">Ora usi %1$s · nuovo percorso Tor tra %2$d s</string>
+    <string name="accounts_tor_stalled">In attesa di un nuovo percorso Tor…</string>
+    <string name="accounts_remove_text">Messaggi, bozze e impostazioni di %1$s su questo telefono verranno eliminati.</string>
+    <string name="accounts_remove_failed">Impossibile rimuovere l\'account</string>
+    <string name="accounts_already_using">Stai già usando %1$s</string>
+    <string name="add_account_amber">Accedi con Amber</string>
+    <string name="add_account_recommended">Consigliato</string>
+    <string name="add_account_get_amber">Ottieni Amber</string>
+    <string name="add_account_get_amber_hint">Tiene le tue chiavi fuori da Monostr</string>
+    <string name="add_account_key">Accedi con chiave</string>
+    <string name="add_account_create">Crea un altro account</string>
+    <string name="logout_keep_settings">Conserva le mie impostazioni su questo dispositivo</string>
+    <string name="logout_keep_settings_hint">Cifrate con la tua chiave. Tornano al prossimo accesso.</string>
+    <string name="logout_keep_failed_title">Impostazioni non conservate</string>
+    <string name="logout_keep_failed_text">Il tuo signer non ha cifrato le impostazioni, quindi non è stato rimosso nulla. Uscire senza conservarle?</string>
+    <string name="accounts_keep_failed">Impostazioni non conservate: il tuo signer non ha risposto. L\'account non è stato rimosso.</string>
 </resources>

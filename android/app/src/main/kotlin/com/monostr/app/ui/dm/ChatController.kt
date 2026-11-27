@@ -17,6 +17,7 @@ import com.monostr.nostr.repo.ProfileRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import com.monostr.app.session.AccountBusy
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -64,6 +65,8 @@ class ChatController(
     private val work: CoroutineDispatcher = Dispatchers.Default,
     /** Only for the reason shown: `DmSync` is the one that refuses. Open only in tests. */
     private val sendGate: SendGate = SendGate.OPEN,
+    /** Counts a send or retry as work an account switch must not cut off. */
+    private val busy: AccountBusy = AccountBusy(),
 ) {
     val names: StateFlow<Map<String, String>> get() = mentions.names
     private val sendFn = send
@@ -138,11 +141,11 @@ class ChatController(
 
     fun send(text: String) {
         if (!_state.value.canSend(text)) return
-        scope.launch { report(guarded(DmStatus.FAILED) { sendFn(peer, text) }) }
+        scope.launch { report(busy.track { guarded(DmStatus.FAILED) { sendFn(peer, text) } }) }
     }
 
     fun retry(rumorId: String) {
-        scope.launch { report(guarded(DmStatus.FAILED) { retryFn(rumorId) }) }
+        scope.launch { report(busy.track { guarded(DmStatus.FAILED) { retryFn(rumorId) } }) }
     }
 
     fun markRead() {

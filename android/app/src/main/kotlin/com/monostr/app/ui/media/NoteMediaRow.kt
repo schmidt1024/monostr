@@ -1,5 +1,7 @@
 package com.monostr.app.ui.media
 
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalContext
 import android.graphics.Bitmap
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -214,6 +216,8 @@ internal fun MediaCell(
         // a derived video frame that did not come gives up quietly: the play button stays alone
         val shown = failure
         if (shown != null && !placeholderOnly && source != null && !MediaModels.derived(source)) MediaFailedMark(shown)
+        // a video is in sight: the player's classes load in the background before a tap needs them (backlog 116)
+        if (m.kind == NoteMedia.Kind.VIDEO) { val warmContext = LocalContext.current; LaunchedEffect(Unit) { VideoWarmUp.start(warmContext) } }
         if (m.kind == NoteMedia.Kind.VIDEO) Icon(Icons.Filled.PlayArrow, contentDescription = videoLabel, tint = Color.White, modifier = Modifier.background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.5f), RoundedCornerShape(50)).padding(Spacing.m))
         // owner 2026-11-19: the length from `imeta duration`, bottom left like a player; nothing is fetched for it
         m.durationSeconds?.takeIf { m.kind == NoteMedia.Kind.VIDEO }?.let { secs ->

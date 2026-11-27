@@ -1,5 +1,6 @@
 package com.monostr.app.ui.settings
 
+import com.monostr.app.ui.common.ConfirmDialog
 import androidx.compose.foundation.background
 import com.monostr.app.ui.common.MonostrSnackbarHost
 import androidx.compose.foundation.clickable
@@ -21,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.SwitchAccount
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
 import com.monostr.nostr.Npub
@@ -88,10 +90,7 @@ fun SettingsOverview(
     vm: SettingsViewModel,
     onBack: () -> Unit,
     onOpen: (SettingsPage, String?) -> Unit,
-    onLogout: () -> Unit,
     onRedirect: (SettingsPage) -> Unit = { onOpen(it, null) },
-    /** Sign out's «Show key» (key login): opens the key screen; the caller grants [ShowKeyGate] only when it navigates. */
-    onShowKey: () -> Unit = {},
 ) {
     var redirected by rememberSaveable { mutableStateOf(false) }
     // the Monero chip names the public address: another client may have changed it while the app was away
@@ -147,8 +146,6 @@ fun SettingsOverview(
                             }
                         }
                     }
-                    Spacer(Modifier.height(Spacing.m))
-                    LogoutRow(vm, onLogout, onShowKey)
                     Spacer(Modifier.size(Spacing.xl))
                 }
             }
@@ -313,21 +310,34 @@ private fun pageChip(page: SettingsPage, vm: SettingsViewModel): PageChip? = whe
 private fun RowChevron() = Icon(SettingsIcons.Chevron, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
 
 /**
- * Sign out, outside the cards (UX P1-5): now one tap from the top level, so it asks first. For a key login the question
- * warns that the key may exist only here and offers «Show key» (straight to the key screen) instead of Cancel.
+ * Sign out of the active account, on the Accounts page under it (owner 2026-11-26; UX P1-5 had it at the bottom of the overview,
+ * from before several accounts). It asks first; for a key login the question warns that the key may exist only here and offers
+ * «Show key» (straight to the key screen) instead of Cancel.
  */
 @Composable
-private fun LogoutRow(vm: SettingsViewModel, onLogout: () -> Unit, onShowKey: () -> Unit) {
+internal fun LogoutRow(vm: SettingsViewModel, onLogout: () -> Unit, onShowKey: () -> Unit) {
     val busy by vm.logoutBusy.collectAsStateWithLifecycle()
     val red = MaterialTheme.colorScheme.error
     var asking by rememberSaveable { mutableStateOf(false) }
+    var keep by rememberSaveable { mutableStateOf(true) }
+    val keepFailed by vm.keepFailed.collectAsStateWithLifecycle()
+    if (keepFailed) {
+        // the signer did not seal the settings: nothing was removed, the user decides again
+        ConfirmDialog(
+            title = stringResource(R.string.logout_keep_failed_title), text = stringResource(R.string.logout_keep_failed_text),
+            confirm = stringResource(R.string.settings_logout), confirmTag = "logout-keep-failed-confirm", destructive = true,
+            onConfirm = { vm.keepFailedSeen(); vm.logout(keepSettings = false, onLogout) },
+            onDismiss = { vm.keepFailedSeen() },
+        )
+    }
     if (asking) {
-        SettingsConfirmDialog(
+        ConfirmDialog(
             title = stringResource(R.string.settings_logout_q),
             text = if (vm.isAmber) null else stringResource(R.string.settings_logout_key_warning),
             confirm = stringResource(R.string.settings_logout), confirmTag = "settings-logout-confirm", destructive = true,
-            onConfirm = { asking = false; vm.logout(onLogout) },
+            onConfirm = { asking = false; vm.logout(keep, onLogout) },
             onDismiss = { asking = false },
+            extra = { com.monostr.app.ui.common.KeepSettingsSwitch(keep) { keep = it } },
             dismissButton = if (vm.isAmber) null else {
                 {
                     TextButton(onClick = { asking = false; onShowKey() }, modifier = Modifier.testTag("settings-logout-show-key")) {
@@ -338,7 +348,7 @@ private fun LogoutRow(vm: SettingsViewModel, onLogout: () -> Unit, onShowKey: ()
         )
     }
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(enabled = !busy, role = Role.Button) { asking = true }.padding(horizontal = Spacing.l, vertical = Spacing.m).testTag("settings-logout"),
+        Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(enabled = !busy, role = Role.Button) { asking = true }.padding(horizontal = Spacing.l, vertical = Spacing.m).testTag("account-remove"),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {

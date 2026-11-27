@@ -1,5 +1,10 @@
 package com.monostr.app.ui.dm
 
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import com.monostr.app.ui.common.MentionResolver
 import com.monostr.app.ui.common.MonostrSnackbarHost
 import kotlinx.coroutines.Dispatchers
@@ -75,13 +80,14 @@ import com.monostr.app.ui.common.relativeTime
 import com.monostr.app.ui.media.NoteMediaRow
 import com.monostr.app.ui.theme.Spacing
 import com.monostr.nostr.model.NoteMedia
+import com.monostr.app.session.AccountBusy
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 
 @HiltViewModel
-class ChatViewModel @Inject constructor(session: NostrSession, handle: SavedStateHandle) : ViewModel() {
+class ChatViewModel @Inject constructor(session: NostrSession, handle: SavedStateHandle, busy: AccountBusy) : ViewModel() {
     private val ready = session.requireReady()
     val controller = ChatController(
         checkNotNull(handle["pubkey"]), ready.pubkey, ready.dmStore, ready.profiles,
@@ -91,6 +97,7 @@ class ChatViewModel @Inject constructor(session: NostrSession, handle: SavedStat
         now = { System.currentTimeMillis() / 1000 },
         mentions = MentionResolver(ready.profiles, viewModelScope, Dispatchers.Default),
         sendGate = ready.sendGate,
+        busy = busy,
     )
     init {
         ready.dms.adoptOwnList() // idempotent; a chat opened from a profile settles the own inbox list too
@@ -225,14 +232,25 @@ private fun Bubble(
         Modifier.fillMaxWidth().padding(horizontal = Spacing.m),
         horizontalAlignment = if (own) Alignment.End else Alignment.Start,
     ) {
+        // backlog 112: a long press copies the message (an address, a link); no selection handles in a list of bubbles
+        val context = androidx.compose.ui.platform.LocalContext.current
+        val copied = stringResource(R.string.note_copied)
+        val copyLabel = stringResource(R.string.action_copy)
+        val text = note.displayContent
+        val copy = { com.monostr.app.ui.common.copyToClipboard(context, text, copied) }
         Surface(
             color = if (own) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
             shape = MaterialTheme.shapes.large,
-            modifier = Modifier.widthIn(max = 320.dp),
+            modifier = Modifier.widthIn(max = 320.dp).then(
+                if (text.isBlank()) Modifier else Modifier
+                    .pointerInput(text) { detectTapGestures(onLongPress = { copy() }) }
+                    .semantics { customActions = listOf(CustomAccessibilityAction(copyLabel) { copy(); true }) }
+                    .testTag("chat-bubble-${m.rumorId.take(8)}"),
+            ),
         ) {
             Column(Modifier.padding(horizontal = Spacing.m, vertical = Spacing.s)) {
                 if (note.displayContent.isNotBlank()) {
-                    NoteText(note.displayContent, onOpen = {}, onHashtag = onHashtag, onOpenProfile = onOpenProfile, onOpenNote = onOpenThread, names = names)
+                    NoteText(note.displayContent, onOpen = null, onHashtag = onHashtag, onOpenProfile = onOpenProfile, onOpenNote = onOpenThread, names = names)
                 }
                 note.quotedId?.let { qid ->
                     // spec 8: no hint relays from a DM (they would connect to relays the sender chose); DB and own relays only

@@ -1,5 +1,6 @@
 package com.monostr.app.ui.media
 
+import com.monostr.app.ui.common.copyToClipboard
 import com.monostr.app.ui.common.GuardedModalBottomSheet
 import com.monostr.app.ui.common.MonostrSnackbarHost
 import com.monostr.app.ui.theme.Spacing
@@ -56,7 +57,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
@@ -143,7 +143,7 @@ class MediaViewerViewModel @Inject constructor(
     session: NostrSession,
     handle: SavedStateHandle,
     @param:ApplicationContext private val context: Context,
-    http: OkHttpClient,
+    media: com.monostr.app.media.MediaHttp,
 ) : ViewModel() {
     private val urls = handle.get<String>("u")?.split("\n")?.filter { it.isNotBlank() }
     val controller = if (urls != null) {
@@ -153,7 +153,7 @@ class MediaViewerViewModel @Inject constructor(
     }
     init { controller.start() }
 
-    private val pictures = PictureSource.create(context, http)
+    private val pictures = PictureSource.create(context, media.client) // with the address check: the URL comes from a stranger's note
     private val _events = Channel<PictureEvent>(Channel.BUFFERED)
     val events: Flow<PictureEvent> = _events.receiveAsFlow()
 
@@ -256,7 +256,7 @@ fun MediaViewerScreen(onBack: () -> Unit, vm: MediaViewerViewModel = hiltViewMod
         MonostrSnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding())
     }
     sheetFor?.let { m ->
-        val clipboard = LocalClipboardManager.current
+        val copiedLabel = stringResource(R.string.note_copied)
         val uriHandler = LocalUriHandler.current
         GuardedModalBottomSheet(onDismissRequest = { sheetFor = null }) {
             MediaSheetItems(
@@ -270,7 +270,7 @@ fun MediaViewerScreen(onBack: () -> Unit, vm: MediaViewerViewModel = hiltViewMod
                     }
                 },
                 onShare = { sheetFor = null; vm.share(m.url) },
-                onCopyLink = { clipboard.setText(AnnotatedString(m.url)); sheetFor = null },
+                onCopyLink = { copyToClipboard(context, m.url, copiedLabel); sheetFor = null },
                 onOpenBrowser = { runCatching { uriHandler.openUri(m.url) }; sheetFor = null },
             )
         }

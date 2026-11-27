@@ -1,0 +1,5 @@
+- Várias contas: adicione, alterne e remova pelo seu avatar ou nas Configurações; cada uma mantém seus relays e configurações
+- Sair remove a conta deste telefone e pode manter suas configurações, criptografadas com a sua chave
+- Bloqueio de tela opcional antes de mostrar sua chave privada
+- Com versões novas do Tor Browser: copie o link e abra o Tor Browser
+- Reforço de segurança e correções

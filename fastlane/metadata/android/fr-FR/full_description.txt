@@ -10,6 +10,7 @@ Monostr est un client Nostr pour Android avec des pourboires en Monero.
 • Recherche de personnes et de notes (NIP-50), notifications pour les j'aime, republications, réponses et pourboires
 • Votre liste de relais (NIP-65) ; les relais d'écriture d'un auteur s'ajoutent tant que son profil est ouvert
 • Connexion avec Amber (NIP-55), une clé ou une sauvegarde de clé protégée par mot de passe (ncryptsec, NIP-49) ; vous pouvez aussi sauvegarder votre clé avec un mot de passe ; thème clair et sombre, 8 langues
+• Plusieurs comptes sur un téléphone : changez depuis votre avatar ; chacun garde ses relais et ses réglages et reçoit de nouveaux circuits Tor
 
 <b>Pourboires en Monero</b>
 • Donnez un pourboire à une note ou à un profil depuis votre propre portefeuille (Unstoppable, monfluo, Cake …) via un lien monero:

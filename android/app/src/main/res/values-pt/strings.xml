@@ -12,6 +12,7 @@
     <string name="action_remove">Remover</string>
     <string name="action_send">Enviar</string>
     <string name="action_send_again">Enviar de novo</string>
+    <string name="action_copy">Copiar</string>
     <string name="action_copy_address">Copiar endereço</string>
     <string name="action_copy_uri">Copiar URI</string>
     <string name="state_sending">Enviando…</string>
@@ -281,6 +282,8 @@
     <string name="setup_verify_word">Palavra nº %1$d</string>
     <string name="setup_verify_wrong">Pelo menos uma palavra está errada.</string>
     <string name="setup_back_to_seed">Voltar para a seed</string>
+    <string name="setup_discard_title">Descartar esta carteira?</string>
+    <string name="setup_discard_text">Estas 25 palavras não funcionarão depois. Começar de novo cria outra carteira.</string>
     <string name="setup_existing_title">Carteira existente</string>
     <string name="setup_address_label">Endereço principal (4… / 5…)</string>
     <string name="setup_view_key_label">Chave de visualização privada (64 hex)</string>
@@ -303,6 +306,7 @@
     <string name="setup_address_title">Receber Monero</string>
     <string name="setup_address_field">Endereço Monero (4… / 8…)</string>
     <string name="setup_address_hint">Este endereço é público. O ideal é usar um subendereço só para o Nostr.</string>
+    <string name="setup_address_looking">Procurando nos seus relays um endereço que você já usa…</string>
     <string name="setup_address_publish">Publicar</string>
     <string name="setup_no_wallet_link">Ainda não tem uma carteira Monero? Crie uma aqui</string>
     <string name="setup_address_done">Agora outras pessoas podem te enviar Monero, também pelo Amethyst e pelo Ditto.</string>
@@ -352,7 +356,7 @@
     <string name="settings_dm_preview_text">Mostrar o texto nas notificações</string>
     <string name="settings_search_relays">Relays de busca</string>
     <string name="settings_search_relays_hint">Usados só para busca de nomes e texto completo (NIP-50), nunca para o feed. Seus termos de busca vão para esses relays.</string>
-    <string name="settings_search_relays_reset">Restaurar padrões</string>
+    <string name="settings_search_relays_reset">Restaurar padrão</string>
     <string name="settings_suggested_relays">Relays sugeridos</string>
     <string name="settings_suggested_relays_hint">Relays Monero pagos: ler é grátis, publicar após um pagamento único em XMR no site do relay. Fonte: pmnr.xmr.rocks</string>
     <string name="settings_suggested_relay_fee">Relay Monero pago · %1$s XMR para publicar</string>
@@ -417,7 +421,7 @@
     <string name="settings_preset_add">Adicionar predefinição</string>
     <string name="settings_preset_remove">Remover predefinição</string>
     <string name="settings_adopt_relays">Substituir estes relays pela minha lista publicada (NIP-65)</string>
-    <string name="settings_logout">Sair</string>
+    <string name="settings_logout">Remover conta deste telefone</string>
     <string name="settings_msg_presets_saved">Valores salvos</string>
     <string name="settings_msg_disabled">Gorjetas em Monero desativadas</string>
     <string name="settings_msg_view_key_deleted">Chave de visualização excluída localmente</string>
@@ -456,7 +460,10 @@
     <string name="notifications_checking">Consultando seus relays…</string>
     <string name="notifications_error_load">Não foi possível carregar as notificações</string>
     <string name="messages_title">Mensagens</string>
-    <string name="messages_empty">Ainda não há mensagens. Abra um perfil e toque em “Mensagem”.</string>
+    <string name="messages_empty">Ainda não há mensagens. Toque em + para escrever a primeira.</string>
+    <string name="messages_new">Nova mensagem</string>
+    <string name="messages_new_hint">Buscar pessoas neste telefone</string>
+    <string name="messages_new_none">Ninguém encontrado. Você também pode abrir um perfil e tocar em “Mensagem”.</string>
     <plurals name="messages_requests">
         <item quantity="one">Solicitação (%1$d)</item>
         <item quantity="many">Solicitações (%1$d)</item>
@@ -472,7 +479,7 @@
     <string name="messages_error_load">Não foi possível carregar as mensagens</string>
     <string name="chat_input_hint">Mensagem</string>
     <string name="chat_send">Enviar</string>
-    <string name="chat_retry">Tentar de novo</string>
+    <string name="chat_retry">Tentar novamente</string>
     <string name="chat_status_sending">Enviando…</string>
     <string name="chat_status_failed">Não enviado</string>
     <string name="chat_error_send">Não foi possível enviar a mensagem</string>
@@ -582,6 +589,7 @@
     <string name="compose_quote_hint">Citação</string>
     <string name="profile_edit">Editar perfil</string>
     <string name="feed_profile">Meu perfil</string>
+    <string name="feed_profile_more_accounts">%1$s, mais contas</string>
     <string name="profile_edit_title">Editar perfil</string>
     <string name="profile_edit_banner">URL do banner</string>
     <string name="profile_edit_picture">URL da imagem</string>
@@ -618,11 +626,11 @@
     <string name="about_feedback">Feedback no Nostr</string>
     <string name="about_issues">Relatar um problema</string>
     <string name="about_license">Licença: %1$s</string>
-    <string name="dm_relay_hint_missing">relay.monostr.com não está na sua lista de caixas de entrada, então usuários do Monostr podem não conseguir falar com você.</string>
+    <string name="dm_relay_hint_missing">relay.monostr.com não está nos seus relays de mensagens, então usuários do Monostr podem não conseguir falar com você.</string>
     <string name="dm_relay_hint_add">Adicionar</string>
-    <string name="dm_relay_hint_second">Um segundo relay de caixa de entrada deixa suas mensagens mais confiáveis.</string>
+    <string name="dm_relay_hint_second">Um segundo relay de mensagens deixa suas mensagens mais confiáveis.</string>
     <string name="dm_relay_hint_dismiss">Ocultar</string>
-    <string name="dm_relay_hint_replace">Sua lista de caixas de entrada está cheia. Qual relay o relay.monostr.com deve substituir?</string>
+    <string name="dm_relay_hint_replace">Seus relays de mensagens estão cheios. Qual relay o relay.monostr.com deve substituir?</string>
     <string name="upload_error_nsfw">Este servidor não aceita conteúdo adulto. Você pode escolher outro servidor de mídia nas configurações.</string>
     <string name="upload_error_too_large">Imagem grande demais para este servidor</string>
     <string name="upload_error_quota">Seu espaço neste servidor está cheio</string>
@@ -639,7 +647,7 @@
     <string name="compose_attach">Adicionar imagens</string>
     <string name="compose_attach_limit">Até 20 imagens por nota</string>
     <string name="compose_attachment_remove">Remover imagem</string>
-    <string name="upload_retry">Tentar de novo</string>
+    <string name="upload_retry">Tentar novamente</string>
     <string name="compose_sensitive">Conteúdo sensível</string>
     <string name="compose_sensitive_hint">Os leitores veem as imagens desfocadas até tocarem nelas.</string>
     <string name="profile_edit_pick">Escolher imagem</string>
@@ -696,6 +704,9 @@
     <string name="create_finish">Vamos lá</string>
     <string name="create_cancel_text">Cancelar? A chave será descartada.</string>
     <string name="create_cancel_yes">Descartar</string>
+    <string name="create_step">Passo %1$d de %2$d</string>
+    <string name="unsaved_title">Descartar as alterações?</string>
+    <string name="unsaved_keep">Continuar editando</string>
     <string name="create_cancel_no">Continuar</string>
     <string name="settings_show_key">Mostrar chave privada (nsec)</string>
     <string name="settings_show_key_title">Sua chave</string>
@@ -703,7 +714,7 @@
     <string name="settings_show_key_confirm">Mostrar</string>
     <string name="settings_show_key_cancel">Cancelar</string>
     <!-- lists -->
-    <string name="action_retry">Tentar de novo</string>
+    <string name="action_retry">Tentar novamente</string>
     <string name="list_save_failed">Não foi possível salvar, tente de novo</string>
     <string name="feed_tab_following">Seguindo</string>
     <string name="feed_tab_menu_open">Abrir lista</string>
@@ -762,7 +773,7 @@
     </plurals>
     <string name="discover_show_all">Ver todos</string>
     <string name="discover_failed">Não foi possível carregar</string>
-    <string name="discover_retry">Tentar de novo</string>
+    <string name="discover_retry">Tentar novamente</string>
     <string name="discover_dismiss">Ocultar sugestões</string>
     <string name="create_who_rotten">Notícias de Monero (Revuo)</string>
     <string name="create_who_shortwave">Usuário de Monero, testa apps</string>
@@ -866,6 +877,7 @@
     <string name="link_prompt_tor">Seu navegador não usa o Tor do Monostr.</string>
     <string name="link_prompt_copy">Copiar link</string>
     <string name="link_prompt_torbrowser">Abrir no Tor Browser</string>
+    <string name="link_prompt_torbrowser_copy">Copiar e abrir o Tor Browser</string>
     <string name="link_prompt_copied">Link copiado</string>
     <string name="link_prompt_torbrowser_failed">Não foi possível abrir o Tor Browser.</string>
     <string name="tor_desc_connecting">Tor: conectando</string>
@@ -882,7 +894,6 @@
         <item quantity="other">%d gorjetas pendentes serão descartadas.</item>
     </plurals>
     <!-- settings overview -->
-    <string name="settings_page_account">Conta e chave</string>
     <string name="settings_page_privacy">Tor e privacidade</string>
     <string name="settings_page_monero">Monero e gorjetas</string>
     <string name="settings_page_notifications">Notificações</string>
@@ -938,7 +949,7 @@
     <string name="settings_monero_delete_view_key_action">Excluir</string>
     <string name="settings_monero_payto_remove_q">Remover seu endereço Monero?</string>
     <string name="settings_monero_payto_remove_text">É retirado do seu perfil público e ninguém poderá enviar gorjetas para você por lá.</string>
-    <string name="settings_logout_q">Sair?</string>
+    <string name="settings_logout_q">Remover conta deste telefone?</string>
     <string name="settings_logout_key_warning">Sua chave está só neste telefone. Sem uma cópia você não poderá entrar de novo.</string>
     <string name="settings_logout_show_key">Mostrar chave</string>
     <string name="settings_monero_active">Ativo</string>
@@ -949,12 +960,17 @@
     <string name="settings_monero_receipts_replaces">Configurar aqui substitui a do outro dispositivo.</string>
     <string name="settings_media_server_save">Salvar servidor de mídia</string>
     <string name="settings_show_key_sub">Quem a tiver controla sua conta.</string>
+    <string name="settings_key_lock">Pedir bloqueio de tela</string>
+    <string name="settings_key_lock_hint">Antes de mostrar a chave privada.</string>
+    <string name="settings_key_lock_none">Configure primeiro um bloqueio de tela neste telefone.</string>
     <string name="settings_no_name">Ainda sem nome</string>
     <string name="settings_copy_npub">Copiar npub</string>
     <string name="settings_dm_relays_sub">Caixa de entrada das suas DMs · NIP-17</string>
     <string name="settings_publish_list">Publicar lista</string>
     <string name="settings_use_published_list">Usar a lista publicada</string>
     <string name="relay_removed">Relay removido</string>
+    <string name="list_member_removed">Removido da lista</string>
+    <string name="settings_reaction_removed">Reação removida</string>
     <string name="relay_remove_named">Remover %1$s</string>
     <string name="settings_chip_relays_spoken">%1$d de %2$d conectados</string>
     <string name="settings_tip_amounts">Valores de gorjeta</string>
@@ -983,4 +999,31 @@
     <string name="poll_hours">Horas</string>
     <string name="poll_minutes">Minutos</string>
     <string name="poll_remove">Remover enquete</string>
+    <string name="accounts_title">Contas</string>
+    <string name="accounts_page_hint">Cada conta tem os seus próprios relays, definições e aparência.</string>
+    <string name="accounts_other">Outras contas</string>
+    <string name="accounts_switch_label">Trocar de conta</string>
+    <string name="accounts_switch_hint">Pressione e segure para trocar de conta</string>
+    <string name="accounts_add">Adicionar conta</string>
+    <string name="accounts_active">Ativa</string>
+    <string name="accounts_busy">Aguarde o fim do envio</string>
+    <string name="accounts_sign_in_again">Entre de novo</string>
+    <string name="accounts_switch_failed">Não foi possível trocar de conta</string>
+    <string name="accounts_now_using">Usando agora %1$s</string>
+    <string name="accounts_now_using_tor">Usando agora %1$s · nova rota Tor em %2$d s</string>
+    <string name="accounts_tor_stalled">Aguardando uma nova rota Tor…</string>
+    <string name="accounts_remove_text">Mensagens, rascunhos e configurações de %1$s neste telefone serão apagados.</string>
+    <string name="accounts_remove_failed">Não foi possível remover a conta</string>
+    <string name="accounts_already_using">Você já está usando %1$s</string>
+    <string name="add_account_amber">Entrar com Amber</string>
+    <string name="add_account_recommended">Recomendado</string>
+    <string name="add_account_get_amber">Obter Amber</string>
+    <string name="add_account_get_amber_hint">Mantém suas chaves fora do Monostr</string>
+    <string name="add_account_key">Entrar com chave</string>
+    <string name="add_account_create">Criar outra conta</string>
+    <string name="logout_keep_settings">Manter as minhas definições neste dispositivo</string>
+    <string name="logout_keep_settings_hint">Encriptadas com a tua chave. Voltam quando iniciares sessão de novo.</string>
+    <string name="logout_keep_failed_title">Definições não guardadas</string>
+    <string name="logout_keep_failed_text">O teu signer não encriptou as definições, por isso nada foi removido. Terminar sessão sem as manter?</string>
+    <string name="accounts_keep_failed">Definições não guardadas: o teu signer não respondeu. A conta não foi removida.</string>
 </resources>

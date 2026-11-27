@@ -41,6 +41,9 @@ data class TranslateServer(val url: String) : TranslateBackend {
     }
 }
 
+/** The most a translate answer may weigh: a request carries at most a few notes or article blocks, far below this. */
+private const val MAX_BODY = 2L * 1024 * 1024
+
 sealed interface TranslateResult {
     data class Ok(val texts: List<String>) : TranslateResult
     data object RateLimited : TranslateResult
@@ -104,7 +107,10 @@ class TranslateClient(http: OkHttpClient, callTimeoutSeconds: Long = 15) {
             resp.code == 429 -> TranslateResult.RateLimited
             !resp.isSuccessful -> TranslateResult.Failed
             else -> {
-                val out = Json.parseToJsonElement(resp.body?.string().orEmpty())
+                // capped: an answer without end would take the app's memory (bug bounty 2026-11-26)
+                val source = resp.body?.source()
+                if (source != null && source.request(MAX_BODY + 1)) return TranslateResult.Failed
+                val out = Json.parseToJsonElement(source?.readUtf8().orEmpty())
                     .jsonObject["translatedText"]!!.jsonArray.map { it.jsonPrimitive.content }
                 if (out.size == count) TranslateResult.Ok(out) else TranslateResult.Failed
             }

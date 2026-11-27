@@ -9,6 +9,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
@@ -383,5 +384,36 @@ class ComposeDraftsTest {
         assertEquals(com.monostr.app.ui.common.uiText(com.monostr.app.R.string.compose_notice_offline), c.state.value.error)
         assertTrue(c.state.value.pendingResend)
         assertEquals(null, drafts.stored(me, DraftTargets.NOTE))
+    }
+
+    /**
+     * Final review M2: a switch from a notification closes the session (its background scope) while the composer is open. The last
+     * edit is still saved, on a scope that outlives the session; the closed session starts nothing more (no picture is discarded).
+     */
+    @Test
+    fun `the last edit is saved after a switch closed the session`() = runTest {
+        val drafts = FakeDraftStore()
+        val uploader = FakeMediaUploader()
+        val session = eager()
+        val c = ComposeController(
+            null, FakeThreads(emptyMap()), FakePublish(), eager(), uploader = uploader, drafts = drafts, account = me,
+            background = session, draftWrites = eager(), now = { 5_000L },
+        )
+        c.start()
+        advanceUntilIdle()
+        c.attach(listOf("content://p/1"))
+        advanceUntilIdle()
+        c.onTextChange("the last words", 14) // left before the debounce ran
+        session.cancel()
+        c.saveDraftNow()
+        advanceUntilIdle()
+        assertEquals("the last words", drafts.stored(me, DraftTargets.NOTE)!!.text)
+        c.onTextChange("the last words!", 15)
+        c.discardUnsent()
+        advanceUntilIdle()
+        val d = drafts.stored(me, DraftTargets.NOTE)!!
+        assertEquals("the last words!", d.text)
+        assertEquals(1, d.attachments.size)
+        assertTrue(uploader.discarded.isEmpty())
     }
 }

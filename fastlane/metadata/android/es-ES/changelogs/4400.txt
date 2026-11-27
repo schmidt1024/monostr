@@ -1,0 +1,5 @@
+- Varias cuentas: añádelas, cámbialas y quítalas desde tu avatar o en Ajustes; cada una conserva sus relays y ajustes
+- Cerrar sesión quita la cuenta de este teléfono y puede conservar sus ajustes, cifrados con tu clave
+- Bloqueo de pantalla opcional antes de mostrar tu clave privada
+- Con versiones nuevas de Tor Browser: copia el enlace y abre Tor Browser
+- Refuerzo de seguridad y correcciones

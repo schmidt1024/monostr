@@ -1,6 +1,7 @@
 package com.monostr.app.ui.tips
 
 import com.monostr.app.net.SendGate
+import com.monostr.app.session.AccountBusy
 import kotlinx.coroutines.CoroutineStart
 import com.monostr.app.BuildConfig
 import com.monostr.tips.RelayHosts
@@ -100,6 +101,8 @@ class TipSheetController(
     private val takeWalletNote: suspend () -> Boolean = { false },
     /** The recipient's stored name (no relay asked), for the payto title; owner 2026-11-12. */
     private val recipientName: suspend (String) -> String? = { null },
+    /** Counts the send as work an account switch must not cut off. */
+    private val busy: AccountBusy = AccountBusy(),
     private val now: () -> Long = { System.currentTimeMillis() / 1000 },
 ) {
     private val _state = MutableStateFlow(TipSheetState())
@@ -244,58 +247,60 @@ class TipSheetController(
         val anonymous = s.anonymous
         val viaTor = sendGate.viaTor
         scope.launch {
-            if (_state.value.target?.key != key) return@launch // dismissed or reopened meanwhile
-            _state.update { it.copy(phase = TipPhase.Sending, error = null) }
-            try {
-                // tips 0.6: the pid is derived from the signing key, so the key (own or one-time) comes first
-                val sender = tips.tipSender(anonymous)
-                val prepared = TipRequest.prepare(info, target.recipient, target.noteId, amount, TipType.TIP, "", now(), sender = sender, anonymous = anonymous)
-                val watcherRelays = watcherRelays(info)
-                if (!sendGate.canSend.value) return@launch refused(key)
-                val sentToAny: Boolean
-                val intentId: String
-                if (anonymous) {
-                    if (watcherRelays.isEmpty()) {
-                        // an anonymous intent has nowhere else to go, and a public tip is never sent in its place
-                        if (_state.value.target?.key == key) _state.update { it.copy(phase = TipPhase.Ready, error = ERROR_ANON_UNAVAILABLE) }
-                        return@launch
+            busy.track<Unit> {
+                if (_state.value.target?.key != key) return@track // dismissed or reopened meanwhile
+                _state.update { it.copy(phase = TipPhase.Sending, error = null) }
+                try {
+                    // tips 0.6: the pid is derived from the signing key, so the key (own or one-time) comes first
+                    val sender = tips.tipSender(anonymous)
+                    val prepared = TipRequest.prepare(info, target.recipient, target.noteId, amount, TipType.TIP, "", now(), sender = sender, anonymous = anonymous)
+                    val watcherRelays = watcherRelays(info)
+                    if (!sendGate.canSend.value) return@track refused(key)
+                    val sentToAny: Boolean
+                    val intentId: String
+                    if (anonymous) {
+                        if (watcherRelays.isEmpty()) {
+                            // an anonymous intent has nowhere else to go, and a public tip is never sent in its place
+                            if (_state.value.target?.key == key) _state.update { it.copy(phase = TipPhase.Ready, error = ERROR_ANON_UNAVAILABLE) }
+                            return@track
+                        }
+                        val sent = tips.sendAnonymousIntent(prepared, watcherRelays, torOnly = viaTor)
+                        if (lostTor(sent.result.sentToAny)) return@track refused(key)
+                        intentId = sent.result.eventId
+                        pending.add(
+                            PendingTip(
+                                sent.result.eventId, target.noteId, amount, now(), target.recipient,
+                                anonEvent = sent.eventJson, anonRelays = watcherRelays, anonDelivered = sent.result.sentToAny, underTor = viaTor || sendGate.viaTor,
+                            ),
+                        )
+                        sentToAny = sent.result.sentToAny
+                    } else {
+                        val result = tips.sendIntent(prepared, watcherRelays)
+                        if (lostTor(result.sentToAny)) return@track refused(key)
+                        intentId = result.eventId
+                        pending.add(
+                            PendingTip(
+                                result.eventId, target.noteId, amount, now(), target.recipient,
+                                watcherRelays = watcherRelays, watcherDelivered = result.reached(watcherRelays), underTor = viaTor || sendGate.viaTor,
+                            ),
+                        )
+                        sentToAny = result.sentToAny
                     }
-                    val sent = tips.sendAnonymousIntent(prepared, watcherRelays, torOnly = viaTor)
-                    if (lostTor(sent.result.sentToAny)) return@launch refused(key)
-                    intentId = sent.result.eventId
-                    pending.add(
-                        PendingTip(
-                            sent.result.eventId, target.noteId, amount, now(), target.recipient,
-                            anonEvent = sent.eventJson, anonRelays = watcherRelays, anonDelivered = sent.result.sentToAny, underTor = viaTor || sendGate.viaTor,
-                        ),
-                    )
-                    sentToAny = sent.result.sentToAny
-                } else {
-                    val result = tips.sendIntent(prepared, watcherRelays)
-                    if (lostTor(result.sentToAny)) return@launch refused(key)
-                    intentId = result.eventId
-                    pending.add(
-                        PendingTip(
-                            result.eventId, target.noteId, amount, now(), target.recipient,
-                            watcherRelays = watcherRelays, watcherDelivered = result.reached(watcherRelays), underTor = viaTor || sendGate.viaTor,
-                        ),
-                    )
-                    sentToAny = result.sentToAny
+                    redeliver(intentId, info)
+                    if (_state.value.target?.key != key) return@track // the tip went out; the sheet now shows another target
+                    _state.update {
+                        it.copy(
+                            phase = TipPhase.Pay(prepared.paymentUri, prepared.integratedAddress, amount),
+                            notice = if (sentToAny) null else NOTICE_OFFLINE,
+                        )
+                    }
+                    watchArrival(key, intentId)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    if (_state.value.target?.key != key) return@track
+                    _state.update { it.copy(phase = TipPhase.Ready, error = if (sendGate.canSend.value) e.userMessage() else ERROR_TOR) }
                 }
-                redeliver(intentId, info)
-                if (_state.value.target?.key != key) return@launch // the tip went out; the sheet now shows another target
-                _state.update {
-                    it.copy(
-                        phase = TipPhase.Pay(prepared.paymentUri, prepared.integratedAddress, amount),
-                        notice = if (sentToAny) null else NOTICE_OFFLINE,
-                    )
-                }
-                watchArrival(key, intentId)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                if (_state.value.target?.key != key) return@launch
-                _state.update { it.copy(phase = TipPhase.Ready, error = if (sendGate.canSend.value) e.userMessage() else ERROR_TOR) }
             }
         }
     }

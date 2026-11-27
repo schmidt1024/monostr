@@ -13,7 +13,7 @@ import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 
 /** The account's own directory below [filesDir] (or below `noBackupFilesDir`, for what must not be backed up). */
-fun accountDir(filesDir: File, pubkey: String): File = File(filesDir, "nostr-${pubkey.take(16)}")
+fun accountDir(filesDir: File, pubkey: String): File = File(filesDir, "nostr-${pk16(pubkey)}")
 
 /**
  * Spec perf 3.7: the own lists' summary, a JSON file in the account's directory (it holds decrypted private
